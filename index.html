@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Système de Fenêtres Rétro</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        /* Style de base pour le corps de la page */
+        body {
+            background-color: #000;
+            color: #00ff00;
+            font-family: 'VT323', monospace;
+            font-size: 18px;
+            overflow: hidden; /* Empêche les barres de défilement sur grand écran */
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* Toile pour le starfield en arrière-plan */
+        #starfield-canvas {
+            position: fixed; /* Fixé pour rester en arrière-plan même avec le défilement */
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0; /* Placé derrière les fenêtres */
+        }
+
+        /* Scroller sinusoidal en haut */
+        #top-scroller {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            z-index: 1001;
+            font-size: 36px;
+            text-shadow: 0 0 5px #00ff00, 0 0 10px #00ff00;
+            pointer-events: none;
+        }
+
+        #top-scroller span {
+            position: relative;
+            display: inline-block;
+        }
+
+        /* Style pour les fenêtres */
+        .window {
+            position: absolute;
+            border: 2px solid #00ff00;
+            background-color: rgba(0, 20, 0, 0.85);
+            box-shadow: 5px 5px 0px rgba(0, 255, 0, 0.3);
+            min-width: 210px;
+            min-height: 105px;
+            display: flex;
+            flex-direction: column;
+            border-radius: 3px;
+            overflow: hidden; /* Important pour contenir le canvas/iframe */
+        }
+
+        /* Barre de titre de la fenêtre */
+        .title-bar {
+            background-color: #00ff00;
+            color: #000;
+            padding: 5px 8px;
+            font-weight: bold;
+            cursor: move; /* Curseur pour indiquer que l'élément est déplaçable */
+            user-select: none; /* Empêche la sélection du texte du titre */
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        
+        .title-bar .title-text {
+            flex-grow: 1;
+        }
+
+        .title-bar .close-button {
+            background-color: #000;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+            width: 20px;
+            height: 20px;
+            text-align: center;
+            line-height: 18px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        
+        .close-button:hover {
+            background-color: #ff0000;
+            color: #000;
+        }
+
+        /* Contenu de la fenêtre */
+        .content {
+            padding: 15px;
+            flex-grow: 1;
+            overflow: auto; /* Ajoute des barres de défilement si le contenu dépasse */
+        }
+        
+        .content.no-padding {
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+        }
+
+        .scroller-canvas, .matrix-canvas, .torus-canvas, .radar-canvas, .invaders-canvas, .tech-canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        
+        .content p {
+            margin: 4px 0;
+        }
+        
+        .content pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            border: 1px dashed #00ff00;
+            padding: 10px;
+            background-color: rgba(0, 0, 0, 0.4);
+            height: 100%;
+            box-sizing: border-box;
+            margin: 0;
+        }
+        
+        .system-status span {
+            color: #fff;
+        }
+        
+        .system-status .status-ok {
+            color: #3d9970;
+            font-weight: bold;
+        }
+
+        /* Effet de scanline pour le look rétro */
+        body::after {
+            content: " ";
+            display: block;
+            position: fixed; /* Fixé pour couvrir l'écran */
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom, rgba(0,0,0,0) 50%, rgba(0,0,0,0.4) 50%);
+            background-size: 100% 4px;
+            z-index: 9999;
+            pointer-events: none; /* Permet de cliquer à travers */
+        }
+
+        /* Bandeau défilant (Ticker) */
+        .ticker-wrap {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            overflow: hidden;
+            background-color: #000;
+            border-top: 2px solid #00ff00;
+            padding: 5px 0;
+            z-index: 1000;
+        }
+
+        .ticker {
+            display: inline-block;
+            white-space: nowrap;
+            padding-left: 100%;
+            animation: ticker-scroll 45s linear infinite;
+        }
+
+        .ticker-item {
+            display: inline-block;
+            padding: 0 2rem;
+            font-size: 20px;
+        }
+        
+        .ticker-item .down {
+            color: #ff4136;
+        }
+        
+        .ticker-item .up {
+            color: #3d9970;
+        }
+
+        @keyframes ticker-scroll {
+            0% {
+                transform: translateX(0);
+            }
+            100% {
+                transform: translateX(-100%);
+            }
+        }
+
+        /* --- STYLES RESPONSIVES --- */
+        @media (max-width: 800px) {
+            body {
+                overflow: auto; /* Permet le défilement sur mobile */
+            }
+
+            .window {
+                position: relative !important;
+                width: 90% !important;
+                height: auto !important;
+                min-height: 200px;
+                left: auto !important;
+                top: auto !important;
+                margin: 20px auto !important;
+                float: none !important;
+            }
+
+            .title-bar {
+                cursor: default; /* Pas de curseur de déplacement sur mobile */
+            }
+        }
+
+    </style>
+</head>
+<body>
+    <div id="top-scroller"></div>
+    <canvas id="starfield-canvas"></canvas>
+
+    <!-- Rangée 1 -->
+    <div class="window" style="top: 10%; left: 1%; width: 23%; height: 40%; z-index: 2;">
+        <div class="title-bar">
+            <span class="title-text">C:\DATA.STREAM</span>
+            <span class="close-button" onclick="this.parentElement.parentElement.style.display='none'">X</span>
+        </div>
+        <div class="content no-padding">
+            <canvas class="scroller-canvas"></canvas>
+        </div>
+    </div>
+    <div class="window" style="top: 10%; left: 25.5%; width: 23%; height: 40%; z-index: 3;">
+        <div class="title-bar">
+            <span class="title-text">A:\SYSTEM.STATUS</span>
+            <span class="close-button" onclick="this.parentElement.parentElement.style.display='none'">X</span>
+        </div>
+        <div class="content system-status">
+            <div>
+                <p>CPU LOAD....: <span id="cpu-load">15</span>%</p>
+                <p>MEMORY......: <span id="mem-usage">1024</span> / 8192 MB</p>
+                <p>NETWORK UP..: <span id="net-up">45</span> KB/s</p>
+                <p>NETWORK DOWN: <span id="net-down">128</span> KB/s</p>
+                <p>CORE TEMP...: <span id="core-temp">42</span>°C</p>
+                <p>STATUS......: <span class="status-ok">NOMINAL</span></p>
+            </div>
+        </div>
+    </div>
+    <div class="window" style="top: 10%; left: 50%; width: 23%; height: 40%; z-index: 5;">
+        <div class="title-bar">
+            <span class="title-text">D:\MATRIX.RUN</span>
+            <span class="close-button" onclick="this.parentElement.parentElement.style.display='none'">X</span>
+        </div>
+        <div class="content no-padding">
+            <canvas class="matrix-canvas"></canvas>
+        </div>
+    </div>
+    <div class="window" style="top: 10%; left: 74.5%; width: 23%; height: 40%; z-index: 6;">
+        <div class="title-bar">
+            <span class="title-text">E:\TORUS_KNOT.SYS</span>
+            <span class="close-button" onclick="this.parentElement.parentElement.style.display='none'">X</span>
+        </div>
+        <div class="content no-padding">
+             <canvas class="torus-canvas"></canvas>
+        </div>
+    </div>
+
+    <!-- Rangée 2 -->
+    <div class="window" style="top: 55%; left: 1%; width: 23%; height: 40%; z-index: 7;">
+        <div class="title-bar">
+            <span class="title-text">F:\RADAR.SCAN</span>
+            <span class="close-button" onclick="this.parentElement.parentElement.style.display='none'">X</span>
+        </div>
+        <div class="content no-padding">
+             <canvas class="radar-canvas"></canvas>
+        </div>
+    </div>
+     <div class="window" style="top: 55%; left: 25.5%; width: 23%; height: 40%; z-index: 8;">
+        <div class="title-bar">
+            <span class="title-text">G:\INVADERS.EXE</span>
+            <span class="close-button" onclick="this.parentElement.parentElement.style.display='none'">X</span>
+        </div>
+        <div class="content no-padding">
+             <canvas class="invaders-canvas"></canvas>
+        </div>
+    </div>
+    <div class="window" style="top: 55%; left: 50%; width: 23%; height: 40%; z-index: 9;">
+        <div class="title-bar">
+            <span class="title-text">H:\TECH.DEMO</span>
+            <span class="close-button" onclick="this.parentElement.parentElement.style.display='none'">X</span>
+        </div>
+        <div class="content no-padding">
+             <canvas class="tech-canvas"></canvas>
+        </div>
+    </div>
+    <div class="window" style="top: 55%; left: 74.5%; width: 23%; height: 40%; z-index: 4;">
+        <div class="title-bar">
+            <span class="title-text">B:\DECRYPT.EXE</span>
+            <span class="close-button" onclick="this.parentElement.parentElement.style.display='none'">X</span>
+        </div>
+        <div class="content no-padding">
+            <pre id="decrypt-output"></pre>
+        </div>
+    </div>
+
+    <!-- Ticker de Crypto-monnaies -->
+    <div class="ticker-wrap">
+        <div class="ticker" id="crypto-ticker">
+            <!-- Le contenu sera injecté par JavaScript -->
+        </div>
+    </div>
+
+
+    <script>
+        // --- LOGIQUE DU STARFIELD ---
+        function initializeStarfield(canvas) {
+            const ctx = canvas.getContext('2d');
+            let w, h, stars = [], count = 1500;
+            let rotation = 0;
+
+            function resize() {
+                w = canvas.width = window.innerWidth;
+                h = canvas.height = window.innerHeight;
+                stars = [];
+                for (let i = 0; i < count; i++) {
+                    stars.push({
+                        x: Math.random() * w - w / 2,
+                        y: Math.random() * h - h / 2,
+                        z: Math.random() * w
+                    });
+                }
+            }
+
+            function animateStarfield() {
+                ctx.fillStyle = 'black';
+                ctx.fillRect(0, 0, w, h);
+                ctx.save();
+                ctx.translate(w / 2, h / 2);
+                ctx.rotate(rotation);
+
+                for (const star of stars) {
+                    star.z -= 1;
+                    if (star.z < 1) {
+                        star.z = w;
+                    }
+
+                    const k = 128 / star.z;
+                    const px = star.x * k;
+                    const py = star.y * k;
+                    
+                    const size = (1 - star.z / w) * 4;
+                    ctx.fillStyle = `rgba(0, 255, 0, ${1 - star.z / w})`;
+                    ctx.fillRect(px, py, size, size);
+                }
+                ctx.restore();
+                rotation += 0.0002;
+                requestAnimationFrame(animateStarfield);
+            }
+            
+            window.addEventListener('resize', resize);
+            resize();
+            animateStarfield();
+        }
+
+
+        // --- LOGIQUE DU RADAR (FENÊTRE F) ---
+        function initializeRadar(canvas) {
+            const ctx = canvas.getContext('2d');
+            let w, h, angle = 0, blips = [];
+            const radarColor = '#00ff00';
+
+            function generateBlips() {
+                blips = [];
+                const center_x = w / 2;
+                const center_y = h / 2;
+                const maxRadius = Math.min(center_x, center_y) * 0.8;
+                for (let i = 0; i < 5; i++) {
+                    const r = Math.random() * maxRadius;
+                    const a = Math.random() * 2 * Math.PI;
+                    blips.push({
+                        x: center_x + r * Math.cos(a),
+                        y: center_y + r * Math.sin(a),
+                        size: Math.random() * 2 + 1
+                    });
+                }
+            }
+
+            function resize() {
+                w = canvas.width = canvas.parentElement.clientWidth;
+                h = canvas.height = canvas.parentElement.clientHeight;
+                generateBlips();
+            }
+
+            function drawRadar() {
+                ctx.fillStyle = 'black';
+                ctx.fillRect(0, 0, w, h);
+                const center_x = w / 2;
+                const center_y = h / 2;
+                const radius = Math.min(center_x, center_y) * 0.8;
+
+                ctx.strokeStyle = 'rgba(0, 255, 0, 0.3)';
+                ctx.lineWidth = 1;
+                for (let i = 1; i <= 3; i++) {
+                    ctx.beginPath();
+                    ctx.arc(center_x, center_y, radius * (i / 3), 0, 2 * Math.PI);
+                    ctx.stroke();
+                }
+                ctx.beginPath();
+                ctx.moveTo(center_x - radius, center_y);
+                ctx.lineTo(center_x + radius, center_y);
+                ctx.moveTo(center_x, center_y - radius);
+                ctx.lineTo(center_x, center_y + radius);
+                ctx.stroke();
+
+                ctx.save();
+                ctx.translate(center_x, center_y);
+                ctx.rotate(angle);
+                const gradient = ctx.createLinearGradient(0, 0, radius, 0);
+                gradient.addColorStop(0, 'rgba(0, 255, 0, 0.5)');
+                gradient.addColorStop(1, 'rgba(0, 255, 0, 0)');
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.arc(0, 0, radius, 0, Math.PI / 2);
+                ctx.lineTo(0,0);
+                ctx.fill();
+                ctx.restore();
+
+                ctx.fillStyle = radarColor;
+                blips.forEach(blip => {
+                    ctx.beginPath();
+                    ctx.arc(blip.x, blip.y, blip.size, 0, 2 * Math.PI);
+                    ctx.fill();
+                });
+
+                angle += 0.03;
+                requestAnimationFrame(drawRadar);
+            }
+            
+            new ResizeObserver(resize).observe(canvas.parentElement);
+            resize();
+            drawRadar();
+        }
+
+
+        // --- LOGIQUE EFFET DE DÉFILEMENT DE TEXTE (FENÊTRE C) ---
+        function initializeLogScroller(canvas) {
+            const ctx = canvas.getContext('2d');
+            let w, h;
+            const lines = ["INITIATING DATA TRANSFER...","ACCESSING SECTOR 7G.","CONNECTION ESTABLISHED: 14.4k BPS","ENCRYPTION LAYER: ACTIVE","PACKET 001... SENT","PACKET 002... SENT","RECEIVING RESPONSE...","AUTH_KEY: 8A4F-9B2C-5D7E-1F0A","DECRYPTING PAYLOAD...","PAYLOAD SIZE: 4096 BYTES","DATA CORRUPTION: 0.01%","RENDERING VISUALS...","GRID NODE 42, 57 ONLINE","GRID NODE 13, 88 ONLINE","WARNING: UNKNOWN SIGNATURE DETECTED","SOURCE: UNTRACEABLE","ISOLATING ANOMALY...","LOOPING DATASTREAM...","...","SYSTEM STATUS: NOMINAL"];
+            let y;
+            const lineHeight = 20;
+            const scrollSpeed = 0.7;
+            
+            function resize() {
+                w = canvas.width = canvas.parentElement.clientWidth;
+                h = canvas.height = canvas.parentElement.clientHeight;
+                y = h;
+            }
+
+            function draw() {
+                ctx.fillStyle = 'rgba(0, 20, 0, 1)';
+                ctx.fillRect(0, 0, w, h);
+                ctx.fillStyle = '#00ff00';
+                ctx.font = '18px VT323';
+                for (let i = 0; i < lines.length; i++) {
+                    ctx.fillText(lines[i], 10, y + i * lineHeight);
+                }
+                y -= scrollSpeed;
+                if (y < -lines.length * lineHeight) {
+                    y = h;
+                }
+                requestAnimationFrame(draw);
+            }
+            
+            new ResizeObserver(resize).observe(canvas.parentElement);
+            resize();
+            draw();
+        }
+
+        // --- LOGIQUE EFFET MATRIX (FENÊTRE D) ---
+        function initializeMatrix(canvas) {
+            const ctx = canvas.getContext('2d');
+            let w, h, cols, ypos;
+            const matrixChars = 'アァカサタナハマヤャラワガザダバパイィキシチニヒミリヰギジヂビピウゥクスツヌフムユュルグズブプエェケセテネヘメレヱゲゼデベペオォコソトノホモヨョロヲゴゾドボポヴッン0123456789';
+            
+            function resize() {
+                w = canvas.width = canvas.parentElement.clientWidth;
+                h = canvas.height = canvas.parentElement.clientHeight;
+                cols = Math.floor(w / 20) + 1;
+                ypos = Array(cols).fill(0);
+            }
+
+            function drawMatrix() {
+                ctx.fillStyle = 'rgba(0, 0, 0, .05)';
+                ctx.fillRect(0, 0, w, h);
+                ctx.fillStyle = '#00ff00';
+                ctx.font = '15pt VT323';
+                ypos.forEach((y, ind) => {
+                    const text = matrixChars.charAt(Math.floor(Math.random() * matrixChars.length));
+                    const x = ind * 20;
+                    ctx.fillText(text, x, y);
+                    if (y > 100 + Math.random() * 10000) {
+                        ypos[ind] = 0;
+                    } else {
+                        ypos[ind] = y + 20;
+                    }
+                });
+            }
+            
+            new ResizeObserver(resize).observe(canvas.parentElement);
+            resize();
+            setInterval(drawMatrix, 50);
+        }
+
+        // --- LOGIQUE POUR STATUT SYSTÈME (FENÊTRE A) ---
+        function initializeSystemStatus() {
+            const cpu = document.getElementById('cpu-load');
+            const mem = document.getElementById('mem-usage');
+            const netUp = document.getElementById('net-up');
+            const netDown = document.getElementById('net-down');
+            const temp = document.getElementById('core-temp');
+
+            setInterval(() => {
+                cpu.textContent = Math.floor(Math.random() * (90 - 10 + 1) + 10);
+                mem.textContent = Math.floor(Math.random() * (7000 - 1024 + 1) + 1024);
+                netUp.textContent = Math.floor(Math.random() * (200 - 20 + 1) + 20);
+                netDown.textContent = Math.floor(Math.random() * (1024 - 128 + 1) + 128);
+                temp.textContent = Math.floor(Math.random() * (65 - 40 + 1) + 40);
+            }, 2000);
+        }
+
+        // --- LOGIQUE POUR DÉCHIFFREMENT (FENÊTRE B) ---
+        function initializeDecryption() {
+            const output = document.getElementById('decrypt-output');
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_-+=[]{}|;:,.<>?';
+            let intervalId;
+
+            function randomChar() {
+                return chars[Math.floor(Math.random() * chars.length)];
+            }
+
+            function generateLine(length) {
+                let line = '';
+                for (let i = 0; i < length; i++) {
+                    line += randomChar();
+                }
+                return line;
+            }
+
+            function runDecryption() {
+                let lines = 0;
+                output.innerHTML = 'INITIALIZING BRUTEFORCE...\n';
+                output.innerHTML += 'TARGET: 256-BIT AES KEY\n\n';
+
+                intervalId = setInterval(() => {
+                    if (lines < 8) {
+                        const line = generateLine(50);
+                        output.innerHTML += `> ${line} [FAILED]\n`;
+                        lines++;
+                         // Auto-scroll to bottom
+                        output.scrollTop = output.scrollHeight;
+                    } else {
+                        clearInterval(intervalId);
+                        const key = `> ${generateLine(22)} <span class="status-ok">[KEY FOUND]</span> ${generateLine(21)}`;
+                        output.innerHTML += `${key}\n\n`;
+                        output.innerHTML += 'DECRYPTION SUCCESSFUL.\nACCESS GRANTED.\n';
+                        output.scrollTop = output.scrollHeight;
+                        // Restart after a pause
+                        setTimeout(runDecryption, 5000); 
+                    }
+                }, 150);
+            }
+
+            runDecryption();
+        }
+
+
+        // --- LOGIQUE MODÈLE 3D (FENÊTRE E) ---
+        function initializeTorusKnot(canvas) {
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(75, canvas.clientWidth / canvas.clientHeight, 0.1, 1000);
+            const renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true });
+            
+            renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+
+            const geometry = new THREE.TorusKnotGeometry(1.5, 0.5, 128, 16);
+            const material = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true });
+            const torusKnot = new THREE.Mesh(geometry, material);
+            scene.add(torusKnot);
+
+            camera.position.z = 5;
+
+            function animate() {
+                requestAnimationFrame(animate);
+                torusKnot.rotation.x += 0.005;
+                torusKnot.rotation.y += 0.01;
+                renderer.render(scene, camera);
+            }
+            animate();
+
+            // Gérer le redimensionnement
+            new ResizeObserver(() => {
+                const w = canvas.parentElement.clientWidth;
+                const h = canvas.parentElement.clientHeight;
+                camera.aspect = w / h;
+                camera.updateProjectionMatrix();
+                renderer.setSize(w, h);
+            }).observe(canvas.parentElement);
+        }
+        
+        // --- LOGIQUE SPACE INVADERS (FENÊTRE G) ---
+        function initializeSpaceInvaders(canvas) {
+            const ctx = canvas.getContext('2d');
+            let w, h;
+            
+            const player = { x: 0, y: 0, width: 20, height: 10, speed: 2 };
+            const bullets = [];
+            const invaders = [];
+            const invaderRows = 3;
+            const invaderCols = 6;
+            const invaderSize = 15;
+            let invaderDirection = 1;
+            let invaderSpeed = 0.5;
+            let shootCooldown = 0;
+
+            function resetInvaders() {
+                invaders.length = 0;
+                for (let r = 0; r < invaderRows; r++) {
+                    for (let c = 0; c < invaderCols; c++) {
+                        invaders.push({
+                            x: c * (invaderSize + 10) + 15,
+                            y: r * (invaderSize + 10) + 20,
+                            width: invaderSize,
+                            height: invaderSize,
+                            alive: true
+                        });
+                    }
+                }
+            }
+            
+            function resize() {
+                w = canvas.width = canvas.parentElement.clientWidth;
+                h = canvas.height = canvas.parentElement.clientHeight;
+                player.x = w / 2 - player.width / 2;
+                player.y = h - player.height - 10;
+                resetInvaders();
+            }
+            
+            function gameLoop() {
+                ctx.fillStyle = 'black';
+                ctx.fillRect(0, 0, w, h);
+                
+                // --- Player Logic ---
+                player.x += player.speed;
+                if (player.x <= 0 || player.x + player.width >= w) {
+                    player.speed *= -1;
+                }
+                ctx.fillStyle = '#00ff00';
+                ctx.fillRect(player.x, player.y, player.width, player.height);
+                
+                // Auto-shoot
+                if (shootCooldown <= 0) {
+                    bullets.push({ x: player.x + player.width / 2 - 1, y: player.y, width: 2, height: 5, speed: -5 });
+                    shootCooldown = 20;
+                }
+                shootCooldown--;
+
+                // --- Bullets Logic ---
+                for (let i = bullets.length - 1; i >= 0; i--) {
+                    const b = bullets[i];
+                    b.y += b.speed;
+                    ctx.fillRect(b.x, b.y, b.width, b.height);
+                    if (b.y < 0) bullets.splice(i, 1);
+                }
+                
+                // --- Invaders Logic ---
+                let moveDown = false;
+                for (const invader of invaders) {
+                    if (invader.alive) {
+                        invader.x += invaderDirection * invaderSpeed;
+                        if (invader.x <= 0 || invader.x + invader.width >= w) {
+                            moveDown = true;
+                        }
+                    }
+                }
+                if (moveDown) {
+                    invaderDirection *= -1;
+                    invaders.forEach(inv => inv.y += 10);
+                }
+                
+                // Draw invaders and check collisions
+                for (const invader of invaders) {
+                    if (invader.alive) {
+                        ctx.fillRect(invader.x, invader.y, invader.width, invader.height);
+                        for (let i = bullets.length - 1; i >= 0; i--) {
+                            const b = bullets[i];
+                            if (b.y < invader.y + invader.height && b.y + b.height > invader.y &&
+                                b.x < invader.x + invader.width && b.x + b.width > invader.x) {
+                                invader.alive = false;
+                                bullets.splice(i, 1);
+                            }
+                        }
+                    }
+                }
+                
+                if (invaders.every(inv => !inv.alive)) {
+                    resetInvaders();
+                }
+
+                requestAnimationFrame(gameLoop);
+            }
+
+            new ResizeObserver(resize).observe(canvas.parentElement);
+            resize();
+            gameLoop();
+        }
+        
+        // --- LOGIQUE EFFET TECH-TECH (FENÊTRE H) ---
+        function initializeTechTech(canvas) {
+            const ctx = canvas.getContext('2d');
+            const offscreenCanvas = document.createElement('canvas');
+            const offscreenCtx = offscreenCanvas.getContext('2d');
+            let w, h;
+            let time = 0;
+            const text = "  <<< TECH-TECH DEMO >>>  ";
+
+            function setupOffscreen() {
+                w = canvas.width = canvas.parentElement.clientWidth;
+                h = canvas.height = canvas.parentElement.clientHeight;
+                offscreenCanvas.width = w;
+                offscreenCanvas.height = h;
+
+                offscreenCtx.fillStyle = '#000';
+                offscreenCtx.fillRect(0, 0, w, h);
+                offscreenCtx.fillStyle = '#00ff00';
+                offscreenCtx.font = '30px VT323';
+                offscreenCtx.textBaseline = 'middle';
+                offscreenCtx.textAlign = 'center';
+                
+                // Répéter le texte pour couvrir le canvas
+                for(let i = -1; i < 2; i++) {
+                    offscreenCtx.fillText(text, w / 2 + (i * w), h / 2);
+                }
+            }
+
+            function animate() {
+                ctx.fillStyle = 'black';
+                ctx.fillRect(0, 0, w, h);
+                
+                time += 1;
+                if (time > w) time = 0;
+
+                for (let i = 0; i < h; i++) {
+                    const sliceY = i;
+                    const offsetX = Math.sin(i / 25 + time / 10) * 25;
+                    
+                    ctx.drawImage(
+                        offscreenCanvas,
+                        time, sliceY,
+                        w, 1,
+                        offsetX, sliceY,
+                        w, 1
+                    );
+                }
+                
+                requestAnimationFrame(animate);
+            }
+            
+            new ResizeObserver(setupOffscreen).observe(canvas.parentElement);
+            setupOffscreen();
+            animate();
+        }
+
+        // --- LOGIQUE DU TICKER CRYPTO ---
+        const cryptoData = {
+            'BTC': { price: 66102.55, id: 'bitcoin' },
+            'ETH': { price: 3560.78, id: 'ethereum' },
+            'SOL': { price: 165.21, id: 'solana' },
+            'BNB': { price: 598.44, id: 'binancecoin' },
+            'XRP': { price: 0.495, id: 'ripple' },
+            'DOGE': { price: 0.158, id: 'dogecoin' },
+            'ADA': { price: 0.456, id: 'cardano' },
+            'SHIB': { price: 0.0000251, id: 'shiba-inu' },
+            'AVAX': { price: 36.70, id: 'avalanche-2' },
+            'LINK': { price: 18.55, id: 'chainlink' }
+        };
+
+        function simulateCryptoPrices() {
+            for (const symbol in cryptoData) {
+                const data = cryptoData[symbol];
+                const oldPrice = data.price;
+                const volatility = oldPrice * 0.005; // Fluctuation de 0.5%
+                const change = (Math.random() * volatility * 2) - volatility;
+                const newPrice = oldPrice + change;
+                
+                data.price = Math.max(0, newPrice); // Empêche les prix négatifs
+            }
+            updateTicker();
+        }
+
+        function updateTicker() {
+            const ticker = document.getElementById('crypto-ticker');
+            let html = '';
+
+            for (const symbol in cryptoData) {
+                const data = cryptoData[symbol];
+                const price = data.price;
+                const direction = Math.random() > 0.5 ? 'up' : 'down';
+                const directionSymbol = direction === 'up' ? '▲' : '▼';
+                
+                let formattedPrice = price.toLocaleString('en-US', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: price < 1 ? 7 : 2
+                });
+
+                html += `
+                    <div class="ticker-item">
+                        ${symbol}: $${formattedPrice} <span class="${direction}">${directionSymbol}</span>
+                    </div>
+                `;
+            }
+            // Dupliquer le contenu pour un défilement fluide
+            ticker.innerHTML = html + html;
+        }
+
+
+        // --- LOGIQUE DE DÉPLACEMENT DES FENÊTRES ---
+        let activeWindow = null;
+        let highestZIndex = 9; // Initialisé au z-index le plus élevé + 1
+        let offset = { x: 0, y: 0 };
+        
+        function startDrag(e, win) {
+            if (e.target.classList.contains('close-button')) return;
+            activeWindow = win;
+            highestZIndex++;
+            activeWindow.style.zIndex = highestZIndex;
+            offset.x = e.clientX - activeWindow.offsetLeft;
+            offset.y = e.clientY - activeWindow.offsetTop;
+            document.addEventListener('mousemove', dragWindow);
+            document.addEventListener('mouseup', stopDrag);
+        }
+
+        function dragWindow(e) {
+            if (!activeWindow) return;
+            e.preventDefault();
+            activeWindow.style.left = `${e.clientX - offset.x}px`;
+            activeWindow.style.top = `${e.clientY - offset.y}px`;
+        }
+
+        function stopDrag() {
+            document.removeEventListener('mousemove', dragWindow);
+            document.removeEventListener('mouseup', stopDrag);
+            activeWindow = null;
+        }
+
+        function initializeWindows() {
+            // Désactiver le glisser-déposer sur les petits écrans
+            if (window.matchMedia("(max-width: 800px)").matches) {
+                return;
+            }
+
+            const windows = document.querySelectorAll('.window');
+            windows.forEach(win => {
+                const titleBar = win.querySelector('.title-bar');
+                titleBar.addEventListener('mousedown', (e) => startDrag(e, win));
+                win.addEventListener('mousedown', () => {
+                    highestZIndex++;
+                    win.style.zIndex = highestZIndex;
+                });
+            });
+        }
+        
+        // --- LOGIQUE DU SCROLLER SINUSOIDAL ---
+        function initializeTopScroller() {
+            const scroller = document.getElementById('top-scroller');
+            const text = "HACKER";
+            scroller.innerHTML = text.split('').map(char => `<span>${char}</span>`).join('');
+            
+            const letters = scroller.querySelectorAll('span');
+            let time = 0;
+
+            function animateScroller() {
+                time += 0.05;
+                letters.forEach((letter, i) => {
+                    const y = Math.sin(time + i * 0.5) * 15; // 15 est l'amplitude de la vague
+                    letter.style.transform = `translateY(${y}px)`;
+                });
+                requestAnimationFrame(animateScroller);
+            }
+            animateScroller();
+        }
+        
+        // --- INITIALISATION ---
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            // Initialiser les composants principaux
+            initializeStarfield(document.getElementById('starfield-canvas'));
+            initializeWindows();
+            initializeTopScroller();
+            
+            // Initialiser les fenêtres dynamiques
+            initializeSystemStatus();
+            initializeDecryption();
+            
+            // Initialiser les canevas
+            const scrollerCanvas = document.querySelector('.scroller-canvas');
+            initializeLogScroller(scrollerCanvas);
+
+            const matrixCanvas = document.querySelector('.matrix-canvas');
+            initializeMatrix(matrixCanvas);
+
+            const torusCanvas = document.querySelector('.torus-canvas');
+            initializeTorusKnot(torusCanvas);
+            
+            const radarCanvas = document.querySelector('.radar-canvas');
+            initializeRadar(radarCanvas);
+            
+            const invadersCanvas = document.querySelector('.invaders-canvas');
+            initializeSpaceInvaders(invadersCanvas);
+            
+            const techCanvas = document.querySelector('.tech-canvas');
+            initializeTechTech(techCanvas);
+
+            // Lancer le ticker simulé
+            simulateCryptoPrices();
+            setInterval(simulateCryptoPrices, 2000); // Mettre à jour toutes les 2 secondes
+        });
+
+    </script>
+
+</body>
+</html>
