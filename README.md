@@ -1,1 +1,0 @@
-# 80s-Green-Screen-OS-Simulator
