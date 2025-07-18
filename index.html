@@ -1,13 +1,4 @@
 <!DOCTYPE html>
-<head>
-  ...
-  <meta property="og:title" content="Retro Hacker Terminal OS" />
-  <meta property="og:description" content="A multi-window, retro-themed OS simulator built with HTML, CSS, JS, and Three.js." />
-  <meta property="og:image" content="https://github.com/Gunthermart/80s-Green-Screen-OS-Simulator/blob/e907ccdca9131f13e8f897645988642db28778d9/hacker.png?raw=true" />
-  <meta property="og:url" content="https://github.com/Gunthermart/80s-Green-Screen-OS-Simulator/" />
-  <meta property="og:type" content="Hack" />
-  ...
-</head>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -63,14 +54,14 @@
         .window {
             position: absolute;
             border: 2px solid #00ff00;
-            background-color: rgba(0, 20, 0, 0.85);
+            background-color: rgba(0, 20, 0, 0.5); /* Transparence à 50% */
             box-shadow: 5px 5px 0px rgba(0, 255, 0, 0.3);
             min-width: 210px;
             min-height: 105px;
             display: flex;
             flex-direction: column;
             border-radius: 3px;
-            overflow: hidden; /* Important pour contenir le canvas/iframe */
+            overflow: hidden;
         }
 
         /* Barre de titre de la fenêtre */
@@ -90,8 +81,8 @@
         .title-bar .title-text {
             flex-grow: 1;
         }
-
-        .title-bar .close-button {
+        
+        .close-button {
             background-color: #000;
             color: #00ff00;
             border: 1px solid #00ff00;
@@ -101,6 +92,7 @@
             line-height: 18px;
             cursor: pointer;
             font-weight: bold;
+            margin-left: 4px;
         }
         
         .close-button:hover {
@@ -118,10 +110,24 @@
         .content.no-padding {
             padding: 0;
             overflow: hidden;
-            background-color: #000;
+            background-color: transparent; /* Fond transparent pour voir à travers */
+            position: relative; /* Pour positionner les boutons */
+        }
+        
+        /* Style des ascenseurs */
+        .content::-webkit-scrollbar {
+            width: 12px;
+        }
+        .content::-webkit-scrollbar-track {
+            background: #000;
+        }
+        .content::-webkit-scrollbar-thumb {
+            background-color: #ff0000;
+            border-radius: 2px;
+            border: 2px solid #00ff00;
         }
 
-        .scroller-canvas, .matrix-canvas, .torus-canvas, .radar-canvas, .invaders-canvas, .tech-canvas {
+        .scroller-canvas, .matrix-canvas, .torus-canvas, .radar-canvas, .invaders-canvas, .tech-canvas, .tunnel-canvas, .audio-canvas {
             display: block;
             width: 100%;
             height: 100%;
@@ -209,6 +215,29 @@
                 transform: translateX(-100%);
             }
         }
+        
+        /* Boutons Glow */
+        .glow-button {
+            position: absolute;
+            bottom: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(255, 0, 0, 0.15);
+            border: 1px solid #ff0000;
+            color: #ff0000;
+            padding: 5px 15px;
+            border-radius: 5px;
+            font-family: 'VT323', monospace;
+            font-size: 20px;
+            cursor: pointer;
+            text-shadow: 0 0 5px #ff0000, 0 0 10px #ff0000;
+            transition: all 0.3s ease;
+        }
+
+        .glow-button:hover {
+            background-color: rgba(255, 0, 0, 0.3);
+            box-shadow: 0 0 15px #ff0000;
+        }
 
         /* --- STYLES RESPONSIVES --- */
         @media (max-width: 800px) {
@@ -225,6 +254,7 @@
                 top: auto !important;
                 margin: 20px auto !important;
                 float: none !important;
+                resize: none; /* Désactiver le redimensionnement sur mobile */
             }
 
             .title-bar {
@@ -239,86 +269,62 @@
     <canvas id="starfield-canvas"></canvas>
 
     <!-- Rangée 1 -->
-    <div class="window" style="top: 10%; left: 1%; width: 23%; height: 40%; z-index: 2;">
-        <div class="title-bar">
-            <span class="title-text">C:\DATA.STREAM</span>
-            <span class="close-button" onclick="this.parentElement.parentElement.style.display='none'">X</span>
-        </div>
-        <div class="content no-padding">
-            <canvas class="scroller-canvas"></canvas>
-        </div>
+    <div class="window" style="top: 10%; left: 1%; width: 18.8%; height: 40%; z-index: 2;">
+        <div class="title-bar"><span class="title-text">C:\DATA.STREAM</span><span class="close-button" onclick="this.parentElement.parentElement.style.display='none'">X</span></div>
+        <div class="content no-padding"><canvas class="scroller-canvas"></canvas></div>
     </div>
-    <div class="window" style="top: 10%; left: 25.5%; width: 23%; height: 40%; z-index: 3;">
-        <div class="title-bar">
-            <span class="title-text">A:\SYSTEM.STATUS</span>
-            <span class="close-button" onclick="this.parentElement.parentElement.style.display='none'">X</span>
-        </div>
+    <div class="window" style="top: 10%; left: 20.8%; width: 18.8%; height: 40%; z-index: 3;">
+        <div class="title-bar"><span class="title-text">A:\SYSTEM.STATUS</span><span class="close-button" onclick="this.parentElement.parentElement.style.display='none'">X</span></div>
         <div class="content system-status">
             <div>
-                <p>CPU LOAD....: <span id="cpu-load">15</span>%</p>
-                <p>MEMORY......: <span id="mem-usage">1024</span> / 8192 MB</p>
-                <p>NETWORK UP..: <span id="net-up">45</span> KB/s</p>
-                <p>NETWORK DOWN: <span id="net-down">128</span> KB/s</p>
-                <p>CORE TEMP...: <span id="core-temp">42</span>°C</p>
-                <p>STATUS......: <span class="status-ok">NOMINAL</span></p>
+                <p>CPU LOAD: <span id="cpu-load">15</span>%</p>
+                <p>MEMORY: <span id="mem-usage">1024</span>MB</p>
+                <p>NET UP: <span id="net-up">45</span>KB/s</p>
+                <p>NET DOWN: <span id="net-down">128</span>KB/s</p>
+                <p>CORE TEMP: <span id="core-temp">42</span>°C</p>
+                <p>STATUS: <span class="status-ok">NOMINAL</span></p>
             </div>
         </div>
     </div>
-    <div class="window" style="top: 10%; left: 50%; width: 23%; height: 40%; z-index: 5;">
-        <div class="title-bar">
-            <span class="title-text">D:\MATRIX.RUN</span>
-            <span class="close-button" onclick="this.parentElement.parentElement.style.display='none'">X</span>
-        </div>
-        <div class="content no-padding">
-            <canvas class="matrix-canvas"></canvas>
-        </div>
+    <div class="window" style="top: 10%; left: 40.6%; width: 18.8%; height: 40%; z-index: 5;">
+        <div class="title-bar"><span class="title-text">D:\MATRIX.RUN</span><span class="close-button" onclick="this.parentElement.parentElement.style.display='none'">X</span></div>
+        <div class="content no-padding"><canvas class="matrix-canvas"></canvas></div>
     </div>
-    <div class="window" style="top: 10%; left: 74.5%; width: 23%; height: 40%; z-index: 6;">
-        <div class="title-bar">
-            <span class="title-text">E:\TORUS_KNOT.SYS</span>
-            <span class="close-button" onclick="this.parentElement.parentElement.style.display='none'">X</span>
-        </div>
-        <div class="content no-padding">
-             <canvas class="torus-canvas"></canvas>
-        </div>
+    <div class="window" style="top: 10%; left: 60.4%; width: 18.8%; height: 40%; z-index: 6;">
+        <div class="title-bar"><span class="title-text">E:\TORUS_KNOT.SYS</span><span class="close-button" onclick="this.parentElement.parentElement.style.display='none'">X</span></div>
+        <div class="content no-padding"><canvas class="torus-canvas"></canvas></div>
+    </div>
+    <div class="window" style="top: 10%; left: 80.2%; width: 18.8%; height: 40%; z-index: 10;">
+        <div class="title-bar"><span class="title-text">I:\WORMHOLE.TUNNEL</span><span class="close-button" onclick="this.parentElement.parentElement.style.display='none'">X</span></div>
+        <div class="content no-padding"><canvas class="tunnel-canvas"></canvas></div>
     </div>
 
     <!-- Rangée 2 -->
-    <div class="window" style="top: 55%; left: 1%; width: 23%; height: 40%; z-index: 7;">
-        <div class="title-bar">
-            <span class="title-text">F:\RADAR.SCAN</span>
-            <span class="close-button" onclick="this.parentElement.parentElement.style.display='none'">X</span>
-        </div>
-        <div class="content no-padding">
-             <canvas class="radar-canvas"></canvas>
-        </div>
+    <div class="window" style="top: 55%; left: 1%; width: 18.8%; height: 40%; z-index: 7;">
+        <div class="title-bar"><span class="title-text">F:\RADAR.SCAN</span><span class="close-button" onclick="this.parentElement.parentElement.style.display='none'">X</span></div>
+        <div class="content no-padding"><canvas class="radar-canvas"></canvas></div>
     </div>
-     <div class="window" style="top: 55%; left: 25.5%; width: 23%; height: 40%; z-index: 8;">
-        <div class="title-bar">
-            <span class="title-text">G:\INVADERS.EXE</span>
-            <span class="close-button" onclick="this.parentElement.parentElement.style.display='none'">X</span>
-        </div>
+     <div class="window" style="top: 55%; left: 20.8%; width: 18.8%; height: 40%; z-index: 8;">
+        <div class="title-bar"><span class="title-text">G:\INVADERS.EXE</span><span class="close-button" onclick="this.parentElement.parentElement.style.display='none'">X</span></div>
         <div class="content no-padding">
              <canvas class="invaders-canvas"></canvas>
+             <button class="glow-button">Candy</button>
         </div>
     </div>
-    <div class="window" style="top: 55%; left: 50%; width: 23%; height: 40%; z-index: 9;">
-        <div class="title-bar">
-            <span class="title-text">H:\TECH.DEMO</span>
-            <span class="close-button" onclick="this.parentElement.parentElement.style.display='none'">X</span>
-        </div>
+    <div class="window" style="top: 55%; left: 40.6%; width: 18.8%; height: 40%; z-index: 9;">
+        <div class="title-bar"><span class="title-text">H:\TECH.DEMO</span><span class="close-button" onclick="this.parentElement.parentElement.style.display='none'">X</span></div>
         <div class="content no-padding">
              <canvas class="tech-canvas"></canvas>
+             <button class="glow-button" onclick="window.location.href='calc/index.html'">Calc</button>
         </div>
     </div>
-    <div class="window" style="top: 55%; left: 74.5%; width: 23%; height: 40%; z-index: 4;">
-        <div class="title-bar">
-            <span class="title-text">B:\DECRYPT.EXE</span>
-            <span class="close-button" onclick="this.parentElement.parentElement.style.display='none'">X</span>
-        </div>
-        <div class="content no-padding">
-            <pre id="decrypt-output"></pre>
-        </div>
+     <div class="window" style="top: 55%; left: 60.4%; width: 18.8%; height: 40%; z-index: 11;">
+        <div class="title-bar"><span class="title-text">J:\AUDIO.VIZ</span><span class="close-button" onclick="this.parentElement.parentElement.style.display='none'">X</span></div>
+        <div class="content no-padding"><canvas class="audio-canvas"></canvas></div>
+    </div>
+    <div class="window" style="top: 55%; left: 80.2%; width: 18.8%; height: 40%; z-index: 4;">
+        <div class="title-bar"><span class="title-text">B:\DECRYPT.EXE</span><span class="close-button" onclick="this.parentElement.parentElement.style.display='none'">X</span></div>
+        <div class="content no-padding"><pre id="decrypt-output"></pre></div>
     </div>
 
     <!-- Ticker de Crypto-monnaies -->
@@ -330,6 +336,8 @@
 
 
     <script>
+        const isMobile = () => window.innerWidth <= 800;
+
         // --- LOGIQUE DU STARFIELD ---
         function initializeStarfield(canvas) {
             const ctx = canvas.getContext('2d');
@@ -403,9 +411,9 @@
                 }
             }
 
-            function resize() {
-                w = canvas.width = canvas.parentElement.clientWidth;
-                h = canvas.height = canvas.parentElement.clientHeight;
+            function resize(width, height) {
+                w = canvas.width = width;
+                h = canvas.height = height;
                 generateBlips();
             }
 
@@ -455,8 +463,16 @@
                 requestAnimationFrame(drawRadar);
             }
             
-            new ResizeObserver(resize).observe(canvas.parentElement);
-            resize();
+            const observer = new ResizeObserver(entries => {
+                window.requestAnimationFrame(() => {
+                    const entry = entries[0];
+                    if (canvas.width !== entry.contentRect.width || canvas.height !== entry.contentRect.height) {
+                        resize(entry.contentRect.width, entry.contentRect.height);
+                    }
+                });
+            });
+            observer.observe(canvas.parentElement);
+            resize(canvas.parentElement.clientWidth, canvas.parentElement.clientHeight);
             drawRadar();
         }
 
@@ -470,9 +486,9 @@
             const lineHeight = 20;
             const scrollSpeed = 0.7;
             
-            function resize() {
-                w = canvas.width = canvas.parentElement.clientWidth;
-                h = canvas.height = canvas.parentElement.clientHeight;
+            function resize(width, height) {
+                w = canvas.width = width;
+                h = canvas.height = height;
                 y = h;
             }
 
@@ -491,8 +507,16 @@
                 requestAnimationFrame(draw);
             }
             
-            new ResizeObserver(resize).observe(canvas.parentElement);
-            resize();
+            const observer = new ResizeObserver(entries => {
+                window.requestAnimationFrame(() => {
+                    const entry = entries[0];
+                    if (canvas.width !== entry.contentRect.width || canvas.height !== entry.contentRect.height) {
+                        resize(entry.contentRect.width, entry.contentRect.height);
+                    }
+                });
+            });
+            observer.observe(canvas.parentElement);
+            resize(canvas.parentElement.clientWidth, canvas.parentElement.clientHeight);
             draw();
         }
 
@@ -502,9 +526,9 @@
             let w, h, cols, ypos;
             const matrixChars = 'アァカサタナハマヤャラワガザダバパイィキシチニヒミリヰギジヂビピウゥクスツヌフムユュルグズブプエェケセテネヘメレヱゲゼデベペオォコソトノホモヨョロヲゴゾドボポヴッン0123456789';
             
-            function resize() {
-                w = canvas.width = canvas.parentElement.clientWidth;
-                h = canvas.height = canvas.parentElement.clientHeight;
+            function resize(width, height) {
+                w = canvas.width = width;
+                h = canvas.height = height;
                 cols = Math.floor(w / 20) + 1;
                 ypos = Array(cols).fill(0);
             }
@@ -526,8 +550,16 @@
                 });
             }
             
-            new ResizeObserver(resize).observe(canvas.parentElement);
-            resize();
+            const observer = new ResizeObserver(entries => {
+                window.requestAnimationFrame(() => {
+                    const entry = entries[0];
+                    if (canvas.width !== entry.contentRect.width || canvas.height !== entry.contentRect.height) {
+                        resize(entry.contentRect.width, entry.contentRect.height);
+                    }
+                });
+            });
+            observer.observe(canvas.parentElement);
+            resize(canvas.parentElement.clientWidth, canvas.parentElement.clientHeight);
             setInterval(drawMatrix, 50);
         }
 
@@ -618,14 +650,19 @@
             }
             animate();
 
-            // Gérer le redimensionnement
-            new ResizeObserver(() => {
-                const w = canvas.parentElement.clientWidth;
-                const h = canvas.parentElement.clientHeight;
-                camera.aspect = w / h;
-                camera.updateProjectionMatrix();
-                renderer.setSize(w, h);
-            }).observe(canvas.parentElement);
+            const observer = new ResizeObserver(entries => {
+                window.requestAnimationFrame(() => {
+                    const entry = entries[0];
+                    const w = entry.contentRect.width;
+                    const h = entry.contentRect.height;
+                    if (canvas.width !== w || canvas.height !== h) {
+                        camera.aspect = w / h;
+                        camera.updateProjectionMatrix();
+                        renderer.setSize(w, h);
+                    }
+                });
+            });
+            observer.observe(canvas.parentElement);
         }
         
         // --- LOGIQUE SPACE INVADERS (FENÊTRE G) ---
@@ -658,9 +695,9 @@
                 }
             }
             
-            function resize() {
-                w = canvas.width = canvas.parentElement.clientWidth;
-                h = canvas.height = canvas.parentElement.clientHeight;
+            function resize(width, height) {
+                w = canvas.width = width;
+                h = canvas.height = height;
                 player.x = w / 2 - player.width / 2;
                 player.y = h - player.height - 10;
                 resetInvaders();
@@ -730,8 +767,16 @@
                 requestAnimationFrame(gameLoop);
             }
 
-            new ResizeObserver(resize).observe(canvas.parentElement);
-            resize();
+            const observer = new ResizeObserver(entries => {
+                window.requestAnimationFrame(() => {
+                    const entry = entries[0];
+                    if (canvas.width !== entry.contentRect.width || canvas.height !== entry.contentRect.height) {
+                        resize(entry.contentRect.width, entry.contentRect.height);
+                    }
+                });
+            });
+            observer.observe(canvas.parentElement);
+            resize(canvas.parentElement.clientWidth, canvas.parentElement.clientHeight);
             gameLoop();
         }
         
@@ -744,9 +789,9 @@
             let time = 0;
             const text = "  <<< TECH-TECH DEMO >>>  ";
 
-            function setupOffscreen() {
-                w = canvas.width = canvas.parentElement.clientWidth;
-                h = canvas.height = canvas.parentElement.clientHeight;
+            function setupOffscreen(width, height) {
+                w = canvas.width = width;
+                h = canvas.height = height;
                 offscreenCanvas.width = w;
                 offscreenCanvas.height = h;
 
@@ -757,7 +802,6 @@
                 offscreenCtx.textBaseline = 'middle';
                 offscreenCtx.textAlign = 'center';
                 
-                // Répéter le texte pour couvrir le canvas
                 for(let i = -1; i < 2; i++) {
                     offscreenCtx.fillText(text, w / 2 + (i * w), h / 2);
                 }
@@ -786,34 +830,122 @@
                 requestAnimationFrame(animate);
             }
             
-            new ResizeObserver(setupOffscreen).observe(canvas.parentElement);
-            setupOffscreen();
+            const observer = new ResizeObserver(entries => {
+                window.requestAnimationFrame(() => {
+                    const entry = entries[0];
+                    if (canvas.width !== entry.contentRect.width || canvas.height !== entry.contentRect.height) {
+                        setupOffscreen(entry.contentRect.width, entry.contentRect.height);
+                    }
+                });
+            });
+            observer.observe(canvas.parentElement);
+            setupOffscreen(canvas.parentElement.clientWidth, canvas.parentElement.clientHeight);
             animate();
+        }
+        
+        // --- LOGIQUE AUDIO VISUALIZER (FENÊTRE J) ---
+        function initializeAudioVisualizer(canvas) {
+            const ctx = canvas.getContext('2d');
+            let w, h, time = 0;
+            const bars = 16;
+
+            function resize(width, height) {
+                w = canvas.width = width;
+                h = canvas.height = height;
+            }
+
+            function draw() {
+                ctx.fillStyle = 'black';
+                ctx.fillRect(0, 0, w, h);
+                ctx.fillStyle = '#00ff00';
+                
+                const barWidth = w / bars;
+                for (let i = 0; i < bars; i++) {
+                    const amplitude = (Math.sin(i * 0.5 + time * 0.1) + 1) / 2;
+                    const barHeight = amplitude * h * 0.8 + h * 0.1;
+                    ctx.fillRect(i * barWidth, h - barHeight, barWidth - 2, barHeight);
+                }
+                
+                time++;
+                requestAnimationFrame(draw);
+            }
+            
+            const observer = new ResizeObserver(entries => {
+                window.requestAnimationFrame(() => {
+                    const entry = entries[0];
+                    if (canvas.width !== entry.contentRect.width || canvas.height !== entry.contentRect.height) {
+                        resize(entry.contentRect.width, entry.contentRect.height);
+                    }
+                });
+            });
+            observer.observe(canvas.parentElement);
+            resize(canvas.parentElement.clientWidth, canvas.parentElement.clientHeight);
+            draw();
+        }
+        
+        // --- LOGIQUE TUNNEL 3D (FENÊTRE I) ---
+        function initializeTunnel(canvas) {
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(75, canvas.clientWidth / canvas.clientHeight, 0.1, 1000);
+            const renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true });
+            
+            renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+
+            const numSegments = 50;
+            const radius = 10;
+            const tubeRadius = 0.5;
+            const tubeSegments = 8;
+            const tubeGeometry = new THREE.CylinderGeometry(radius, radius, tubeRadius, tubeSegments, 1, true);
+            const material = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true, side: THREE.DoubleSide });
+            
+            const tunnel = new THREE.Group();
+            for (let i = 0; i < numSegments; i++) {
+                const segment = new THREE.Mesh(tubeGeometry, material);
+                segment.position.z = i * tubeRadius * 2;
+                tunnel.add(segment);
+            }
+            scene.add(tunnel);
+
+            function animate() {
+                requestAnimationFrame(animate);
+                tunnel.position.z -= 0.1;
+                tunnel.rotation.z += 0.001;
+                if (tunnel.position.z < -tubeRadius * 2) {
+                    tunnel.position.z = 0;
+                }
+                renderer.render(scene, camera);
+            }
+            animate();
+
+            const observer = new ResizeObserver(entries => {
+                window.requestAnimationFrame(() => {
+                    const entry = entries[0];
+                    const w = entry.contentRect.width;
+                    const h = entry.contentRect.height;
+                    if (canvas.width !== w || canvas.height !== h) {
+                        camera.aspect = w / h;
+                        camera.updateProjectionMatrix();
+                        renderer.setSize(w, h);
+                    }
+                });
+            });
+            observer.observe(canvas.parentElement);
         }
 
         // --- LOGIQUE DU TICKER CRYPTO ---
         const cryptoData = {
-            'BTC': { price: 66102.55, id: 'bitcoin' },
-            'ETH': { price: 3560.78, id: 'ethereum' },
-            'SOL': { price: 165.21, id: 'solana' },
-            'BNB': { price: 598.44, id: 'binancecoin' },
-            'XRP': { price: 0.495, id: 'ripple' },
-            'DOGE': { price: 0.158, id: 'dogecoin' },
-            'ADA': { price: 0.456, id: 'cardano' },
-            'SHIB': { price: 0.0000251, id: 'shiba-inu' },
-            'AVAX': { price: 36.70, id: 'avalanche-2' },
-            'LINK': { price: 18.55, id: 'chainlink' }
+            'BTC': { price: 66102.55 }, 'ETH': { price: 3560.78 }, 'SOL': { price: 165.21 },
+            'BNB': { price: 598.44 }, 'XRP': { price: 0.495 }, 'DOGE': { price: 0.158 },
+            'ADA': { price: 0.456 }, 'SHIB': { price: 0.0000251 }, 'AVAX': { price: 36.70 }, 'LINK': { price: 18.55 }
         };
 
         function simulateCryptoPrices() {
             for (const symbol in cryptoData) {
                 const data = cryptoData[symbol];
-                const oldPrice = data.price;
-                const volatility = oldPrice * 0.005; // Fluctuation de 0.5%
+                const volatility = data.price * 0.005;
                 const change = (Math.random() * volatility * 2) - volatility;
-                const newPrice = oldPrice + change;
-                
-                data.price = Math.max(0, newPrice); // Empêche les prix négatifs
+                data.price = Math.max(0, data.price + change);
             }
             updateTicker();
         }
@@ -821,41 +953,32 @@
         function updateTicker() {
             const ticker = document.getElementById('crypto-ticker');
             let html = '';
-
             for (const symbol in cryptoData) {
                 const data = cryptoData[symbol];
-                const price = data.price;
                 const direction = Math.random() > 0.5 ? 'up' : 'down';
                 const directionSymbol = direction === 'up' ? '▲' : '▼';
-                
-                let formattedPrice = price.toLocaleString('en-US', {
+                let formattedPrice = data.price.toLocaleString('en-US', {
                     minimumFractionDigits: 2,
-                    maximumFractionDigits: price < 1 ? 7 : 2
+                    maximumFractionDigits: data.price < 1 ? 7 : 2
                 });
-
-                html += `
-                    <div class="ticker-item">
-                        ${symbol}: $${formattedPrice} <span class="${direction}">${directionSymbol}</span>
-                    </div>
-                `;
+                html += `<div class="ticker-item">${symbol}: $${formattedPrice} <span class="${direction}">${directionSymbol}</span></div>`;
             }
-            // Dupliquer le contenu pour un défilement fluide
             ticker.innerHTML = html + html;
         }
 
 
-        // --- LOGIQUE DE DÉPLACEMENT DES FENÊTRES ---
+        // --- LOGIQUE DE DÉPLACEMENT ET REDIMENSIONNEMENT DES FENÊTR ES ---
         let activeWindow = null;
-        let highestZIndex = 9; // Initialisé au z-index le plus élevé + 1
+        let highestZIndex = 11;
         let offset = { x: 0, y: 0 };
         
         function startDrag(e, win) {
             if (e.target.classList.contains('close-button')) return;
             activeWindow = win;
             highestZIndex++;
-            activeWindow.style.zIndex = highestZIndex;
-            offset.x = e.clientX - activeWindow.offsetLeft;
-            offset.y = e.clientY - activeWindow.offsetTop;
+            win.style.zIndex = highestZIndex;
+            offset.x = e.clientX - win.offsetLeft;
+            offset.y = e.clientY - win.offsetTop;
             document.addEventListener('mousemove', dragWindow);
             document.addEventListener('mouseup', stopDrag);
         }
@@ -874,11 +997,7 @@
         }
 
         function initializeWindows() {
-            // Désactiver le glisser-déposer sur les petits écrans
-            if (window.matchMedia("(max-width: 800px)").matches) {
-                return;
-            }
-
+            if (isMobile()) return;
             const windows = document.querySelectorAll('.window');
             windows.forEach(win => {
                 const titleBar = win.querySelector('.title-bar');
@@ -893,7 +1012,7 @@
         // --- LOGIQUE DU SCROLLER SINUSOIDAL ---
         function initializeTopScroller() {
             const scroller = document.getElementById('top-scroller');
-            const text = "HACKER";
+            const text = "LEONCE EQUITY";
             scroller.innerHTML = text.split('').map(char => `<span>${char}</span>`).join('');
             
             const letters = scroller.querySelectorAll('span');
@@ -902,7 +1021,7 @@
             function animateScroller() {
                 time += 0.05;
                 letters.forEach((letter, i) => {
-                    const y = Math.sin(time + i * 0.5) * 15; // 15 est l'amplitude de la vague
+                    const y = Math.sin(time + i * 0.5) * 15;
                     letter.style.transform = `translateY(${y}px)`;
                 });
                 requestAnimationFrame(animateScroller);
@@ -913,37 +1032,30 @@
         // --- INITIALISATION ---
         
         document.addEventListener('DOMContentLoaded', () => {
-            // Initialiser les composants principaux
             initializeStarfield(document.getElementById('starfield-canvas'));
             initializeWindows();
             initializeTopScroller();
-            
-            // Initialiser les fenêtres dynamiques
             initializeSystemStatus();
             initializeDecryption();
             
-            // Initialiser les canevas
-            const scrollerCanvas = document.querySelector('.scroller-canvas');
-            initializeLogScroller(scrollerCanvas);
+            const canvases = {
+                '.scroller-canvas': initializeLogScroller,
+                '.matrix-canvas': initializeMatrix,
+                '.torus-canvas': initializeTorusKnot,
+                '.radar-canvas': initializeRadar,
+                '.invaders-canvas': initializeSpaceInvaders,
+                '.tech-canvas': initializeTechTech,
+                '.tunnel-canvas': initializeTunnel,
+                '.audio-canvas': initializeAudioVisualizer
+            };
 
-            const matrixCanvas = document.querySelector('.matrix-canvas');
-            initializeMatrix(matrixCanvas);
+            for (const selector in canvases) {
+                const canvas = document.querySelector(selector);
+                if (canvas) canvases[selector](canvas);
+            }
 
-            const torusCanvas = document.querySelector('.torus-canvas');
-            initializeTorusKnot(torusCanvas);
-            
-            const radarCanvas = document.querySelector('.radar-canvas');
-            initializeRadar(radarCanvas);
-            
-            const invadersCanvas = document.querySelector('.invaders-canvas');
-            initializeSpaceInvaders(invadersCanvas);
-            
-            const techCanvas = document.querySelector('.tech-canvas');
-            initializeTechTech(techCanvas);
-
-            // Lancer le ticker simulé
             simulateCryptoPrices();
-            setInterval(simulateCryptoPrices, 2000); // Mettre à jour toutes les 2 secondes
+            setInterval(simulateCryptoPrices, 2000);
         });
 
     </script>
