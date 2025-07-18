@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculatrice Rétro avec Historique</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&family=DSEG7+Classic&display=swap" rel="stylesheet">
+    <style>
+        /* --- Style Général Rétro --- */
+        body {
+            font-family: 'VT323', monospace; /* Police de terminal retro */
+            background-color: #000000;
+            color: #39ff14; /* Vert "Matrix" */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            flex-direction: column;
+            text-shadow: 0 0 4px rgba(57, 255, 20, 0.7);
+        }
+
+        /* --- Style des barres de défilement --- */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #1a0000;
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #ff0000;
+            border-radius: 10px;
+            box-shadow: 0 0 5px rgba(255, 0, 0, 0.7);
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #cc0000;
+        }
+
+
+        /* --- Conteneur Principal --- */
+        .app-container {
+            width: auto;
+            max-width: 900px; /* Augmenté pour les deux panneaux */
+            padding: 20px;
+            display: flex;
+            flex-direction: row;
+            align-items: stretch; /* Aligne les éléments sur toute la hauteur */
+            gap: 15px; /* Espace réduit */
+        }
+
+        /* --- Panneaux --- */
+        .calculator, .history-container, .sci-panel {
+            background-color: rgba(57, 255, 20, 0.05); /* Fond très léger pour un effet de verre */
+            border: 2px solid #39ff14;
+            border-radius: 10px;
+            padding: 15px; /* Padding réduit */
+            box-shadow: 0 0 15px rgba(57, 255, 20, 0.4), inset 0 0 10px rgba(57, 255, 20, 0.3);
+            transition: width 0.4s ease-in-out, height 0.4s ease-in-out, opacity 0.4s ease-in-out, padding 0.4s ease-in-out, border 0.4s ease-in-out;
+        }
+
+        .calculator {
+            width: 190px; /* Taille réduite */
+            flex-shrink: 0;
+        }
+
+        /* --- Panneaux Coulissants (SCI & Historique) --- */
+        .sci-panel, .history-container {
+            width: 0;
+            padding: 0;
+            border: none;
+            opacity: 0;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+        
+        .sci-panel.visible {
+            width: 150px; /* Taille réduite */
+            padding: 15px;
+            border: 2px solid #39ff14;
+            opacity: 1;
+        }
+        
+        .history-container.visible {
+            width: 155px; /* Taille réduite */
+            padding: 15px;
+            border: 2px solid #39ff14;
+            opacity: 1;
+        }
+        
+        .sci-panel .buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr; /* Grille 3 colonnes */
+            gap: 6px; /* Aligné sur la calculatrice principale */
+            height: 100%;
+        }
+
+        /* --- Écran d'affichage --- */
+        #display {
+            width: 100%;
+            min-height: 45px; /* Hauteur minimale */
+            max-height: 100px; /* Hauteur maximale avant scroll */
+            background-color: #1a0000; /* Fond noir-rougeâtre */
+            color: #ff0000; /* Rouge diode */
+            text-align: right;
+            font-size: 1.8rem; /* Taille de police réduite */
+            font-family: 'DSEG7 Classic', monospace; /* Police style digital */
+            padding: 8px;
+            border: 2px solid #ff0000;
+            border-radius: 5px;
+            box-sizing: border-box;
+            margin-bottom: 10px;
+            text-shadow: 0 0 8px rgba(255, 0, 0, 0.7); /* Lueur rouge */
+            overflow-y: auto; 
+            resize: none; /* Empêche le redimensionnement manuel */
+            line-height: 1.1;
+        }
+
+        /* --- Grille des boutons --- */
+        .buttons {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px; 
+        }
+
+        /* --- Style des boutons --- */
+        .btn {
+            padding: 6px 4px; 
+            font-size: 1.2rem; 
+            font-family: 'VT323', monospace;
+            border: 2px solid #39ff14;
+            border-radius: 5px;
+            cursor: pointer;
+            background-color: transparent;
+            color: #39ff14;
+            transition: background-color 0.15s, color 0.15s;
+            text-shadow: 0 0 3px #39ff14;
+        }
+        
+        /* Style spécifique pour les boutons du panneau SCI */
+        .sci-panel .btn {
+            font-size: 1rem;
+            padding: 8px 2px;
+        }
+        
+        .btn.store-mode-active {
+            background-color: #39ff14;
+            color: #000;
+            text-shadow: none;
+        }
+
+        .btn:hover, .btn:focus {
+            background-color: #39ff14;
+            color: #000;
+            text-shadow: none;
+            outline: none;
+        }
+
+        .btn:active {
+            transform: translateY(2px);
+        }
+
+        .btn.zero {
+            grid-column: span 2;
+        }
+        
+        .btn.equals {
+            grid-column: span 3;
+        }
+
+        /* --- Section Historique (dans le panneau) --- */
+        .history-container {
+            margin-top: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .history-container h3 {
+            margin-top: 0;
+            text-align: center;
+            font-size: 1.3rem;
+            letter-spacing: 2px;
+        }
+
+        #history-list {
+            list-style: none;
+            padding: 0;
+            margin: 8px 0;
+            flex-grow: 1;
+            overflow-y: auto;
+            text-align: center;
+            font-size: 1rem;
+        }
+
+        #history-list li {
+            padding: 4px 0;
+            border-bottom: 1px dashed rgba(57, 255, 20, 0.5);
+        }
+
+        #history-list li:last-child {
+            border-bottom: none;
+        }
+
+        #clear-history-btn {
+            width: 100%;
+            margin-top: 10px;
+            padding: 8px;
+            font-size: 1rem;
+            font-family: 'VT323', monospace;
+            background-color: transparent;
+            color: #39ff14;
+            border: 2px solid #39ff14;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        #clear-history-btn:hover {
+            background-color: #39ff14;
+            color: #000;
+            text-shadow: none;
+        }
+        
+        /* --- Fenêtre Modale d'Instructions --- */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-overlay.visible {
+            display: flex;
+        }
+
+        .modal-content {
+            background: #000;
+            border: 2px solid #39ff14;
+            padding: 15px;
+            border-radius: 10px;
+            max-width: 350px; /* Taille réduite */
+            width: 90%;
+            position: relative;
+            box-shadow: 0 0 25px rgba(57, 255, 20, 0.5);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 0px;
+            right: 10px;
+            background: none;
+            border: none;
+            color: #39ff14;
+            font-size: 2rem; /* Taille réduite */
+            cursor: pointer;
+        }
+        
+        .modal-content h3 {
+             text-align: center;
+             font-size: 1.4rem; /* Taille réduite */
+             letter-spacing: 2px;
+             margin-bottom: 8px;
+        }
+
+        .lang-tabs {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap; /* Permet aux onglets de passer à la ligne */
+            margin-bottom: 15px;
+            border-bottom: 1px solid #39ff14;
+            flex-shrink: 0;
+        }
+        
+        .lang-tab {
+            padding: 4px 10px;
+            cursor: pointer;
+            font-size: 1rem; /* Taille réduite */
+            border: none;
+            background: none;
+            color: #39ff14;
+            opacity: 0.6;
+        }
+        
+        .lang-tab.active {
+            opacity: 1;
+            text-shadow: 0 0 5px #39ff14;
+        }
+        
+        .help-content {
+            display: none;
+            overflow-y: auto;
+        }
+        
+        .help-content.active {
+            display: block;
+        }
+        
+        .help-grid {
+            display: grid;
+            grid-template-columns: max-content auto;
+            gap: 5px 10px; /* Espace réduit */
+            font-size: 1rem; /* Taille réduite */
+        }
+        
+        .help-grid strong {
+            text-align: right;
+        }
+        
+        .help-divider {
+            grid-column: span 2;
+            border-top: 1px dashed #39ff14;
+            margin: 5px 0;
+        }
+        
+        /* --- Responsive Design --- */
+        @media (max-width: 768px) {
+            .app-container {
+                flex-direction: column;
+                gap: 20px;
+                padding: 10px;
+                align-items: center;
+            }
+
+            .calculator {
+                width: 100%;
+                max-width: 320px;
+            }
+
+            .sci-panel.visible, .history-container.visible {
+                width: 100%;
+                max-width: 320px;
+                height: auto;
+            }
+            
+            .sci-panel {
+                order: -1; /* Place le panneau SCI au-dessus de la calculatrice */
+            }
+            
+            .modal-content {
+                width: 95%;
+                max-height: 80vh;
+            }
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        <!-- Panneau Scientifique (caché par défaut) -->
+        <div class="sci-panel">
+            <div class="buttons">
+                <button class="btn sin">sin</button>
+                <button class="btn cos">cos</button>
+                <button class="btn tan">tan</button>
+                <button class="btn asin">sin⁻¹</button>
+                <button class="btn acos">cos⁻¹</button>
+                <button class="btn atan">tan⁻¹</button>
+                <button class="btn log">log</button>
+                <button class="btn ln">ln</button>
+                <button class="btn factorial">n!</button>
+                <button class="btn power-x2">x²</button>
+                <button class="btn power-xy">x^y</button>
+                <button class="btn sqrt">√</button>
+                <button class="btn pi">π</button>
+                <button class="btn euler">e</button>
+                <button class="btn inverse">1/x</button>
+                <button class="btn abs">|x|</button>
+                <button class="btn rand">rand</button>
+                <button class="btn mod">mod</button>
+            </div>
+        </div>
+        
+        <!-- Section de la calculatrice -->
+        <div class="calculator">
+            <textarea id="display" readonly>0</textarea>
+            <div class="buttons">
+                <!-- Ligne Mémoire -->
+                <button class="btn memory-clear">MC</button>
+                <button class="btn memory-store">MS</button>
+                <button class="btn memory-recall" data-mem="M1">M1</button>
+                <button class="btn memory-recall" data-mem="M2">M2</button>
+                <!-- Ligne Fonctions 1 -->
+                <button class="btn sci-toggle-btn">SCI</button>
+                <button class="btn hist-toggle-btn">Hist</button>
+                <button class="btn recall-ans">Ans</button>
+                <button class="btn percent">%</button>
+                <!-- Ligne Fonctions 2 -->
+                <button class="btn clear">C</button>
+                <button class="btn delete-char">DEL</button>
+                <button class="btn parenthesis">(</button>
+                <button class="btn parenthesis">)</button>
+                <!-- Ligne Nombres 1 -->
+                <button class="btn number">7</button>
+                <button class="btn number">8</button>
+                <button class="btn number">9</button>
+                <button class="btn operator" data-op="÷">÷</button>
+                <!-- Ligne Nombres 2 -->
+                <button class="btn number">4</button>
+                <button class="btn number">5</button>
+                <button class="btn number">6</button>
+                <button class="btn operator" data-op="×">×</button>
+                <!-- Ligne Nombres 3 -->
+                <button class="btn number">1</button>
+                <button class="btn number">2</button>
+                <button class="btn number">3</button>
+                <button class="btn operator" data-op="+">+</button>
+                <!-- Ligne Nombres 4 -->
+                <button class="btn number zero">0</button>
+                <button class="btn number">.</button>
+                <button class="btn operator" data-op="-">−</button>
+                <!-- Ligne Contrôle -->
+                <button class="btn instructions-btn">?</button>
+                <button class="btn equals" style="grid-column: span 3;">=</button>
+            </div>
+        </div>
+
+        <!-- Section de l'historique (cachée par défaut) -->
+        <div class="history-container">
+            <h3 id="history-title">Historique</h3>
+            <ul id="history-list">
+                <!-- Les entrées de l'historique seront ajoutées ici par JavaScript -->
+            </ul>
+            <button id="clear-history-btn">Effacer l'historique</button>
+        </div>
+    </div>
+    
+    <!-- Fenêtre modale pour les instructions -->
+    <div id="instructions-modal" class="modal-overlay">
+        <div class="modal-content">
+            <button class="modal-close">&times;</button>
+            <h3>Instructions</h3>
+            <div class="lang-tabs">
+                <button class="lang-tab active" data-lang="fr">Français</button>
+                <button class="lang-tab" data-lang="en">English</button>
+                <button class="lang-tab" data-lang="es">Español</button>
+                <button class="lang-tab" data-lang="de">Deutsch</button>
+                <button class="lang-tab" data-lang="zh">中文</button>
+            </div>
+
+            <!-- Contenu Français -->
+            <div id="help-fr" class="help-content active">
+                <div class="help-grid">
+                    <strong>SCI</strong> <span>Affiche/cache le panneau scientifique.</span>
+                    <strong>Hist</strong> <span>Affiche/cache le panneau de l'historique.</span>
+                    <strong>C</strong> <span>Efface l'expression en cours.</span>
+                    <strong>DEL</strong> <span>Efface le dernier caractère.</span>
+                    <strong>Ans</strong> <span>Rappelle le dernier résultat obtenu.</span>
+                    <div class="help-divider"></div>
+                    <strong>sin/cos/tan</strong> <span>Fonctions trigonométriques (en degrés).</span>
+                    <strong>sin⁻¹/cos⁻¹/tan⁻¹</strong> <span>Fonctions trigonométriques inverses (en degrés).</span>
+                    <strong>log/ln</strong> <span>Logarithme base 10 et naturel.</span>
+                    <strong>n!</strong> <span>Factorielle (ex: factorial(5)).</span>
+                    <strong>x²</strong> <span>Met le nombre au carré.</span>
+                    <strong>x^y</strong> <span>Opérateur de puissance.</span>
+                    <strong>√</strong> <span>Racine carrée (ex: √(9)).</span>
+                    <strong>π/e</strong> <span>Constantes Pi et Euler.</span>
+                    <strong>1/x</strong> <span>Inverse le nombre (ex: 1/(...)).</span>
+                    <strong>|x|</strong> <span>Valeur absolue.</span>
+                    <strong>rand</strong> <span>Nombre aléatoire entre 0 et 1.</span>
+                    <strong>mod</strong> <span>Opérateur Modulo (reste de la division).</span>
+                    <div class="help-divider"></div>
+                    <strong>MS</strong> <span>Active le mode "Mémoriser". Appuyez ensuite sur M1 ou M2.</span>
+                    <strong>M1/M2</strong> <span>Rappelle la valeur mémorisée.</span>
+                    <strong>MC</strong> <span>Efface les deux mémoires (M1 et M2).</span>
+                </div>
+            </div>
+
+            <!-- Contenu Anglais -->
+            <div id="help-en" class="help-content">
+                <div class="help-grid">
+                    <strong>SCI</strong> <span>Shows/hides the scientific panel.</span>
+                    <strong>Hist</strong> <span>Shows/hides the history panel.</span>
+                    <strong>C</strong> <span>Clears the current expression.</span>
+                    <strong>DEL</strong> <span>Deletes the last character.</span>
+                    <strong>Ans</strong> <span>Recalls the last result.</span>
+                    <div class="help-divider"></div>
+                    <strong>sin/cos/tan</strong> <span>Trigonometric functions (in degrees).</span>
+                    <strong>sin⁻¹/cos⁻¹/tan⁻¹</strong> <span>Inverse trigonometric functions (in degrees).</span>
+                    <strong>log/ln</strong> <span>Base-10 and natural logarithm.</span>
+                    <strong>n!</strong> <span>Factorial (e.g., factorial(5)).</span>
+                    <strong>x²</strong> <span>Squares the number.</span>
+                    <strong>x^y</strong> <span>Power operator.</span>
+                    <strong>√</strong> <span>Square root (e.g., √(9)).</span>
+                    <strong>π/e</strong> <span>Pi and Euler constants.</span>
+                    <strong>1/x</strong> <span>Inverts the number (e.g., 1/(...)).</span>
+                    <strong>|x|</strong> <span>Absolute value.</span>
+                    <strong>rand</strong> <span>Random number between 0 and 1.</span>
+                    <strong>mod</strong> <span>Modulo operator (division remainder).</span>
+                    <div class="help-divider"></div>
+                    <strong>MS</strong> <span>Activates "Store" mode. Then press M1 or M2.</span>
+                    <strong>M1/M2</strong> <span>Recalls the stored value.</span>
+                    <strong>MC</strong> <span>Clears both memories (M1 and M2).</span>
+                </div>
+            </div>
+            
+            <!-- Contenu Espagnol -->
+            <div id="help-es" class="help-content">
+                <div class="help-grid">
+                    <strong>SCI</strong> <span>Muestra/oculta el panel científico.</span>
+                    <strong>Hist</strong> <span>Muestra/oculta el panel de historial.</span>
+                    <strong>C</strong> <span>Borra la expresión actual.</span>
+                    <strong>DEL</strong> <span>Elimina el último carácter.</span>
+                    <strong>Ans</strong> <span>Recupera el último resultado.</span>
+                    <div class="help-divider"></div>
+                    <strong>sin/cos/tan</strong> <span>Funciones trigonométricas (en grados).</span>
+                    <strong>sin⁻¹/cos⁻¹/tan⁻¹</strong> <span>Funciones trigonométricas inversas (en grados).</span>
+                    <strong>log/ln</strong> <span>Logaritmo base 10 y natural.</span>
+                    <strong>n!</strong> <span>Factorial (ej: factorial(5)).</span>
+                    <strong>x²</strong> <span>Eleva al cuadrado.</span>
+                    <strong>x^y</strong> <span>Operador de potencia.</span>
+                    <strong>√</strong> <span>Raíz cuadrada (ej: √(9)).</span>
+                    <strong>π/e</strong> <span>Constantes Pi y Euler.</span>
+                    <strong>1/x</strong> <span>Invierte el número (ej: 1/(...)).</span>
+                    <strong>|x|</strong> <span>Valor absoluto.</span>
+                    <strong>rand</strong> <span>Número aleatorio entre 0 y 1.</span>
+                    <strong>mod</strong> <span>Operador de módulo (resto de la división).</span>
+                    <div class="help-divider"></div>
+                    <strong>MS</strong> <span>Activa el modo "Guardar". Luego presione M1 o M2.</span>
+                    <strong>M1/M2</strong> <span>Recupera el valor guardado.</span>
+                    <strong>MC</strong> <span>Borra ambas memorias (M1 y M2).</span>
+                </div>
+            </div>
+            
+            <!-- Contenu Allemand -->
+            <div id="help-de" class="help-content">
+                <div class="help-grid">
+                    <strong>SCI</strong> <span>Wissenschaftliches Panel ein-/ausblenden.</span>
+                    <strong>Hist</strong> <span>Verlaufspanel ein-/ausblenden.</span>
+                    <strong>C</strong> <span>Löscht den aktuellen Ausdruck.</span>
+                    <strong>DEL</strong> <span>Löscht das letzte Zeichen.</span>
+                    <strong>Ans</strong> <span>Ruft das letzte Ergebnis ab.</span>
+                    <div class="help-divider"></div>
+                    <strong>sin/cos/tan</strong> <span>Trigonometrische Funktionen (in Grad).</span>
+                    <strong>sin⁻¹/cos⁻¹/tan⁻¹</strong> <span>Inverse trigonometrische Funktionen (in Grad).</span>
+                    <strong>log/ln</strong> <span>Logarithmus zur Basis 10 und natürlicher Logarithmus.</span>
+                    <strong>n!</strong> <span>Fakultät (z.B. factorial(5)).</span>
+                    <strong>x²</strong> <span>Quadriert die Zahl.</span>
+                    <strong>x^y</strong> <span>Potenzoperator.</span>
+                    <strong>√</strong> <span>Quadratwurzel (z.B. √(9)).</span>
+                    <strong>π/e</strong> <span>Konstanten Pi und Euler.</span>
+                    <strong>1/x</strong> <span>Kehrwert der Zahl (z.B. 1/(...)).</span>
+                    <strong>|x|</strong> <span>Absolutwert.</span>
+                    <strong>rand</strong> <span>Zufallszahl zwischen 0 und 1.</span>
+                    <strong>mod</strong> <span>Modulo-Operator (Rest der Division).</span>
+                    <div class="help-divider"></div>
+                    <strong>MS</strong> <span>Aktiviert den "Speichern"-Modus. Drücken Sie dann M1 oder M2.</span>
+                    <strong>M1/M2</strong> <span>Ruft den gespeicherten Wert ab.</span>
+                    <strong>MC</strong> <span>Löscht beide Speicher (M1 und M2).</span>
+                </div>
+            </div>
+            
+            <!-- Contenu Chinois -->
+            <div id="help-zh" class="help-content">
+                <div class="help-grid">
+                    <strong>SCI</strong> <span>显示/隐藏科学面板。</span>
+                    <strong>Hist</strong> <span>显示/隐藏历史面板。</span>
+                    <strong>C</strong> <span>清除当前表达式。</span>
+                    <strong>DEL</strong> <span>删除最后一个字符。</span>
+                    <strong>Ans</strong> <span>调用上一个结果。</span>
+                    <div class="help-divider"></div>
+                    <strong>sin/cos/tan</strong> <span>三角函数（角度制）。</span>
+                    <strong>sin⁻¹/cos⁻¹/tan⁻¹</strong> <span>反三角函数（角度制）。</span>
+                    <strong>log/ln</strong> <span>常用对数和自然对数。</span>
+                    <strong>n!</strong> <span>阶乘 (例如 factorial(5))。</span>
+                    <strong>x²</strong> <span>平方。</span>
+                    <strong>x^y</strong> <span>幂运算符。</span>
+                    <strong>√</strong> <span>平方根 (例如 √(9))。</span>
+                    <strong>π/e</strong> <span>常数 Pi 和 Euler。</span>
+                    <strong>1/x</strong> <span>倒数 (例如 1/(...))。</span>
+                    <strong>|x|</strong> <span>绝对值。</span>
+                    <strong>rand</strong> <span>0到1之间的随机数。</span>
+                    <strong>mod</strong> <span>模运算符（除法余数）。</span>
+                    <div class="help-divider"></div>
+                    <strong>MS</strong> <span>激活“存储”模式。然后按 M1 或 M2。</span>
+                    <strong>M1/M2</strong> <span>调用存储的值。</span>
+                    <strong>MC</strong> <span>清除两个内存（M1 和 M2）。</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+
+            const display = document.getElementById('display');
+            const buttons = document.querySelector('.calculator .buttons');
+            const sciButtons = document.querySelector('.sci-panel .buttons');
+            const historyList = document.getElementById('history-list');
+            const clearHistoryBtn = document.getElementById('clear-history-btn');
+            const msButton = document.querySelector('.memory-store');
+            
+            const calculator = document.querySelector('.calculator');
+            const historyContainer = document.querySelector('.history-container');
+            const sciPanel = document.querySelector('.sci-panel');
+            
+            const instructionsBtn = document.querySelector('.instructions-btn');
+            const modal = document.getElementById('instructions-modal');
+            const modalContent = document.querySelector('.modal-content');
+            const closeModalBtn = document.querySelector('.modal-close');
+            const langTabs = document.querySelectorAll('.lang-tab');
+
+            let expression = '0';
+            let history = [];
+            let justCalculated = false;
+            let lastResult = null;
+            
+            let memory = { M1: null, M2: null };
+            let isStoreMode = false;
+            
+            const translations = {
+                fr: { historyTitle: "Historique", clearHistoryBtn: "Effacer l'historique" },
+                en: { historyTitle: "History", clearHistoryBtn: "Clear History" },
+                es: { historyTitle: "Historial", clearHistoryBtn: "Borrar Historial" },
+                de: { historyTitle: "Verlauf", clearHistoryBtn: "Verlauf löschen" },
+                zh: { historyTitle: "历史", clearHistoryBtn: "清除历史" }
+            };
+
+            function setLanguage(lang) {
+                document.getElementById('history-title').textContent = translations[lang].historyTitle;
+                document.getElementById('clear-history-btn').textContent = translations[lang].clearHistoryBtn;
+            }
+
+            function updateDisplay() {
+                display.value = expression;
+                display.scrollTop = display.scrollHeight;
+            }
+
+            function updateHistory() {
+                historyList.innerHTML = '';
+                history.forEach(entry => {
+                    const li = document.createElement('li');
+                    li.textContent = entry;
+                    historyList.appendChild(li);
+                });
+            }
+            
+            function handleInput(value) {
+                if (justCalculated) {
+                    if (!['+', '-', '×', '÷', '%', '**'].includes(value)) {
+                        expression = '0';
+                    }
+                    justCalculated = false;
+                }
+
+                const appendableOperators = ['+', '-', '×', '÷', '%', '**', '**2'];
+
+                if (expression === '0' && !appendableOperators.includes(value)) {
+                    if (value === '.') {
+                        expression = '0.';
+                    } else {
+                        expression = value;
+                    }
+                } else {
+                    expression += value;
+                }
+                updateDisplay();
+            }
+
+            function clearAll() {
+                expression = '0';
+                justCalculated = false;
+                updateDisplay();
+            }
+
+            function deleteChar() {
+                if (expression.length > 1) {
+                    expression = expression.slice(0, -1);
+                } else {
+                    expression = '0';
+                }
+                justCalculated = false;
+                updateDisplay();
+            }
+
+            const factorial = (n) => {
+                if (n < 0) return NaN;
+                if (n === 0) return 1;
+                let result = 1;
+                for (let i = n; i > 1; i--) {
+                    result *= i;
+                }
+                return result;
+            };
+
+            function calculate() {
+                if (expression === '') return;
+
+                let sanitizedExpression = expression
+                    .replace(/×/g, '*')
+                    .replace(/÷/g, '/')
+                    .replace(/p/g, '/100'); // 'p' pour pourcentage
+
+                sanitizedExpression = sanitizedExpression.replace(/(Math\.(?:sin|cos|tan))\(([^)]+)\)/g, (match, func, angle) => {
+                    return `${func}((${angle}) * Math.PI / 180)`;
+                });
+                
+                sanitizedExpression = sanitizedExpression.replace(/(Math\.(?:asin|acos|atan))\(([^)]+)\)/g, (match, func, value) => {
+                    return `((${func}(${value})) * 180 / Math.PI)`;
+                });
+
+                try {
+                    const result = (new Function('factorial', `return ${sanitizedExpression}`))(factorial);
+
+                    if (isNaN(result) || !isFinite(result)) {
+                        throw new Error("Résultat invalide");
+                    }
+                    const finalResult = parseFloat(result.toPrecision(12));
+                    const historyEntry = `${expression} = ${finalResult}`;
+                    history.push(historyEntry);
+                    updateHistory();
+                    expression = finalResult.toString();
+                    lastResult = finalResult;
+                    justCalculated = true;
+                } catch (error) {
+                    expression = 'Error';
+                    justCalculated = true;
+                }
+                updateDisplay();
+            }
+            
+            function toggleStoreMode(forceOff = false) {
+                if (forceOff) {
+                    isStoreMode = false;
+                } else {
+                    isStoreMode = !isStoreMode;
+                }
+                
+                if (isStoreMode) {
+                    msButton.classList.add('store-mode-active');
+                } else {
+                    msButton.classList.remove('store-mode-active');
+                }
+            }
+
+            function storeMemory(memKey) {
+                if (!isStoreMode) return;
+                let valueToStore = parseFloat(expression);
+                if (!isNaN(valueToStore)) {
+                    memory[memKey] = valueToStore;
+                }
+                toggleStoreMode(true);
+            }
+
+            function recallMemory(memKey) {
+                if (memory[memKey] !== null) {
+                    handleInput(memory[memKey].toString());
+                }
+            }
+
+            function clearMemory() {
+                memory.M1 = null;
+                memory.M2 = null;
+            }
+            
+            function handleButtonClick(target) {
+                 if (!target.matches('button')) return;
+
+                if (!target.classList.contains('memory-recall') && !target.classList.contains('memory-store')) {
+                    if(isStoreMode) toggleStoreMode(true);
+                }
+
+                if (expression === 'Error' && !target.classList.contains('clear')) {
+                    return;
+                }
+
+                const value = target.innerText;
+                const op = target.dataset.op;
+
+                if (target.classList.contains('number') || target.classList.contains('parenthesis')) {
+                    handleInput(value);
+                } else if (target.classList.contains('operator')) {
+                    handleInput(op);
+                } else if (target.classList.contains('percent')) {
+                    handleInput('p');
+                } else if (target.classList.contains('mod')) {
+                    handleInput('%');
+                } else if (target.classList.contains('power-x2')) {
+                    handleInput('**2');
+                } else if (target.classList.contains('power-xy')) {
+                    handleInput('**');
+                } else if (target.classList.contains('sqrt')) {
+                    handleInput('Math.sqrt(');
+                } else if (target.classList.contains('sin')) {
+                    handleInput('Math.sin(');
+                } else if (target.classList.contains('cos')) {
+                    handleInput('Math.cos(');
+                } else if (target.classList.contains('tan')) {
+                    handleInput('Math.tan(');
+                } else if (target.classList.contains('asin')) {
+                    handleInput('Math.asin(');
+                } else if (target.classList.contains('acos')) {
+                    handleInput('Math.acos(');
+                } else if (target.classList.contains('atan')) {
+                    handleInput('Math.atan(');
+                } else if (target.classList.contains('log')) {
+                    handleInput('Math.log10(');
+                } else if (target.classList.contains('ln')) {
+                    handleInput('Math.log(');
+                } else if (target.classList.contains('factorial')) {
+                    handleInput('factorial(');
+                } else if (target.classList.contains('pi')) {
+                    handleInput(Math.PI.toString());
+                } else if (target.classList.contains('euler')) {
+                    handleInput(Math.E.toString());
+                } else if (target.classList.contains('inverse')) {
+                    handleInput('1/(');
+                } else if (target.classList.contains('abs')) {
+                    handleInput('Math.abs(');
+                } else if (target.classList.contains('rand')) {
+                    handleInput(Math.random().toString());
+                } else if (target.classList.contains('clear')) {
+                    clearAll();
+                } else if (target.classList.contains('delete-char')) {
+                    deleteChar();
+                } else if (target.classList.contains('equals')) {
+                    calculate();
+                } else if (target.classList.contains('recall-ans')) {
+                    if (lastResult !== null) {
+                        handleInput(lastResult.toString());
+                    }
+                } else if (target.classList.contains('memory-clear')) {
+                    clearMemory();
+                } else if (target.classList.contains('memory-store')) {
+                    toggleStoreMode();
+                } else if (target.classList.contains('memory-recall')) {
+                    const memKey = target.dataset.mem;
+                    if (isStoreMode) {
+                        storeMemory(memKey);
+                    } else {
+                        recallMemory(memKey);
+                    }
+                } else if (target.classList.contains('instructions-btn')) {
+                     modalContent.style.height = `${calculator.offsetHeight}px`;
+                     modal.classList.add('visible');
+                } else if (target.classList.contains('sci-toggle-btn')) {
+                    sciPanel.classList.toggle('visible');
+                } else if (target.classList.contains('hist-toggle-btn')) {
+                    historyContainer.classList.toggle('visible');
+                }
+            }
+
+            buttons.addEventListener('click', (event) => handleButtonClick(event.target));
+            sciButtons.addEventListener('click', (event) => handleButtonClick(event.target));
+            
+            clearHistoryBtn.addEventListener('click', () => {
+                history = [];
+                updateHistory();
+            });
+            
+            modal.addEventListener('click', (event) => {
+                if (event.target === modal) {
+                    modal.classList.remove('visible');
+                }
+            });
+            
+            closeModalBtn.addEventListener('click', () => {
+                modal.classList.remove('visible');
+            });
+
+            langTabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    const lang = tab.dataset.lang;
+                    langTabs.forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    document.querySelectorAll('.help-content').forEach(c => c.classList.remove('active'));
+                    document.getElementById(`help-${lang}`).classList.add('active');
+                    setLanguage(lang);
+                });
+            });
+
+            document.addEventListener('keydown', (event) => {
+                event.preventDefault();
+                const key = event.key;
+                
+                let targetButton;
+
+                if (key >= '0' && key <= '9') {
+                    targetButton = [...document.querySelectorAll('.btn.number')].find(btn => btn.innerText === key);
+                } else if (['+', '-', '*', '/', '(', ')', '.'].includes(key)) {
+                    const opMap = {'*': '×', '/': '÷'};
+                    const symbol = opMap[key] || key;
+                    targetButton = [...document.querySelectorAll('.btn')].find(btn => btn.innerText === symbol || btn.dataset.op === symbol);
+                } else if (key === '%') {
+                    targetButton = document.querySelector('.btn.percent');
+                } else if (key === '^') {
+                    targetButton = document.querySelector('.btn.power-xy');
+                } else if (key === 'Enter' || key === '=') {
+                    targetButton = document.querySelector('.btn.equals');
+                } else if (key === 'Backspace') {
+                    targetButton = document.querySelector('.btn.delete-char');
+                } else if (key === 'Escape') {
+                    targetButton = document.querySelector('.btn.clear');
+                } else if (key.toLowerCase() === 'a') {
+                    targetButton = document.querySelector('.btn.recall-ans');
+                } else if (key === '?') {
+                    targetButton = document.querySelector('.btn.instructions-btn');
+                }
+
+                if (targetButton) {
+                    targetButton.click();
+                }
+            });
+            
+            updateDisplay();
+        });
+    </script>
+
+</body>
+</html>
