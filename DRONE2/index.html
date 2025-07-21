@@ -1,0 +1,2130 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Simulateur de Drone (Solo)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="icon" href="drone.png" type="image/png">
+    <style>
+        :root {
+            --primary-color: #10B981;
+            --secondary-color: #059669;
+            --danger-color: #DC2626;
+            --danger-light: #F87171;
+            --dark-bg: #0F172A;
+            --ui-bg: rgba(15, 23, 42, 0.8);
+            --text-color: #F9FAFB;
+            --border-light: rgba(255, 255, 255, 0.2);
+            --glass-bg: rgba(255, 255, 255, 0.1);
+            --glass-border: rgba(255, 255, 255, 0.2);
+        }
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            font-family: 'Inter', sans-serif; 
+            background-color: var(--dark-bg); 
+            -webkit-user-select: none; 
+            -ms-user-select: none; 
+            user-select: none; 
+            color: var(--text-color);
+        }
+        canvas { display: block; }
+        #ui-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        #joystick-container { position: absolute; bottom: 5vh; left: 0; right: 0; display: flex; justify-content: space-between; padding: 0 5vw; pointer-events: none; }
+        .joystick-base { 
+            width: clamp(100px, 20vw, 150px); 
+            height: clamp(100px, 20vw, 150px); 
+            background-color: var(--glass-bg); 
+            border-radius: 50%; 
+            position: relative; 
+            border: 2px solid var(--glass-border); 
+            pointer-events: all; 
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+            backdrop-filter: blur(8px);
+        }
+        .joystick-knob { 
+            width: 40%; 
+            height: 40%; 
+            background-color: var(--primary-color); 
+            border-radius: 50%; 
+            position: absolute; 
+            top: 50%; 
+            left: 50%; 
+            transform: translate(-50%, -50%); 
+            cursor: grab; 
+            border: 2px solid var(--secondary-color);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+        #info-panel { 
+            position: absolute; 
+            top: 20px; 
+            left: 50%; 
+            transform: translateX(-50%); 
+            background-color: var(--ui-bg); 
+            color: var(--text-color); 
+            padding: 12px 24px; 
+            border-radius: 12px; 
+            text-align: center; 
+            font-size: clamp(0.8rem, 2vw, 1rem); 
+            z-index: 10; 
+            pointer-events: all; 
+            transition: opacity 1s ease-out;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--border-light);
+        }
+        #bottom-view-container { 
+            position: absolute; 
+            top: 20px; 
+            left: 20px; 
+            width: 25vh; 
+            height: 25vh; 
+            max-width: 200px; 
+            max-height: 200px; 
+            border: 2px solid var(--primary-color); 
+            z-index: 5; 
+            pointer-events: none;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+        #restart-button { 
+            position: absolute; 
+            top: 50%; 
+            left: 50%; 
+            transform: translate(-50%, -50%); 
+            padding: 1rem 2.5rem; 
+            font-size: 1.5rem; 
+            font-weight: bold; 
+            color: var(--text-color); 
+            background-color: var(--primary-color); 
+            border: none; 
+            border-radius: 12px; 
+            cursor: pointer; 
+            z-index: 100; 
+            pointer-events: all; 
+            display: none;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+            transition: all 0.2s ease-in-out;
+            outline: 2px solid transparent;
+        }
+        #restart-button:hover {
+            background-color: var(--secondary-color);
+            transform: translate(-50%, -50%) scale(1.05);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+        }
+        #restart-button:active {
+            transform: translate(-50%, -50%) scale(0.95);
+        }
+        
+        #help-button { 
+            position: absolute; 
+            top: 20px; 
+            right: 20px; 
+            width: 44px; 
+            height: 44px; 
+            background-color: var(--ui-bg); 
+            color: var(--text-color); 
+            border: 1px solid var(--border-light); 
+            border-radius: 50%; 
+            font-size: 1.5rem; 
+            font-weight: bold; 
+            z-index: 20; 
+            pointer-events: all; 
+            cursor: pointer; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+            backdrop-filter: blur(8px);
+        }
+        #help-panel { 
+            position: absolute; 
+            top: 0; 
+            left: 0; 
+            right: 0; 
+            background-color: var(--ui-bg); 
+            color: var(--text-color); 
+            z-index: 100; 
+            transform: translateY(-100%); 
+            transition: transform 0.5s ease-in-out; 
+            pointer-events: all; 
+            max-height: 100vh; 
+            overflow-y: auto; 
+            padding: 20px; 
+            padding-top: 80px;
+            backdrop-filter: blur(12px);
+        }
+        #help-panel.open { transform: translateY(0); }
+        #close-help-button { position: absolute; top: 20px; right: 20px; font-size: 2rem; cursor: pointer; }
+        .accordion-item { border-bottom: 1px solid #4a5568; }
+        .accordion-header { padding: 1rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-size: 1.2rem; font-weight: bold; }
+        .accordion-content { max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out; background-color: rgba(0,0,0,0.2); }
+        .accordion-content p { padding: 1rem; margin: 0; }
+        .accordion-content strong { color: var(--primary-color); }
+        
+        #fire-button { 
+            position: absolute; 
+            bottom: 7vh; 
+            left: 50%; 
+            transform: translateX(-50%); 
+            width: clamp(70px, 15vw, 90px); 
+            height: clamp(70px, 15vw, 90px); 
+            background-color: var(--danger-color); 
+            color: var(--text-color); 
+            border: 2px solid var(--danger-light); 
+            border-radius: 50%; 
+            font-size: 1.2rem; 
+            font-weight: bold; 
+            z-index: 15; 
+            pointer-events: all; 
+            display: none;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+            transition: all 0.15s ease-in-out;
+            transform-origin: center;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
+        #fire-button:active {
+            transform: translateX(-50%) scale(0.9);
+            background-color: #b91c1c;
+        }
+        
+        .text-primary {
+            color: var(--primary-color);
+        }
+        
+        .text-danger {
+            color: var(--danger-color);
+        }
+
+        .touch-only { display: none; }
+        .no-touch-only { display: none; }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <button id="help-button">?</button>
+
+    <div id="help-panel">
+        <span id="close-help-button">&times;</span>
+        <div class="accordion">
+            <!-- Français -->
+            <div class="accordion-item">
+                <div class="accordion-header"><span>🇫🇷 Français</span><span>+</span></div>
+                <div class="accordion-content">
+                    <p><strong>Objectif:</strong> Détruisez tous les chars jaunes en lâchant des bombes. Évitez de vous écraser contre les immeubles, les chars ou le zeppelin.<br>
+                       <strong>Contrôles PC:</strong> <strong>Flèches</strong> pour l'altitude/rotation. <strong>Souris (clic+glisser)</strong> pour la direction. <strong>Espace / Clic Droit</strong> pour lâcher la bombe.<br>
+                       <strong>Contrôles Mobiles:</strong> <strong>Joystick gauche</strong> pour l'altitude/rotation. <strong>Joystick droit</strong> pour la direction. <strong>Bouton ROUGE</strong> pour lâcher la bombe.<br>
+                       <strong>Bombardement:</strong> Les bombes détruisent les chars, le zeppelin, et réduisent la hauteur des immeubles de 30%.<br>
+                       <strong>Fin de partie:</strong> Le jeu se termine si vous vous écrasez. Cliquez sur "Recommencer" pour rejouer.</p>
+                </div>
+            </div>
+            <!-- English -->
+            <div class="accordion-item">
+                <div class="accordion-header"><span>🇬🇧 English</span><span>+</span></div>
+                <div class="accordion-content">
+                    <p><strong>Objective:</strong> Destroy all yellow tanks by dropping bombs. Avoid crashing into buildings, tanks, or the zeppelin.<br>
+                       <strong>PC Controls:</strong> <strong>Arrow Keys</strong> for altitude/rotation. <strong>Mouse (click & drag)</strong> for direction. <strong>Spacebar / Right-Click</strong> to drop the bomb.<br>
+                       <strong>Mobile Controls:</strong> <strong>Left joystick</strong> for altitude/rotation. <strong>Right joystick</strong> for direction. <strong>RED button</strong> to drop the bomb.<br>
+                       <strong>Bombing:</strong> Bombs destroy tanks, the zeppelin, and reduce building height by 30%.<br>
+                       <strong>Game Over:</strong> The game ends if you crash. Click "Recommencer" (Restart) to play again.</p>
+                </div>
+            </div>
+            <!-- Español -->
+            <div class="accordion-item">
+                <div class="accordion-header"><span>🇪🇸 Español</span><span>+</span></div>
+                <div class="accordion-content">
+                    <p><strong>Objetivo:</strong> Destruye todos los tanques amarillos lanzando bombas. Evita chocar contra edificios, tanques o el zepelín.<br>
+                       <strong>Controles PC:</strong> <strong>Teclas de flecha</strong> para altitud/rotación. <strong>Ratón (clic y arrastrar)</strong> para la dirección. <strong>Barra espaciadora / Clic derecho</strong> para lanzar la bomba.<br>
+                       <strong>Controles Móviles:</strong> <strong>Joystick izquierdo</strong> para altitud/rotación. <strong>Joystick derecho</strong> para la dirección. <strong>Botón ROJO</strong> para lanzar la bomba.<br>
+                       <strong>Bombardeo:</strong> Las bombas destruyen tanques, el zepelín y reducen la altura de los edificios en un 30%.<br>
+                       <strong>Fin del juego:</strong> El juego termina si te estrellas. Haz clic en "Recommencer" (Reiniciar) para volver a jugar.</p>
+                </div>
+            </div>
+            <!-- Deutsch -->
+            <div class="accordion-item">
+                <div class="accordion-header"><span>🇩🇪 Deutsch</span><span>+</span></div>
+                <div class="accordion-content">
+                    <p><strong>Ziel:</strong> Zerstöre alle gelben Panzer, indem du Bomben abwirfst. Vermeide es, gegen Gebäude, Panzer oder den Zeppelin zu stoßen.<br>
+                       <strong>PC-Steuerung:</strong> <strong>Pfeiltasten</strong> für Höhe/Drehung. <strong>Maus (klicken & ziehen)</strong> für die Richtung. <strong>Leertaste / Rechtsklick</strong> zum Abwerfen der Bombe.<br>
+                       <strong>Mobile Steuerung:</strong> <strong>Linker Joystick</strong> für Höhe/Drehung. <strong>Rechter Joystick</strong> für die Richtung. <strong>ROTE Taste</strong> zum Abwerfen der Bombe.<br>
+                       <strong>Bombardierung:</strong> Bomben zerstören Panzer, den Zeppelin und reduzieren die Höhe von Gebäuden um 30%.<br>
+                       <strong>Spielende:</strong> Das Spiel endet, wenn du abstürzt. Klicke auf "Recommencer" (Neustart), um erneut zu spielen.</p>
+                </div>
+            </div>
+            <!-- Italiano -->
+            <div class="accordion-item">
+                <div class="accordion-header"><span>🇮🇹 Italiano</span><span>+</span></div>
+                <div class="accordion-content">
+                    <p><strong>Obiettivo:</strong> Distruggi tutti i carri armati gialli sganciando bombe. Evita di schiantarti contro edifici, carri armati o lo zeppelin.<br>
+                       <strong>Controlli PC:</strong> <strong>Tasti freccia</strong> per altitudine/rotazione. <strong>Mouse (clic e trascina)</strong> per la direzione. <strong>Barra spaziatrice / Clic destro</strong> per sganciare la bomba.<br>
+                       <strong>Controlli Mobile:</strong> <strong>Joystick sinistro</strong> per altitudine/rotazione. <strong>Joystick destro</strong> per la direzione. <strong>Pulsante ROSSO</strong> per sganciare la bomba.<br>
+                       <strong>Bombardamento:</strong> Le bombe distruggono i carri armati, lo zeppelin e riducono l'altezza degli edifici del 30%.<br>
+                       <strong>Fine del gioco:</strong> Il gioco finisce se ti schianti. Clicca su "Recommencer" (Ricomincia) per giocare di nuovo.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="ui-container">
+        <div id="info-panel">
+            <div id="info-touch" class="touch-only">
+                <p class="font-bold text-lg">Contrôles Mobiles</p>
+                <p><span class="font-semibold text-primary">Gauche:</span> Altitude/Rotation | <span class="font-semibold text-primary">Droite:</span> Direction</p>
+                <p>Appuyez sur le bouton <span class="text-danger font-bold">ROUGE</span> pour lâcher la bombe</p>
+            </div>
+            <div id="info-desktop" class="no-touch-only">
+                <p class="font-bold text-lg">Contrôles PC</p>
+                <p><span class="font-semibold text-primary">Flèches:</span> Altitude/Rotation | <span class="font-semibold text-primary">Souris:</span> Direction</p>
+                <p><span class="font-semibold text-primary">Clic Droit / Espace:</span> Lâcher la bombe</p>
+            </div>
+            <div class="mt-2 text-sm">
+                Objectif: Détruire tous les chars jaunes
+            </div>
+        </div>
+        <div id="bottom-view-container"></div>
+        <div id="joystick-container" class="touch-only">
+            <div id="joystick-left" class="joystick-base"><div id="knob-left" class="joystick-knob"></div></div>
+            <div id="joystick-right" class="joystick-base"><div id="knob-right" class="joystick-knob"></div></div>
+        </div>
+        <button id="fire-button" class="touch-only">FIRE</button>
+    </div>
+    <button id="restart-button">Recommencer</button>
+
+    <script type="importmap">
+        { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        // --- Variables Globales ---
+        const isTouchDevice = 'ontouchstart' in window;
+        const keyState = {};
+        let isMouseDragging = false;
+        let infoPanelTimer = null;
+        const planeSize = 4000;
+        
+        let tanks = [];
+        let buildings = [];
+        let allCollidables = [];
+
+        let bombObject = null;
+        let isBombAttached = true;
+        let isDroneCrashed = false;
+        let isZeppelinCrashed = false;
+        const zeppelinFlames = [];
+        const localActiveBombs = [];
+        const localActiveExplosions = [];
+        const localActiveTankExplosions = [];
+        
+        // --- Scène 3D ---
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 4000);
+        const bottomCamera = new THREE.PerspectiveCamera(90, 1, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setScissorTest(true);
+        document.body.appendChild(renderer.domElement);
+        
+        const bottomViewContainer = document.getElementById('bottom-view-container');
+        const restartButton = document.getElementById('restart-button');
+        const infoPanel = document.getElementById('info-panel');
+        const clock = new THREE.Clock();
+
+        // --- Fonctions de création d'objets 3D ---
+        function createDroneMesh(color = 0x10B981) {
+            const droneGroup = new THREE.Group();
+            
+            // Materials
+            const bodyMaterial = new THREE.MeshStandardMaterial({ 
+                color: color, 
+                wireframe: true,
+                emissive: color,
+                emissiveIntensity: 0.4
+            });
+            const propellerMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0xDC2626, 
+                wireframe: true,
+                emissive: 0xDC2626,
+                emissiveIntensity: 0.5
+            });
+            const glassMaterial = new THREE.MeshStandardMaterial({
+                color: 0x90E0EF,
+                wireframe: true,
+                transparent: true,
+                opacity: 0.8,
+                emissive: 0x90E0EF,
+                emissiveIntensity: 0.3
+            });
+            
+            // Main Body - More detailed hexagonal shape
+            const bodyGeometry = new THREE.CylinderGeometry(0.5, 0.5, 0.2, 6);
+            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            droneGroup.add(body);
+            
+            // Bottom Center Pod
+            const centerPodGeometry = new THREE.CylinderGeometry(0.2, 0.3, 0.3, 6);
+            const centerPod = new THREE.Mesh(centerPodGeometry, bodyMaterial);
+            centerPod.position.y = -0.2;
+            droneGroup.add(centerPod);
+            
+            // Camera pod (front indicator)
+            const cameraPodGeometry = new THREE.SphereGeometry(0.15, 8, 8);
+            const cameraPod = new THREE.Mesh(cameraPodGeometry, glassMaterial);
+            cameraPod.position.set(0, -0.15, 0.4);
+            droneGroup.add(cameraPod);
+            
+            // Arms and Propellers
+            const armGeometry = new THREE.BoxGeometry(0.1, 0.05, 0.8);
+            const propellerGeometry = new THREE.CylinderGeometry(0.4, 0.4, 0.03, 16);
+            const propellerHubGeometry = new THREE.CylinderGeometry(0.1, 0.1, 0.1, 8);
+            const propellers = [];
+            
+            function createArmAndPropeller(x, z) {
+                // Arm
+                const arm = new THREE.Mesh(armGeometry, bodyMaterial);
+                arm.position.set(x*0.5, 0, z*0.5);
+                arm.rotation.y = Math.atan2(x, z);
+                droneGroup.add(arm);
+                
+                // Propeller hub
+                const hub = new THREE.Mesh(propellerHubGeometry, bodyMaterial);
+                hub.position.set(x, 0.1, z);
+                droneGroup.add(hub);
+                
+                // Propeller
+                const propeller = new THREE.Mesh(propellerGeometry, propellerMaterial);
+                propeller.position.set(x, 0.15, z);
+                droneGroup.add(propeller);
+                propellers.push(propeller);
+                
+                // Motor mount - a small cylinder
+                const motorMountGeometry = new THREE.CylinderGeometry(0.12, 0.12, 0.1, 8);
+                const motorMount = new THREE.Mesh(motorMountGeometry, bodyMaterial);
+                motorMount.position.set(x, 0.05, z);
+                droneGroup.add(motorMount);
+            }
+            
+            // Create 4 arms and propellers in X configuration
+            createArmAndPropeller(0.7, 0.7);
+            createArmAndPropeller(0.7, -0.7);
+            createArmAndPropeller(-0.7, 0.7);
+            createArmAndPropeller(-0.7, -0.7);
+            
+            // LED indicators
+            function createLED(x, z, color) {
+                const ledGeometry = new THREE.SphereGeometry(0.05, 6, 6);
+                const ledMaterial = new THREE.MeshStandardMaterial({
+                    color: color,
+                    emissive: color,
+                    emissiveIntensity: 1
+                });
+                const led = new THREE.Mesh(ledGeometry, ledMaterial);
+                led.position.set(x, 0, z);
+                droneGroup.add(led);
+            }
+            
+            // Add LEDs - green in front, red in back for orientation
+            createLED(0, 0.6, 0x22D3EE);  // Front (cyan)
+            createLED(0, -0.6, 0xDC2626);  // Back (red)
+            
+            droneGroup.propellers = propellers;
+            return droneGroup;
+        }
+
+        function createTextTexture(text) {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            const fontSize = 48;
+            canvas.width = 512;
+            canvas.height = 128;
+            context.font = `bold ${fontSize}px Inter`;
+            context.fillStyle = 'yellow';
+            context.textAlign = 'center';
+            context.textBaseline = 'middle';
+            context.fillText(text, canvas.width / 2, canvas.height / 2);
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        function createZeppelinMesh() {
+            const zeppelinGroup = new THREE.Group();
+            
+            // Materials
+            const mainMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x8B5CF6, 
+                wireframe: true,
+                emissive: 0x8B5CF6,
+                emissiveIntensity: 0.3
+            });
+            
+            const detailMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0xA78BFA, 
+                wireframe: true,
+                emissive: 0xA78BFA,
+                emissiveIntensity: 0.3
+            });
+            
+            const metalMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0xD1D5DB, 
+                wireframe: true,
+                emissive: 0xD1D5DB,
+                emissiveIntensity: 0.2
+            });
+
+            // Main body - more segments for smoother appearance
+            const bodyGeometry = new THREE.CapsuleGeometry(20, 80, 24, 36);
+            const body = new THREE.Mesh(bodyGeometry, mainMaterial);
+            body.rotation.z = Math.PI / 2;
+            zeppelinGroup.add(body);
+            
+            // Create a better text texture with glow effect
+            const textTexture = createTextTexture("LEONCE EQUITY");
+            const textMaterial = new THREE.MeshBasicMaterial({ 
+                map: textTexture, 
+                transparent: true,
+                emissive: 0xFFFFFF,
+                emissiveIntensity: 0.5
+            });
+            const textGeometry = new THREE.PlaneGeometry(80, 20);
+
+            const textMesh1 = new THREE.Mesh(textGeometry, textMaterial);
+            textMesh1.position.set(0, 0, 21);
+            zeppelinGroup.add(textMesh1);
+
+            const textMesh2 = new THREE.Mesh(textGeometry, textMaterial);
+            textMesh2.position.set(0, 0, -21);
+            textMesh2.rotation.y = Math.PI;
+            zeppelinGroup.add(textMesh2);
+
+            // Enhanced gondola with more detail
+            const gondolaGeometry = new THREE.BoxGeometry(12, 8, 32);
+            const gondola = new THREE.Mesh(gondolaGeometry, detailMaterial);
+            gondola.position.y = -25;
+            zeppelinGroup.add(gondola);
+            
+            // Windows on gondola
+            for (let i = -3; i <= 3; i++) {
+                const windowGeometry = new THREE.PlaneGeometry(2, 3);
+                const windowMaterial = new THREE.MeshBasicMaterial({ 
+                    color: 0x90E0EF,
+                    wireframe: true,
+                    transparent: true,
+                    opacity: 0.8,
+                    side: THREE.DoubleSide
+                });
+                
+                // Windows on both sides
+                const windowLeft = new THREE.Mesh(windowGeometry, windowMaterial);
+                windowLeft.position.set(6.01, -24, i * 4);
+                windowLeft.rotation.y = Math.PI / 2;
+                zeppelinGroup.add(windowLeft);
+                
+                const windowRight = new THREE.Mesh(windowGeometry, windowMaterial);
+                windowRight.position.set(-6.01, -24, i * 4);
+                windowRight.rotation.y = -Math.PI / 2;
+                zeppelinGroup.add(windowRight);
+            }
+            
+            // Enhanced fins
+            const finGeometry = new THREE.BoxGeometry(1, 28, 42);
+            const finV = new THREE.Mesh(finGeometry, detailMaterial);
+            finV.position.x = -50;
+            zeppelinGroup.add(finV);
+
+            const finH = new THREE.Mesh(finGeometry, detailMaterial);
+            finH.position.x = -50;
+            finH.rotation.y = Math.PI / 2;
+            zeppelinGroup.add(finH);
+            
+            // Add structural rings around the body for detail
+            const addStructuralRing = (posX) => {
+                const ringGeometry = new THREE.TorusGeometry(20.5, 1, 8, 24);
+                const ring = new THREE.Mesh(ringGeometry, metalMaterial);
+                ring.position.x = posX;
+                ring.rotation.y = Math.PI / 2;
+                zeppelinGroup.add(ring);
+            };
+            
+            // Add rings along the body
+            addStructuralRing(-30);
+            addStructuralRing(-15);
+            addStructuralRing(0);
+            addStructuralRing(15);
+            addStructuralRing(30);
+            
+            // Add engine pods with propellers
+            const enginePodGeometry = new THREE.CylinderGeometry(3, 4, 12, 8);
+            const propellerGeometry = new THREE.BoxGeometry(12, 0.5, 1);
+            
+            function createEnginePod(x, z) {
+                const pod = new THREE.Mesh(enginePodGeometry, detailMaterial);
+                pod.position.set(x, -22, z);
+                pod.rotation.x = Math.PI / 2;
+                zeppelinGroup.add(pod);
+                
+                // Propeller
+                const propeller = new THREE.Mesh(propellerGeometry, metalMaterial);
+                propeller.position.set(x, -22, z + 7);
+                zeppelinGroup.userData.propellers = zeppelinGroup.userData.propellers || [];
+                zeppelinGroup.userData.propellers.push(propeller);
+                zeppelinGroup.add(propeller);
+            }
+            
+            // Add four engine pods
+            createEnginePod(-8, -15);
+            createEnginePod(8, -15);
+            createEnginePod(-8, 15);
+            createEnginePod(8, 15);
+            
+            return zeppelinGroup;
+        }
+
+        const drone = createDroneMesh();
+        const droneBoundingBox = new THREE.Box3();
+        const zeppelin = createZeppelinMesh();
+        const zeppelinBoundingBox = new THREE.Box3();
+
+        // --- Logique de Jeu ---
+        function dropBomb() {
+            if (!isBombAttached || !bombObject || isDroneCrashed) return;
+            isBombAttached = false;
+            const worldPosition = new THREE.Vector3();
+            bombObject.getWorldPosition(worldPosition);
+            drone.remove(bombObject);
+            
+            createFallingBomb(worldPosition, droneState.velocity);
+            bombObject = null;
+        }
+
+        function handleDroneCrash() {
+            if (isDroneCrashed) return;
+            isDroneCrashed = true;
+            drone.visible = false;
+            
+            const explosionGeo = new THREE.SphereGeometry(1, 16, 16);
+            const explosionMat = new THREE.MeshBasicMaterial({ color: 0xffa500, transparent: true });
+            const explosion = new THREE.Mesh(explosionGeo, explosionMat);
+            explosion.position.copy(drone.position);
+            localActiveExplosions.push({ mesh: explosion, startTime: clock.getElapsedTime() });
+            scene.add(explosion);
+
+            setTimeout(() => { restartButton.style.display = 'block'; }, 1000);
+        }
+        
+        function handleZeppelinCrash() {
+            if (isZeppelinCrashed) return;
+            isZeppelinCrashed = true;
+            if (!isDroneCrashed) handleDroneCrash();
+
+            // Add fire lights at different points of the zeppelin
+            for(let i=0; i<8; i++) {
+                const flame = new THREE.PointLight(0xff4500, 5000, 50);
+                flame.position.set(
+                    (Math.random() - 0.5) * 80,
+                    (Math.random() - 0.5) * 20,
+                    (Math.random() - 0.5) * 20
+                );
+                zeppelin.add(flame);
+                zeppelinFlames.push(flame);
+            }
+            
+            // Change material to show damage
+            zeppelin.traverse(child => {
+                if (child.isMesh) {
+                    // Make material show damage
+                    if (child.material) {
+                        child.material.emissive = new THREE.Color(0xff4500);
+                        child.material.emissiveIntensity = 0.5;
+                    }
+                }
+            });
+            
+            // Create smoke trail effect
+            const createSmokeTrail = () => {
+                if (!zeppelin.visible) return;
+                
+                const smokeParticle = new THREE.Mesh(
+                    new THREE.SphereGeometry(Math.random() * 10 + 5, 8, 8),
+                    new THREE.MeshBasicMaterial({ 
+                        color: 0x222222, 
+                        transparent: true, 
+                        opacity: Math.random() * 0.4 + 0.2,
+                        wireframe: true
+                    })
+                );
+                
+                // Position smoke behind zeppelin
+                const zeppelinWorldPos = new THREE.Vector3();
+                zeppelin.getWorldPosition(zeppelinWorldPos);
+                smokeParticle.position.copy(zeppelinWorldPos);
+                
+                // Add random offset
+                smokeParticle.position.x += (Math.random() - 0.5) * 40;
+                smokeParticle.position.y += (Math.random() - 0.5) * 20;
+                smokeParticle.position.z += (Math.random() - 0.5) * 40;
+                
+                scene.add(smokeParticle);
+                
+                // Smoke life in seconds
+                const smokeLife = 3.0;
+                const startTime = clock.getElapsedTime();
+                
+                // Animate smoke
+                const animateSmoke = () => {
+                    const elapsed = clock.getElapsedTime() - startTime;
+                    
+                    if (elapsed > smokeLife) {
+                        scene.remove(smokeParticle);
+                        return;
+                    }
+                    
+                    const progress = elapsed / smokeLife;
+                    
+                    // Make smoke float upward slowly
+                    smokeParticle.position.y += 2 * deltaTime;
+                    
+                    // Scale up as it disperses
+                    const scale = 1 + progress * 3;
+                    smokeParticle.scale.set(scale, scale, scale);
+                    
+                    // Fade out over time
+                    smokeParticle.material.opacity = 0.4 * (1 - progress);
+                    
+                    requestAnimationFrame(animateSmoke);
+                };
+                
+                animateSmoke();
+            };
+            
+            // Start creating smoke particles
+            const smokeInterval = setInterval(createSmokeTrail, 200);
+            
+            // Create some small fires on the zeppelin
+            for (let i = 0; i < 6; i++) {
+                const firePosition = new THREE.Vector3(
+                    (Math.random() - 0.5) * 80,
+                    (Math.random() - 0.5) * 20,
+                    (Math.random() - 0.5) * 20
+                );
+                
+                // Create fire particle system
+                const createFireParticle = () => {
+                    if (!zeppelin.visible) {
+                        clearInterval(fireInterval);
+                        return;
+                    }
+                    
+                    const fireParticle = new THREE.Mesh(
+                        new THREE.SphereGeometry(Math.random() * 3 + 1, 6, 6),
+                        new THREE.MeshBasicMaterial({ 
+                            color: Math.random() > 0.5 ? 0xff4500 : 0xff8000, 
+                            transparent: true, 
+                            opacity: Math.random() * 0.5 + 0.5,
+                            wireframe: Math.random() > 0.5
+                        })
+                    );
+                    
+                    // Position fire particle at fire position
+                    fireParticle.position.copy(firePosition);
+                    
+                    // Add slight random variation to position
+                    fireParticle.position.x += (Math.random() - 0.5) * 5;
+                    fireParticle.position.y += (Math.random() - 0.5) * 5;
+                    fireParticle.position.z += (Math.random() - 0.5) * 5;
+                    
+                    zeppelin.add(fireParticle);
+                    
+                    // Fire particle life
+                    const fireLife = Math.random() * 0.7 + 0.3;
+                    const startTime = clock.getElapsedTime();
+                    
+                    // Animate fire particle
+                    const animateFire = () => {
+                        const elapsed = clock.getElapsedTime() - startTime;
+                        
+                        if (elapsed > fireLife || !zeppelin.visible) {
+                            zeppelin.remove(fireParticle);
+                            return;
+                        }
+                        
+                        const progress = elapsed / fireLife;
+                        
+                        // Move upward
+                        fireParticle.position.y += 10 * deltaTime;
+                        
+                        // Fade out
+                        fireParticle.material.opacity = 0.8 * (1 - progress);
+                        
+                        requestAnimationFrame(animateFire);
+                    };
+                    
+                    animateFire();
+                };
+                
+                // Create fire particles at intervals
+                const fireInterval = setInterval(createFireParticle, Math.random() * 100 + 100);
+            }
+            
+            // Store intervals to clear when zeppelin is destroyed
+            zeppelin.userData.smokeInterval = smokeInterval;
+            
+            // Add zeppelin propeller animation when crashing
+            if (zeppelin.userData.propellers && zeppelin.userData.propellers.length > 0) {
+                zeppelin.userData.propellers.forEach(propeller => {
+                    propeller.rotation.z = Math.random() * Math.PI * 2; // Random rotation
+                });
+            }
+        }
+
+        function resetGame() {
+            // Reset game state
+            isDroneCrashed = false;
+            isZeppelinCrashed = false;
+            
+            // Reset zeppelin
+            zeppelin.visible = true;
+            zeppelin.position.set(-planeSize / 2 - 200, 250, 0);
+            zeppelin.rotation.set(0, 0, 0);
+            
+            // Reset zeppelin appearance
+            zeppelinFlames.forEach(f => zeppelin.remove(f));
+            zeppelinFlames.length = 0;
+            
+            zeppelin.traverse(child => {
+                if (child.isMesh && child.material && child.material.emissive) {
+                    child.material.emissive.set(child.material.color);
+                    child.material.emissiveIntensity = 0.3;
+                }
+            });
+            
+            // Clear any intervals
+            if (zeppelin.userData.smokeInterval) {
+                clearInterval(zeppelin.userData.smokeInterval);
+                zeppelin.userData.smokeInterval = null;
+            }
+
+            // Reset drone
+            drone.position.set(0, 10, 0);
+            drone.rotation.set(0, 0, 0);
+            droneState.velocity.set(0,0,0);
+            droneState.rotationVelocity.set(0,0,0);
+            drone.visible = true;
+            
+            // Hide restart button
+            restartButton.style.display = 'none';
+            
+            // Show and then fade info panel
+            if (infoPanelTimer) clearTimeout(infoPanelTimer);
+            infoPanel.style.display = 'block';
+            infoPanel.style.pointerEvents = 'all';
+            setTimeout(() => { infoPanel.style.opacity = '1'; }, 10);
+            infoPanelTimer = setTimeout(() => {
+                infoPanel.style.opacity = '0';
+                infoPanel.style.pointerEvents = 'none';
+            }, 12000);
+
+            // Clean up all active objects
+            localActiveBombs.forEach(b => {
+                // Clear any intervals
+                if (b.userData.blinkInterval) {
+                    clearInterval(b.userData.blinkInterval);
+                }
+                if (b.userData.trailInterval) {
+                    clearInterval(b.userData.trailInterval);
+                }
+                scene.remove(b);
+            });
+            localActiveBombs.length = 0;
+            
+            localActiveExplosions.forEach(e => {
+                scene.remove(e.mesh);
+                if (e.light) scene.remove(e.light);
+            });
+            localActiveExplosions.length = 0;
+            
+            localActiveTankExplosions.forEach(t => {
+                scene.remove(t.mesh);
+                if (t.light) scene.remove(t.light);
+            });
+            localActiveTankExplosions.length = 0;
+            
+            // Clean up any remaining objects
+            scene.traverse(object => {
+                if (object.userData && object.userData.createdAt) {
+                    scene.remove(object);
+                }
+            });
+            
+            // Setup new scene
+            setupScene();
+            createBomb();
+            
+            // Add a restart animation effect
+            const fadeInScreen = document.createElement('div');
+            fadeInScreen.style.position = 'absolute';
+            fadeInScreen.style.top = '0';
+            fadeInScreen.style.left = '0';
+            fadeInScreen.style.width = '100%';
+            fadeInScreen.style.height = '100%';
+            fadeInScreen.style.backgroundColor = '#FFF';
+            fadeInScreen.style.opacity = '0.5';
+            fadeInScreen.style.pointerEvents = 'none';
+            fadeInScreen.style.zIndex = '1000';
+            fadeInScreen.style.transition = 'opacity 0.5s ease-out';
+            document.body.appendChild(fadeInScreen);
+            
+            // Fade out the white screen
+            setTimeout(() => {
+                fadeInScreen.style.opacity = '0';
+                setTimeout(() => {
+                    document.body.removeChild(fadeInScreen);
+                }, 500);
+            }, 10);
+        }
+        
+        function setupScene() {
+            allCollidables.forEach(obj => scene.remove(obj.mesh));
+            allCollidables = [];
+            buildings = [];
+            tanks = [];
+
+            // Create buildings with more detailed and varied designs
+            const buildingColors = [0x3B82F6, 0x60A5FA, 0x93C5FD, 0x2563EB];
+            const numberOfObstacles = 150;
+            
+            for (let i = 0; i < numberOfObstacles; i++) {
+                const buildingType = Math.floor(Math.random() * 4);
+                let obstacle;
+                const colorIndex = Math.floor(Math.random() * buildingColors.length);
+                const buildingColor = buildingColors[colorIndex];
+                
+                const buildingMaterial = new THREE.MeshStandardMaterial({ 
+                    color: buildingColor, 
+                    wireframe: true,
+                    emissive: buildingColor,
+                    emissiveIntensity: 0.2
+                });
+                
+                // Calculate position before creating the building
+                const posX = (Math.random() - 0.5) * planeSize * 0.9;
+                const posZ = (Math.random() - 0.5) * planeSize * 0.9;
+                
+                switch(buildingType) {
+                    case 0: // Skyscraper
+                        const sizeX = Math.random() * 20 + 20;
+                        const sizeY = Math.random() * 150 + 100;
+                        const sizeZ = Math.random() * 20 + 20;
+                        const skyscraperGeometry = new THREE.BoxGeometry(sizeX, sizeY, sizeZ);
+                        obstacle = new THREE.Mesh(skyscraperGeometry, buildingMaterial);
+                        break;
+                        
+                    case 1: // Cylindrical tower
+                        const radius = Math.random() * 15 + 10;
+                        const height = Math.random() * 120 + 60;
+                        const towerGeometry = new THREE.CylinderGeometry(radius, radius * 1.2, height, 8);
+                        obstacle = new THREE.Mesh(towerGeometry, buildingMaterial);
+                        break;
+                        
+                    case 2: // Pyramid/angular building
+                        const baseSize = Math.random() * 35 + 25;
+                        const pyramidHeight = Math.random() * 80 + 40;
+                        const pyramidGeometry = new THREE.ConeGeometry(baseSize, pyramidHeight, 4);
+                        obstacle = new THREE.Mesh(pyramidGeometry, buildingMaterial);
+                        break;
+                        
+                    case 3: // Lower wide building
+                        const wideSizeX = Math.random() * 50 + 30;
+                        const wideSizeY = Math.random() * 40 + 20;
+                        const wideSizeZ = Math.random() * 50 + 30;
+                        const wideGeometry = new THREE.BoxGeometry(wideSizeX, wideSizeY, wideSizeZ);
+                        obstacle = new THREE.Mesh(wideGeometry, buildingMaterial);
+                        break;
+                }
+                
+                // Get the size to position correctly
+                const size = new THREE.Box3().setFromObject(obstacle).getSize(new THREE.Vector3());
+                obstacle.position.set(posX, size.y / 2, posZ);
+                
+                // Random rotation for variety
+                obstacle.rotation.y = Math.random() * Math.PI * 2;
+                
+                scene.add(obstacle);
+                const buildingObject = { mesh: obstacle, boundingBox: new THREE.Box3().setFromObject(obstacle) };
+                buildings.push(buildingObject);
+                allCollidables.push(buildingObject);
+            }
+
+            // Enhanced tank design
+            function createTankMesh() {
+                const tankGroup = new THREE.Group();
+                
+                // Tank colors
+                const tankColor = 0xFCD34D; // Yellow color for tanks
+                
+                const baseMaterial = new THREE.MeshStandardMaterial({ 
+                    color: tankColor, 
+                    wireframe: true,
+                    emissive: tankColor,
+                    emissiveIntensity: 0.3
+                });
+                const trackMaterial = new THREE.MeshStandardMaterial({ 
+                    color: 0x78716C, 
+                    wireframe: true,
+                    emissive: 0x78716C,
+                    emissiveIntensity: 0.2
+                });
+                
+                // Tank body
+                const bodyGeometry = new THREE.BoxGeometry(10, 3, 14);
+                const body = new THREE.Mesh(bodyGeometry, baseMaterial);
+                tankGroup.add(body);
+                
+                // Tank turret
+                const turretGeometry = new THREE.CylinderGeometry(4, 4, 2, 8);
+                const turret = new THREE.Mesh(turretGeometry, baseMaterial);
+                turret.position.set(0, 3, 0);
+                tankGroup.add(turret);
+                
+                // Tank cannon
+                const cannonGeometry = new THREE.CylinderGeometry(0.8, 0.8, 10, 8);
+                const cannon = new THREE.Mesh(cannonGeometry, baseMaterial);
+                cannon.position.set(0, 3, 7);
+                cannon.rotation.x = Math.PI / 2;
+                tankGroup.add(cannon);
+                
+                // Left track
+                const leftTrackGeometry = new THREE.BoxGeometry(2, 2, 14);
+                const leftTrack = new THREE.Mesh(leftTrackGeometry, trackMaterial);
+                leftTrack.position.set(-4.5, -0.5, 0);
+                tankGroup.add(leftTrack);
+                
+                // Right track
+                const rightTrackGeometry = new THREE.BoxGeometry(2, 2, 14);
+                const rightTrack = new THREE.Mesh(rightTrackGeometry, trackMaterial);
+                rightTrack.position.set(4.5, -0.5, 0);
+                tankGroup.add(rightTrack);
+                
+                return tankGroup;
+            }
+            
+            // Position tanks
+            const tankPositions = [
+                new THREE.Vector3(200, 2, 200), new THREE.Vector3(-300, 2, -150),
+                new THREE.Vector3(150, 2, -350), new THREE.Vector3(-400, 2, 300),
+                new THREE.Vector3(500, 2, 500), new THREE.Vector3(-600, 2, -450),
+                new THREE.Vector3(450, 2, -650), new THREE.Vector3(-700, 2, 600)
+            ];
+            
+            tankPositions.forEach(pos => {
+                const tank = createTankMesh();
+                tank.position.copy(pos);
+                tank.rotation.y = Math.random() * Math.PI * 2;
+                
+                const tankObject = {
+                    mesh: tank,
+                    boundingBox: new THREE.Box3().setFromObject(tank),
+                    speed: Math.random() * 5 + 5,
+                    type: 'random'
+                };
+                
+                scene.add(tank);
+                tanks.push(tankObject);
+                allCollidables.push(tankObject);
+            });
+
+            // Create tank column with enhanced tanks
+            const columnStartPos = new THREE.Vector3(-1000, 2, 1000);
+            let leader = null;
+            
+            for (let i = 0; i < 5; i++) {
+                const tank = createTankMesh();
+                tank.position.set(columnStartPos.x, columnStartPos.y, columnStartPos.z + i * 25);
+                tank.rotation.y = -Math.PI / 2;
+                
+                const tankObject = {
+                    mesh: tank,
+                    boundingBox: new THREE.Box3().setFromObject(tank),
+                    speed: 8,
+                    type: 'column',
+                    leader: leader // The first has no leader
+                };
+                
+                scene.add(tank);
+                tanks.push(tankObject);
+                allCollidables.push(tankObject);
+                leader = tank; // The next tank will follow this one
+            }
+            
+            // Add some decorative elements
+            addDecorativeElements();
+        }
+        
+        // Function to add decorative elements to the scene
+        function addDecorativeElements() {
+            // Materials
+            const treeMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x22C55E, 
+                wireframe: true,
+                emissive: 0x22C55E,
+                emissiveIntensity: 0.2
+            });
+            
+            const trunkMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x92400E, 
+                wireframe: true,
+                emissive: 0x92400E,
+                emissiveIntensity: 0.2
+            });
+            
+            // Create trees
+            for (let i = 0; i < 50; i++) {
+                const treeGroup = new THREE.Group();
+                
+                // Tree trunk
+                const trunkGeometry = new THREE.CylinderGeometry(2, 3, 10, 8);
+                const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+                trunk.position.y = 5;
+                treeGroup.add(trunk);
+                
+                // Tree top
+                const topGeometry = new THREE.ConeGeometry(10, 25, 8);
+                const top = new THREE.Mesh(topGeometry, treeMaterial);
+                top.position.y = 22.5;
+                treeGroup.add(top);
+                
+                // Position randomly but away from center
+                const distance = 200 + Math.random() * (planeSize / 2 - 200);
+                const angle = Math.random() * Math.PI * 2;
+                const x = Math.cos(angle) * distance;
+                const z = Math.sin(angle) * distance;
+                
+                treeGroup.position.set(x, 0, z);
+                scene.add(treeGroup);
+            }
+        }
+        
+        function createFallingBomb(position, velocity) {
+            // Create a detailed falling bomb similar to the attached one
+            const bombGroup = new THREE.Group();
+            
+            // Main bomb body
+            const bombMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x3B82F6, 
+                wireframe: true,
+                emissive: 0x3B82F6,
+                emissiveIntensity: 0.5
+            });
+            
+            // Create teardrop shape for bomb
+            const bombGeometry = new THREE.CapsuleGeometry(0.15, 0.4, 8, 8);
+            const bombBody = new THREE.Mesh(bombGeometry, bombMaterial);
+            bombBody.rotation.x = Math.PI;
+            bombGroup.add(bombBody);
+            
+            // Add fins to the bomb
+            const finMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x1E3A8A, 
+                wireframe: true,
+                emissive: 0x1E3A8A,
+                emissiveIntensity: 0.4
+            });
+            
+            // Create 4 fins
+            for (let i = 0; i < 4; i++) {
+                const finGeometry = new THREE.BoxGeometry(0.2, 0.05, 0.1);
+                const fin = new THREE.Mesh(finGeometry, finMaterial);
+                fin.position.y = -0.15;
+                fin.position.x = Math.sin(i * Math.PI/2) * 0.12;
+                fin.position.z = Math.cos(i * Math.PI/2) * 0.12;
+                fin.rotation.y = i * Math.PI/2;
+                bombGroup.add(fin);
+            }
+            
+            // Add a blinking light to the bomb
+            const blinkingLight = new THREE.PointLight(0xff0000, 2, 0.5);
+            blinkingLight.position.y = 0;
+            bombGroup.add(blinkingLight);
+            
+            // Animate the light
+            const blinkInterval = setInterval(() => {
+                blinkingLight.intensity = blinkingLight.intensity > 0 ? 0 : 2;
+            }, 200);
+            
+            // Store the interval to clear it when the bomb explodes
+            bombGroup.userData.blinkInterval = blinkInterval;
+            
+            // Set position and velocity
+            bombGroup.position.copy(position);
+            bombGroup.velocity = new THREE.Vector3(velocity.x, velocity.y, velocity.z);
+            
+            scene.add(bombGroup);
+            localActiveBombs.push(bombGroup);
+            
+            // Add a trail effect for the falling bomb
+            const createTrail = () => {
+                if (!bombGroup.parent) return; // Stop if bomb is removed
+                
+                const trailParticle = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.05, 6, 6),
+                    new THREE.MeshBasicMaterial({ 
+                        color: 0x90E0EF, 
+                        transparent: true, 
+                        opacity: 0.7 
+                    })
+                );
+                
+                trailParticle.position.copy(bombGroup.position);
+                // Add slight random offset
+                trailParticle.position.x += (Math.random() - 0.5) * 0.1;
+                trailParticle.position.z += (Math.random() - 0.5) * 0.1;
+                
+                scene.add(trailParticle);
+                
+                // Animate and remove trail particle
+                let opacity = 0.7;
+                const fadeTrail = setInterval(() => {
+                    opacity -= 0.05;
+                    if (opacity <= 0) {
+                        scene.remove(trailParticle);
+                        clearInterval(fadeTrail);
+                    } else {
+                        trailParticle.material.opacity = opacity;
+                    }
+                }, 50);
+            };
+            
+            // Start creating trail
+            const trailInterval = setInterval(createTrail, 100);
+            bombGroup.userData.trailInterval = trailInterval;
+        }
+
+        function explodeTank(tank, startTime) {
+            if (tank.isExploding) return;
+            tank.isExploding = true;
+            
+            // Create explosion particles
+            const particleCount = 20;
+            const explosionGroup = new THREE.Group();
+            
+            // Make children of tank invisible
+            tank.traverse(child => {
+                if (child.isMesh) {
+                    child.material.transparent = true;
+                    child.material.opacity = 0.8;
+                    child.material.emissive.set(0xff4500);
+                    child.material.emissiveIntensity = 2;
+                }
+            });
+            
+            // Add explosion light
+            const explosionLight = new THREE.PointLight(0xff4500, 5000, 30);
+            explosionLight.position.copy(tank.position);
+            explosionLight.position.y += 5;
+            scene.add(explosionLight);
+            
+            setTimeout(() => {
+                scene.remove(explosionLight);
+            }, 500);
+            
+            localActiveTankExplosions.push({ 
+                mesh: tank, 
+                startTime: startTime,
+                light: explosionLight
+            });
+        }
+        
+        function createBomb() {
+            if (bombObject) drone.remove(bombObject);
+            
+            // Create a more detailed bomb
+            const bombGroup = new THREE.Group();
+            
+            // Main bomb body
+            const bombMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x3B82F6, 
+                wireframe: true,
+                emissive: 0x3B82F6,
+                emissiveIntensity: 0.5
+            });
+            
+            // Create teardrop shape for bomb
+            const bombGeometry = new THREE.CapsuleGeometry(0.15, 0.4, 8, 8);
+            const bombBody = new THREE.Mesh(bombGeometry, bombMaterial);
+            bombBody.rotation.x = Math.PI;
+            bombGroup.add(bombBody);
+            
+            // Add fins to the bomb
+            const finMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x1E3A8A, 
+                wireframe: true,
+                emissive: 0x1E3A8A,
+                emissiveIntensity: 0.4
+            });
+            
+            // Create 4 fins
+            for (let i = 0; i < 4; i++) {
+                const finGeometry = new THREE.BoxGeometry(0.2, 0.05, 0.1);
+                const fin = new THREE.Mesh(finGeometry, finMaterial);
+                fin.position.y = -0.15;
+                fin.position.x = Math.sin(i * Math.PI/2) * 0.12;
+                fin.position.z = Math.cos(i * Math.PI/2) * 0.12;
+                fin.rotation.y = i * Math.PI/2;
+                bombGroup.add(fin);
+            }
+            
+            // Add a blinking light to the bomb
+            const blinkingLight = new THREE.PointLight(0xff0000, 2, 0.5);
+            blinkingLight.position.y = 0;
+            bombGroup.add(blinkingLight);
+            
+            // Animate the light
+            const blinkInterval = setInterval(() => {
+                blinkingLight.intensity = blinkingLight.intensity > 0 ? 0 : 2;
+            }, 200);
+            
+            // Store the interval to clear it when the bomb is dropped
+            bombGroup.userData.blinkInterval = blinkInterval;
+            
+            // Position the bomb
+            bombGroup.position.set(0, -0.4, 0);
+            
+            bombObject = bombGroup;
+            drone.add(bombObject);
+            isBombAttached = true;
+        }
+
+        const droneState = {
+            velocity: new THREE.Vector3(),
+            rotationVelocity: new THREE.Vector3(),
+            damping: 0.90, 
+            rotationDamping: 0.85
+        };
+        const controlsState = {
+            left: { x: 0, y: 0 },
+            right: { x: 0, y: 0 }
+        };
+        
+        if (isTouchDevice) {
+            const fireButton = document.getElementById('fire-button');
+            fireButton.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                dropBomb();
+            });
+
+            const joystickLeft = document.getElementById('joystick-left');
+            const knobLeft = document.getElementById('knob-left');
+            const joystickRight = document.getElementById('joystick-right');
+            const knobRight = document.getElementById('knob-right');
+            setupJoystick(joystickLeft, knobLeft, controlsState.left);
+            setupJoystick(joystickRight, knobRight, controlsState.right);
+        } else {
+            window.addEventListener('keydown', (e) => {
+                keyState[e.code] = true;
+                if (e.code === 'Space') dropBomb();
+            });
+            window.addEventListener('keyup', (e) => keyState[e.code] = false);
+            window.addEventListener('mousedown', () => { isMouseDragging = true; });
+            window.addEventListener('mouseup', () => { isMouseDragging = false; });
+            window.addEventListener('mousemove', (e) => {
+                if (isMouseDragging) {
+                    controlsState.right.x = THREE.MathUtils.clamp(controlsState.right.x + e.movementX * 0.01, -1, 1);
+                    controlsState.right.y = THREE.MathUtils.clamp(controlsState.right.y - e.movementY * 0.01, -1, 1);
+                }
+            });
+            window.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                dropBomb();
+            });
+        }
+        
+        function setupJoystick(joystickBase, knob, state) {
+            let activeTouchId = null;
+            const maxDist = joystickBase.offsetWidth / 2 - knob.offsetWidth / 2;
+            function handleMove(clientX, clientY) {
+                const rect = joystickBase.getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+                let dx = clientX - centerX;
+                let dy = clientY - centerY;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist > maxDist) { dx = (dx / dist) * maxDist; dy = (dy / dist) * maxDist; }
+                knob.style.transform = `translate(-50%, -50%) translate(${dx}px, ${dy}px)`;
+                state.x = dx / maxDist; state.y = -dy / maxDist;
+            }
+            function handleEnd() {
+                activeTouchId = null;
+                knob.style.transform = `translate(-50%, -50%)`;
+                state.x = 0; state.y = 0;
+            }
+            joystickBase.addEventListener('touchstart', (e) => { e.preventDefault(); if (activeTouchId === null) { activeTouchId = e.changedTouches[0].identifier; handleMove(e.changedTouches[0].clientX, e.changedTouches[0].clientY); } }, { passive: false });
+            window.addEventListener('touchmove', (e) => { if (activeTouchId !== null) { for (let i = 0; i < e.changedTouches.length; i++) { if (e.changedTouches[i].identifier === activeTouchId) { handleMove(e.changedTouches[i].clientX, e.changedTouches[i].clientY); } } } }, { passive: false });
+            window.addEventListener('touchend', (e) => { for (let i = 0; i < e.changedTouches.length; i++) { if (e.changedTouches[i].identifier === activeTouchId) { handleEnd(); } } });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const deltaTime = clock.getDelta();
+            const elapsedTime = clock.getElapsedTime();
+
+            if (!isZeppelinCrashed) {
+                const forward = new THREE.Vector3(1, 0, 0).applyQuaternion(zeppelin.quaternion);
+                zeppelin.position.add(forward.multiplyScalar(15 * deltaTime));
+                
+                const limit = planeSize / 2 - 100;
+                if (Math.abs(zeppelin.position.x) > limit || Math.abs(zeppelin.position.z) > limit) {
+                    zeppelin.position.x = Math.max(-limit, Math.min(limit, zeppelin.position.x));
+                    zeppelin.position.z = Math.max(-limit, Math.min(limit, zeppelin.position.z));
+                    zeppelin.rotation.y = Math.random() * Math.PI * 2;
+                }
+            } else {
+                // Make zeppelin fall with wobbling motion
+                zeppelin.position.y -= 30 * deltaTime;
+                zeppelin.rotation.z += 0.01;
+                zeppelin.rotation.x += 0.005;
+                
+                // Add some side motion to make it drift as it falls
+                zeppelin.position.x += Math.sin(elapsedTime * 0.5) * 2 * deltaTime;
+                zeppelin.position.z += Math.cos(elapsedTime * 0.3) * 2 * deltaTime;
+                
+                // Animate flames with random intensity
+                zeppelinFlames.forEach(f => {
+                    f.intensity = 5000 + Math.random() * 3000;
+                    // Change color slightly randomly
+                    f.color.setHSL(0.05, 1.0, 0.5 + Math.random() * 0.2);
+                });
+                
+                // Animate propellers chaotically if they exist
+                if (zeppelin.userData.propellers) {
+                    zeppelin.userData.propellers.forEach(propeller => {
+                        propeller.rotation.z += (Math.random() - 0.5) * 0.5;
+                    });
+                }
+                
+                // Create the final explosion when zeppelin hits the ground
+                if (zeppelin.position.y < 50 && zeppelin.visible) {
+                    const explosionGeo = new THREE.SphereGeometry(1, 16, 16);
+                    const explosionMat = new THREE.MeshBasicMaterial({ 
+                        color: 0xff4500, 
+                        transparent: true 
+                    });
+                    const explosion = new THREE.Mesh(explosionGeo, explosionMat);
+                    explosion.position.copy(zeppelin.position);
+                    
+                    // Add strong explosion light with a slight delay to avoid potential timing issues
+                    setTimeout(() => {
+                        const explosionLight = new THREE.PointLight(0xff4500, 20000, 300);
+                        explosionLight.position.copy(zeppelin.position);
+                        scene.add(explosionLight);
+                        
+                        // Store reference to the light
+                        explosion.userData = explosion.userData || {};
+                        explosion.userData.light = explosionLight;
+                    }, 10);
+                    
+                    localActiveExplosions.push({ 
+                        mesh: explosion, 
+                        startTime: elapsedTime, 
+                        size: 150 
+                    });
+                    scene.add(explosion);
+                    
+                    // Clear any intervals
+                    if (zeppelin.userData.smokeInterval) {
+                        clearInterval(zeppelin.userData.smokeInterval);
+                    }
+                    
+                    zeppelin.visible = false;
+                    
+                    // Camera shake effect
+                    const shakeStartTime = elapsedTime;
+                    const shakeDuration = 2.0;
+                    const shakeEffect = () => {
+                        const shakeElapsed = clock.getElapsedTime() - shakeStartTime;
+                        if (shakeElapsed > shakeDuration) return;
+                        
+                        const shakeAmount = 2 * (1 - (shakeElapsed / shakeDuration));
+                        camera.position.x += (Math.random() - 0.5) * shakeAmount;
+                        camera.position.y += (Math.random() - 0.5) * shakeAmount;
+                        camera.position.z += (Math.random() - 0.5) * shakeAmount;
+                        
+                        requestAnimationFrame(shakeEffect);
+                    };
+                    shakeEffect();
+                    
+                    // Create massive debris field
+                    for (let i = 0; i < 30; i++) {
+                        const size = Math.random() * 3 + 1;
+                        const debrisMat = new THREE.MeshBasicMaterial({ 
+                            color: Math.random() > 0.5 ? 0xff4500 : 0xffa500, 
+                            wireframe: Math.random() > 0.5,
+                            transparent: true,
+                            opacity: 0.8
+                        });
+                        
+                        // Create debris with different shapes
+                        let debrisGeo;
+                        const shapeType = Math.floor(Math.random() * 3);
+                        if (shapeType === 0) {
+                            debrisGeo = new THREE.BoxGeometry(size, size, size);
+                        } else if (shapeType === 1) {
+                            debrisGeo = new THREE.SphereGeometry(size/2, 8, 8);
+                        } else {
+                            debrisGeo = new THREE.ConeGeometry(size/2, size, 6);
+                        }
+                        
+                        const debris = new THREE.Mesh(debrisGeo, debrisMat);
+                        debris.position.copy(zeppelin.position);
+                        
+                        // Add random velocity
+                        const velocity = new THREE.Vector3(
+                            (Math.random() - 0.5) * 80,
+                            Math.random() * 40,
+                            (Math.random() - 0.5) * 80
+                        );
+                        
+                        debris.userData = {
+                            velocity: velocity,
+                            rotationSpeed: new THREE.Vector3(
+                                Math.random() * 5, 
+                                Math.random() * 5, 
+                                Math.random() * 5
+                            ),
+                            createdAt: elapsedTime
+                        };
+                        
+                        scene.add(debris);
+                        
+                        // Animate debris
+                        const animateDebris = function() {
+                            const debrisTime = clock.getElapsedTime() - debris.userData.createdAt;
+                            if (debrisTime > 5) {
+                                scene.remove(debris);
+                                return;
+                            }
+                            
+                            // Apply physics
+                            debris.position.add(debris.userData.velocity.clone().multiplyScalar(deltaTime));
+                            debris.userData.velocity.y -= 9.8 * 2 * deltaTime;
+                            
+                            // Rotate debris
+                            debris.rotation.x += debris.userData.rotationSpeed.x * deltaTime;
+                            debris.rotation.y += debris.userData.rotationSpeed.y * deltaTime;
+                            debris.rotation.z += debris.userData.rotationSpeed.z * deltaTime;
+                            
+                            // Fade out
+                            if (debrisTime > 3) {
+                                debris.material.opacity = 0.8 * (1 - ((debrisTime - 3) / 2));
+                            }
+                            
+                            requestAnimationFrame(animateDebris);
+                        };
+                        
+                        animateDebris();
+                    }
+                }
+            }
+            zeppelinBoundingBox.setFromObject(zeppelin);
+
+            tanks.forEach(tankObj => {
+                const tank = tankObj.mesh;
+                if (!tank.isExploding) {
+                    if (tankObj.type === 'column' && tankObj.leader) {
+                        const leader = tankObj.leader;
+                        const distance = tank.position.distanceTo(leader.position);
+                        if (distance > 25) {
+                            const direction = new THREE.Vector3().subVectors(leader.position, tank.position).normalize();
+                            tank.position.add(direction.multiplyScalar(tankObj.speed * deltaTime));
+                            tank.lookAt(leader.position);
+                        }
+                    } else { // Mouvement aléatoire pour les leaders de colonne et les chars normaux
+                        const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(tank.quaternion);
+                        tank.position.add(forward.multiplyScalar(tankObj.speed * deltaTime));
+                        
+                        const limit = planeSize / 2 - 20;
+                        if (Math.abs(tank.position.x) > limit || Math.abs(tank.position.z) > limit) {
+                            tank.position.x = Math.max(-limit, Math.min(limit, tank.position.x));
+                            tank.position.z = Math.max(-limit, Math.min(limit, tank.position.z));
+                            tank.rotation.y = Math.random() * Math.PI * 2;
+                        }
+
+                        for (const building of buildings) {
+                            if (tankObj.boundingBox.setFromObject(tank).intersectsBox(building.boundingBox)) {
+                                const backVector = new THREE.Vector3(0, 0, -1).applyQuaternion(tank.quaternion);
+                                tank.position.add(backVector.multiplyScalar(2));
+                                tank.rotation.y = Math.random() * Math.PI * 2;
+                                break;
+                            }
+                        }
+                    }
+                    tankObj.boundingBox.setFromObject(tank);
+                }
+            });
+
+            if (!isDroneCrashed) {
+                if (!isTouchDevice) {
+                    if (keyState['ArrowUp']) controlsState.left.y = Math.min(1, controlsState.left.y + 0.15);
+                    else if (keyState['ArrowDown']) controlsState.left.y = Math.max(-1, controlsState.left.y - 0.15);
+                    else controlsState.left.y *= 0.8;
+                    if (keyState['ArrowLeft']) controlsState.left.x = Math.max(-1, controlsState.left.x - 0.15);
+                    else if (keyState['ArrowRight']) controlsState.left.x = Math.min(1, controlsState.left.x + 0.15);
+                    else controlsState.left.x *= 0.8;
+                    if (!isMouseDragging) { controlsState.right.x *= 0.9; controlsState.right.y *= 0.9; }
+                }
+
+                droneState.velocity.y += controlsState.left.y * 280 * deltaTime;
+                droneState.rotationVelocity.y -= controlsState.left.x * 17.5 * deltaTime;
+                const forwardSpeed = controlsState.right.y * 1400 * deltaTime;
+                const strafeSpeed = controlsState.right.x * 1050 * deltaTime;
+                const forwardVector = new THREE.Vector3(0, 0, -1).applyQuaternion(drone.quaternion);
+                const rightVector = new THREE.Vector3(1, 0, 0).applyQuaternion(drone.quaternion);
+                droneState.velocity.add(forwardVector.multiplyScalar(forwardSpeed));
+                droneState.velocity.add(rightVector.multiplyScalar(strafeSpeed));
+                droneState.velocity.multiplyScalar(droneState.damping);
+                droneState.rotationVelocity.multiplyScalar(droneState.rotationDamping);
+                if (drone.position.y > 0.5) droneState.velocity.y -= 2.5 * deltaTime;
+                else droneState.velocity.y = Math.max(0, droneState.velocity.y);
+                drone.position.add(droneState.velocity.clone().multiplyScalar(deltaTime));
+                drone.rotation.y += droneState.rotationVelocity.y * deltaTime;
+                
+                const droneLimit = planeSize / 2 - 5;
+                drone.position.x = Math.max(-droneLimit, Math.min(droneLimit, drone.position.x));
+                drone.position.z = Math.max(-droneLimit, Math.min(droneLimit, drone.position.z));
+                if (drone.position.y < 0.5) drone.position.y = 0.5;
+                
+                droneBoundingBox.setFromObject(drone);
+                if (zeppelin.visible && droneBoundingBox.intersectsBox(zeppelinBoundingBox)) {
+                    handleZeppelinCrash();
+                } else {
+                    for (const collidable of allCollidables) {
+                        if (collidable.mesh.visible && !collidable.mesh.isExploding && droneBoundingBox.intersectsBox(collidable.boundingBox)) {
+                            handleDroneCrash();
+                            break;
+                        }
+                    }
+                }
+            }
+
+            const propellerSpeed = 20 * deltaTime;
+            drone.propellers.forEach((p, i) => p.rotation.y += (i % 2 === 0 ? 1 : -1) * propellerSpeed);
+            
+            for (let i = localActiveBombs.length - 1; i >= 0; i--) {
+                const bomb = localActiveBombs[i];
+                const bombBox = new THREE.Box3().setFromObject(bomb);
+                bomb.velocity.y -= 9.8 * deltaTime;
+                bomb.position.add(bomb.velocity.clone().multiplyScalar(deltaTime));
+                
+                // Rotate the bomb as it falls
+                bomb.rotation.x += 2 * deltaTime;
+                bomb.rotation.z += 1.5 * deltaTime;
+                
+                let hasHit = bomb.position.y <= 0;
+                let hitPosition = bomb.position.clone();
+
+                if (zeppelin.visible && bombBox.intersectsBox(zeppelinBoundingBox)) {
+                    hasHit = true;
+                    hitPosition = bomb.position.clone();
+                    handleZeppelinCrash();
+                }
+                
+                if (!hasHit) {
+                    for (let k = buildings.length - 1; k >= 0; k--) {
+                        const building = buildings[k];
+                        if (bombBox.intersectsBox(building.boundingBox)) {
+                            hasHit = true;
+                            hitPosition = bomb.position.clone();
+                            
+                            const hitBuildingMesh = building.mesh;
+                            // Get original height information - handle different geometry types
+                            let originalHeight = 0;
+                            if (hitBuildingMesh.geometry.parameters && hitBuildingMesh.geometry.parameters.height) {
+                                originalHeight = hitBuildingMesh.geometry.parameters.height;
+                            } else {
+                                // For geometries without direct height parameter
+                                originalHeight = building.boundingBox.max.y - building.boundingBox.min.y;
+                            }
+                            
+                            hitBuildingMesh.scale.y *= 0.7;
+                            hitBuildingMesh.position.y -= (originalHeight * (1 - 0.7)) / 2;
+                            
+                            building.boundingBox.setFromObject(hitBuildingMesh);
+                            break;
+                        }
+                    }
+                }
+
+                if (!hasHit) {
+                    for(let j = tanks.length - 1; j >= 0; j--) {
+                        const tankObj = tanks[j];
+                        const tank = tankObj.mesh;
+                        if (!tank.isExploding && bomb.position.distanceTo(tank.position) < 10) {
+                            hasHit = true;
+                            hitPosition = tank.position.clone();
+                            explodeTank(tank, elapsedTime);
+                            
+                            const tankIndexInAll = allCollidables.findIndex(o => o.mesh === tank);
+                            if (tankIndexInAll > -1) allCollidables.splice(tankIndexInAll, 1);
+                            tanks.splice(j, 1);
+                            break;
+                        }
+                    }
+                }
+
+                if (hasHit) {
+                    // Clear any intervals
+                    if (bomb.userData.blinkInterval) {
+                        clearInterval(bomb.userData.blinkInterval);
+                    }
+                    if (bomb.userData.trailInterval) {
+                        clearInterval(bomb.userData.trailInterval);
+                    }
+                    
+                    scene.remove(bomb);
+                    localActiveBombs.splice(i, 1);
+                    
+                    // Create enhanced explosion
+                    createExplosion(hitPosition, elapsedTime);
+                    
+                    if (!isDroneCrashed) setTimeout(createBomb, 1000);
+                }
+            }
+            
+            // Enhanced explosion effect
+            function createExplosion(position, startTime) {
+                // Create explosion core
+                const explosionGeo = new THREE.SphereGeometry(1, 16, 16);
+                const explosionMat = new THREE.MeshBasicMaterial({ 
+                    color: 0xff4500, 
+                    transparent: true 
+                });
+                const explosion = new THREE.Mesh(explosionGeo, explosionMat);
+                explosion.position.copy(position);
+                explosion.position.y = Math.max(explosion.position.y, 1);
+                
+                // Add explosion light
+                const explosionLight = new THREE.PointLight(0xff4500, 8000, 50);
+                explosionLight.position.copy(position);
+                explosionLight.position.y += 1;
+                scene.add(explosionLight);
+                
+                // Add explosion object with light reference
+                localActiveExplosions.push({ 
+                    mesh: explosion, 
+                    light: explosionLight,
+                    startTime: startTime, 
+                    size: 30 
+                });
+                scene.add(explosion);
+                
+                // Create debris particles
+                const debrisCount = 15;
+                const debrisGroup = new THREE.Group();
+                scene.add(debrisGroup);
+                
+                for (let i = 0; i < debrisCount; i++) {
+                    const size = Math.random() * 0.5 + 0.2;
+                    const debrisMat = new THREE.MeshBasicMaterial({ 
+                        color: Math.random() > 0.5 ? 0xff4500 : 0xffa500, 
+                        transparent: true,
+                        opacity: 0.8
+                    });
+                    const debrisGeo = new THREE.BoxGeometry(size, size, size);
+                    const debris = new THREE.Mesh(debrisGeo, debrisMat);
+                    
+                    // Set random position around explosion center
+                    debris.position.copy(position);
+                    debris.position.x += (Math.random() - 0.5) * 2;
+                    debris.position.y += Math.random() * 5;
+                    debris.position.z += (Math.random() - 0.5) * 2;
+                    
+                    // Add velocity for animation
+                    debris.userData.velocity = new THREE.Vector3(
+                        (Math.random() - 0.5) * 20,
+                        Math.random() * 15,
+                        (Math.random() - 0.5) * 20
+                    );
+                    
+                    debrisGroup.add(debris);
+                }
+                
+                // Create shockwave ring
+                const ringGeo = new THREE.RingGeometry(0.5, 2, 16);
+                const ringMat = new THREE.MeshBasicMaterial({ 
+                    color: 0xff4500, 
+                    transparent: true,
+                    opacity: 0.7,
+                    side: THREE.DoubleSide
+                });
+                const ring = new THREE.Mesh(ringGeo, ringMat);
+                ring.position.copy(position);
+                ring.position.y = 0.5;
+                ring.rotation.x = -Math.PI / 2;
+                scene.add(ring);
+                
+                // Animate debris and ring
+                const animateExplosion = () => {
+                    const duration = 1.0; // seconds
+                    const elapsed = clock.getElapsedTime() - startTime;
+                    
+                    if (elapsed > duration) {
+                        // Clean up
+                        scene.remove(debrisGroup);
+                        scene.remove(ring);
+                        scene.remove(explosionLight);
+                        return;
+                    }
+                    
+                    const progress = elapsed / duration;
+                    
+                    // Animate debris
+                    debrisGroup.children.forEach(debris => {
+                        debris.position.add(debris.userData.velocity.clone().multiplyScalar(deltaTime));
+                        debris.userData.velocity.y -= 9.8 * deltaTime; // gravity
+                        debris.material.opacity = 1 - progress;
+                    });
+                    
+                    // Animate ring
+                    ring.scale.set(1 + progress * 10, 1 + progress * 10, 1);
+                    ring.material.opacity = 0.7 * (1 - progress);
+                    
+                    // Continue animation
+                    requestAnimationFrame(animateExplosion);
+                };
+                
+                animateExplosion();
+            }
+
+            for (let i = localActiveExplosions.length - 1; i >= 0; i--) {
+                const explosion = localActiveExplosions[i];
+                const timeSinceStart = elapsedTime - explosion.startTime;
+                const duration = 0.8;
+                
+                if (timeSinceStart > duration) {
+                    scene.remove(explosion.mesh);
+                    if (explosion.light) {
+                        scene.remove(explosion.light);
+                    }
+                    localActiveExplosions.splice(i, 1);
+                } else {
+                    const progress = timeSinceStart / duration;
+                    const scale = progress * (explosion.size || 30);
+                    
+                    explosion.mesh.scale.set(scale, scale, scale);
+                    explosion.mesh.material.opacity = 1.0 - progress;
+                    
+                    // Fade out the explosion light
+                    if (explosion.light) {
+                        explosion.light.intensity = 8000 * (1 - progress);
+                        
+                        // Flicker the light for more dynamic effect
+                        if (Math.random() > 0.7) {
+                            explosion.light.intensity *= Math.random() * 0.5 + 0.5;
+                        }
+                    }
+                    
+                    // Change explosion color over time - from bright to dark orange
+                    const color = new THREE.Color();
+                    color.setHSL(0.05, 1.0, 0.5 * (1 - progress) + 0.2);
+                    explosion.mesh.material.color = color;
+                }
+            }
+
+            for (let i = localActiveTankExplosions.length - 1; i >= 0; i--) {
+                const tankExplosion = localActiveTankExplosions[i];
+                const timeSinceStart = elapsedTime - tankExplosion.startTime;
+                const duration = 1.2;
+                
+                if (timeSinceStart > duration) {
+                    scene.remove(tankExplosion.mesh);
+                    if (tankExplosion.light) {
+                        scene.remove(tankExplosion.light);
+                    }
+                    localActiveTankExplosions.splice(i, 1);
+                } else {
+                    const progress = timeSinceStart / duration;
+                    const scale = 1.0 + progress * 2;
+                    
+                    tankExplosion.mesh.traverse(child => {
+                        if (child.isMesh) {
+                            child.material.opacity = 1.0 - progress;
+                            
+                            // Create flame effect by changing emissive color
+                            const flameIntensity = 2.0 * (1 - progress);
+                            child.material.emissiveIntensity = flameIntensity;
+                            
+                            // Random flicker effect
+                            if (Math.random() > 0.8) {
+                                child.material.emissiveIntensity = flameIntensity * (Math.random() * 0.5 + 0.5);
+                            }
+                        }
+                    });
+                    
+                    // Animate explosion light
+                    if (tankExplosion.light) {
+                        tankExplosion.light.intensity = 5000 * (1 - progress);
+                        
+                        // Create flickering effect
+                        if (Math.random() > 0.7) {
+                            tankExplosion.light.intensity *= Math.random() * 0.5 + 0.5;
+                        }
+                    }
+                    
+                    // Add smoke particles if early in explosion
+                    if (progress < 0.5 && Math.random() > 0.8) {
+                        const smokeParticle = new THREE.Mesh(
+                            new THREE.SphereGeometry(Math.random() * 2 + 1, 8, 8),
+                            new THREE.MeshBasicMaterial({ 
+                                color: 0x333333, 
+                                transparent: true, 
+                                opacity: Math.random() * 0.3 + 0.1 
+                            })
+                        );
+                        
+                        // Position smoke above tank
+                        smokeParticle.position.copy(tankExplosion.mesh.position);
+                        smokeParticle.position.y += 5 + Math.random() * 3;
+                        smokeParticle.position.x += (Math.random() - 0.5) * 5;
+                        smokeParticle.position.z += (Math.random() - 0.5) * 5;
+                        
+                        scene.add(smokeParticle);
+                        
+                        // Animate smoke particle
+                        const smokeVelocity = new THREE.Vector3(
+                            (Math.random() - 0.5) * 1,
+                            Math.random() * 2 + 1,
+                            (Math.random() - 0.5) * 1
+                        );
+                        
+                        const smokeLife = 2.0; // seconds
+                        const smokeStartTime = elapsedTime;
+                        
+                        const animateSmoke = () => {
+                            const smokeElapsed = clock.getElapsedTime() - smokeStartTime;
+                            
+                            if (smokeElapsed > smokeLife) {
+                                scene.remove(smokeParticle);
+                                return;
+                            }
+                            
+                            const smokeProgress = smokeElapsed / smokeLife;
+                            
+                            // Move smoke
+                            smokeParticle.position.add(smokeVelocity.clone().multiplyScalar(deltaTime));
+                            
+                            // Scale up
+                            const smokeScale = 1 + smokeProgress * 4;
+                            smokeParticle.scale.set(smokeScale, smokeScale, smokeScale);
+                            
+                            // Fade out
+                            smokeParticle.material.opacity = 0.3 * (1 - smokeProgress);
+                            
+                            requestAnimationFrame(animateSmoke);
+                        };
+                        
+                        animateSmoke();
+                    }
+                }
+            }
+
+            const cameraOffset = new THREE.Vector3(0, 3, 7);
+            if (drone.visible) {
+                cameraOffset.applyQuaternion(drone.quaternion);
+                const cameraPosition = drone.position.clone().add(cameraOffset);
+                camera.position.lerp(cameraPosition, 0.21);
+                camera.lookAt(drone.position);
+            }
+
+            renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
+            renderer.setScissor(0, 0, window.innerWidth, window.innerHeight);
+            renderer.render(scene, camera);
+
+            const viewSize = bottomViewContainer.offsetHeight;
+            renderer.setViewport(20, window.innerHeight - viewSize - 20, viewSize, viewSize);
+            renderer.setScissor(20, window.innerHeight - viewSize - 20, viewSize, viewSize);
+            renderer.render(scene, bottomCamera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        if (isTouchDevice) {
+            document.querySelectorAll('.touch-only').forEach(el => el.style.display = 'flex');
+            document.getElementById('fire-button').style.display = 'block';
+        } else {
+            document.querySelectorAll('.no-touch-only').forEach(el => el.style.display = 'block');
+        }
+        
+        // Enhanced lighting
+        const ambientLight = new THREE.AmbientLight(0x404080, 0.5);
+        scene.add(ambientLight);
+        
+        const directionalLight = new THREE.DirectionalLight(0xFFFFFF, 1.0);
+        directionalLight.position.set(5, 10, 7.5);
+        directionalLight.castShadow = true;
+        scene.add(directionalLight);
+        
+        // Add hemisphere light for better ambient color
+        const hemisphereLight = new THREE.HemisphereLight(0x90E0EF, 0x10B981, 0.6);
+        scene.add(hemisphereLight);
+        
+        // Add fog for depth
+        scene.fog = new THREE.FogExp2(0x0F172A, 0.00035);
+        
+        // Enhanced terrain with grid pattern
+        const terrainGeometry = new THREE.PlaneGeometry(planeSize, planeSize, 100, 100);
+        const gridTexture = createGridTexture();
+        const terrainMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0x10B981, 
+            wireframe: true,
+            emissive: 0x10B981,
+            emissiveIntensity: 0.2,
+            map: gridTexture,
+            transparent: true
+        });
+        const terrain = new THREE.Mesh(terrainGeometry, terrainMaterial);
+        terrain.rotation.x = -Math.PI / 2;
+        scene.add(terrain);
+        
+        // Create a distant mountains backdrop
+        const mountainBackdrop = createMountainBackdrop();
+        scene.add(mountainBackdrop);
+        
+        // Function to create a grid texture
+        function createGridTexture() {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            const size = 1024;
+            canvas.width = size;
+            canvas.height = size;
+            
+            context.fillStyle = 'rgba(0, 0, 0, 0)';
+            context.fillRect(0, 0, size, size);
+            
+            context.lineWidth = 1;
+            context.strokeStyle = 'rgba(16, 185, 129, 0.3)';
+            
+            // Draw main grid lines
+            const gridStep = size / 32;
+            for (let i = 0; i <= size; i += gridStep) {
+                context.beginPath();
+                context.moveTo(0, i);
+                context.lineTo(size, i);
+                context.stroke();
+                
+                context.beginPath();
+                context.moveTo(i, 0);
+                context.lineTo(i, size);
+                context.stroke();
+            }
+            
+            // Draw major grid lines with higher opacity
+            context.lineWidth = 2;
+            context.strokeStyle = 'rgba(16, 185, 129, 0.7)';
+            const majorGridStep = size / 8;
+            for (let i = 0; i <= size; i += majorGridStep) {
+                context.beginPath();
+                context.moveTo(0, i);
+                context.lineTo(size, i);
+                context.stroke();
+                
+                context.beginPath();
+                context.moveTo(i, 0);
+                context.lineTo(i, size);
+                context.stroke();
+            }
+            
+            return new THREE.CanvasTexture(canvas);
+        }
+        
+        // Function to create distant mountains as a backdrop
+        function createMountainBackdrop() {
+            const group = new THREE.Group();
+            const mountainMaterial = new THREE.MeshStandardMaterial({
+                color: 0x0F172A,
+                wireframe: true,
+                emissive: 0x10B981,
+                emissiveIntensity: 0.1
+            });
+            
+            // Create circular backdrop
+            const radius = planeSize * 0.8;
+            const segments = 32;
+            
+            for (let i = 0; i < segments; i++) {
+                const angle = (i / segments) * Math.PI * 2;
+                const nextAngle = ((i + 1) / segments) * Math.PI * 2;
+                
+                const x1 = Math.cos(angle) * radius;
+                const z1 = Math.sin(angle) * radius;
+                
+                const x2 = Math.cos(nextAngle) * radius;
+                const z2 = Math.sin(nextAngle) * radius;
+                
+                // Create triangular mountain shapes
+                const mountainHeight = Math.random() * 300 + 200;
+                const mountainGeometry = new THREE.BufferGeometry();
+                
+                const vertices = new Float32Array([
+                    x1, 0, z1,
+                    x2, 0, z2,
+                    (x1 + x2) / 2, mountainHeight, (z1 + z2) / 2
+                ]);
+                
+                mountainGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+                mountainGeometry.computeVertexNormals();
+                
+                const mountain = new THREE.Mesh(mountainGeometry, mountainMaterial);
+                group.add(mountain);
+            }
+            
+            return group;
+        }
+
+        scene.add(drone);
+        scene.add(zeppelin);
+        
+        bottomCamera.position.set(0, -0.2, 0);
+        bottomCamera.rotation.x = -Math.PI / 2;
+        drone.add(bottomCamera);
+
+        restartButton.addEventListener('click', resetGame);
+        
+        const helpButton = document.getElementById('help-button');
+        const helpPanel = document.getElementById('help-panel');
+        const closeHelpButton = document.getElementById('close-help-button');
+        const accordionHeaders = document.querySelectorAll('.accordion-header');
+
+        function toggleHelpPanel() {
+            helpPanel.classList.toggle('open');
+        }
+
+        helpButton.addEventListener('click', toggleHelpPanel);
+        closeHelpButton.addEventListener('click', toggleHelpPanel);
+
+        accordionHeaders.forEach(header => {
+            header.addEventListener('click', () => {
+                const content = header.nextElementSibling;
+                const isOpen = content.style.maxHeight;
+
+                document.querySelectorAll('.accordion-content').forEach(c => c.style.maxHeight = null);
+                document.querySelectorAll('.accordion-header span:last-child').forEach(s => s.textContent = '+');
+
+                if (!isOpen) {
+                    content.style.maxHeight = content.scrollHeight + "px";
+                    header.querySelector('span:last-child').textContent = '-';
+                }
+            });
+        });
+
+        resetGame();
+        animate();
+    </script>
+</body>
+</html>
