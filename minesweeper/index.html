@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Démineur :: Responsive Edition</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <style>
+        /* --- Import de la police --- */
+        @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+
+        /* --- Styles Généraux --- */
+        :root {
+            --glow-color: #00ff41;
+            --primary-color: #0d0d0d;
+            --cell-size: 5vw; /* Taille de base pour mobile */
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden; /* Empêche le rebond sur mobile */
+        }
+
+        body {
+            font-family: 'VT323', monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 0;
+            background-color: var(--primary-color);
+            color: var(--glow-color);
+            text-shadow: 0 0 3px rgba(0, 255, 65, 0.7);
+        }
+
+        /* Effet de scanlines en arrière-plan */
+        body::after {
+            content: ' ';
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: repeating-linear-gradient(
+                0deg,
+                rgba(0, 0, 0, 0.3),
+                rgba(0, 0, 0, 0.3) 1px,
+                transparent 1px,
+                transparent 3px
+            );
+            z-index: 1001;
+            pointer-events: none;
+        }
+
+        .game-container {
+            width: 95vw;
+            max-width: 90vh; /* Empêche le conteneur d'être trop large sur les écrans larges */
+            background-color: rgba(0, 20, 0, 0.5);
+            padding: 2vw;
+            border: 2px solid var(--glow-color);
+            box-shadow: 0 0 25px rgba(0, 255, 65, 0.4), inset 0 0 15px rgba(0, 255, 65, 0.3);
+            text-align: center;
+            border-radius: 0;
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        h1 {
+            margin: 0 0 15px 0;
+            color: #39ff14;
+            font-size: clamp(2.5em, 8vw, 4em); /* Taille de police adaptative */
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            text-shadow: 0 0 5px #39ff14, 0 0 15px #39ff14, 0 0 25px #39ff14;
+        }
+
+        /* --- Panneau de Contrôle --- */
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap; /* Permet aux éléments de passer à la ligne */
+            margin-bottom: 15px;
+            padding: 10px;
+            background-color: transparent;
+            border: 1px solid var(--glow-color);
+            font-size: clamp(1em, 3.5vw, 1.5em);
+        }
+
+        .controls > div, .controls > select {
+            background-color: transparent;
+            padding: 5px 8px;
+            border-radius: 0;
+            box-shadow: none;
+            color: var(--glow-color);
+            border: none;
+        }
+
+        #difficulty-selector {
+            border: 1px solid var(--glow-color);
+            cursor: pointer;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            padding-right: 30px;
+            background-image: url("data:image/svg+xml;utf8,<svg fill='%2300ff41' height='24' viewBox='0 0 24 24' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/><path d='M0 0h24v24H0z' fill='none'/></svg>");
+            background-repeat: no-repeat;
+            background-position-x: 100%;
+            background-position-y: 5px;
+        }
+        
+        #difficulty-selector option {
+            background: var(--primary-color);
+            color: var(--glow-color);
+            font-family: 'VT323', monospace;
+        }
+
+        #restart-button, #restart-from-message {
+            border: 1px solid var(--glow-color);
+            cursor: pointer;
+            transition: background-color 0.2s, box-shadow 0.2s;
+            font-size: clamp(1em, 3.5vw, 1.2em);
+            text-transform: uppercase;
+            background: transparent;
+            color: var(--glow-color);
+            padding: 8px 15px;
+            border-radius: 0;
+            margin-top: 15px;
+        }
+
+        #restart-button:hover, #restart-from-message:hover {
+            background-color: rgba(0, 255, 65, 0.1);
+            box-shadow: 0 0 10px rgba(0, 255, 65, 0.7);
+        }
+
+        /* --- Grille du Jeu --- */
+        #board {
+            display: grid;
+            border: 2px solid var(--glow-color);
+            padding: 5px;
+            border-radius: 0;
+            aspect-ratio: 1 / 1; /* Garde la grille carrée */
+        }
+
+        .cell {
+            background-color: rgba(0, 255, 65, 0.05);
+            border: 1px solid rgba(0, 255, 65, 0.2);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: clamp(0.8em, 4vw, 1.8em);
+            font-weight: normal;
+            cursor: pointer;
+            user-select: none;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+
+        .cell:not(.revealed):hover {
+            background-color: rgba(0, 255, 65, 0.15);
+            border-color: var(--glow-color);
+        }
+
+        .cell.revealed {
+            background-color: transparent;
+            border: 1px solid rgba(0, 255, 65, 0.1);
+            cursor: default;
+        }
+
+        .cell.mine {
+            color: #ff3333;
+            text-shadow: 0 0 5px #ff3333, 0 0 10px #ff3333;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink { 50% { color: var(--primary-color); text-shadow: none; } }
+
+        /* --- Couleurs des Nombres --- */
+        .cell[data-mines="1"] { color: #00ff41; }
+        .cell[data-mines="2"] { color: #8aff8a; }
+        .cell[data-mines="3"] { color: #ffff00; text-shadow: 0 0 5px #ffff00; }
+        .cell[data-mines="4"] { color: #00ffff; text-shadow: 0 0 5px #00ffff; }
+        .cell[data-mines="5"] { color: #ff9900; text-shadow: 0 0 5px #ff9900; }
+        .cell[data-mines="6"] { color: #ff00ff; text-shadow: 0 0 5px #ff00ff; }
+        .cell[data-mines="7"] { color: #ffffff; text-shadow: 0 0 5px #ffffff; }
+        .cell[data-mines="8"] { color: #aaaaaa; }
+
+        /* --- Message de Fin de Partie --- */
+        .message-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 20, 0, 0.85);
+            display: none; justify-content: center; align-items: center;
+            z-index: 1000;
+        }
+        .message-box {
+            background-color: rgba(0, 0, 0, 0.8);
+            padding: 30px 40px; border: 2px solid var(--glow-color);
+            text-align: center; box-shadow: 0 0 20px var(--glow-color);
+            animation: fadeIn 0.5s ease-out; border-radius: 0;
+            width: 80vw; max-width: 500px;
+        }
+        .message-box h2 { margin-top: 0; font-size: clamp(1.5em, 6vw, 2.5em); text-transform: uppercase; }
+        .message-box .win { color: #39ff14; text-shadow: 0 0 10px #39ff14; }
+        .message-box .lose { color: #ff3333; text-shadow: 0 0 10px #ff3333; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+    <div class="game-container">
+        <h1>Démineur</h1>
+        <div class="controls">
+            <select id="difficulty-selector">
+                <option value="easy">Facile</option>
+                <option value="medium">Moyen</option>
+                <option value="hard">Difficile</option>
+            </select>
+            <div>MINES: <span id="mine-counter">0</span></div>
+            <div>TEMPS: <span id="timer">0</span></div>
+        </div>
+        <div id="board"></div>
+        <button id="restart-button">Rejouer</button>
+    </div>
+
+    <div class="message-overlay" id="message-overlay">
+        <div class="message-box">
+            <h2 id="message-text"></h2>
+            <p id="message-details"></p>
+            <button id="restart-from-message">Rejouer</button>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const boardElement = document.getElementById('board');
+        const mineCounterElement = document.getElementById('mine-counter');
+        const timerElement = document.getElementById('timer');
+        const restartButton = document.getElementById('restart-button');
+        const difficultySelector = document.getElementById('difficulty-selector');
+        const messageOverlay = document.getElementById('message-overlay');
+        const messageText = document.getElementById('message-text');
+        const messageDetails = document.getElementById('message-details');
+        const restartFromMessageButton = document.getElementById('restart-from-message');
+
+        const difficulties = {
+            easy: { size: 10, mines: 10 },
+            medium: { size: 16, mines: 40 },
+            hard: { size: 22, mines: 99 }
+        };
+
+        let gridSize, numMines, board = [], gameOver = false, flagsPlaced = 0, revealedCells = 0, firstClick = true, timerInterval, time = 0;
+        
+        // --- Gestion Tactile ---
+        let touchTimeout;
+        let isLongPress = false;
+        const longPressDuration = 400; // ms
+
+        function handleTouchStart(event) {
+            event.preventDefault();
+            const cellElement = event.target.closest('.cell');
+            if (!cellElement || gameOver) return;
+
+            isLongPress = false;
+            touchTimeout = setTimeout(() => {
+                isLongPress = true;
+                handleRightClick(cellElement);
+            }, longPressDuration);
+        }
+
+        function handleTouchEnd(event) {
+            event.preventDefault();
+            const cellElement = event.target.closest('.cell');
+            clearTimeout(touchTimeout);
+            if (!isLongPress && cellElement) {
+                handleLeftClick(cellElement);
+            }
+        }
+
+        function handleTouchMove(event) {
+            event.preventDefault();
+            clearTimeout(touchTimeout);
+        }
+        
+        function startGame() {
+            gameOver = false;
+            firstClick = true;
+            flagsPlaced = 0;
+            revealedCells = 0;
+            time = 0;
+            
+            clearInterval(timerInterval);
+            timerInterval = null;
+            timerElement.textContent = time;
+
+            messageOverlay.style.display = 'none';
+
+            const difficulty = difficulties[difficultySelector.value];
+            gridSize = difficulty.size;
+            numMines = difficulty.mines;
+
+            mineCounterElement.textContent = numMines;
+
+            createBoardData();
+            renderBoard();
+        }
+
+        function createBoardData() {
+            board = Array.from({ length: gridSize }, (_, r) => 
+                Array.from({ length: gridSize }, (_, c) => ({
+                    isMine: false, isRevealed: false, isFlagged: false,
+                    neighborMines: 0, element: null, row: r, col: c
+                }))
+            );
+        }
+
+        function placeMines(initialRow, initialCol) {
+            let minesToPlace = numMines;
+            while (minesToPlace > 0) {
+                const row = Math.floor(Math.random() * gridSize);
+                const col = Math.floor(Math.random() * gridSize);
+                const cell = board[row][col];
+                if (!cell.isMine && (row !== initialRow || col !== initialCol)) {
+                    cell.isMine = true;
+                    minesToPlace--;
+                }
+            }
+            calculateNeighborMines();
+        }
+
+        function calculateNeighborMines() {
+            for (let r = 0; r < gridSize; r++) {
+                for (let c = 0; c < gridSize; c++) {
+                    if (board[r][c].isMine) continue;
+                    let count = 0;
+                    for (let dr = -1; dr <= 1; dr++) {
+                        for (let dc = -1; dc <= 1; dc++) {
+                            if (dr === 0 && dc === 0) continue;
+                            const nr = r + dr;
+                            const nc = c + dc;
+                            if (nr >= 0 && nr < gridSize && nc >= 0 && nc < gridSize && board[nr][nc].isMine) {
+                                count++;
+                            }
+                        }
+                    }
+                    board[r][c].neighborMines = count;
+                }
+            }
+        }
+
+        function renderBoard() {
+            boardElement.innerHTML = '';
+            boardElement.style.gridTemplateColumns = `repeat(${gridSize}, 1fr)`;
+
+            board.forEach(row => {
+                row.forEach(cellData => {
+                    const cellElement = document.createElement('div');
+                    cellElement.classList.add('cell');
+                    cellElement.dataset.row = cellData.row;
+                    cellElement.dataset.col = cellData.col;
+
+                    // Clic pour PC
+                    cellElement.addEventListener('click', (e) => handleLeftClick(e.target));
+                    cellElement.addEventListener('contextmenu', (e) => {
+                        e.preventDefault();
+                        handleRightClick(e.target);
+                    });
+
+                    // Tactile pour mobile
+                    cellElement.addEventListener('touchstart', handleTouchStart, { passive: false });
+                    cellElement.addEventListener('touchend', handleTouchEnd, { passive: false });
+                    cellElement.addEventListener('touchmove', handleTouchMove, { passive: false });
+
+
+                    board[cellData.row][cellData.col].element = cellElement;
+                    boardElement.appendChild(cellElement);
+                });
+            });
+        }
+
+        function handleLeftClick(cellElement) {
+            if (gameOver) return;
+            const row = parseInt(cellElement.dataset.row);
+            const col = parseInt(cellElement.dataset.col);
+            const cellData = board[row][col];
+            if (cellData.isRevealed || cellData.isFlagged) return;
+            if (firstClick) {
+                placeMines(row, col);
+                startTimer();
+                firstClick = false;
+            }
+            revealCell(row, col);
+            if (cellData.isMine) {
+                endGame(false);
+            } else {
+                checkWinCondition();
+            }
+        }
+
+        function handleRightClick(cellElement) {
+            if (gameOver || firstClick) return;
+            const row = parseInt(cellElement.dataset.row);
+            const col = parseInt(cellElement.dataset.col);
+            const cellData = board[row][col];
+            if (cellData.isRevealed) return;
+            cellData.isFlagged = !cellData.isFlagged;
+            if (cellData.isFlagged) {
+                cellData.element.textContent = '>';
+                flagsPlaced++;
+            } else {
+                cellData.element.textContent = '';
+                flagsPlaced--;
+            }
+            mineCounterElement.textContent = numMines - flagsPlaced;
+            checkWinCondition();
+        }
+
+        function revealCell(row, col) {
+            if (row < 0 || row >= gridSize || col < 0 || col >= gridSize) return;
+            const cellData = board[row][col];
+            if (cellData.isRevealed || cellData.isFlagged) return;
+            cellData.isRevealed = true;
+            revealedCells++;
+            cellData.element.classList.add('revealed');
+            if (cellData.isMine) {
+                cellData.element.textContent = '*';
+                cellData.element.classList.add('mine');
+            } else if (cellData.neighborMines > 0) {
+                cellData.element.textContent = cellData.neighborMines;
+                cellData.element.dataset.mines = cellData.neighborMines;
+            } else {
+                for (let dr = -1; dr <= 1; dr++) {
+                    for (let dc = -1; dc <= 1; dc++) {
+                        if (dr === 0 && dc === 0) continue;
+                        revealCell(row + dr, col + dc);
+                    }
+                }
+            }
+        }
+
+        function checkWinCondition() {
+            const nonMineCells = (gridSize * gridSize) - numMines;
+            if (revealedCells === nonMineCells) {
+                endGame(true);
+            }
+        }
+
+        function endGame(isWin) {
+            gameOver = true;
+            clearInterval(timerInterval);
+            board.forEach(row => {
+                row.forEach(cell => {
+                    if (cell.isMine) {
+                        cell.element.classList.add('revealed');
+                        if (!cell.isFlagged) cell.element.textContent = '*';
+                        if (isWin) cell.element.textContent = '>';
+                    }
+                    if(!cell.isMine && cell.isFlagged){
+                        cell.element.textContent = '!';
+                    }
+                });
+            });
+            if (isWin) {
+                messageText.textContent = '>> SYSTEME SECURISE <<';
+                messageText.className = 'win';
+                messageDetails.textContent = `Neutralisation réussie en ${time}s.`;
+                mineCounterElement.textContent = 0;
+            } else {
+                messageText.textContent = '>> INTRUSION DETECTEE <<';
+                messageText.className = 'lose';
+                messageDetails.textContent = 'Mine déclenchée. Séquence d\'arrêt.';
+            }
+            messageOverlay.style.display = 'flex';
+        }
+
+        function startTimer() {
+            if (timerInterval) return;
+            timerInterval = setInterval(() => {
+                time++;
+                timerElement.textContent = time;
+            }, 1000);
+        }
+
+        restartButton.addEventListener('click', startGame);
+        restartFromMessageButton.addEventListener('click', startGame);
+        difficultySelector.addEventListener('change', startGame);
+        startGame();
+    });
+    </script>
+</body>
+</html>
