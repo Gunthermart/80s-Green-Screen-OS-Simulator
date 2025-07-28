@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CyberMetropolis - Simulation de Trafic Urbain 3D</title>
+
+    <!-- META SEO -->
+    <meta name="description" content="Une simulation 3D interactive d'une métropole futuriste avec intelligence artificielle de trafic, visualisation en temps réel et contrôles avancés. Explorez une ville cyberpunk avec véhicules autonomes et drones.">
+    <meta name="keywords" content="three.js, 3d, simulation, ville futuriste, trafic intelligent, cyberpunk, AI, drones, véhicules autonomes">
+    <meta name="author" content="CyberMetropolis Team">
+
+    <!-- META Open Graph -->
+    <meta property="og:title" content="CyberMetropolis - Simulation de Trafic Urbain 3D">
+    <meta property="og:description" content="Explorez une métropole futuriste avec simulation de trafic intelligent et visualisation 3D immersive.">
+    <meta property="og:type" content="website">
+
+    <!-- META Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="CyberMetropolis - Simulation de Trafic Urbain 3D">
+    <meta name="twitter:description" content="Explorez une métropole futuriste avec simulation de trafic intelligent et visualisation 3D immersive.">
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
+        
+        * {
+            box-sizing: border-box;
+        }
+        
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
+            color: #00ff00;
+            font-family: 'Orbitron', 'Courier New', Courier, monospace;
+            font-weight: 400;
+        }
+        
+        canvas {
+            display: block;
+        }
+        
+        /* Interface principale */
+        #hud {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 100;
+        }
+        
+        /* Panneau de contrôle principal */
+        #control-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            padding: 20px;
+            background: linear-gradient(135deg, rgba(0, 20, 40, 0.9) 0%, rgba(0, 10, 20, 0.9) 100%);
+            border: 2px solid #00ff00;
+            border-radius: 15px;
+            box-shadow: 0 0 30px rgba(0, 255, 0, 0.3), inset 0 0 20px rgba(0, 255, 0, 0.1);
+            backdrop-filter: blur(10px);
+            pointer-events: all;
+            min-width: 300px;
+            transition: all 0.3s ease;
+        }
+        
+        #control-panel:hover {
+            box-shadow: 0 0 40px rgba(0, 255, 0, 0.5), inset 0 0 25px rgba(0, 255, 0, 0.15);
+        }
+        
+        .panel-header {
+            font-size: 18px;
+            font-weight: 900;
+            text-align: center;
+            margin-bottom: 15px;
+            text-shadow: 0 0 10px #00ff00;
+            letter-spacing: 2px;
+        }
+        
+        .control-section {
+            margin-bottom: 15px;
+            padding: 10px;
+            border: 1px solid rgba(0, 255, 0, 0.3);
+            border-radius: 8px;
+            background: rgba(0, 255, 0, 0.05);
+        }
+        
+        .control-label {
+            font-size: 12px;
+            margin-bottom: 8px;
+            color: #66ff66;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .control-button {
+            padding: 8px 15px;
+            background: linear-gradient(45deg, #003300, #006600);
+            border: 1px solid #00ff00;
+            color: #00ff00;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 2px;
+            font-family: 'Orbitron', monospace;
+            font-size: 11px;
+            transition: all 0.2s ease;
+            text-transform: uppercase;
+        }
+        
+        .control-button:hover {
+            background: linear-gradient(45deg, #006600, #00aa00);
+            box-shadow: 0 0 15px rgba(0, 255, 0, 0.4);
+            transform: translateY(-1px);
+        }
+        
+        .control-button.active {
+            background: linear-gradient(45deg, #00aa00, #00ff00);
+            color: #000;
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.6);
+        }
+        
+        .control-slider {
+            width: 100%;
+            margin: 10px 0;
+            -webkit-appearance: none;
+            appearance: none;
+            height: 6px;
+            background: linear-gradient(90deg, #003300, #00ff00);
+            border-radius: 3px;
+            outline: none;
+        }
+        
+        .control-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            background: #00ff00;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+        }
+        
+        /* Statistiques temps réel */
+        #stats-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 15px;
+            background: linear-gradient(135deg, rgba(40, 0, 40, 0.9) 0%, rgba(20, 0, 20, 0.9) 100%);
+            border: 2px solid #ff00ff;
+            border-radius: 12px;
+            box-shadow: 0 0 25px rgba(255, 0, 255, 0.3);
+            backdrop-filter: blur(8px);
+            min-width: 250px;
+            font-size: 11px;
+        }
+        
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 5px 0;
+            padding: 3px 0;
+            border-bottom: 1px solid rgba(255, 0, 255, 0.2);
+        }
+        
+        .stat-value {
+            color: #ff66ff;
+            font-weight: 700;
+        }
+        
+        /* Panneau d'information */
+        #info-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            padding: 15px;
+            background: linear-gradient(135deg, rgba(0, 40, 40, 0.9) 0%, rgba(0, 20, 20, 0.9) 100%);
+            border: 2px solid #00ffff;
+            border-radius: 12px;
+            box-shadow: 0 0 25px rgba(0, 255, 255, 0.3);
+            backdrop-filter: blur(8px);
+            max-width: 400px;
+            font-size: 11px;
+            line-height: 1.4;
+        }
+        
+        /* Indicateurs de performance */
+        #performance-panel {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            padding: 12px;
+            background: linear-gradient(135deg, rgba(40, 20, 0, 0.9) 0%, rgba(20, 10, 0, 0.9) 100%);
+            border: 2px solid #ffaa00;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(255, 170, 0, 0.3);
+            backdrop-filter: blur(6px);
+            font-size: 10px;
+        }
+        
+        .performance-bar {
+            height: 4px;
+            background: #333;
+            border-radius: 2px;
+            margin: 5px 0;
+            overflow: hidden;
+        }
+        
+        .performance-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ff6600, #ffaa00);
+            transition: width 0.3s ease;
+        }
+        
+        /* Bouton de fermeture */
+        #close-btn {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            font-size: 28px;
+            color: #ff3333;
+            text-decoration: none;
+            text-shadow: 0 0 15px #ff3333;
+            cursor: pointer;
+            z-index: 200;
+            transition: all 0.2s ease;
+            pointer-events: all;
+        }
+        
+        #close-btn:hover {
+            color: #ffffff;
+            text-shadow: 0 0 25px #ff3333;
+            transform: scale(1.1);
+        }
+        
+        /* Effets de lueur globaux */
+        .glow-green { text-shadow: 0 0 10px #00ff00; }
+        .glow-cyan { text-shadow: 0 0 10px #00ffff; }
+        .glow-magenta { text-shadow: 0 0 10px #ff00ff; }
+        .glow-orange { text-shadow: 0 0 10px #ffaa00; }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            #control-panel, #stats-panel, #info-panel, #performance-panel {
+                font-size: 10px;
+                padding: 10px;
+                min-width: auto;
+                max-width: calc(100vw - 40px);
+            }
+            
+            .panel-header {
+                font-size: 14px;
+            }
+        }
+        
+        /* Animations */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        .pulse { animation: pulse 2s infinite; }
+        
+        @keyframes slideIn {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        .slide-in { animation: slideIn 0.5s ease-out; }
+    </style>
+</head>
+<body>
+    <!-- Interface utilisateur HUD -->
+    <div id="hud">
+        <!-- Panneau de contrôle principal -->
+        <div id="control-panel" class="slide-in">
+            <div class="panel-header glow-green">CYBERMETROPOLIS</div>
+            <div class="control-section">
+                <div class="control-label">Contrôles de Simulation</div>
+                <button id="pause-btn" class="control-button">⏸ Pause</button>
+                <button id="reset-btn" class="control-button">🔄 Reset</button>
+                <button id="view-btn" class="control-button">📷 Vue</button>
+            </div>
+            <div class="control-section">
+                <div class="control-label">Formation des Drones</div>
+                <button id="drone-random" class="control-button active">Aléatoire</button>
+                <button id="drone-circle" class="control-button">Cercle</button>
+                <button id="drone-square" class="control-button">Carré</button>
+            </div>
+            <div class="control-section">
+                <div class="control-label">Vitesse de Simulation</div>
+                <input type="range" id="speed-slider" class="control-slider" min="0.1" max="3" step="0.1" value="1">
+                <span id="speed-value">1.0x</span>
+            </div>
+            <div class="control-section">
+                <div class="control-label">Densité du Trafic</div>
+                <input type="range" id="traffic-slider" class="control-slider" min="0.1" max="2" step="0.1" value="1">
+                <span id="traffic-value">100%</span>
+            </div>
+        </div>
+        
+        <!-- Panneau de statistiques -->
+        <div id="stats-panel" class="slide-in">
+            <div class="panel-header glow-magenta">STATISTIQUES TEMPS RÉEL</div>
+            <div class="stat-item">
+                <span>Véhicules Actifs:</span>
+                <span id="vehicle-count" class="stat-value">280</span>
+            </div>
+            <div class="stat-item">
+                <span>Drones Bleus:</span>
+                <span id="blue-drone-count" class="stat-value">20</span>
+            </div>
+            <div class="stat-item">
+                <span>Drones Rouges:</span>
+                <span id="red-drone-count" class="stat-value">10</span>
+            </div>
+            <div class="stat-item">
+                <span>Formation:</span>
+                <span id="formation-status" class="stat-value">Aléatoire</span>
+            </div>
+            <div class="stat-item">
+                <span>Temps Simulation:</span>
+                <span id="sim-time" class="stat-value">00:00</span>
+            </div>
+            <div class="stat-item">
+                <span>Collisions Évitées:</span>
+                <span id="collision-count" class="stat-value pulse">1,247</span>
+            </div>
+        </div>
+        
+        <!-- Panneau d'information -->
+        <div id="info-panel" class="slide-in">
+            <div class="panel-header glow-cyan">NAVIGATION & CONTRÔLES</div>
+            <div><strong>🖱️ Souris/Tactile:</strong></div>
+            <div>• Clic gauche + glisser : Rotation orbite</div>
+            <div>• Clic droit + glisser : Déplacement panoramique</div>
+            <div>• Molette/Pincement : Zoom avant/arrière</div>
+            <div style="margin-top: 10px;"><strong>🎮 Simulation:</strong></div>
+            <div>• IA de trafic autonome avec évitement</div>
+            <div>• Formations dynamiques de drones</div>
+            <div>• Système de tunnels urbains</div>
+            <div>• Rendu post-processing avec effets bloom</div>
+        </div>
+        
+        <!-- Panneau de performance -->
+        <div id="performance-panel" class="slide-in">
+            <div class="panel-header glow-orange">PERFORMANCE</div>
+            <div>FPS: <span id="fps-counter">60</span></div>
+            <div class="performance-bar">
+                <div id="fps-bar" class="performance-fill" style="width: 100%"></div>
+            </div>
+            <div>GPU: <span id="gpu-usage">45%</span></div>
+            <div class="performance-bar">
+                <div id="gpu-bar" class="performance-fill" style="width: 45%"></div>
+            </div>
+        </div>
+    </div>
+    
+    <a id="close-btn" href="#" title="Retour à l'accueil">[✕]</a>
+
+    <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.157.0/examples/jsm/"
+        }
+    }
+    </script>
+    <script type="module">
+        // Import des modules Three.js
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+        // --- Configuration de base ---
+        let scene, camera, renderer, controls, composer;
+        const vehicles = [];
+        const blueDrones = [];
+        const redDrones = [];
+        const buildingColliders = [];
+        const housePositions = [];
+        const tunnelAreas = [];
+        const tunnelEntranceColliders = []; // NEW: Array for tunnel entrances
+        const citySize = 1000;
+        const roadWidth = 20;
+        
+        // Variables de contrôle de simulation
+        let simulationSpeed = 1.0;
+        let trafficDensity = 1.0;
+        let isPaused = false;
+        let simulationTime = 0;
+        let collisionCount = 1247;
+        let frameCount = 0;
+        let lastFPSUpdate = 0;
+        
+        // Couleurs
+        const buildingColor = 0x00ff00;
+        const houseColor = 0xffff00;
+        const carColor = 0xff00ff;
+        const busColor = 0x00ffff;
+        const truckColor = 0xff0000;
+        const blueDroneColor = 0x00aaff;
+        const redDroneColor = 0xff0000;
+        const tunnelColor = 0xffa500;
+
+        // Gestion des formations de drones
+        let droneFormationState = 'random';
+        let droneFormationCenter = new THREE.Vector3(0, 350, 0);
+        let needsNewDroneTargets = true;
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.fog = new THREE.Fog(0x000000, 1, 1500);
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+            camera.position.set(250, 200, 250);
+            camera.lookAt(0, 0, 0);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.toneMapping = THREE.ReinhardToneMapping;
+            renderer.toneMappingExposure = 1.2;
+            document.body.appendChild(renderer.domElement);
+            
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxPolarAngle = Math.PI / 2 - 0.05;
+            controls.minDistance = 50;
+            controls.maxDistance = 1200;
+            
+            const renderScene = new RenderPass(scene, camera);
+            const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.8, 0.4, 0.85);
+            bloomPass.threshold = 0;
+            bloomPass.strength = 1.5;
+            bloomPass.radius = 0.8;
+            composer = new EffectComposer(renderer);
+            composer.addPass(renderScene);
+            composer.addPass(bloomPass);
+
+            createCityGrid();
+            createTunnels();
+            createBuildings();
+            createHouses();
+            createVehicles();
+            createBlueDrones();
+            createRedDrones();
+            
+            setupUI();
+            setInterval(changeDroneFormation, 20000);
+            setInterval(updateStats, 1000);
+            window.addEventListener('resize', onWindowResize, false);
+            animate();
+        }
+
+        function setupUI() {
+            // Contrôles de simulation
+            document.getElementById('pause-btn').addEventListener('click', () => {
+                isPaused = !isPaused;
+                document.getElementById('pause-btn').textContent = isPaused ? '▶️ Play' : '⏸️ Pause';
+            });
+            
+            document.getElementById('reset-btn').addEventListener('click', () => {
+                resetSimulation();
+            });
+            
+            document.getElementById('view-btn').addEventListener('click', () => {
+                // Cycle through different camera views
+                const views = [
+                    { pos: [250, 200, 250], target: [0, 0, 0] },
+                    { pos: [0, 500, 0], target: [0, 0, 0] },
+                    { pos: [400, 100, 0], target: [0, 0, 0] },
+                    { pos: [-300, 150, 300], target: [0, 0, 0] }
+                ];
+                const view = views[Math.floor(Math.random() * views.length)];
+                camera.position.set(...view.pos);
+                controls.target.set(...view.target);
+                controls.update();
+            });
+            
+            // Contrôles de formation des drones
+            document.getElementById('drone-random').addEventListener('click', () => setDroneFormation('random'));
+            document.getElementById('drone-circle').addEventListener('click', () => setDroneFormation('circle'));
+            document.getElementById('drone-square').addEventListener('click', () => setDroneFormation('square'));
+            
+            // Sliders
+            document.getElementById('speed-slider').addEventListener('input', (e) => {
+                simulationSpeed = parseFloat(e.target.value);
+                document.getElementById('speed-value').textContent = simulationSpeed.toFixed(1) + 'x';
+            });
+            
+            document.getElementById('traffic-slider').addEventListener('input', (e) => {
+                trafficDensity = parseFloat(e.target.value);
+                document.getElementById('traffic-value').textContent = Math.round(trafficDensity * 100) + '%';
+            });
+        }
+        
+        function setDroneFormation(formation) {
+            droneFormationState = formation;
+            needsNewDroneTargets = true;
+            
+            // Update UI
+            document.querySelectorAll('#control-panel .control-button').forEach(btn => {
+                if (btn.id.includes('drone-')) btn.classList.remove('active');
+            });
+            document.getElementById(`drone-${formation}`).classList.add('active');
+            document.getElementById('formation-status').textContent = 
+                formation === 'random' ? 'Aléatoire' : 
+                formation === 'circle' ? 'Cercle' : 'Carré';
+        }
+        
+        function resetSimulation() {
+            simulationTime = 0;
+            collisionCount = 0;
+            vehicles.forEach(v => resetVehicle(v.object, v.direction, v.size));
+            blueDrones.forEach(d => {
+                d.object.position.set(
+                    Math.random() * citySize - citySize / 2,
+                    Math.random() * 150 + 300,
+                    Math.random() * citySize - citySize / 2
+                );
+            });
+        }
+        
+        function updateStats() {
+            if (!isPaused) {
+                simulationTime += 1;
+                if (Math.random() < 0.3) collisionCount += Math.floor(Math.random() * 3);
+            }
+            
+            const minutes = Math.floor(simulationTime / 60);
+            const seconds = simulationTime % 60;
+            document.getElementById('sim-time').textContent = 
+                `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            document.getElementById('collision-count').textContent = collisionCount.toLocaleString();
+            
+            // Simulate GPU usage
+            const gpu = 30 + Math.random() * 40;
+            document.getElementById('gpu-usage').textContent = Math.round(gpu) + '%';
+            document.getElementById('gpu-bar').style.width = gpu + '%';
+        }
+
+        function createCityGrid() {
+            const gridHelper = new THREE.GridHelper(citySize, citySize / roadWidth, 0x005500, 0x005500);
+            gridHelper.position.y = -0.5;
+            scene.add(gridHelper);
+        }
+
+        // MODIFIED FUNCTION
+        function createTunnels() {
+            const tunnelMaterial = new THREE.MeshBasicMaterial({ color: 0x1a1a1a });
+            const tunnelEntranceMaterial = new THREE.MeshBasicMaterial({ color: tunnelColor, wireframe: true });
+            const tunnels = [
+                { x: 0, z: 0, length: 400, rotation: 0 }, { x: 200, z: 0, length: 500, rotation: Math.PI / 2 },
+                { x: -200, z: 100, length: 300, rotation: Math.PI / 2 }, { x: 300, z: 200, length: 400, rotation: 0 },
+                { x: -300, z: -250, length: 350, rotation: 0 }, { x: 150, z: -300, length: 600, rotation: Math.PI / 2 },
+                { x: -400, z: 0, length: 400, rotation: Math.PI / 2 }, { x: 400, z: -100, length: 250, rotation: 0 },
+                { x: -100, z: 300, length: 500, rotation: 0 }
+            ];
+
+            tunnels.forEach(t => {
+                const floorGeo = new THREE.PlaneGeometry(roadWidth, t.length);
+                const floor = new THREE.Mesh(floorGeo, tunnelMaterial);
+                floor.rotation.x = -Math.PI / 2;
+                floor.position.set(t.x, -1, t.z);
+                if (t.rotation !== 0) floor.rotation.z = t.rotation;
+                scene.add(floor);
+                const entranceGeo = new THREE.BoxGeometry(roadWidth + 4, 20, 5);
+                const entrance1 = new THREE.Mesh(entranceGeo, tunnelEntranceMaterial);
+                const entrance2 = new THREE.Mesh(entranceGeo, tunnelEntranceMaterial);
+                const offset = t.length / 2;
+                let tunnelBox, entranceBox1, entranceBox2;
+                if (t.rotation === 0) {
+                    entrance1.position.set(t.x, 10, t.z - offset); entrance2.position.set(t.x, 10, t.z + offset);
+                    tunnelBox = new THREE.Box3().setFromCenterAndSize(new THREE.Vector3(t.x, 0, t.z), new THREE.Vector3(roadWidth, 40, t.length));
+                    entranceBox1 = new THREE.Box3().setFromCenterAndSize(entrance1.position, new THREE.Vector3(roadWidth + 20, 40, 20));
+                    entranceBox2 = new THREE.Box3().setFromCenterAndSize(entrance2.position, new THREE.Vector3(roadWidth + 20, 40, 20));
+                } else {
+                    entrance1.position.set(t.x - offset, 10, t.z); entrance2.position.set(t.x + offset, 10, t.z);
+                    entrance1.rotation.y = Math.PI / 2; entrance2.rotation.y = Math.PI / 2;
+                    tunnelBox = new THREE.Box3().setFromCenterAndSize(new THREE.Vector3(t.x, 0, t.z), new THREE.Vector3(t.length, 40, roadWidth));
+                    entranceBox1 = new THREE.Box3().setFromCenterAndSize(entrance1.position, new THREE.Vector3(20, 40, roadWidth + 20));
+                    entranceBox2 = new THREE.Box3().setFromCenterAndSize(entrance2.position, new THREE.Vector3(20, 40, roadWidth + 20));
+                }
+                tunnelAreas.push(tunnelBox);
+                // Add to both general and specific collider lists
+                tunnelEntranceColliders.push(entranceBox1, entranceBox2);
+                buildingColliders.push(entranceBox1, entranceBox2);
+                scene.add(entrance1);
+                scene.add(entrance2);
+            });
+        }
+
+        function createBuildings() {
+            const buildingGeometry = new THREE.BoxGeometry(1, 1, 1);
+            const buildingMaterial = new THREE.MeshBasicMaterial({ color: buildingColor, wireframe: true });
+            const buildingGroup = new THREE.Group();
+            const margin = 50;
+            const innerCitySize = citySize - margin * 2;
+            const gridSnap = roadWidth * 1.5;
+            let createdCount = 0;
+            let totalAttempts = 0;
+            while (createdCount < 117 && totalAttempts < 5000) {
+                totalAttempts++;
+                const height = Math.random() * 250 + 50;
+                const scaleX = Math.random() * 30 + 15;
+                const scaleZ = Math.random() * 30 + 15;
+                const x = Math.random() * innerCitySize - innerCitySize / 2;
+                const z = Math.random() * innerCitySize - innerCitySize / 2;
+                const tempPosition = new THREE.Vector3(Math.round(x / gridSnap) * gridSnap, height / 2, Math.round(z / gridSnap) * gridSnap);
+                const tempBox = new THREE.Box3().setFromCenterAndSize(tempPosition, new THREE.Vector3(scaleX, height, scaleZ));
+                let intersects = false;
+                for (const existingCollider of buildingColliders) { if (existingCollider.intersectsBox(tempBox)) { intersects = true; break; } }
+                if (!intersects) {
+                    const building = new THREE.Mesh(buildingGeometry, buildingMaterial);
+                    building.position.copy(tempPosition);
+                    building.scale.set(scaleX, height, scaleZ);
+                    buildingColliders.push(tempBox);
+                    buildingGroup.add(building);
+                    createdCount++;
+                }
+            }
+            scene.add(buildingGroup);
+        }
+        
+        function createHouses() {
+            const houseGeometry = new THREE.BoxGeometry(1, 1, 1);
+            const houseMaterial = new THREE.MeshBasicMaterial({ color: houseColor, wireframe: true });
+            const houseGroup = new THREE.Group();
+            const margin = 50;
+            const innerCitySize = citySize - margin * 2;
+            const gridSnap = roadWidth * 1.5;
+            let createdCount = 0;
+            let totalAttempts = 0;
+            while (createdCount < 30 && totalAttempts < 2000) {
+                totalAttempts++;
+                const height = Math.random() * 20 + 10;
+                const scaleX = Math.random() * 10 + 8;
+                const scaleZ = Math.random() * 10 + 8;
+                const x = Math.random() * innerCitySize - innerCitySize / 2;
+                const z = Math.random() * innerCitySize - innerCitySize / 2;
+                const tempPosition = new THREE.Vector3(Math.round(x / gridSnap) * gridSnap, height / 2, Math.round(z / gridSnap) * gridSnap);
+                const tempBox = new THREE.Box3().setFromCenterAndSize(tempPosition, new THREE.Vector3(scaleX, height, scaleZ));
+                let intersects = false;
+                for (const existingCollider of buildingColliders) { if (existingCollider.intersectsBox(tempBox)) { intersects = true; break; } }
+                if (!intersects) {
+                    const house = new THREE.Mesh(houseGeometry, houseMaterial);
+                    house.position.copy(tempPosition);
+                    house.scale.set(scaleX, height, scaleZ);
+                    buildingColliders.push(tempBox);
+                    housePositions.push(house.position.clone());
+                    houseGroup.add(house);
+                    createdCount++;
+                }
+            }
+            scene.add(houseGroup);
+        }
+
+        function createVehicles() {
+            for (let i = 0; i < Math.floor(200 * trafficDensity); i++) createVehicle('car');
+            for (let i = 0; i < Math.floor(50 * trafficDensity); i++) createVehicle('bus');
+            for (let i = 0; i < Math.floor(30 * trafficDensity); i++) createVehicle('truck');
+        }
+
+        function createVehicle(type) {
+            let size, color;
+            switch(type) {
+                case 'bus': size = { w: 4, h: 4, d: 12 }; color = busColor; break;
+                case 'truck': size = { w: 4.5, h: 5, d: 10 }; color = truckColor; break;
+                case 'car': default: size = { w: 3, h: 3, d: 6 }; color = carColor; break;
+            }
+            const vehicleGeometry = new THREE.BoxGeometry(size.w, size.h, size.d);
+            const wireframeGeometry = new THREE.EdgesGeometry(vehicleGeometry);
+            const material = new THREE.LineBasicMaterial({ color: color, linewidth: 2 });
+            const vehicle = new THREE.LineSegments(wireframeGeometry, material);
+            const speed = Math.random() * 1.0 + 0.5;
+            const direction = new THREE.Vector3();
+            resetVehicle(vehicle, direction, size);
+            vehicles.push({ object: vehicle, speed, direction, size: size });
+            scene.add(vehicle);
+        }
+
+        function createBlueDrones() {
+            for (let i = 0; i < 20; i++) {
+                const droneGeometry = new THREE.OctahedronGeometry(2.5, 0);
+                const wireframeGeometry = new THREE.EdgesGeometry(droneGeometry);
+                const material = new THREE.LineBasicMaterial({ color: blueDroneColor });
+                const drone = new THREE.LineSegments(wireframeGeometry, material);
+                const x = Math.random() * citySize - citySize / 2;
+                const y = Math.random() * 150 + 300;
+                const z = Math.random() * citySize - citySize / 2;
+                drone.position.set(x, y, z);
+                const target = new THREE.Vector3(Math.random() * citySize - citySize / 2, Math.random() * 150 + 300, Math.random() * citySize - citySize / 2);
+                blueDrones.push({ object: drone, target: target, speed: Math.random() * 0.5 + 0.2 });
+                scene.add(drone);
+            }
+        }
+
+        function createRedDrones() {
+            for (let i = 0; i < 10; i++) {
+                const droneGeometry = new THREE.IcosahedronGeometry(1.5, 0);
+                const wireframeGeometry = new THREE.EdgesGeometry(droneGeometry);
+                const material = new THREE.LineBasicMaterial({ color: redDroneColor });
+                const drone = new THREE.LineSegments(wireframeGeometry, material);
+                const x = Math.random() * citySize - citySize / 2;
+                const y = Math.random() * 100 + 250;
+                const z = Math.random() * citySize - citySize / 2;
+                drone.position.set(x, y, z);
+                const target = new THREE.Vector3(Math.random() * citySize - citySize / 2, Math.random() * 100 + 250, Math.random() * citySize - citySize / 2);
+                redDrones.push({
+                    object: drone,
+                    target: target,
+                    speed: Math.random() * 0.4 + 0.1,
+                    blinkTimer: Math.random() * 60,
+                    blinkRate: Math.random() * 30 + 30
+                });
+                scene.add(drone);
+            }
+        }
+        
+        function resetVehicle(vehicle, direction, size) {
+            const laneOffset = roadWidth / 4;
+            let positionOk = false;
+            let attempts = 0;
+            const halfCity = citySize / 2;
+
+            while (!positionOk && attempts < 200) {
+                attempts++;
+                let potentialPosition = new THREE.Vector3();
+                
+                const randomX = Math.random() * citySize - halfCity;
+                const randomZ = Math.random() * citySize - halfCity;
+                const nearestRoadX = Math.round(randomX / roadWidth) * roadWidth + laneOffset;
+                const nearestRoadZ = Math.round(randomZ / roadWidth) * roadWidth + laneOffset;
+
+                if (Math.random() > 0.5) {
+                    potentialPosition.set(nearestRoadX, 1.5, randomZ);
+                    direction.set(0, 0, Math.random() > 0.5 ? 1 : -1);
+                } else {
+                    potentialPosition.set(randomX, 1.5, nearestRoadZ);
+                    direction.set(Math.random() > 0.5 ? 1 : -1, 0, 0);
+                }
+
+                const vehicleBox = new THREE.Box3();
+                const vehicleDimensions = new THREE.Vector3(size.w, size.h, size.d);
+                if (direction.x !== 0) { 
+                    vehicleDimensions.set(size.d, size.h, size.w);
+                }
+                vehicleBox.setFromCenterAndSize(potentialPosition, vehicleDimensions);
+
+                let intersectsBuilding = false;
+                for (const box of buildingColliders) {
+                    if (box.intersectsBox(vehicleBox)) {
+                        intersectsBuilding = true;
+                        break;
+                    }
+                }
+
+                let inTunnel = false;
+                for (const tunnel of tunnelAreas) {
+                    if (tunnel.intersectsBox(vehicleBox)) {
+                        inTunnel = true;
+                        break;
+                    }
+                }
+                
+                let intersectsVehicle = false;
+                for (const v of vehicles) {
+                    if (v.object !== vehicle && v.object.position.distanceTo(potentialPosition) < 15) {
+                        intersectsVehicle = true;
+                        break;
+                    }
+                }
+
+                if (!intersectsBuilding && !intersectsVehicle && !inTunnel) {
+                    positionOk = true;
+                    vehicle.position.copy(potentialPosition);
+                    if (direction.x !== 0) { vehicle.rotation.y = direction.x > 0 ? Math.PI / 2 : -Math.PI / 2; } 
+                    else { vehicle.rotation.y = direction.z > 0 ? 0 : Math.PI; }
+                }
+            }
+        }
+
+        function turnVehicle(vehicleData, turnDirection) {
+            const axis = new THREE.Vector3(0, 1, 0);
+            const angle = turnDirection === 'left' ? Math.PI / 2 : -Math.PI / 2;
+            vehicleData.direction.applyAxisAngle(axis, angle).round();
+            vehicleData.object.rotation.y += angle;
+        }
+
+        // MODIFIED FUNCTION
+        function updateVehicles() {
+            if (isPaused) return;
+            
+            const halfCity = citySize / 2;
+            vehicles.forEach(v => {
+                const vehicle = v.object;
+                let isInTunnel = false;
+                for (const tunnel of tunnelAreas) { if (tunnel.containsPoint(vehicle.position)) { isInTunnel = true; break; } }
+                
+                const targetY = isInTunnel ? -5.0 : 1.5;
+                vehicle.position.y = THREE.MathUtils.lerp(vehicle.position.y, targetY, 0.1);
+                
+                const effectiveSpeed = v.speed * simulationSpeed;
+                const frontSensor = vehicle.position.clone().add(v.direction.clone().multiplyScalar(v.size.d / 2 + effectiveSpeed));
+                
+                let blockedByVehicle = false;
+                for (const otherV of vehicles) {
+                    if (v !== otherV && frontSensor.distanceTo(otherV.object.position) < 8) {
+                        blockedByVehicle = true;
+                        break;
+                    }
+                }
+
+                let blockedByBuilding = false;
+                if (!isInTunnel) {
+                    for (const box of buildingColliders) {
+                        // Check if the collider is a tunnel entrance
+                        const isTunnelEntrance = tunnelEntranceColliders.includes(box);
+                        
+                        // If the sensor is in a building that is NOT a tunnel entrance, it's blocked
+                        if (!isTunnelEntrance && box.containsPoint(frontSensor)) {
+                            blockedByBuilding = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (blockedByBuilding || blockedByVehicle) {
+                    turnVehicle(v, Math.random() > 0.5 ? 'left' : 'right');
+                    if (blockedByVehicle && Math.random() < 0.1) collisionCount++;
+                } else {
+                    vehicle.position.add(v.direction.clone().multiplyScalar(effectiveSpeed));
+                    const pos = vehicle.position;
+                    const laneOffset = roadWidth / 4;
+                    const onIntersection = (Math.abs((pos.x - laneOffset) % roadWidth) < effectiveSpeed) || (Math.abs((pos.z - laneOffset) % roadWidth) < effectiveSpeed);
+                    if (onIntersection && Math.random() < 0.05 && !isInTunnel) {
+                        turnVehicle(v, Math.random() > 0.5 ? 'left' : 'right');
+                    }
+                }
+
+                if (Math.abs(vehicle.position.x) > halfCity || Math.abs(vehicle.position.z) > halfCity) {
+                    resetVehicle(vehicle, v.direction, v.size);
+                }
+            });
+        }
+
+        function changeDroneFormation() {
+            if (!isPaused) {
+                const formations = ['random', 'circle', 'square'];
+                setDroneFormation(formations[Math.floor(Math.random() * formations.length)]);
+            }
+        }
+
+        function updateBlueDrones() {
+            if (isPaused) return;
+            
+            const halfCity = citySize / 2;
+            if (needsNewDroneTargets) {
+                switch (droneFormationState) {
+                    case 'circle':
+                        const radius = 100;
+                        blueDrones.forEach((d, i) => {
+                            const angle = (i / blueDrones.length) * Math.PI * 2;
+                            d.target.set(droneFormationCenter.x + radius * Math.cos(angle), droneFormationCenter.y, droneFormationCenter.z + radius * Math.sin(angle));
+                        });
+                        break;
+                    case 'square':
+                        const size = 150;
+                        const perRow = 5;
+                        blueDrones.forEach((d, i) => {
+                            const x = (i % perRow - (perRow - 1) / 2) * (size / perRow);
+                            const z = (Math.floor(i / perRow) - (Math.floor((blueDrones.length - 1) / perRow)) / 2) * (size / perRow);
+                            d.target.set(droneFormationCenter.x + x, droneFormationCenter.y, droneFormationCenter.z + z);
+                        });
+                        break;
+                    default:
+                        blueDrones.forEach(d => {
+                            d.target.set(Math.random() * citySize - halfCity, Math.random() * 150 + 300, Math.random() * citySize - halfCity);
+                        });
+                        break;
+                }
+                needsNewDroneTargets = false;
+            }
+            if (droneFormationState !== 'random') {
+                droneFormationCenter.x += 0.05 * simulationSpeed;
+            }
+            blueDrones.forEach(d => {
+                d.object.position.lerp(d.target, (d.speed / 100) * simulationSpeed);
+                d.object.rotation.y += 0.01 * simulationSpeed;
+                d.object.rotation.x += 0.005 * simulationSpeed;
+            });
+        }
+
+        function updateRedDrones() {
+            if (isPaused) return;
+            
+            const halfCity = citySize / 2;
+            redDrones.forEach(d => {
+                d.object.position.lerp(d.target, (d.speed / 100) * simulationSpeed);
+                d.object.rotation.y -= 0.015 * simulationSpeed;
+                d.object.rotation.z += 0.008 * simulationSpeed;
+
+                if (d.object.position.distanceTo(d.target) < 20) {
+                    d.target.set(Math.random() * citySize - halfCity, Math.random() * 100 + 250, Math.random() * citySize - halfCity);
+                }
+
+                d.blinkTimer -= simulationSpeed;
+                if (d.blinkTimer <= 0) {
+                    d.object.visible = !d.object.visible;
+                    d.blinkTimer = d.blinkRate;
+                }
+            });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // FPS Counter
+            frameCount++;
+            const now = performance.now();
+            if (now - lastFPSUpdate > 1000) {
+                const fps = Math.round(frameCount / ((now - lastFPSUpdate) / 1000));
+                document.getElementById('fps-counter').textContent = fps;
+                document.getElementById('fps-bar').style.width = Math.min(fps / 60 * 100, 100) + '%';
+                frameCount = 0;
+                lastFPSUpdate = now;
+            }
+            
+            controls.update();
+            updateVehicles();
+            updateBlueDrones();
+            updateRedDrones();
+            composer.render();
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            composer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        init();
+    </script>
+</body>
+</html>
