@@ -7,7 +7,7 @@
 
     <!-- META SEO -->
     <meta name="description" content="Une simulation 3D interactive d'une métropole futuriste avec intelligence artificielle de trafic, visualisation en temps réel et contrôles avancés. Explorez une ville cyberpunk avec véhicules autonomes et drones.">
-    <meta name="keywords" content="three.js, 3d, simulation, ville futuriste, trafic intelligent, cyberpunk, AI, drones, véhicules autonomes, explosion">
+    <meta name="keywords" content="three.js, 3d, simulation, ville futuriste, trafic intelligent, cyberpunk, AI, drones, véhicules autonomes, explosion, néon">
     <meta name="author" content="CyberMetropolis Team">
 
     <!-- META Open Graph -->
@@ -254,6 +254,9 @@
             font-size: 12px;
             transition: all 0.2s ease;
             text-transform: uppercase;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
         }
         .reopen-btn:hover {
             background: linear-gradient(45deg, #006600, #00aa00);
@@ -299,16 +302,17 @@
 <body>
     <!-- Conteneur pour les boutons de réouverture -->
     <div id="reopen-panel-container">
-        <button id="reopen-control-btn" class="reopen-btn hidden">[+] Contrôles</button>
-        <button id="reopen-stats-btn" class="reopen-btn hidden">[+] Stats</button>
-        <button id="reopen-info-btn" class="reopen-btn hidden">[+] Infos</button>
-        <button id="reopen-performance-btn" class="reopen-btn hidden">[+] Perf</button>
+        <a href="#" class="reopen-btn">[&lt;-] Retour</a>
+        <button id="reopen-control-btn" class="reopen-btn">[+] Contrôles</button>
+        <button id="reopen-stats-btn" class="reopen-btn">[+] Stats</button>
+        <button id="reopen-info-btn" class="reopen-btn">[+] Infos</button>
+        <button id="reopen-performance-btn" class="reopen-btn">[+] Perf</button>
     </div>
 
     <!-- Interface utilisateur HUD -->
     <div id="hud">
         <!-- Panneau de contrôle principal -->
-        <div id="control-panel" class="panel slide-in">
+        <div id="control-panel" class="panel slide-in hidden">
             <a class="window-toggle-btn" data-target="control-panel">[-]</a>
             <div class="panel-header glow-green">CYBERMETROPOLIS</div>
             <div class="control-section">
@@ -336,7 +340,7 @@
         </div>
         
         <!-- Panneau de statistiques -->
-        <div id="stats-panel" class="panel slide-in">
+        <div id="stats-panel" class="panel slide-in hidden">
             <a class="window-toggle-btn" data-target="stats-panel">[-]</a>
             <div class="panel-header glow-magenta">STATISTIQUES TEMPS RÉEL</div>
             <div class="stat-item">
@@ -370,7 +374,7 @@
         </div>
         
         <!-- Panneau d'information -->
-        <div id="info-panel" class="panel slide-in">
+        <div id="info-panel" class="panel slide-in hidden">
             <a class="window-toggle-btn" data-target="info-panel">[-]</a>
             <div class="panel-header glow-cyan">NAVIGATION & CONTRÔLES</div>
             <div><strong>🖱️ Souris/Tactile:</strong></div>
@@ -385,7 +389,7 @@
         </div>
         
         <!-- Panneau de performance -->
-        <div id="performance-panel" class="panel slide-in">
+        <div id="performance-panel" class="panel slide-in hidden">
             <a class="window-toggle-btn" data-target="performance-panel">[-]</a>
             <div class="panel-header glow-orange">PERFORMANCE</div>
             <div>FPS: <span id="fps-counter">60</span></div>
@@ -425,7 +429,8 @@
         const housePositions = [];
         const tunnelAreas = [];
         const tunnelEntranceColliders = []; 
-        const explosions = []; // NEW: Array for explosion effects
+        const explosions = [];
+        const scrollingAds = [];
         const citySize = 1000;
         const roadWidth = 20;
         
@@ -435,7 +440,7 @@
         let isPaused = false;
         let simulationTime = 0;
         let collisionCount = 1247;
-        let destroyedCount = 0; // NEW: Counter for destroyed vehicles
+        let destroyedCount = 0;
         let frameCount = 0;
         let lastFPSUpdate = 0;
         
@@ -566,7 +571,10 @@
                     } else {
                         targetPanelId = e.target.id.replace('reopen-', '').replace('-btn', '-panel');
                     }
-                    document.getElementById(targetPanelId).classList.remove('hidden');
+                    const targetPanel = document.getElementById(targetPanelId);
+                    if (targetPanel) {
+                       targetPanel.classList.remove('hidden');
+                    }
                     e.target.classList.add('hidden');
                 });
             });
@@ -694,11 +702,87 @@
                     buildingColliders.push(tempBox);
                     buildingGroup.add(building);
                     createdCount++;
+
+                    if (height > 150 && Math.random() < 0.25) {
+                        createAdOnBuilding(building, height, scaleX, scaleZ, buildingGroup);
+                    }
                 }
             }
             scene.add(buildingGroup);
         }
         
+        // MODIFIED FUNCTION
+        function createAdOnBuilding(building, height, scaleX, scaleZ, group) {
+            const adTexts = [
+                "Mum's watching you.",
+                "Big Sister is online.",
+                "Internet never forgets.",
+                "Your phone just snitched.",
+                "Even your toaster saw that.",
+                "Alexa told us everything.",
+                "You’ve been shadowbanned by Grandma.",
+                "You blinked. We noticed.",
+                "CCTV loves your style.",
+                "Paranoia loading…",
+                "Smart move, genius.",
+                "Not your finest click.",
+                "404: Good decision not found.",
+                "Error: Brain not connected.",
+                "Installing common sense… failed.",
+                "Your FBI agent needs therapy.",
+                "Try again, but with dignity."
+            ];
+            const adText = adTexts[Math.floor(Math.random() * adTexts.length)];
+
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            const font_size = 48; // Adjusted for longer text
+            const canvasWidth = 1024; // Wider canvas for scrolling
+            const canvasHeight = 128;
+            canvas.width = canvasWidth;
+            canvas.height = canvasHeight;
+            
+            context.font = `bold ${font_size}px Orbitron`;
+
+            const texture = new THREE.CanvasTexture(canvas);
+            const adMaterial = new THREE.MeshBasicMaterial({
+                map: texture,
+                transparent: true,
+                opacity: 0.9
+            });
+
+            const adHeight = height * 0.15; // Adjusted height
+            const adWidth = Math.random() > 0.5 ? scaleX : scaleZ;
+            const adGeo = new THREE.PlaneGeometry(adWidth * 0.9, adHeight);
+            
+            const ad1 = new THREE.Mesh(adGeo, adMaterial);
+            const ad2 = new THREE.Mesh(adGeo, adMaterial.clone());
+
+            const adY = height - adHeight / 2;
+
+            if (adWidth === scaleX) { // Place on Z faces
+                ad1.position.set(building.position.x, adY, building.position.z + scaleZ / 2 + 0.1);
+                ad2.position.set(building.position.x, adY, building.position.z - scaleZ / 2 - 0.1);
+                ad2.rotation.y = Math.PI;
+            } else { // Place on X faces
+                ad1.position.set(building.position.x + scaleX / 2 + 0.1, adY, building.position.z);
+                ad1.rotation.y = Math.PI / 2;
+                ad2.position.set(building.position.x - scaleX / 2 - 0.1, adY, building.position.z);
+                ad2.rotation.y = -Math.PI / 2;
+            }
+            
+            group.add(ad1);
+            group.add(ad2);
+
+            const textWidth = context.measureText(adText).width;
+            scrollingAds.push({
+                context: context, text: adText, canvas: canvas, texture: texture, x: canvas.width, textWidth: textWidth
+            });
+            scrollingAds.push({
+                context: ad2.material.map.image.getContext('2d'), text: adText, canvas: ad2.material.map.image, texture: ad2.material.map, x: canvas.width, textWidth: textWidth
+            });
+        }
+
         function createHouses() {
             const houseGeometry = new THREE.BoxGeometry(1, 1, 1);
             const houseMaterial = new THREE.MeshBasicMaterial({ color: houseColor, wireframe: true });
@@ -738,7 +822,6 @@
             for (let i = 0; i < Math.floor(30 * trafficDensity); i++) createVehicle('truck');
         }
 
-        // MODIFIED FUNCTION
         function createVehicle(type) {
             let size, color;
             switch(type) {
@@ -758,8 +841,8 @@
                 speed, 
                 direction, 
                 size,
-                stuckTimer: 0, // NEW: Timer to track if stuck
-                lastPosition: new THREE.Vector3() // NEW: Last known position
+                stuckTimer: 0,
+                lastPosition: new THREE.Vector3()
             });
             scene.add(vehicle);
         }
@@ -880,12 +963,11 @@
             vehicleData.object.rotation.y += angle;
         }
 
-        // MODIFIED FUNCTION
         function updateVehicles() {
             if (isPaused) return;
             
             const halfCity = citySize / 2;
-            const stuckThreshold = 180; // 3 seconds at 60fps
+            const stuckThreshold = 180;
 
             vehicles.forEach(v => {
                 const vehicle = v.object;
@@ -894,7 +976,6 @@
                     return;
                 }
 
-                // Stuck detection
                 if (vehicle.position.distanceTo(v.lastPosition) < 0.1) {
                     v.stuckTimer++;
                 } else {
@@ -907,7 +988,7 @@
                     destroyedCount++;
                     v.stuckTimer = 0;
                     resetVehicle(vehicle, v.direction, v.size);
-                    return; // Skip rest of the logic for this frame
+                    return;
                 }
 
                 let isInTunnel = false;
@@ -1026,7 +1107,6 @@
             });
         }
 
-        // NEW FUNCTION
         function createExplosion(position) {
             const particleCount = 50;
             const particles = [];
@@ -1051,10 +1131,9 @@
                 scene.add(particle);
             }
             
-            explosions.push({ particles: particles, life: 60 }); // Explosion lasts 1 second at 60fps
+            explosions.push({ particles: particles, life: 60 });
         }
 
-        // NEW FUNCTION
         function updateExplosions() {
             for (let i = explosions.length - 1; i >= 0; i--) {
                 const explosion = explosions[i];
@@ -1066,17 +1145,39 @@
                 } else {
                     explosion.particles.forEach(p => {
                         p.mesh.position.add(p.velocity);
-                        p.velocity.multiplyScalar(0.95); // Damping
+                        p.velocity.multiplyScalar(0.95);
                         p.mesh.material.opacity = explosion.life / 60;
                     });
                 }
             }
         }
 
+        function updateScrollingAds() {
+            scrollingAds.forEach(ad => {
+                const { context, text, canvas, texture, textWidth } = ad;
+
+                context.fillStyle = '#1a001a';
+                context.fillRect(0, 0, canvas.width, canvas.height);
+                
+                context.fillStyle = '#ff44ff';
+                context.shadowColor = '#ff00ff';
+                context.shadowBlur = 20;
+                context.textAlign = 'left';
+                context.textBaseline = 'middle';
+                context.fillText(text, ad.x, canvas.height / 2);
+                
+                ad.x -= 2 * simulationSpeed;
+                if (ad.x < -textWidth) {
+                    ad.x = canvas.width;
+                }
+                
+                texture.needsUpdate = true;
+            });
+        }
+
         function animate() {
             requestAnimationFrame(animate);
             
-            // FPS Counter
             frameCount++;
             const now = performance.now();
             if (now - lastFPSUpdate > 1000) {
@@ -1092,7 +1193,8 @@
                 updateVehicles();
                 updateBlueDrones();
                 updateRedDrones();
-                updateExplosions(); // NEW
+                updateExplosions();
+                updateScrollingAds();
             }
             composer.render();
         }
