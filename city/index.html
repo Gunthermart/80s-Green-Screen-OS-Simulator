@@ -271,6 +271,103 @@
         .glow-magenta { text-shadow: 0 0 10px #ff00ff; }
         .glow-orange { text-shadow: 0 0 10px #ffaa00; }
         
+        /* Écran de chargement cyberpunk */
+        #loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            transition: opacity 1s ease-out;
+        }
+        
+        #loading-screen.fade-out {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        .cyber-logo {
+            font-family: 'Orbitron', monospace;
+            font-size: 4rem;
+            font-weight: 900;
+            color: #00ff00;
+            text-shadow: 0 0 20px #00ff00, 0 0 40px #00ff00, 0 0 60px #00ff00, 0 0 80px #ff00ff, 0 0 100px #ff00ff;
+            margin-bottom: 2rem;
+            animation: logoGlow 2s ease-in-out infinite alternate;
+            letter-spacing: 4px;
+        }
+        
+        .loading-text {
+            font-family: 'Orbitron', monospace;
+            font-size: 1.2rem;
+            color: #00ffff;
+            text-shadow: 0 0 10px #00ffff;
+            margin-bottom: 2rem;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        
+        .progress-container {
+            width: 60%;
+            max-width: 500px;
+            height: 4px;
+            background: rgba(0, 255, 0, 0.2);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-bottom: 1rem;
+            border: 1px solid rgba(0, 255, 0, 0.3);
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #00ff00, #00ffff, #00ff00);
+            background-size: 200% 100%;
+            animation: progressShine 2s linear infinite;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        
+        .loading-percentage {
+            font-family: 'Orbitron', monospace;
+            color: #00ff00;
+            font-size: 1rem;
+            text-shadow: 0 0 5px #00ff00;
+        }
+        
+        .cyber-grid {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                linear-gradient(rgba(0, 255, 0, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 255, 0, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            animation: gridMove 20s linear infinite;
+            z-index: -1;
+        }
+        
+        @keyframes logoGlow {
+            0% { text-shadow: 0 0 20px #00ff00, 0 0 40px #00ff00, 0 0 60px #ff00ff, 0 0 80px #ff00ff; }
+            100% { text-shadow: 0 0 30px #00ff00, 0 0 60px #00ff00, 0 0 90px #ff00ff, 0 0 120px #ff00ff; }
+        }
+        
+        @keyframes progressShine {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+        
+        @keyframes gridMove {
+            0% { transform: translate(0, 0); }
+            100% { transform: translate(50px, 50px); }
+        }
+        
         /* Responsive */
         @media (max-width: 768px) {
             .panel {
@@ -418,6 +515,17 @@
             </div>
         </div>
     </div>
+
+    <!-- Écran de chargement -->
+    <div id="loading-screen">
+        <div class="cyber-grid"></div>
+        <div class="cyber-logo">CYBERMETROPOLIS</div>
+        <div class="loading-text">INITIALISATION DU SYSTÈME</div>
+        <div class="progress-container">
+            <div class="progress-bar" id="progress-bar"></div>
+        </div>
+        <div class="loading-percentage" id="loading-percentage">0%</div>
+    </div>
     
     <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
     <script type="importmap">
@@ -468,6 +576,18 @@
         let isInfraredMode = false;
         let isConvoyMode = false;
         
+        // Variables de chargement
+        let loadingProgress = 0;
+        let loadingSteps = [
+            { name: "CHARGEMENT DES MODULES...", duration: 1000 },
+            { name: "GÉNÉRATION DE LA VILLE...", duration: 2000 },
+            { name: "INITIALISATION DES VÉHICULES...", duration: 1500 },
+            { name: "ACTIVATION DES DRONES...", duration: 1000 },
+            { name: "OPTIMISATION DES SHADERS...", duration: 1500 },
+            { name: "SYSTÈME PRÊT", duration: 500 }
+        ];
+        let currentLoadingStep = 0;
+        
         // Materials
         let wireframeBuildingMaterial, solidBuildingMaterial, wireframeHouseMaterial, solidHouseMaterial, tunnelEntranceMaterial;
         let solidCarMaterial, solidBusMaterial, solidTruckMaterial;
@@ -488,6 +608,40 @@
         let droneFormationCenter = new THREE.Vector3(0, 350, 0);
         let needsNewDroneTargets = true;
 
+        function simulateLoading() {
+            return new Promise((resolve) => {
+                function nextStep() {
+                    if (currentLoadingStep < loadingSteps.length) {
+                        const step = loadingSteps[currentLoadingStep];
+                        const progressPercent = (currentLoadingStep / loadingSteps.length) * 100;
+                        
+                        document.querySelector('.loading-text').textContent = step.name;
+                        document.getElementById('progress-bar').style.width = progressPercent + '%';
+                        document.getElementById('loading-percentage').textContent = Math.round(progressPercent) + '%';
+                        
+                        currentLoadingStep++;
+                        
+                        setTimeout(nextStep, step.duration);
+                    } else {
+                        document.getElementById('progress-bar').style.width = '100%';
+                        document.getElementById('loading-percentage').textContent = '100%';
+                        setTimeout(() => {
+                            const loadingScreen = document.getElementById('loading-screen');
+                            loadingScreen.classList.add('fade-out');
+                            
+                            // Les panneaux restent fermés au démarrage.
+                            setTimeout(() => {
+                                loadingScreen.style.display = 'none';
+                            }, 1000);
+                            
+                            resolve();
+                        }, 500);
+                    }
+                }
+                nextStep();
+            });
+        }
+
         function init() {
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x0a0a2a);
@@ -497,7 +651,8 @@
             camera.lookAt(0, 0, 0);
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(window.devicePixelRatio);
+            // Limitation du pixel ratio pour améliorer les performances
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
             renderer.toneMapping = THREE.ReinhardToneMapping;
             renderer.toneMappingExposure = 1.2;
             document.body.appendChild(renderer.domElement);
@@ -558,18 +713,87 @@
             setInterval(changeDroneFormation, 20000);
             setInterval(updateStats, 1000);
             window.addEventListener('resize', onWindowResize, false);
-            animate();
+            
+            // Simuler le chargement puis démarrer l'animation
+            simulateLoading().then(() => {
+                animate();
+            });
         }
 
         function initLights() {
-            const nightAmbient = new THREE.AmbientLight(0xffffff, 0.2);
+            // Éclairage ambiant cyberpunk plus sombre
+            const nightAmbient = new THREE.AmbientLight(0x0033ff, 0.15);
             scene.add(nightAmbient);
-            const nightDir1 = new THREE.DirectionalLight(0xffffff, 0.8);
+            
+            // Lumière directionnelle principale avec couleur cyberpunk
+            const nightDir1 = new THREE.DirectionalLight(0x00ff88, 0.6);
             nightDir1.position.set(1, 1, 1);
+            nightDir1.castShadow = true;
             scene.add(nightDir1);
-            const nightDir2 = new THREE.DirectionalLight(0x00ffff, 0.5);
+            
+            // Lumière d'accent cyan
+            const nightDir2 = new THREE.DirectionalLight(0x00ffff, 0.4);
             nightDir2.position.set(-1, 0.5, -1);
             scene.add(nightDir2);
+            
+            // Lumière de remplissage magenta
+            const accentLight = new THREE.DirectionalLight(0xff0088, 0.3);
+            accentLight.position.set(0, -1, 0.5);
+            scene.add(accentLight);
+            
+            // Ajout de particules atmosphériques
+            createAtmosphericParticles();
+        }
+        
+        function createAtmosphericParticles() {
+            const particleCount = 1000;
+            const particles = new THREE.BufferGeometry();
+            const positions = new Float32Array(particleCount * 3);
+            const colors = new Float32Array(particleCount * 3);
+            
+            for (let i = 0; i < particleCount; i++) {
+                positions[i * 3] = (Math.random() - 0.5) * citySize * 2;
+                positions[i * 3 + 1] = Math.random() * 500;
+                positions[i * 3 + 2] = (Math.random() - 0.5) * citySize * 2;
+                
+                // Couleurs cyberpunk aléatoires
+                const colorChoice = Math.random();
+                if (colorChoice < 0.4) {
+                    colors[i * 3] = 0; colors[i * 3 + 1] = 1; colors[i * 3 + 2] = 1; // Cyan
+                } else if (colorChoice < 0.7) {
+                    colors[i * 3] = 0; colors[i * 3 + 1] = 1; colors[i * 3 + 2] = 0; // Vert
+                } else {
+                    colors[i * 3] = 1; colors[i * 3 + 1] = 0; colors[i * 3 + 2] = 1; // Magenta
+                }
+            }
+            
+            particles.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            particles.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            
+            const particleMaterial = new THREE.PointsMaterial({
+                size: 2,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.6,
+                blending: THREE.AdditiveBlending
+            });
+            
+            const particleSystem = new THREE.Points(particles, particleMaterial);
+            scene.add(particleSystem);
+            
+            // Animation des particules
+            function animateParticles() {
+                const positions = particleSystem.geometry.attributes.position.array;
+                for (let i = 0; i < particleCount; i++) {
+                    positions[i * 3 + 1] -= 0.5; // Chute lente
+                    if (positions[i * 3 + 1] < 0) {
+                        positions[i * 3 + 1] = 500; // Reset en haut
+                    }
+                }
+                particleSystem.geometry.attributes.position.needsUpdate = true;
+                requestAnimationFrame(animateParticles);
+            }
+            animateParticles();
         }
 
         function initMaterials() {
@@ -848,7 +1072,8 @@
             const gridSnap = roadWidth * 1.5;
             let createdCount = 0;
             let totalAttempts = 0;
-            while (createdCount < 117 && totalAttempts < 5000) {
+            // Réduction du nombre de bâtiments pour améliorer les performances
+            while (createdCount < 80 && totalAttempts < 3000) {
                 totalAttempts++;
                 const height = Math.random() * 250 + 50;
                 const scaleX = Math.random() * 30 + 15;
@@ -879,12 +1104,12 @@
         
         function createAdOnBuilding(building, height, scaleX, scaleZ, group) {
             const adTexts = [
-                "Mum's watching you.", "Big Sister is online.", "Internet never forgets.",
-                "Your phone just snitched.", "Even your toaster saw that.", "Alexa told us everything.",
-                "You've been shadowbanned by Grandma.", "You blinked. We noticed.", "CCTV loves your style.",
-                "Paranoia loading...", "Smart move, genius.", "Not your finest click.",
-                "404: Good decision not found.", "Error: Brain not connected.", "Installing common sense... failed.",
-                "Your FBI agent needs therapy.", "Try again, but with dignity."
+                "CYBERTECH • Votre avenir commence ici", "NEURO-LINK • Connectez votre esprit", "QUANTUM-CORP • L'IA qui vous comprend",
+                "URBAN-FLOW • Transport intelligent", "DIGITAL-DREAMS • Réalité augmentée", "CYBER-SECURITY • Protection totale",
+                "SMART-CITY • Ville intelligente 2084", "NEURAL-INTERFACE • Pensée amplifiée", "FUSION-ENERGY • Énergie propre",
+                "DATA-STREAM • Information en temps réel", "HOLO-DISPLAYS • Affichage 3D", "CYBER-DEFENSE • Sécurité maximale",
+                "NANO-TECH • Technologie microscopique", "AI-ASSISTANT • Assistant personnel", "VIRTUAL-REALITY • Monde parallèle",
+                "DRONE-DELIVERY • Livraison autonome", "BIOMETRIC-ID • Identification unique", "CLOUD-COMPUTING • Puissance infinie"
             ];
             const adText = adTexts[Math.floor(Math.random() * adTexts.length)];
 
@@ -972,9 +1197,10 @@
         }
 
         function createVehicles() {
-            for (let i = 0; i < Math.floor(200 * trafficDensity); i++) createVehicle('car');
-            for (let i = 0; i < Math.floor(50 * trafficDensity); i++) createVehicle('bus');
-            for (let i = 0; i < Math.floor(30 * trafficDensity); i++) createVehicle('truck');
+            // Réduction initiale pour améliorer les performances de chargement
+            for (let i = 0; i < Math.floor(150 * trafficDensity); i++) createVehicle('car');
+            for (let i = 0; i < Math.floor(40 * trafficDensity); i++) createVehicle('bus');
+            for (let i = 0; i < Math.floor(25 * trafficDensity); i++) createVehicle('truck');
         }
 
         function createVehicle(type) {
