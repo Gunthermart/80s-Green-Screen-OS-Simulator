@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aquarium Rétro 3D - Simulation de Vie Artificielle</title>
+
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="Explorez un aquarium 3D interactif de style terminal rétro des années 80. Observez des bancs de poissons colorés, gérez l'écosystème et introduisez des prédateurs dans cette simulation de vie artificielle.">
+    <meta name="keywords" content="simulation 3d, aquarium, boids, vie artificielle, three.js, webgl, retro, terminal, poisson, prédateur, cichla, interactif">
+    <meta name="author" content="Simulation Interactive">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://leonce-equity.com/aquarium/">
+    <meta property="og:title" content="Aquarium Rétro 3D - Simulation de Vie Artificielle">
+    <meta property="og:description" content="Plongez dans un écosystème numérique et contrôlez la vie de poissons virtuels dans un style wireframe unique.">
+    <meta property="og:image" content="https://leonce-equity.com/aquarium/aquarium.png">
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://leonce-equity.com/aquarium/">
+    <meta property="twitter:title" content="Aquarium Rétro 3D - Simulation de Vie Artificielle">
+    <meta property="twitter:description" content="Plongez dans un écosystème numérique et contrôlez la vie de poissons virtuels dans un style wireframe unique.">
+    <meta property="twitter:image" content="https://leonce-equity.com/aquarium/aquarium.png">
+
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #0d0d0d;
+            color: #00ff41;
+            font-family: 'Courier New', Courier, monospace;
+            text-align: center;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            padding: 10px;
+            box-sizing: border-box;
+            z-index: 100;
+            display: block;
+            text-shadow: 0 0 5px #00ff41, 0 0 10px #00ff41;
+            pointer-events: none;
+        }
+        canvas {
+            display: block;
+        }
+        #exit-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 102;
+            cursor: pointer;
+            font-size: 2em;
+            font-weight: bold;
+            text-shadow: 0 0 5px #00ff41;
+            color: #00ff41;
+        }
+        #exit-btn:hover {
+            color: #ff4141;
+        }
+        #settings-buttons-container {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 102;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .settings-btn {
+            cursor: pointer;
+            background-color: transparent;
+            border: 1px solid #00ff41;
+            color: #00ff41;
+            padding: 8px 15px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 1em;
+            text-shadow: 0 0 5px #00ff41;
+            transition: all 0.2s ease;
+            width: 160px;
+            text-align: left;
+        }
+        .settings-btn:hover {
+            background-color: rgba(0, 255, 65, 0.1);
+            box-shadow: 0 0 10px #00ff41;
+        }
+        .settings-panel {
+            position: absolute;
+            width: 280px;
+            background-color: #0a140a;
+            border: 1px solid #00ff41;
+            box-shadow: 0 0 15px rgba(0, 255, 65, 0.5);
+            z-index: 101;
+        }
+        .settings-panel.hidden {
+            display: none;
+        }
+        .panel-header {
+            color: #00ff41;
+            padding: 8px 10px;
+            cursor: move;
+            font-weight: bold;
+            border-bottom: 1px solid #00ff41;
+            text-shadow: 0 0 5px #00ff41;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .panel-header .close-btn {
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .panel-header .close-btn:hover {
+            color: #ff4141;
+        }
+        .panel-content {
+            padding: 15px;
+        }
+        .panel-content fieldset {
+            border: 1px dashed #00ff41;
+            padding: 10px;
+            margin: 0;
+        }
+        .panel-content label {
+            display: block;
+            margin-bottom: 5px;
+            margin-top: 10px;
+        }
+        /* Style de base des curseurs */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]:focus {
+            outline: none;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 2px;
+            cursor: pointer;
+            background: #00ff41;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            border: 1px solid #00ff41;
+            height: 16px;
+            width: 16px;
+            background: #00ff41;
+            cursor: pointer;
+            margin-top: -7px;
+        }
+        input[type=range]::-moz-range-track {
+            width: 100%;
+            height: 2px;
+            cursor: pointer;
+            background: #00ff41;
+        }
+        input[type=range]::-moz-range-thumb {
+            border: 1px solid #00ff41;
+            height: 16px;
+            width: 16px;
+            background: #00ff41;
+            cursor: pointer;
+        }
+
+        /* Responsive Design for Mobile */
+        @media (max-width: 768px) {
+            #info h1 {
+                font-size: 1.5em;
+            }
+            #settings-buttons-container {
+                top: auto;
+                bottom: 10px;
+                left: 10px;
+                flex-direction: row;
+                flex-wrap: wrap;
+                max-width: calc(100vw - 20px);
+            }
+            .settings-btn {
+                font-size: 0.8em;
+                padding: 5px 8px;
+                width: auto;
+            }
+            .settings-panel {
+                width: 90vw;
+                top: 50% !important;
+                left: 50% !important;
+                transform: translate(-50%, -50%);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <h1>AQUARIUM_TERMINAL.EXE</h1>
+        <p>Utilisez la souris pour naviguer dans la scène.</p>
+    </div>
+
+    <div id="exit-btn" title="Retourner au répertoire parent">[X]</div>
+    <div id="settings-buttons-container"></div>
+    <div id="settings-container"></div>
+
+    <script type="module">
+        // Importation des modules nécessaires de Three.js
+        import * as THREE from 'https://cdn.skypack.dev/three@0.132.2';
+        import { OrbitControls } from 'https://cdn.skypack.dev/three@0.132.2/examples/jsm/controls/OrbitControls.js';
+
+        // --- Variables globales ---
+        let scene, camera, renderer, controls;
+        let boids = [];
+        const rocks = [];
+        const plants = [];
+        const worldSize = { width: 500, height: 250, depth: 350 };
+
+        // --- Paramètres de comportement globaux ---
+        const flockingForces = {
+            alignment: 0.4,
+            cohesion: 0.3,
+            separation: 1.2
+        };
+        
+        const environmentSettings = {
+            rockCount: 15,
+            plantCount: 60
+        };
+
+        // --- Configuration des espèces de poissons ---
+        const fishSpecies = {
+            'cichla': {
+                type: 'predator',
+                count: 0, color: 0xffff00, scale: 1.2, maxSpeed: 0.6, perceptionRadius: 100,
+                vertices: new Float32Array([0,0,0, -15,0,0, -4,3,0, -4,-3,0, -4,3,0, -15,0,0, -4,-3,0, -15,0,0])
+            },
+            'tetra': {
+                type: 'prey',
+                count: 60, color: 0xff69b4, scale: 0.4, maxSpeed: 0.3, perceptionRadius: 30, fearRadius: 70,
+                vertices: new Float32Array([0,0,0,-5,2,0, 0,0,0,-5,-2,0, -5,2,0,-10,0,0, -5,-2,0,-10,0,0, -10,0,0,-14,3,0, -10,0,0,-14,-3,0])
+            },
+            'guppy': {
+                type: 'prey',
+                count: 75, color: 0x00ffff, scale: 0.35, maxSpeed: 0.35, perceptionRadius: 35, fearRadius: 80,
+                vertices: new Float32Array([0,0,0,-4,1.5,0, 0,0,0,-4,-1.5,0, -4,1.5,0,-8,0,0, -4,-1.5,0,-8,0,0, -8,0,0,-12,4,0, -8,0,0,-12,-4,0])
+            },
+            'puffer': {
+                type: 'prey',
+                count: 40, color: 0xffa500, scale: 0.4, maxSpeed: 0.25, perceptionRadius: 25, fearRadius: 65,
+                vertices: new Float32Array([2,0,0,0,2.5,0, 0,2.5,0,-3,2.5,0, -3,2.5,0,-5,0,0, -5,0,0,-3,-2.5,0, -3,-2.5,0,0,-2.5,0, 0,-2.5,0,2,0,0, -5,0,0,-7,0,0])
+            },
+            'angel': {
+                type: 'prey',
+                count: 35, color: 0x9400D3, scale: 0.55, maxSpeed: 0.3, perceptionRadius: 30, fearRadius: 70,
+                vertices: new Float32Array([0,0,0, -4,4,0, 0,0,0, -4,-4,0, -4,4,0, -8,0,0, -4,-4,0, -8,0,0, -8,0,0, -11,2,0, -8,0,0, -11,-2,0])
+            }
+        };
+
+        // --- Classe Boid ---
+        class Boid {
+            constructor(species) {
+                this.species = species;
+                const config = fishSpecies[species];
+                this.isPredator = config.type === 'predator';
+                this.maxSpeed = config.maxSpeed;
+                this.maxForce = 0.05; // Limite l'accélération pour des mouvements plus doux
+                this.perceptionRadius = config.perceptionRadius;
+                this.fearRadius = config.fearRadius || 0;
+                
+                this.satiation = 0;
+                if (this.isPredator) {
+                    this.satiation = 300; // Le prédateur commence rassasié
+                }
+                this.isEaten = false;
+
+                const material = new THREE.LineBasicMaterial({ color: config.color });
+                this.mesh = new THREE.LineSegments(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(config.vertices, 3)), material);
+                this.mesh.scale.set(config.scale, config.scale, config.scale);
+                this.position = new THREE.Vector3(Math.random()*worldSize.width-worldSize.width/2, Math.random()*(worldSize.height-10)+5, Math.random()*worldSize.depth-worldSize.depth/2);
+                this.velocity = new THREE.Vector3(Math.random()*2-1, Math.random()*2-1, Math.random()*2-1);
+                this.velocity.setLength(Math.random() * this.maxSpeed * 0.5 + 0.1);
+                this.acceleration = new THREE.Vector3();
+                this.mesh.position.copy(this.position);
+                scene.add(this.mesh);
+            }
+
+            applyForce(force) {
+                this.acceleration.add(force);
+            }
+            
+            update(allBoids) {
+                if (this.isEaten) return;
+
+                if (this.isPredator) {
+                    this.hunt(allBoids);
+                } else {
+                    this.schoolAndFlee(allBoids);
+                }
+
+                // Mettre à jour la physique
+                this.velocity.add(this.acceleration);
+                this.velocity.clampLength(0, this.maxSpeed);
+                this.position.add(this.velocity);
+                this.acceleration.multiplyScalar(0); // Réinitialiser l'accélération
+
+                this.checkBounds();
+                this.mesh.position.copy(this.position);
+                if (this.velocity.lengthSq() > 0.0001) {
+                    this.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), this.velocity.clone().normalize());
+                }
+            }
+
+            hunt(allBoids) {
+                if (this.satiation > 0) {
+                    this.satiation--;
+                    this.schoolAndFlee(allBoids); // Comportement normal pendant la satiété
+                    return;
+                }
+
+                let closestPrey = null;
+                let minDistance = Infinity;
+
+                for (const other of allBoids) {
+                    if (!other.isPredator && !other.isEaten) {
+                        const d = this.position.distanceTo(other.position);
+                        if (d < this.perceptionRadius && d < minDistance) {
+                            minDistance = d;
+                            closestPrey = other;
+                        }
+                    }
+                }
+
+                if (closestPrey) {
+                    let pursuitForce = this.seek(closestPrey.position);
+                    this.applyForce(pursuitForce);
+                    
+                    if (minDistance < 5) {
+                        closestPrey.isEaten = true;
+                        this.satiation = 300;
+                    }
+
+                } else {
+                    this.schoolAndFlee(allBoids);
+                }
+            }
+
+            schoolAndFlee(allBoids) {
+                if (!this.isPredator) {
+                    let fleeVector = new THREE.Vector3();
+                    let predatorCount = 0;
+                    for (const other of allBoids) {
+                        if (other.isPredator) {
+                            const d = this.position.distanceTo(other.position);
+                            if (d > 0 && d < this.fearRadius) {
+                                let diff = new THREE.Vector3().subVectors(this.position, other.position);
+                                diff.normalize().divideScalar(d); // Plus le prédateur est proche, plus la force de fuite est grande
+                                fleeVector.add(diff);
+                                predatorCount++;
+                            }
+                        }
+                    }
+                    if (predatorCount > 0) {
+                        fleeVector.divideScalar(predatorCount);
+                        let steer = this.seek(this.position.clone().add(fleeVector));
+                        steer.multiplyScalar(2.5); // La peur est une forte motivation
+                        this.applyForce(steer);
+                        return; // La fuite annule le reste
+                    }
+                }
+                
+                let separation = this.separate(allBoids);
+                let alignment = this.align(allBoids);
+                let cohesion = this.cohere(allBoids);
+
+                separation.multiplyScalar(flockingForces.separation);
+                alignment.multiplyScalar(flockingForces.alignment);
+                cohesion.multiplyScalar(flockingForces.cohesion);
+
+                this.applyForce(separation);
+                this.applyForce(alignment);
+                this.applyForce(cohesion);
+            }
+            
+            seek(target) {
+                let desired = new THREE.Vector3().subVectors(target, this.position);
+                desired.setLength(this.maxSpeed);
+                let steer = new THREE.Vector3().subVectors(desired, this.velocity);
+                steer.clampLength(0, this.maxForce);
+                return steer;
+            }
+
+            separate(boids) {
+                let desiredSeparation = 15.0;
+                let steer = new THREE.Vector3();
+                let count = 0;
+                for (let other of boids) {
+                    let d = this.position.distanceTo(other.position);
+                    if ((d > 0) && (d < desiredSeparation)) {
+                        let diff = new THREE.Vector3().subVectors(this.position, other.position);
+                        diff.normalize();
+                        diff.divideScalar(d);
+                        steer.add(diff);
+                        count++;
+                    }
+                }
+                if (count > 0) {
+                    steer.divideScalar(count);
+                }
+                if (steer.length() > 0) {
+                    steer.setLength(this.maxSpeed);
+                    steer.sub(this.velocity);
+                    steer.clampLength(0, this.maxForce);
+                }
+                return steer;
+            }
+
+            align(boids) {
+                let sum = new THREE.Vector3();
+                let count = 0;
+                for (let other of boids) {
+                    if (other.species !== this.species) continue;
+                    let d = this.position.distanceTo(other.position);
+                    if ((d > 0) && (d < this.perceptionRadius)) {
+                        sum.add(other.velocity);
+                        count++;
+                    }
+                }
+                if (count > 0) {
+                    sum.divideScalar(count);
+                    sum.setLength(this.maxSpeed);
+                    let steer = new THREE.Vector3().subVectors(sum, this.velocity);
+                    steer.clampLength(0, this.maxForce);
+                    return steer;
+                } else {
+                    return new THREE.Vector3();
+                }
+            }
+
+            cohere(boids) {
+                let sum = new THREE.Vector3();
+                let count = 0;
+                for (let other of boids) {
+                    if (other.species !== this.species) continue;
+                    let d = this.position.distanceTo(other.position);
+                    if ((d > 0) && (d < this.perceptionRadius)) {
+                        sum.add(other.position);
+                        count++;
+                    }
+                }
+                if (count > 0) {
+                    sum.divideScalar(count);
+                    return this.seek(sum);
+                } else {
+                    return new THREE.Vector3();
+                }
+            }
+
+            checkBounds() {
+                const margin = 2, bounce = -1;
+                if (this.position.x < -worldSize.width/2+margin) { this.position.x = -worldSize.width/2+margin; this.velocity.x *= bounce; }
+                else if (this.position.x > worldSize.width/2-margin) { this.position.x = worldSize.width/2-margin; this.velocity.x *= bounce; }
+                if (this.position.y < margin) { this.position.y = margin; this.velocity.y *= bounce; }
+                else if (this.position.y > worldSize.height-margin) { this.position.y = worldSize.height-margin; this.velocity.y *= bounce; }
+                if (this.position.z < -worldSize.depth/2+margin) { this.position.z = -worldSize.depth/2+margin; this.velocity.z *= bounce; }
+                else if (this.position.z > worldSize.depth/2-margin) { this.position.z = worldSize.depth/2-margin; this.velocity.z *= bounce; }
+            }
+        }
+
+        function createBoids() {
+            while(boids.length) {
+                const boid = boids.pop();
+                scene.remove(boid.mesh);
+            }
+            for (const species in fishSpecies) {
+                for (let i = 0; i < fishSpecies[species].count; i++) {
+                    boids.push(new Boid(species));
+                }
+            }
+        }
+
+        // --- Initialisation ---
+        init();
+        animate();
+        setupUI();
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x050505);
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+            camera.position.set(0, 100, 600);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.maxDistance = 1500;
+            controls.target.set(0, worldSize.height / 2, 0);
+
+            createAquariumBox();
+            createFloorGrid();
+            createBoids();
+            createDecor();
+            createPlants();
+            window.addEventListener('resize', onWindowResize, false);
+        }
+
+        // --- Création des éléments de la scène ---
+        function createAquariumBox() {
+            const geometry = new THREE.BoxGeometry(worldSize.width, worldSize.height, worldSize.depth);
+            const material = new THREE.MeshBasicMaterial({ color: 0x00ff41, wireframe: true, transparent: true, opacity: 0.3 });
+            const box = new THREE.Mesh(geometry, material);
+            box.position.set(0, worldSize.height / 2, 0);
+            scene.add(box);
+        }
+        function createFloorGrid() {
+            const gridHelper = new THREE.GridHelper(worldSize.width, 10, 0x00ff41, 0x008822);
+            gridHelper.material.opacity = 0.25;
+            gridHelper.material.transparent = true;
+            scene.add(gridHelper);
+        }
+        function createDecor() {
+            while(rocks.length) {
+                const rock = rocks.pop();
+                scene.remove(rock);
+                rock.geometry.dispose();
+            }
+            const rockMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff41, wireframe: true });
+            for(let i=0; i < environmentSettings.rockCount; i++) {
+                const size = Math.random() * 40 + 20;
+                const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(size, 0), rockMaterial);
+                rock.position.set((Math.random() - 0.5) * (worldSize.width - size * 2), size / 2, (Math.random() - 0.5) * (worldSize.depth - size * 2));
+                scene.add(rock);
+                rocks.push(rock);
+            }
+        }
+        function createPlants() {
+            while(plants.length) {
+                const plant = plants.pop();
+                scene.remove(plant);
+                plant.geometry.dispose();
+            }
+            const material = new THREE.LineBasicMaterial({ color: 0x00dd22 });
+            for (let i = 0; i < environmentSettings.plantCount; i++) {
+                const vertices = [];
+                const height = Math.random() * 75 + 25;
+                vertices.push(0, 0, 0, 0, height, 0);
+                for (let j = 0; j < Math.floor(Math.random() * 5) + 3; j++) {
+                    const leafH = Math.random() * height * 0.8 + height * 0.2;
+                    const leafL = Math.random() * 20 + 10;
+                    const angle = Math.random() * Math.PI * 2;
+                    vertices.push(0, leafH, 0, Math.cos(angle) * leafL, leafH + (Math.random() - 0.5) * 10, Math.sin(angle) * leafL);
+                }
+                const geometry = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+                const plant = new THREE.LineSegments(geometry, material);
+                plant.position.set((Math.random() - 0.5) * worldSize.width * 0.9, 0, (Math.random() - 0.5) * worldSize.depth * 0.9);
+                scene.add(plant);
+                plants.push(plant);
+            }
+        }
+
+        // --- UI & Réglages ---
+        function makeDraggable(panel) {
+            const header = panel.querySelector('.panel-header');
+            let isDragging = false;
+            let offsetX, offsetY;
+            
+            const bringToFront = () => {
+                document.querySelectorAll('.settings-panel').forEach(p => p.style.zIndex = 101);
+                panel.style.zIndex = 102;
+            };
+
+            panel.addEventListener('mousedown', bringToFront);
+
+            header.addEventListener('mousedown', (e) => {
+                if (e.target.classList.contains('close-btn')) return;
+                isDragging = true;
+                offsetX = e.clientX - panel.offsetLeft;
+                offsetY = e.clientY - panel.offsetTop;
+                document.body.style.userSelect = 'none';
+                e.preventDefault();
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                panel.style.left = `${e.clientX - offsetX}px`;
+                panel.style.top = `${e.clientY - offsetY}px`;
+            });
+
+            document.addEventListener('mouseup', () => {
+                isDragging = false;
+                document.body.style.userSelect = '';
+            });
+        }
+
+        function createPanelHTML(id, title, content, style, color = null) {
+            const headerStyle = color ? `style="text-shadow: 0 0 5px #${color.toString(16).padStart(6, '0')};"` : '';
+            const titleStyle = color ? `style="color: #${color.toString(16).padStart(6, '0')};"` : '';
+            const fieldsetStyle = color ? `style="border-color: #${color.toString(16).padStart(6, '0')};"` : '';
+
+            return `
+                <div id="panel-${id}" class="settings-panel hidden" ${style}>
+                    <div class="panel-header" ${headerStyle}>
+                        <span ${titleStyle}>${title}</span>
+                        <span class="close-btn" data-panel="${id}">[X]</span>
+                    </div>
+                    <div class="panel-content">
+                        <fieldset ${fieldsetStyle}>${content}</fieldset>
+                    </div>
+                </div>
+            `;
+        }
+        
+        function createButtonHTML(panelId, text) {
+            return `<button class="settings-btn" data-panel="${panelId}">${text}</button>`;
+        }
+        
+        function setupUI() {
+            const buttonsContainer = document.getElementById('settings-buttons-container');
+            const panelsContainer = document.getElementById('settings-container');
+            
+            let allPanelsHTML = '';
+            let allButtonsHTML = '';
+            let i = 0;
+
+            // Panneau des forces globales
+            let globalContent = '';
+            for (const force in flockingForces) {
+                globalContent += `
+                    <label for="${force}">${force} (<span id="${force}-value">${flockingForces[force]}</span>)</label>
+                    <input type="range" id="${force}" data-param="${force}" min="0" max="2" step="0.1" value="${flockingForces[force]}">
+                `;
+            }
+            allPanelsHTML += createPanelHTML('global', 'FORCES GLOBALES', globalContent, `top: 20px; left: 220px;`);
+            allButtonsHTML += createButtonHTML('global', 'FORCES');
+
+            // Panneau de l'environnement
+            let envContent = `
+                <label for="rockCount">Nombre Rochers (<span id="rockCount-value">${environmentSettings.rockCount}</span>)</label>
+                <input type="range" id="rockCount" data-param="rockCount" min="0" max="50" step="1" value="${environmentSettings.rockCount}">
+                <label for="plantCount">Nombre Plantes (<span id="plantCount-value">${environmentSettings.plantCount}</span>)</label>
+                <input type="range" id="plantCount" data-param="plantCount" min="0" max="250" step="5" value="${environmentSettings.plantCount}">
+            `;
+            allPanelsHTML += createPanelHTML('env', 'ENVIRONNEMENT', envContent, `top: 230px; left: 220px;`);
+            allButtonsHTML += createButtonHTML('env', 'ENVIRONNEMENT');
+
+            // Panneaux des espèces
+            for (const species in fishSpecies) {
+                const config = fishSpecies[species];
+                const top = 20 + (i % 3) * 250;
+                const left = 540 + Math.floor(i / 3) * 320;
+                
+                let panelContentHTML = `
+                    <label for="${species}-count">Nombre (<span id="${species}-count-value">${config.count}</span>)</label>
+                    <input type="range" id="${species}-count" data-species="${species}" data-param="count" min="0" max="200" step="1" value="${config.count}">
+                    <label for="${species}-scale">Taille (<span id="${species}-scale-value">${config.scale}</span>)</label>
+                    <input type="range" id="${species}-scale" data-species="${species}" data-param="scale" min="0.1" max="1.5" step="0.05" value="${config.scale}">
+                    <label for="${species}-maxSpeed">Vitesse Max (<span id="${species}-maxSpeed-value">${config.maxSpeed}</span>)</label>
+                    <input type="range" id="${species}-maxSpeed" data-species="${species}" data-param="maxSpeed" min="0.1" max="1.5" step="0.05" value="${config.maxSpeed}">
+                    <label for="${species}-perceptionRadius">Rayon Perception (<span id="${species}-perceptionRadius-value">${config.perceptionRadius}</span>)</label>
+                    <input type="range" id="${species}-perceptionRadius" data-species="${species}" data-param="perceptionRadius" min="5" max="150" step="1" value="${config.perceptionRadius}">
+                `;
+
+                if(config.type === 'prey') {
+                    panelContentHTML += `
+                        <label for="${species}-fearRadius">Rayon Fuite (<span id="${species}-fearRadius-value">${config.fearRadius}</span>)</label>
+                        <input type="range" id="${species}-fearRadius" data-species="${species}" data-param="fearRadius" min="10" max="150" step="1" value="${config.fearRadius}">
+                    `;
+                }
+                
+                allPanelsHTML += createPanelHTML(species, species.toUpperCase(), panelContentHTML, `top: ${top}px; left: ${left}px;`, config.color);
+                allButtonsHTML += createButtonHTML(species, species.toUpperCase());
+                i++;
+            }
+
+            panelsContainer.innerHTML = allPanelsHTML;
+            buttonsContainer.innerHTML = allButtonsHTML;
+
+            // Injection des styles de curseurs dynamiques
+            let dynamicStyles = '';
+            for (const species in fishSpecies) {
+                const color = '#' + fishSpecies[species].color.toString(16).padStart(6, '0');
+                dynamicStyles += `
+                    #panel-${species} input[type=range]::-webkit-slider-thumb { background: ${color}; }
+                    #panel-${species} input[type=range]::-moz-range-thumb { background: ${color}; }
+                `;
+            }
+            const styleSheet = document.createElement("style");
+            styleSheet.innerText = dynamicStyles;
+            document.head.appendChild(styleSheet);
+
+
+            document.querySelectorAll('.settings-panel').forEach(makeDraggable);
+
+            document.querySelectorAll('.settings-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const panelId = btn.dataset.panel;
+                    const panel = document.getElementById(`panel-${panelId}`);
+                    panel.classList.toggle('hidden');
+                });
+            });
+
+            panelsContainer.addEventListener('input', (e) => {
+                if (e.target.type !== 'range') return;
+                const species = e.target.dataset.species;
+                const param = e.target.dataset.param;
+                const value = parseFloat(e.target.value);
+                document.getElementById(`${e.target.id}-value`).textContent = value;
+
+                if (species) {
+                    fishSpecies[species][param] = value;
+                    if (param === 'count') updateBoidCount(species);
+                    else boids.forEach(boid => {
+                        if (boid.species === species) {
+                            if(param === 'scale') boid.mesh.scale.set(value, value, value);
+                            else boid[param] = value;
+                        }
+                    });
+                } else if (param === 'rockCount' || param === 'plantCount') {
+                    environmentSettings[param] = value;
+                    if (param === 'rockCount') createDecor();
+                    else createPlants();
+                } else {
+                    flockingForces[param] = value;
+                }
+            });
+        }
+        
+        document.addEventListener('click', (e) => {
+            if (e.target.matches('.close-btn')) {
+                const panelId = e.target.dataset.panel;
+                document.getElementById(`panel-${panelId}`).classList.add('hidden');
+            }
+        });
+        
+        function updateBoidCount(species) {
+            const newCount = fishSpecies[species].count;
+            const currentBoidsOfSpecies = boids.filter(b => b.species === species && !b.isEaten);
+            const diff = newCount - currentBoidsOfSpecies.length;
+
+            if (diff > 0) {
+                for (let i = 0; i < diff; i++) boids.push(new Boid(species));
+            } else if (diff < 0) {
+                let toRemoveCount = -diff;
+                for (let i = boids.length - 1; i >= 0; i--) {
+                    if (toRemoveCount === 0) break;
+                    if (boids[i].species === species) {
+                        boids[i].isEaten = true;
+                        toRemoveCount--;
+                    }
+                }
+            }
+        }
+
+        // --- Boucle d'animation & Redimensionnement ---
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            boids.forEach(boid => boid.update(boids));
+
+            for (let i = boids.length - 1; i >= 0; i--) {
+                if (boids[i].isEaten) {
+                    scene.remove(boids[i].mesh);
+                    boids[i].mesh.geometry.dispose();
+                    boids[i].mesh.material.dispose();
+                    boids.splice(i, 1);
+                }
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+    </script>
+</body>
+</html>
