@@ -235,6 +235,10 @@
             margin: 0;
             margin-bottom: 10px;
         }
+        .panel-content fieldset:disabled {
+            opacity: 0.5;
+            border-color: #555;
+        }
         .panel-content label {
             display: block;
             margin-bottom: 5px;
@@ -829,6 +833,58 @@
             background-color: #ff0;
         }
         
+        #auto-mode-timer {
+            color: #ff69b4;
+            text-shadow: 0 0 8px #ff69b4, 0 0 16px #ff69b4;
+        }
+
+        #exjv-modal .modal-content {
+            width: 500px;
+            height: 200px;
+            padding: 0;
+            overflow: hidden;
+            background: #000;
+            box-shadow: 0 0 20px rgba(0, 255, 65, 0.5), inset 0 0 20px rgba(0, 255, 65, 0.3);
+        }
+        #exjv-modal .modal-content::after {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            z-index: 2;
+            background-size: 100% 2px, 3px 100%;
+            pointer-events: none;
+        }
+        #exjv-modal .modal-content::before {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            right: 0;
+            background: linear-gradient(transparent 0%, rgba(0, 255, 65, 0.1) 50%, transparent 100%);
+            opacity: .1;
+            z-index: 2;
+            animation: flicker 0.15s infinite;
+        }
+        @keyframes flicker {
+            0% { opacity: 0.1; }
+            20% { opacity: 1; }
+            40% { opacity: 0.1; }
+            60% { opacity: 1; }
+            80% { opacity: 0.1; }
+            100% { opacity: 1; }
+        }
+        #chase-canvas {
+            width: 100%;
+            height: calc(100% - 38px);
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -898,6 +954,8 @@
             <span id="fish-count-label" data-lang-key="fish_count_label">Poissons</span>: <span id="fish-count">0</span> | 
             <span id="predator-count-label" data-lang-key="predator_count_label">Prédateurs</span>: <span id="predator-count">0</span> | 
             <span id="ropefish-status-label" data-lang-key="ropefish_status_label">Erpetoichthys</span>: <span id="ropefish-status" data-lang-key="inactive">INACTIF</span> |
+            <span id="auto-mode-status" style="display: none;">Mode Auto: <span id="auto-mode-status-value">INACTIF</span> | </span>
+            <span id="auto-mode-timer" style="display: none;"></span>
             <span id="fps">FPS: 60</span>
         </div>
     </div>
@@ -905,6 +963,16 @@
     <div id="exit-btn" title="Retourner au répertoire parent">[X]</div>
     <div id="main-controls-container"></div>
     <div id="settings-container"></div>
+    
+    <div id="exjv-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+             <div class="panel-header">
+                <span>(C) EXJV</span>
+                <span class="close-btn">[X]</span>
+            </div>
+            <canvas id="chase-canvas"></canvas>
+        </div>
+    </div>
 
     <script type="module">
         // Importation des modules nécessaires de Three.js
@@ -924,6 +992,10 @@
         let lastFrameTime = 0;
         let highestZIndex = 102; // For panel management
         let lastHiddenTime = 0; // For background simulation
+        let isAutoModeActive = false;
+        let autoModeManager;
+        let isImmortalMode = false;
+        let chaseAnimationId;
 
         // --- Statistics ---
         const simulationStats = {
@@ -955,22 +1027,22 @@
             },
             'tetra': {
                 type: 'prey',
-                count: 50, color: 0xff69b4, scale: 0.45, maxSpeed: 0.4, perceptionRadius: 35, fearRadius: 80, fertility: 0.01,
+                count: 50, color: 0xff69b4, scale: 0.45, maxSpeed: 0.4, perceptionRadius: 35, fearRadius: 80, fertility: 0.03,
                 vertices: new Float32Array([0,0,0, -6,2.5,0, -12,0,0, 0,0,0, -12,0,0, -6,-2.5,0, -12,0,0, -16,4,0, -16,-4,0])
             },
             'guppy': {
                 type: 'prey',
-                count: 65, color: 0x00ddff, scale: 0.4, maxSpeed: 0.45, perceptionRadius: 40, fearRadius: 85, fertility: 0.01,
+                count: 65, color: 0x00ddff, scale: 0.4, maxSpeed: 0.45, perceptionRadius: 40, fearRadius: 85, fertility: 0.03,
                 vertices: new Float32Array([0,0,0, -5,2,0, -10,0,0, 0,0,0, -10,0,0, -5,-2,0, -10,0,0, -14,5,0, -14,-5,0])
             },
             'puffer': {
                 type: 'prey',
-                count: 30, color: 0xffaa00, scale: 0.5, maxSpeed: 0.3, perceptionRadius: 30, fearRadius: 70, fertility: 0.005,
+                count: 30, color: 0xffaa00, scale: 0.5, maxSpeed: 0.3, perceptionRadius: 30, fearRadius: 70, fertility: 0.015,
                 vertices: new Float32Array([3,0,0, 0,3,0, -6,0,0, 3,0,0, -6,0,0, 0,-3,0, -6,0,0, -9,0,0, -4,3,0, -6,0,0, -4,-3,0])
             },
             'angel': {
                 type: 'prey',
-                count: 25, color: 0xaa44ff, scale: 0.6, maxSpeed: 0.35, perceptionRadius: 35, fearRadius: 75, fertility: 0.008,
+                count: 25, color: 0xaa44ff, scale: 0.6, maxSpeed: 0.35, perceptionRadius: 35, fearRadius: 75, fertility: 0.024,
                 vertices: new Float32Array([0,0,0, -5,5,0, -10,0,0, 0,0,0, -10,0,0, -5,-5,0, -10,0,0, -13,3,0, -10,0,0, -13,-3,0])
             }
         };
@@ -985,6 +1057,10 @@
                 ropefish_status_label: "Erpetoichthys",
                 active: "ACTIF",
                 inactive: "INACTIF",
+                auto_mode: "MODE AUTOMATIQUE",
+                random_mode: "MODE ALÉATOIRE",
+                immortal_mode: "MODE IMMORTEL",
+                exjv_credit: "(C) EXJV",
                 mode_wireframe: "MODE: WIREFRAME",
                 mode_solid: "MODE: PLEIN",
                 view_sub: "VUE SOUS-MARIN",
@@ -1057,7 +1133,7 @@
                 feature_lifecycle: "Cycle de vie complet",
                 feature_predation: "Système de prédation",
                 feature_controls: "Contrôles avancés",
-                feature_multilingual: "Interface multilingue",
+                feature_multilingual: "Interface multilingüe",
                 quick_tips_title: ">>> GUIDE RAPIDE:",
                 tip_explore: "• Faites glisser pour explorer l'aquarium 3D",
                 tip_fertility: "• Ajustez la 'Fécondité' pour contrôler la population",
@@ -1078,6 +1154,10 @@
                 ropefish_status_label: "Ropefish",
                 active: "ACTIVE",
                 inactive: "INACTIVE",
+                auto_mode: "AUTO MODE",
+                random_mode: "RANDOM MODE",
+                immortal_mode: "IMMORTAL MODE",
+                exjv_credit: "(C) EXJV",
                 mode_wireframe: "MODE: WIREFRAME",
                 mode_solid: "MODE: SOLID",
                 view_sub: "SUBMARINE VIEW",
@@ -1121,6 +1201,10 @@
                 ropefish_status_label: "Pez Cuerda",
                 active: "ACTIVO",
                 inactive: "INACTIVO",
+                auto_mode: "MODO AUTOMÁTICO",
+                random_mode: "MODO ALEATORIO",
+                immortal_mode: "MODO INMORTAL",
+                exjv_credit: "(C) EXJV",
                 mode_wireframe: "MODO: ALAMBRE",
                 mode_solid: "MODO: SÓLIDO",
                 view_sub: "VISTA SUBMARINO",
@@ -1138,7 +1222,7 @@
                 count: "Cantidad", scale: "Tamaño", max_speed: "Vel. Máxima", perception_radius: "Radio de Percepción", fear_radius: "Radio de Miedo", max_hunt_dist: "Dist. Caza Máx.", max_group_size: "Tamaño Grupo Máx.", rock_count: "Nº de Rocas", plant_count: "Nº de Plantas",
                 alignment: "Alineación", cohesion: "Cohesión", separation: "Separación",
                 welcome_title: "BIENVENIDO A ACUARIO_TERMINAL.EXE",
-                welcome_intro: ">>> INICIALIZANDO SIMULACIÓN DE VIDA ARTIFICIAL...",
+                welcome_intro: ">>> INICIALIZANDO SIMULACIÓN DE VIDA ARTIFICIEL...",
                 welcome_description: "Esta simulación interactiva presenta un ecosistema acuático 3D dinámico. Observa a los peces nacer, crecer, reproducirse y morir, mientras gestionas los parámetros de su entorno.",
                 feature_lifecycle: "Ciclo de vida completo",
                 feature_predation: "Sistema de depredación",
@@ -1164,6 +1248,10 @@
                 ropefish_status_label: "Flösselaal",
                 active: "AKTIV",
                 inactive: "INAKTIV",
+                auto_mode: "AUTO-MODUS",
+                random_mode: "ZUFALLSMODUS",
+                immortal_mode: "UNSTERBLICHER MODUS",
+                exjv_credit: "(C) EXJV",
                 mode_wireframe: "MODUS: DRAHTGITTER",
                 mode_solid: "MODUS: VOLL",
                 view_sub: "U-BOOT-ANSICHT",
@@ -1207,6 +1295,10 @@
                 ropefish_status_label: "多鳍鱼",
                 active: "活动",
                 inactive: "不活动",
+                auto_mode: "自动模式",
+                random_mode: "随机模式",
+                immortal_mode: "不朽模式",
+                exjv_credit: "(C) EXJV",
                 mode_wireframe: "模式：线框",
                 mode_solid: "模式：实体",
                 view_sub: "潜艇视角",
@@ -1478,9 +1570,11 @@
                 }
 
                 if (this.target && this.segments[0].position.distanceTo(this.target.position) < this.attackRadius) {
-                    createEatEffect(this.target.position, 0xFFFF00);
-                    this.target.isEaten = true;
-                    simulationStats.preyEaten++;
+                    if (!isImmortalMode) {
+                        createEatEffect(this.target.position, 0xFFFF00);
+                        this.target.isEaten = true;
+                        simulationStats.preyEaten++;
+                    }
                     this.target = null;
                 }
             }
@@ -1598,6 +1692,9 @@
                 this.maxForce = 0.05;
                 this.perceptionRadius = config.perceptionRadius;
                 this.fearRadius = config.fearRadius || 0;
+                this.baseFertility = config.fertility || 0;
+                this.fertility = this.baseFertility;
+                this.fertilityBoostTimer = 0;
                 
                 // Generation system
                 this.generation = isBaby ? parentGeneration + 1 : 1;
@@ -1612,8 +1709,8 @@
                 // Life Cycle properties
                 this.adultAge = 800; // ~13 seconds
                 this.maxAge = 6000; // ~100 seconds
-                this.age = isBaby ? 0 : this.adultAge + 1;
-                this.isAdult = !isBaby;
+                this.age = isBaby ? 0 : Math.random() * this.maxAge;
+                this.isAdult = this.age >= this.adultAge;
                 this.wantsToMate = false;
                 this.matingCooldown = Math.random() * 500;
                 this.isMating = false;
@@ -1666,6 +1763,13 @@
             update(allBoids) {
                 if (this.isEaten) return;
 
+                if (this.fertilityBoostTimer > 0) {
+                    this.fertilityBoostTimer--;
+                    if (this.fertilityBoostTimer === 0) {
+                        this.fertility = this.baseFertility;
+                    }
+                }
+
                 this.age++;
                 if (!this.isAdult && this.age > this.adultAge) {
                     this.isAdult = true;
@@ -1675,7 +1779,7 @@
                     this.mesh.scale.set(scale, scale, scale);
                 }
 
-                if (this.age > this.maxAge) {
+                if (!isImmortalMode && this.age > this.maxAge) {
                     this.isEaten = true; // Die of old age
                     return;
                 }
@@ -1683,7 +1787,11 @@
                 if (this.matingCooldown > 0) {
                     this.matingCooldown--;
                 } else if (this.isAdult && !this.isMating && !this.isPredator && !this.wantsToMate) {
-                    if (Math.random() < fishSpecies[this.species].fertility) {
+                    let mateChance = this.fertility;
+                    if (this.fertilityBoostTimer > 0) {
+                        mateChance = 0.25; // 25% chance when boost is active
+                    }
+                    if (Math.random() < mateChance) {
                         this.wantsToMate = true;
                     } else {
                         this.matingCooldown = 200 + Math.random() * 200; // Wait a bit before trying again
@@ -1708,9 +1816,16 @@
                                 scene.remove(nearestFood.mesh);
                                 food.splice(foodIndex, 1);
                                 
-                                // Reset mating cooldown
                                 this.matingCooldown = 0;
-                                
+
+                                // Apply fertility boost
+                                const boost = 2; // 100% boost
+                                this.fertility = Math.min(1.0, this.baseFertility * boost); // Cap at max fertility
+                                this.fertilityBoostTimer = 500; // Boost lasts for ~8 seconds
+
+                                // Increase max age by 20%
+                                this.maxAge *= 1.2;
+
                                 // Temporary visual effect (glow)
                                 const currentColor = this.mesh.material.color.clone();
                                 this.mesh.material.color.set(0xffff00);
@@ -1838,9 +1953,11 @@
                     let pursuitForce = this.seek(bestTarget.position);
                     this.applyForce(pursuitForce);
                     if (this.position.distanceTo(bestTarget.position) < 5) {
-                        createEatEffect(bestTarget.position, fishSpecies[this.species].color);
-                        bestTarget.isEaten = true;
-                        simulationStats.preyEaten++;
+                        if (!isImmortalMode) {
+                            createEatEffect(bestTarget.position, fishSpecies[this.species].color);
+                            bestTarget.isEaten = true;
+                            simulationStats.preyEaten++;
+                        }
                         this.satiation = 300;
                     }
                 } else {
@@ -1982,6 +2099,258 @@
             }
         }
 
+        // --- Auto Mode Manager ---
+        class AutoModeManager {
+            constructor() {
+                this.updateInterval = 3000; // Check every 3 seconds
+                this.lastUpdateTime = 0;
+                this.targets = {
+                    minPrey: 80,
+                    maxPrey: 150,
+                    superPredatorThreshold: 180,
+                };
+                this.startTime = 0;
+                this.timerInterval = null;
+                this.timerDisplayElement = document.getElementById('auto-mode-timer');
+                this.lastPreyCount = 0;
+            }
+
+            start() {
+                this.startTime = performance.now();
+                this.timerDisplayElement.style.display = 'inline';
+                if (this.timerInterval) clearInterval(this.timerInterval);
+                this.timerInterval = setInterval(() => {
+                    const elapsedTime = Math.floor((performance.now() - this.startTime) / 1000);
+                    const minutes = String(Math.floor(elapsedTime / 60)).padStart(2, '0');
+                    const seconds = String(elapsedTime % 60).padStart(2, '0');
+                    this.timerDisplayElement.textContent = ` | Survie: ${minutes}:${seconds}`;
+                }, 1000);
+                const prey = boids.filter(b => !b.isEaten && !b.isPredator);
+                this.lastPreyCount = prey.length;
+            }
+
+            stop(freeze = false) {
+                clearInterval(this.timerInterval);
+                this.timerInterval = null;
+                if (!freeze) {
+                    this.timerDisplayElement.style.display = 'none';
+                    this.timerDisplayElement.textContent = '';
+                }
+            }
+
+            update() {
+                const now = performance.now();
+                if (now - this.lastUpdateTime < this.updateInterval) {
+                    return;
+                }
+                this.lastUpdateTime = now;
+
+                const aliveBoids = boids.filter(b => !b.isEaten);
+                const prey = aliveBoids.filter(b => !b.isPredator);
+                const predators = aliveBoids.filter(b => b.isPredator);
+                const totalFish = prey.length + predators.length;
+
+                if (totalFish === 0 && this.startTime > 0) {
+                    this.stop(true); // Stop and freeze the timer
+                    return;
+                }
+
+                const populationChangeRate = (this.lastPreyCount > 0) ? (prey.length - this.lastPreyCount) / this.lastPreyCount : 0;
+                if (populationChangeRate < -0.10) { // More than 10% drop
+                    generateFood(); // Emergency feeding
+                    generateFood(); // Double dose
+                }
+                
+                // Manage prey population based on thresholds
+                if (prey.length < this.targets.minPrey) {
+                    this.increaseFertility();
+                    if (prey.length < this.targets.minPrey / 2) {
+                        generateFood();
+                    }
+                } else if (prey.length > this.targets.maxPrey) {
+                    this.decreaseFertility();
+                }
+
+                // Manage super predator
+                if (prey.length > this.targets.superPredatorThreshold && !superPredator.isActive) {
+                    superPredator.spawn();
+                } else if (prey.length < this.targets.maxPrey && superPredator.isActive) {
+                    scene.remove(superPredator.body);
+                    superPredator.isActive = false;
+                    document.getElementById('ropefish-status').setAttribute('data-lang-key', 'inactive');
+                    setLanguage(document.documentElement.lang);
+                }
+
+                // Update the count for the next cycle
+                this.lastPreyCount = prey.length;
+            }
+
+            increaseFertility() {
+                for (const species in fishSpecies) {
+                    if (fishSpecies[species].type === 'prey') {
+                        fishSpecies[species].fertility = Math.min(0.1, fishSpecies[species].fertility + 0.002);
+                        this.updateSlider(`${species}-fertility`, fishSpecies[species].fertility);
+                    }
+                }
+            }
+
+            decreaseFertility() {
+                for (const species in fishSpecies) {
+                    if (fishSpecies[species].type === 'prey') {
+                        fishSpecies[species].fertility = Math.max(0.001, fishSpecies[species].fertility - 0.002);
+                        this.updateSlider(`${species}-fertility`, fishSpecies[species].fertility);
+                    }
+                }
+            }
+            
+            updateSlider(sliderId, value) {
+                const slider = document.getElementById(sliderId);
+                if (slider) {
+                    slider.value = value;
+                    const valueSpan = document.getElementById(`${sliderId}-value`);
+                    if (valueSpan) {
+                       valueSpan.textContent = value.toFixed(3);
+                    }
+                }
+            }
+        }
+
+        function toggleAutoModeUI(isActive) {
+            const statusEl = document.getElementById('auto-mode-status');
+            const statusValueEl = document.getElementById('auto-mode-status-value');
+            if (isActive) {
+                statusEl.style.display = 'inline';
+                statusValueEl.textContent = translations[document.documentElement.lang].active;
+                autoModeManager.start();
+            } else {
+                statusEl.style.display = 'none';
+                autoModeManager.stop();
+            }
+
+            document.querySelectorAll('.settings-panel fieldset').forEach(fieldset => {
+                fieldset.disabled = isActive;
+            });
+        }
+        
+        function randomizeSettings() {
+            // Randomize flocking forces
+            flockingForces.alignment = (Math.random() * 2).toFixed(1);
+            flockingForces.cohesion = (Math.random() * 2).toFixed(1);
+            flockingForces.separation = (Math.random() * 2).toFixed(1);
+
+            // Randomize environment
+            environmentSettings.rockCount = Math.floor(Math.random() * 50);
+            environmentSettings.plantCount = Math.floor(Math.random() * 100);
+
+            // Randomize species parameters
+            for (const species in fishSpecies) {
+                const config = fishSpecies[species];
+                config.count = Math.floor(Math.random() * 100) + 10; // 10 to 110 fish
+                config.scale = (Math.random() * 1.5 + 0.2).toFixed(1);
+                config.maxSpeed = (Math.random() * 1.5 + 0.2).toFixed(1);
+                config.perceptionRadius = Math.floor(Math.random() * 150) + 20;
+
+                if (config.type === 'prey') {
+                    config.fearRadius = Math.floor(Math.random() * 150) + 30;
+                    config.fertility = (Math.random() * 0.05).toFixed(3);
+                }
+                if (config.type === 'predator') {
+                    config.riskAssessment.maxDistance = Math.floor(Math.random() * 200) + 50;
+                    config.riskAssessment.maxGroupSize = Math.floor(Math.random() * 15) + 1;
+                }
+            }
+
+            // Update UI sliders to reflect new values
+            document.querySelectorAll('input[type=range]').forEach(slider => {
+                const { category, species, property } = slider.dataset;
+                let newValue;
+                if (category === 'species') {
+                    if (property.includes('.')) {
+                        const [prop, subProp] = property.split('.');
+                        newValue = fishSpecies[species][prop][subProp];
+                    } else {
+                        newValue = fishSpecies[species][property];
+                    }
+                } else if (category === 'flocking') {
+                    newValue = flockingForces[property];
+                } else if (category === 'environment') {
+                    newValue = environmentSettings[property];
+                }
+                
+                if (newValue !== undefined) {
+                    slider.value = newValue;
+                    const valueSpan = document.getElementById(`${slider.id}-value`);
+                    if (valueSpan) {
+                        valueSpan.textContent = newValue;
+                    }
+                }
+            });
+
+            // Re-initialize decor and simulation
+            createDecor();
+            createPlants();
+            resetSimulation();
+        }
+
+        function startChaseAnimation() {
+            const canvas = document.getElementById('chase-canvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            let leonceX = -200;
+            let equityX = -350;
+            const y = canvas.height / 2;
+            
+            function drawLightning(ctx, x1, y1, x2, y2) {
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                let lastX = x1;
+                let lastY = y1;
+                for(let i=1; i<10; i++) {
+                    const newX = x1 + (x2 - x1) * (i / 10);
+                    const newY = y1 + (y2 - y1) * (i / 10) + (Math.random() - 0.5) * 20;
+                    ctx.lineTo(newX, newY);
+                }
+                ctx.lineTo(x2, y2);
+                ctx.strokeStyle = `rgba(0, 255, 255, ${Math.random() * 0.5 + 0.5})`;
+                ctx.lineWidth = Math.random() * 2 + 1;
+                ctx.stroke();
+            }
+
+            function animateChase() {
+                chaseAnimationId = requestAnimationFrame(animateChase);
+                
+                canvas.width = canvas.clientWidth;
+                canvas.height = canvas.clientHeight;
+                
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                leonceX += 3;
+                equityX += 3.2;
+
+                if (equityX > canvas.width + 150) {
+                    leonceX = -200;
+                    equityX = -350;
+                }
+
+                ctx.font = 'bold 30px "Courier New", Courier, monospace';
+                ctx.fillStyle = '#00ff41';
+                ctx.shadowColor = '#00ff41';
+                ctx.shadowBlur = 10;
+                ctx.fillText("LEONCE", leonceX, y);
+                ctx.fillText("EQUITY", equityX, y);
+                ctx.shadowBlur = 0;
+
+                if (Math.random() < 0.1) {
+                    drawLightning(ctx, Math.random() * canvas.width, 0, Math.random() * canvas.width, canvas.height);
+                }
+            }
+            animateChase();
+        }
+
+        function stopChaseAnimation() {
+            cancelAnimationFrame(chaseAnimationId);
+        }
+
         // --- Initialization ---
         init();
         loadSettings();
@@ -2017,8 +2386,16 @@
             superPredator = new Ropefish();
             submarine = new Submarine();
             scene.add(submarine.mesh);
+            autoModeManager = new AutoModeManager();
             window.addEventListener('resize', onWindowResize, false);
             document.addEventListener('visibilitychange', handleVisibilityChange, false);
+            document.getElementById('exit-btn').addEventListener('click', () => {
+                document.querySelectorAll('.settings-panel').forEach(p => p.classList.add('hidden'));
+                document.querySelectorAll('.control-group').forEach(g => {
+                    g.classList.remove('active');
+                    g.querySelector('.control-group-content').style.maxHeight = null;
+                });
+            });
         }
 
         // --- Scene Element Creation ---
@@ -2304,7 +2681,7 @@
                 });
             });
 
-            ['feed', 'release_ropefish'].forEach(key => {
+            ['feed', 'release_ropefish', 'random_mode', 'immortal_mode', 'auto_mode', 'mode_wireframe', 'view_orbital'].forEach(key => {
                 controlGroups.actions.buttons.push({
                     id: `btn-${key}`,
                     text: translations.fr[key],
@@ -2313,7 +2690,7 @@
                 });
             });
             
-            ['mode_wireframe', 'view_orbital', 'statistics', 'help_title', 'save', 'reset'].forEach(key => {
+            ['statistics', 'help_title', 'save', 'reset', 'exjv_credit'].forEach(key => {
                  controlGroups.system.buttons.push({
                     id: `btn-${key}`,
                     text: translations.fr[key] || key.replace('_', ' ').toUpperCase(),
@@ -2443,7 +2820,6 @@
                 content += createSlider(`${species}-maxSpeed`, 'max_speed', 0.1, 2, 0.1, config.maxSpeed, { category: 'species', species: species, property: 'maxSpeed' });
                 content += createSlider(`${species}-perceptionRadius`, 'perception_radius', 10, 200, 1, config.perceptionRadius, { category: 'species', species: species, property: 'perceptionRadius' });
                 if (config.type === 'prey') {
-                    content += createSlider(`${species}-fearRadius`, 'fear_radius', 10, 200, 1, config.fearRadius, { category: 'species', species: species, property: 'fearRadius' });
                     content += createSlider(`${species}-fertility`, 'taux_fecondite', 0, 0.1, 0.001, config.fertility, { category: 'species', species: species, property: 'fertility' });
                 }
                 if (config.type === 'predator') {
@@ -2467,12 +2843,16 @@
             generalPanels.forEach(key => {
                 let content = '';
                 if(key === 'forces') {
+                    content += '<fieldset>';
                     content += createSlider('alignment', 'alignment', 0, 2, 0.1, flockingForces.alignment, { category: 'flocking', property: 'alignment' });
                     content += createSlider('cohesion', 'cohesion', 0, 2, 0.1, flockingForces.cohesion, { category: 'flocking', property: 'cohesion' });
                     content += createSlider('separation', 'separation', 0, 2, 0.1, flockingForces.separation, { category: 'flocking', property: 'separation' });
+                    content += '</fieldset>';
                 } else if (key === 'environment') {
+                    content += '<fieldset>';
                     content += createSlider('rockCount', 'rock_count', 0, 50, 1, environmentSettings.rockCount, { category: 'environment', property: 'rockCount', reset: 'decor' });
                     content += createSlider('plantCount', 'plant_count', 0, 100, 1, environmentSettings.plantCount, { category: 'environment', property: 'plantCount', reset: 'plants' });
+                    content += '</fieldset>';
                 } else if (key === 'statistics') {
                     let speciesStatsHtml = '';
                     for (const s in fishSpecies) {
@@ -2506,6 +2886,19 @@
             });
             
             const otherControlActions = {
+                'auto_mode': (event) => {
+                    isAutoModeActive = !isAutoModeActive;
+                    toggleAutoModeUI(isAutoModeActive);
+                    event.currentTarget.style.borderColor = isAutoModeActive ? '#ff4141' : '';
+                },
+                'random_mode': () => {
+                    randomizeSettings();
+                },
+                'immortal_mode': (event) => {
+                    isImmortalMode = !isImmortalMode;
+                    event.currentTarget.style.borderColor = isImmortalMode ? '#00ffff' : '';
+                    event.currentTarget.style.color = isImmortalMode ? '#00ffff' : '';
+                },
                 'mode_wireframe': (event) => {
                     isWireframeMode = !isWireframeMode;
                     const materials = [
@@ -2529,7 +2922,18 @@
                 'release_ropefish': () => superPredator.spawn(),
                 'feed': () => generateFood(),
                 'save': saveSettings,
-                'reset': resetSettings
+                'reset': resetSettings,
+                'exjv_credit': () => {
+                    const modal = document.getElementById('exjv-modal');
+                    modal.classList.remove('hidden');
+                    startChaseAnimation();
+                    modal.addEventListener('click', (e) => {
+                        if (e.target.classList.contains('modal-overlay') || e.target.classList.contains('close-btn')) {
+                            modal.classList.add('hidden');
+                            stopChaseAnimation();
+                        }
+                    });
+                }
             };
 
             for (const key in otherControlActions) {
@@ -2610,6 +3014,10 @@
                 }
             }
             lastFrameTime = time;
+
+            if (isAutoModeActive) {
+                autoModeManager.update();
+            }
 
             // Update eggs and hatch new boids
             let newBoids = [];
