@@ -1,0 +1,1241 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tableau de Bord Interactif - Simulation d'Aquarium</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.132.2/three.min.js"></script>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.skypack.dev/three@0.132.2",
+            "orbit-controls": "https://cdn.skypack.dev/three@0.132.2/examples/jsm/controls/OrbitControls.js"
+        }
+    }
+    </script>
+    <!-- Chosen Palette: Calm Harmony -->
+    <!-- Application Structure Plan: La SPA est conçue comme un tableau de bord immersif. La structure principale se compose d'une vue 3D centrale occupant la majorité de l'écran, d'un en-tête persistant affichant les statistiques vitales, et d'une barre latérale de contrôle fixe à gauche. Cette barre latérale utilise un système d'accordéon pour organiser les commandes en groupes logiques (Espèces, Paramètres, Actions, Système), évitant ainsi l'encombrement des panneaux flottants de l'original. Cette conception centralise les interactions de l'utilisateur, rendant la navigation intuitive et l'exploration des paramètres plus fluide, ce qui est idéal pour gérer une simulation complexe. -->
+    <!-- Visualization & Content Choices: Les paramètres de la simulation (ex: nombre de poissons, vitesse) sont gérés par des curseurs HTML pour un contrôle intuitif. Les statistiques en temps réel (ex: population, proies mangées) sont affichées sous forme de texte dynamique dans l'en-tête et une section dédiée, offrant une lisibilité maximale. L'écosystème 3D est rendu sur un canvas avec Three.js, la méthode la plus directe pour une visualisation de ce type. Les actions de l'utilisateur (ex: nourrir) sont déclenchées par des boutons. Cette approche utilise des éléments HTML standards pour l'interface, garantissant accessibilité et performance, tout en réservant la complexité du rendu au canvas WebGL. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .backdrop-blur-md { backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+        .sidebar-scrollbar::-webkit-scrollbar { width: 4px; }
+        .sidebar-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .sidebar-scrollbar::-webkit-scrollbar-thumb { background: #9ca3af; border-radius: 20px; }
+        .accordion-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s cubic-bezier(0, 1, 0, 1);
+        }
+        .accordion-content.open {
+            transition: max-height 1s ease-in-out;
+        }
+        input[type=range] { -webkit-appearance: none; background: transparent; width: 100%; }
+        input[type=range]:focus { outline: none; }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%; height: 4px; cursor: pointer; background: #d1d5db; border-radius: 5px;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%; background: #4f46e5;
+            cursor: pointer; margin-top: -6px;
+        }
+        input[type=range]:disabled::-webkit-slider-thumb { background: #9ca3af; }
+        #controls-sidebar *:disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+        #simulation-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+        .lang-btn {
+            background-color: #f3f4f6;
+            color: #4b5563;
+        }
+        .lang-btn.active {
+            background-color: #4f46e5;
+            color: white;
+        }
+        #event-log-container {
+            transition: all 0.3s ease-in-out;
+        }
+        #event-log-container:hover #full-log {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
+        }
+        #latest-event-text {
+            transition: opacity 0.5s ease-in-out;
+        }
+        .icon-pulse {
+            animation: pulse 1s 2;
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.25); }
+        }
+    </style>
+</head>
+<body class="bg-stone-100 text-gray-800 antialiased">
+
+    <div id="app-container" class="relative w-full h-screen overflow-hidden">
+        <canvas id="simulation-canvas"></canvas>
+
+        <header id="main-header" class="fixed top-0 left-0 right-0 z-20 transition-all duration-300 lg:left-80">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex items-center justify-between h-16 bg-white/50 backdrop-blur-md rounded-b-lg shadow-sm mt-4 px-6">
+                    <div>
+                        <h1 class="text-xl font-bold text-gray-900">Simulation d'Écosystème Aquatique</h1>
+                        <p class="text-xs text-gray-600">Glissez pour explorer, utilisez le panneau pour contrôler.</p>
+                    </div>
+                    <div id="stats" class="flex items-center space-x-4 text-sm text-center">
+                        <div>
+                            <span class="font-bold text-gray-900" id="fish-count">0</span>
+                            <span class="block text-xs text-gray-500" data-lang-key="fish_count_label">Poissons</span>
+                        </div>
+                        <div class="border-l border-gray-200 h-8"></div>
+                        <div>
+                            <span class="font-bold text-gray-900" id="predator-count">0</span>
+                            <span class="block text-xs text-gray-500" data-lang-key="predator_count_label">Prédateurs</span>
+                        </div>
+                        <div class="border-l border-gray-200 h-8"></div>
+                        <div>
+                            <span class="font-semibold text-red-600" id="ropefish-status" data-lang-key="inactive">INACTIF</span>
+                            <span class="block text-xs text-gray-500" data-lang-key="ropefish_status_label">Super-Prédateur</span>
+                        </div>
+                         <div class="border-l border-gray-200 h-8"></div>
+                        <div>
+                            <span class="font-bold text-gray-900" id="fps">60</span>
+                            <span class="block text-xs text-gray-500">FPS</span>
+                        </div>
+                        <div id="auto-mode-stats" class="hidden border-l border-gray-200 pl-4">
+                            <span class="font-bold text-indigo-600" id="auto-mode-timer">00:00</span>
+                            <span class="block text-xs text-gray-500" data-lang-key="survival_time">Survie</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <aside id="controls-sidebar" class="fixed top-0 left-0 z-30 w-80 h-screen bg-white/50 backdrop-blur-md shadow-lg transition-transform duration-300 -translate-x-full lg:translate-x-0 pt-24 pb-8">
+            <div class="h-full overflow-y-auto sidebar-scrollbar px-6">
+                <div id="accordion-container" class="space-y-2"></div>
+            </div>
+        </aside>
+
+        <div id="welcome-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-70 backdrop-blur-sm">
+            <div class="bg-white rounded-lg shadow-2xl w-full max-w-2xl p-8 m-4 transform transition-all duration-300 scale-95 opacity-0">
+                <h2 class="text-2xl font-bold text-gray-900 mb-2" data-lang-key="welcome_title">Bienvenue dans la Simulation d'Aquarium</h2>
+                <p class="text-gray-600 mb-6" data-lang-key="welcome_description">Explorez un écosystème 3D dynamique. Observez les poissons naître, grandir et interagir. Utilisez les contrôles pour façonner leur monde.</p>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 text-sm">
+                    <div class="flex items-center space-x-3 p-3 bg-gray-50 rounded-md">
+                        <span class="text-xl">🌿</span>
+                        <span data-lang-key="feature_lifecycle">Cycle de vie complet et système de prédation.</span>
+                    </div>
+                    <div class="flex items-center space-x-3 p-3 bg-gray-50 rounded-md">
+                        <span class="text-xl">⚙️</span>
+                        <span data-lang-key="feature_controls">Contrôles avancés sur l'environnement et les espèces.</span>
+                    </div>
+                </div>
+
+                <div class="bg-indigo-50 border-l-4 border-indigo-500 text-indigo-800 p-4 rounded-r-lg mb-6">
+                    <h3 class="font-bold mb-1" data-lang-key="quick_tips_title">Guide Rapide</h3>
+                    <ul class="list-disc list-inside text-sm space-y-1">
+                        <li data-lang-key="tip_explore">Faites glisser pour faire pivoter la caméra et utilisez la molette pour zoomer.</li>
+                        <li data-lang-key="tip_fertility">Ajustez les paramètres dans la barre latérale pour voir leur impact en temps réel.</li>
+                        <li data-lang-key="tip_predator">Libérez le super-prédateur pour un défi supplémentaire !</li>
+                    </ul>
+                </div>
+                
+                <div class="flex flex-wrap justify-between items-center gap-4 mt-8">
+                    <div id="lang-selector" class="flex items-center space-x-1 bg-gray-100 p-1 rounded-lg">
+                        <button data-lang="en" class="lang-btn px-3 py-1 text-sm rounded-md transition-colors">EN</button>
+                        <button data-lang="fr" class="lang-btn px-3 py-1 text-sm rounded-md transition-colors">FR</button>
+                        <button data-lang="es" class="lang-btn px-3 py-1 text-sm rounded-md transition-colors">ES</button>
+                        <button data-lang="de" class="lang-btn px-3 py-1 text-sm rounded-md transition-colors">DE</button>
+                        <button data-lang="zh" class="lang-btn px-3 py-1 text-sm rounded-md transition-colors">ZH</button>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <label class="flex items-center text-sm text-gray-600 cursor-pointer">
+                            <input type="checkbox" id="dont-show-again" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                            <span class="ml-2" data-lang-key="dont_show_again">Ne plus afficher</span>
+                        </label>
+                        <button id="start-simulation-btn" class="px-6 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors" data-lang-key="start_simulation">Démarrer la Simulation</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="event-log-container" class="fixed bottom-4 left-4 z-40 transition-all duration-300 lg:left-80">
+            <div id="full-log" class="absolute bottom-full mb-2 w-80 h-48 bg-gray-900/70 backdrop-blur-md rounded-lg p-2 text-xs font-mono text-white opacity-0 transform translate-y-4 pointer-events-none transition-all duration-300 overflow-y-auto sidebar-scrollbar">
+                <div id="log-content" class="space-y-1"></div>
+            </div>
+            <div id="latest-event" class="flex items-center h-10 px-3 bg-gray-900/70 backdrop-blur-md rounded-full shadow-lg">
+                <span id="latest-event-icon" class="mr-2">⚪</span>
+                <span id="latest-event-text" class="text-white text-xs font-mono"></span>
+            </div>
+        </div>
+        
+        <div id="ui-toggle-cluster" class="fixed top-4 right-4 z-50 flex space-x-2">
+            <button data-target="main-header" class="ui-toggle-btn bg-white/50 backdrop-blur-md rounded-full h-10 w-10 flex items-center justify-center shadow-md text-xl transition-opacity duration-300 opacity-100">📊</button>
+            <button data-target="controls-sidebar" class="ui-toggle-btn bg-white/50 backdrop-blur-md rounded-full h-10 w-10 flex items-center justify-center shadow-md text-xl transition-opacity duration-300 opacity-100">⚙️</button>
+            <button data-target="event-log-container" class="ui-toggle-btn bg-white/50 backdrop-blur-md rounded-full h-10 w-10 flex items-center justify-center shadow-md text-xl transition-opacity duration-300 opacity-100">🔔</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'orbit-controls';
+
+        let scene, camera, renderer, controls, superPredator, submarine, autoModeManager;
+        let boids = [], eggs = [], food = [], rocks = [], plants = [], particles = [];
+        const worldSize = { width: 500, height: 250, depth: 350 };
+        let aquariumBox, lastFrameTime = 0, isSubmarineViewActive = false, isAutoModeActive = false;
+        let diseaseEventTriggered = false;
+        let criticalDiseaseTriggered = false;
+        let fishMarkedForCull = [];
+        let diseaseSpreadCounter = 0;
+        let latestEventTimeout;
+
+        const simulationStats = { preyEaten: 0, eggsLaid: {}, babiesHatched: {}, maxGeneration: {} };
+
+        const flockingForces = { alignment: 0.4, cohesion: 0.3, separation: 1.2 };
+        const environmentSettings = { rockCount: 15, plantCount: 60 };
+
+        const fishSpecies = {
+            'cichla': { type: 'predator', count: 2, color: 0xcb2c31, scale: 1.4, maxSpeed: 0.7, perceptionRadius: 120, riskAssessment: { maxDistance: 150, maxGroupSize: 5 }, fertility: 0.01, vertices: new Float32Array([0,0,0, -18,0,0, -5,4,0, -5,-4,0, -18,0,0, -25,2,0, -25,-2,0]) },
+            'tetra': { type: 'prey', count: 50, color: 0xdb2777, scale: 0.45, maxSpeed: 0.4, perceptionRadius: 35, fearRadius: 80, fertility: 0.03, vertices: new Float32Array([0,0,0, -6,2.5,0, -12,0,0, 0,0,0, -12,0,0, -6,-2.5,0, -12,0,0, -16,4,0, -16,-4,0]) },
+            'guppy': { type: 'prey', count: 65, color: 0x0ea5e9, scale: 0.4, maxSpeed: 0.45, perceptionRadius: 40, fearRadius: 85, fertility: 0.03, vertices: new Float32Array([0,0,0, -5,2,0, -10,0,0, 0,0,0, -10,0,0, -5,-2,0, -10,0,0, -14,5,0, -14,-5,0]) },
+            'puffer': { type: 'prey', count: 30, color: 0xf97316, scale: 0.5, maxSpeed: 0.3, perceptionRadius: 30, fearRadius: 70, fertility: 0.015, vertices: new Float32Array([3,0,0, 0,3,0, -6,0,0, 3,0,0, -6,0,0, 0,-3,0, -6,0,0, -9,0,0, -4,3,0, -6,0,0, -4,-3,0]) },
+            'angel': { type: 'prey', count: 25, color: 0x9333ea, scale: 0.6, maxSpeed: 0.35, perceptionRadius: 35, fearRadius: 75, fertility: 0.024, vertices: new Float32Array([0,0,0, -5,5,0, -10,0,0, 0,0,0, -10,0,0, -5,-5,0, -10,0,0, -13,3,0, -10,0,0, -13,-3,0]) }
+        };
+
+        const translations = {
+            fr: {
+                species: "Espèces", parameters: "Paramètres", fish_count_label: "Poissons", predator_count_label: "Prédateurs", ropefish_status_label: "Super-Prédateur", active: "ACTIF", inactive: "INACTIF", release_ropefish: "Libérer Super-Prédateur", feed: "Nourrir", save: "Sauvegarder", reset: "Réinitialiser", forces: "Forces de Groupe", environment: "Environnement", statistics: "Statistiques", actions: "Actions", system: "Système", count: "Nombre", scale: "Taille", max_speed: "Vitesse Max", perception_radius: "Perception", fear_radius: "Rayon Fuite", fertility: "Fécondité", alignment: "Alignement", cohesion: "Cohésion", separation: "Séparation", rock_count: "Rochers", plant_count: "Plantes", prey_eaten: "Proies mangées", eggs_laid: "Oeufs pondus", babies_hatched: "Bébés nés", generation: "Génération Max", welcome_title: "Bienvenue dans la Simulation d'Aquarium", welcome_description: "Explorez un écosystème 3D dynamique. Observez les poissons naître, grandir et interagir. Utilisez les contrôles pour façonner leur monde.", feature_lifecycle: "Cycle de vie complet et système de prédation.", feature_controls: "Contrôles avancés sur l'environnement et les espèces.", quick_tips_title: "Guide Rapide", tip_explore: "Faites glisser pour faire pivoter la caméra et utilisez la molette pour zoomer.", tip_fertility: "Ajustez les paramètres dans la barre latérale pour voir leur impact en temps réel.", tip_predator: "Libérez le super-prédateur pour un défi supplémentaire !", start_simulation: "Démarrer la Simulation", dont_show_again: "Ne plus afficher", toggle_view: "Changer de Vue", view_orbital: "Vue Orbitale", view_submarine: "Vue Sous-marin", auto_mode: "Mode Automatique", random_mode: "Mode Aléatoire", survival_time: "Survie"
+            },
+            en: {
+                species: "Species", parameters: "Parameters", fish_count_label: "Fish", predator_count_label: "Predators", ropefish_status_label: "Super-Predator", active: "ACTIVE", inactive: "INACTIVE", release_ropefish: "Release Super-Predator", feed: "Feed", save: "Save", reset: "Reset", forces: "Flocking Forces", environment: "Environment", statistics: "Statistics", actions: "Actions", system: "System", count: "Count", scale: "Scale", max_speed: "Max Speed", perception_radius: "Perception", fear_radius: "Fear Radius", fertility: "Fertility", alignment: "Alignment", cohesion: "Cohesion", separation: "Separation", rock_count: "Rocks", plant_count: "Plants", prey_eaten: "Prey Eaten", eggs_laid: "Eggs Laid", babies_hatched: "Babies Hatched", generation: "Max Generation", welcome_title: "Welcome to the Aquarium Simulation", welcome_description: "Explore a dynamic 3D ecosystem. Watch fish be born, grow, and interact. Use the controls to shape their world.", feature_lifecycle: "Complete life cycle and predation system.", feature_controls: "Advanced controls over environment and species.", quick_tips_title: "Quick Guide", tip_explore: "Drag to rotate the camera and use the scroll wheel to zoom.", tip_fertility: "Adjust settings in the sidebar to see their real-time impact.", tip_predator: "Release the super-predator for an extra challenge!", start_simulation: "Start Simulation", dont_show_again: "Don't show again", toggle_view: "Toggle View", view_orbital: "Orbital View", view_submarine: "Submarine View", auto_mode: "Auto Mode", random_mode: "Random Mode", survival_time: "Survival"
+            },
+            es: {
+                species: "Especies", parameters: "Parámetros", fish_count_label: "Peces", predator_count_label: "Depredadores", ropefish_status_label: "Superdepredador", active: "ACTIVO", inactive: "INACTIVO", release_ropefish: "Liberar Superdepredador", feed: "Alimentar", save: "Guardar", reset: "Reiniciar", forces: "Fuerzas de Grupo", environment: "Entorno", statistics: "Estadísticas", actions: "Acciones", system: "Sistema", count: "Cantidad", scale: "Tamaño", max_speed: "Vel. Máxima", perception_radius: "Percepción", fear_radius: "Radio de Miedo", fertility: "Fertilidad", alignment: "Alineación", cohesion: "Cohesión", separation: "Separación", rock_count: "Rocas", plant_count: "Plantas", prey_eaten: "Presas comidas", eggs_laid: "Huevos puestos", babies_hatched: "Crías nacidas", generation: "Generación Máx", welcome_title: "Bienvenido a la Simulación de Acuario", welcome_description: "Explora un ecosistema 3D dinámico. Observa a los peces nacer, crecer e interactuar. Usa los controles para dar forma a su mundo.", feature_lifecycle: "Ciclo de vida completo y sistema de depredación.", feature_controls: "Controles avanzados sobre el entorno y las especies.", quick_tips_title: "Guía Rápida", tip_explore: "Arrastra para rotar la cámara y usa la rueda del ratón para hacer zoom.", tip_fertility: "Ajusta la configuración en la barra lateral para ver su impacto en tiempo real.", tip_predator: "¡Libera al superdepredador para un desafío adicional!", start_simulation: "Iniciar Simulación", dont_show_again: "No volver a mostrar", toggle_view: "Cambiar Vista", view_orbital: "Vista Orbital", view_submarine: "Vista Submarino", auto_mode: "Modo Automático", random_mode: "Modo Aleatorio", survival_time: "Supervivencia"
+            },
+            de: {
+                species: "Arten", parameters: "Parameter", fish_count_label: "Fische", predator_count_label: "Raubtiere", ropefish_status_label: "Super-Raubtier", active: "AKTIV", inactive: "INAKTIV", release_ropefish: "Super-Raubtier freilassen", feed: "Füttern", save: "Speichern", reset: "Zurücksetzen", forces: "Schwarmkräfte", environment: "Umgebung", statistics: "Statistiken", actions: "Aktionen", system: "System", count: "Anzahl", scale: "Größe", max_speed: "Max. Geschw.", perception_radius: "Wahrnehmung", fear_radius: "Fluchtradius", fertility: "Fruchtbarkeit", alignment: "Ausrichtung", cohesion: "Zusammenhalt", separation: "Trennung", rock_count: "Felsen", plant_count: "Pflanzen", prey_eaten: "Beute gefressen", eggs_laid: "Eier gelegt", babies_hatched: "Babys geschlüpft", generation: "Max. Generation", welcome_title: "Willkommen bei der Aquarium-Simulation", welcome_description: "Erkunden Sie ein dynamisches 3D-Ökosystem. Beobachten Sie, wie Fische geboren werden, wachsen und interagieren. Verwenden Sie die Steuerelemente, um ihre Welt zu gestalten.", feature_lifecycle: "Vollständiger Lebenszyklus und Raubtiersystem.", feature_controls: "Erweiterte Steuerung von Umgebung und Arten.", quick_tips_title: "Kurzanleitung", tip_explore: "Ziehen Sie, um die Kamera zu drehen, und verwenden Sie das Mausrad zum Zoomen.", tip_fertility: "Passen Sie die Einstellungen in der Seitenleiste an, um ihre Echtzeit-Auswirkungen zu sehen.", tip_predator: "Lassen Sie das Super-Raubtier für eine zusätzliche Herausforderung frei!", start_simulation: "Simulation starten", dont_show_again: "Nicht erneut anzeigen", toggle_view: "Ansicht wechseln", view_orbital: "Orbitalansicht", view_submarine: "U-Boot-Ansicht", auto_mode: "Auto-Modus", random_mode: "Zufallsmodus", survival_time: "Überleben"
+            },
+            zh: {
+                species: "物种", parameters: "参数", fish_count_label: "鱼类", predator_count_label: "捕食者", ropefish_status_label: "超级捕食者", active: "活动", inactive: "不活动", release_ropefish: "释放超级捕食者", feed: "喂食", save: "保存", reset: "重置", forces: "群体力量", environment: "环境", statistics: "统计数据", actions: "行动", system: "系统", count: "数量", scale: "大小", max_speed: "最大速度", perception_radius: "感知范围", fear_radius: "恐惧半径", fertility: "繁殖力", alignment: "对齐", cohesion: "凝聚", separation: "分离", rock_count: "岩石", plant_count: "植物", prey_eaten: "被捕食", eggs_laid: "产卵数", babies_hatched: "孵化数", generation: "最大代数", welcome_title: "欢迎来到水族馆模拟", welcome_description: "探索动态的3D生态系统。观察鱼类的出生、成长和互动。使用控件来塑造它们的世界。", feature_lifecycle: "完整的生命周期和捕食系统。", feature_controls: "对环境和物种的高级控制。", quick_tips_title: "快速指南", tip_explore: "拖动以旋转相机并使用滚轮进行缩放。", tip_fertility: "在侧边栏中调整设置以查看其实时影响。", tip_predator: "释放超级捕食者以获得额外挑战！", start_simulation: "开始模拟", dont_show_again: "不再显示", toggle_view: "切换视图", view_orbital: "轨道视图", view_submarine: "潜艇视图", auto_mode: "自动模式", random_mode: "随机模式", survival_time: "生存时间"
+            }
+        };
+        let currentLang = 'fr';
+
+        class AutoModeManager {
+            constructor() {
+                this.updateInterval = 3000; this.lastUpdateTime = 0;
+                this.targets = { minPrey: 80, maxPrey: 150, superPredatorThreshold: 180 };
+                this.startTime = 0; this.timerInterval = null;
+                this.timerDisplayElement = document.getElementById('auto-mode-timer');
+                this.lastPreyCount = 0;
+            }
+            start() {
+                this.startTime = performance.now();
+                document.getElementById('auto-mode-stats').classList.remove('hidden');
+                if (this.timerInterval) clearInterval(this.timerInterval);
+                this.timerInterval = setInterval(() => {
+                    const elapsedTime = Math.floor((performance.now() - this.startTime) / 1000);
+                    const minutes = String(Math.floor(elapsedTime / 60)).padStart(2, '0');
+                    const seconds = String(elapsedTime % 60).padStart(2, '0');
+                    this.timerDisplayElement.textContent = `${minutes}:${seconds}`;
+                }, 1000);
+                this.lastPreyCount = boids.filter(b => !b.isEaten && !b.isPredator).length;
+            }
+            stop(freeze = false) {
+                clearInterval(this.timerInterval); this.timerInterval = null;
+                if (!freeze) {
+                    document.getElementById('auto-mode-stats').classList.add('hidden');
+                    this.timerDisplayElement.textContent = '00:00';
+                }
+            }
+            update() {
+                const now = performance.now();
+                if (now - this.lastUpdateTime < this.updateInterval) return;
+                this.lastUpdateTime = now;
+                const aliveBoids = boids.filter(b => !b.isEaten);
+                const prey = aliveBoids.filter(b => !b.isPredator);
+                if ((prey.length + aliveBoids.filter(b => b.isPredator).length) === 0 && this.startTime > 0) {
+                    this.stop(true); return;
+                }
+                const populationChangeRate = (this.lastPreyCount > 0) ? (prey.length - this.lastPreyCount) / this.lastPreyCount : 0;
+                if (populationChangeRate < -0.10) { generateFood(); generateFood(); }
+                if (prey.length < this.targets.minPrey) {
+                    this.adjustFertility(true);
+                    if (prey.length < this.targets.minPrey / 2) generateFood();
+                } else if (prey.length > this.targets.maxPrey) {
+                    this.adjustFertility(false);
+                }
+                if (prey.length > this.targets.superPredatorThreshold && !superPredator.isActive) {
+                    superPredator.spawn();
+                } else if (prey.length < this.targets.maxPrey && superPredator.isActive) {
+                    superPredator.remove();
+                }
+                this.lastPreyCount = prey.length;
+            }
+            adjustFertility(increase) {
+                for (const species in fishSpecies) {
+                    if (fishSpecies[species].type === 'prey') {
+                        const config = fishSpecies[species];
+                        config.fertility = increase ? Math.min(0.1, config.fertility + 0.002) : Math.max(0.001, config.fertility - 0.002);
+                        const slider = document.getElementById(`${species}-fertility`);
+                        if (slider) {
+                            slider.value = config.fertility;
+                            document.getElementById(`${slider.id}-value`).textContent = config.fertility.toFixed(3);
+                        }
+                    }
+                }
+            }
+        }
+
+        class Submarine {
+            constructor() {
+                this.mesh = new THREE.Group();
+                const material = new THREE.MeshLambertMaterial({ color: 0x6b7280 });
+                const body = new THREE.Mesh(new THREE.CylinderGeometry(4, 4, 20, 8), material);
+                body.rotation.z = Math.PI / 2;
+                this.mesh.add(body);
+                const cockpit = new THREE.Mesh(new THREE.SphereGeometry(5, 8, 6), material);
+                cockpit.position.x = 5;
+                this.mesh.add(cockpit);
+                this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                this.camera.position.set(8, 0, 0); 
+                this.mesh.add(this.camera);
+                this.position = new THREE.Vector3(0, worldSize.height / 2 + 20, 0);
+                this.velocity = new THREE.Vector3(0.3, 0, 0);
+                this.acceleration = new THREE.Vector3();
+                this.mesh.position.copy(this.position);
+                this.maxSpeed = 0.4; this.maxForce = 0.01;
+                this.target = this.getNewTarget();
+                scene.add(this.mesh);
+            }
+            getNewTarget() {
+                return new THREE.Vector3( (Math.random() - 0.5) * (worldSize.width - 40), Math.random() * (worldSize.height - 40) + 20, (Math.random() - 0.5) * (worldSize.depth - 40) );
+            }
+            seek(target) {
+                let desired = new THREE.Vector3().subVectors(target, this.position);
+                desired.setLength(this.maxSpeed);
+                let steer = new THREE.Vector3().subVectors(desired, this.velocity);
+                steer.clampLength(0, this.maxForce);
+                return steer;
+            }
+            update() {
+                if (this.position.distanceTo(this.target) < 50) {
+                    this.target = this.getNewTarget();
+                }
+                this.acceleration.add(this.seek(this.target));
+                this.velocity.add(this.acceleration);
+                this.velocity.clampLength(0, this.maxSpeed);
+                this.position.add(this.velocity);
+                this.acceleration.multiplyScalar(0);
+                this.checkBounds(); 
+                this.mesh.position.lerp(this.position, 0.1);
+                const targetQuaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), this.velocity.clone().normalize());
+                this.mesh.quaternion.slerp(targetQuaternion, 0.05);
+            }
+            checkBounds() {
+                const margin = 20;
+                if (this.position.x < -worldSize.width/2+margin || this.position.x > worldSize.width/2-margin ||
+                    this.position.y < margin || this.position.y > worldSize.height-margin ||
+                    this.position.z < -worldSize.depth/2+margin || this.position.z > worldSize.depth/2-margin) {
+                    this.target = new THREE.Vector3(0, worldSize.height / 2, 0);
+                }
+            }
+        }
+
+        class Ropefish {
+            constructor() { this.isActive = false; }
+            spawn() {
+                if (this.isActive || boids.length === 0) return;
+                this.isActive = true;
+                const headMaterial = new THREE.MeshBasicMaterial({ color: 0xFFFF00, wireframe: true });
+                const bodyMaterial = new THREE.MeshBasicMaterial({ color: 0x16a34a, wireframe: true });
+                this.segmentCount = 30; this.segmentSpacing = 3.5; this.speed = 0.9; this.turnSpeed = 0.04; this.attackRadius = 10;
+                this.body = new THREE.Group(); this.segments = []; this.path = []; this.pathLength = 120; this.target = null;
+                const head = new THREE.Mesh(new THREE.SphereGeometry(4, 6, 4), headMaterial);
+                this.segments.push(head); this.body.add(head);
+                for (let i = 1; i < this.segmentCount; i++) {
+                    const segment = new THREE.Mesh(new THREE.SphereGeometry(2.5, 6, 4), bodyMaterial);
+                    this.segments.push(segment); this.body.add(segment);
+                }
+                this.velocity = new THREE.Vector3(Math.random() * 2 - 1, 0, Math.random() * 2 - 1).normalize().multiplyScalar(this.speed);
+                const startPos = new THREE.Vector3((Math.random() - 0.5) * worldSize.width * 0.8, 15, (Math.random() - 0.5) * worldSize.depth * 0.8);
+                this.segments.forEach(seg => seg.position.copy(startPos));
+                this.path = Array(this.pathLength).fill(startPos);
+                scene.add(this.body);
+                document.getElementById('ropefish-status').textContent = translations[currentLang].active;
+                showNotification("Les proies sont stressées, la fertilité chute.", 'warning');
+            }
+            update(boids) {
+                if (!this.isActive) return;
+                this.findTarget(boids); this.move(); this.checkBounds();
+            }
+            findTarget(allBoids) {
+                if (this.target && this.target.isEaten) this.target = null;
+                if (!this.target || Math.random() < 0.01) {
+                    let closestBoid = null, minDistance = Infinity;
+                    const aliveBoids = allBoids.filter(b => !b.isEaten && !b.isPredator);
+                    if (aliveBoids.length === 0) { this.target = null; return; }
+                    for (const boid of aliveBoids) {
+                        const d = this.segments[0].position.distanceTo(boid.position);
+                        if (d < minDistance) { minDistance = d; closestBoid = boid; }
+                    }
+                    this.target = closestBoid;
+                }
+            }
+            move() {
+                let desiredVelocity = new THREE.Vector3();
+                if (this.target) { desiredVelocity.subVectors(this.target.position, this.segments[0].position); } 
+                else {
+                    desiredVelocity.copy(this.velocity);
+                    if (Math.random() < 0.05) { desiredVelocity.applyAxisAngle(new THREE.Vector3(0, 1, 0), (Math.random() - 0.5) * Math.PI / 2); }
+                }
+                desiredVelocity.normalize().multiplyScalar(this.speed);
+                this.velocity.lerp(desiredVelocity, this.turnSpeed);
+                const newHeadPos = this.segments[0].position.clone().add(this.velocity);
+                this.path.unshift(newHeadPos);
+                if (this.path.length > this.pathLength) this.path.pop();
+                for (let i = 0; i < this.segments.length; i++) {
+                    const index = Math.floor(Math.min(i * this.segmentSpacing, this.path.length - 1));
+                    if (this.path[index]) this.segments[i].position.lerp(this.path[index], 0.5);
+                }
+                if (this.target && this.segments[0].position.distanceTo(this.target.position) < this.attackRadius) {
+                    showNotification(`${this.target.species} a été mangé par le Super-Prédateur.`, 'death');
+                    createEatEffect(this.target.position, 0xFFFF00);
+                    this.target.isEaten = true; simulationStats.preyEaten++; this.target = null;
+                }
+            }
+            checkBounds() {
+                const head = this.segments[0]; const margin = 10;
+                if (head.position.x < -worldSize.width / 2 + margin) { head.position.x = -worldSize.width / 2 + margin; this.velocity.x *= -1; }
+                else if (head.position.x > worldSize.width / 2 - margin) { head.position.x = worldSize.width / 2 - margin; this.velocity.x *= -1; }
+                if (head.position.y < margin) { head.position.y = margin; this.velocity.y *= -1; }
+                else if (head.position.y > worldSize.height - margin) { head.position.y = worldSize.height - margin; this.velocity.y *= -1; }
+                if (head.position.z < -worldSize.depth / 2 + margin) { head.position.z = -worldSize.depth / 2 + margin; this.velocity.z *= -1; }
+                else if (head.position.z > worldSize.depth / 2 - margin) { head.position.z = worldSize.depth / 2 - margin; this.velocity.z *= -1; }
+            }
+            remove() {
+                if(this.isActive) {
+                    scene.remove(this.body);
+                    this.isActive = false;
+                    document.getElementById('ropefish-status').textContent = translations[currentLang].inactive;
+                    showNotification("Le calme revient, la fertilité remonte.", 'info');
+                }
+            }
+        }
+
+        class FoodParticle {
+            constructor(position) {
+                this.position = position.clone(); this.velocity = new THREE.Vector3(0, -0.1, 0); this.lifetime = 1000 + Math.random() * 500;
+                const material = new THREE.MeshBasicMaterial({ color: 0xfacc15, wireframe: false, transparent: true, opacity: 0.9 });
+                this.mesh = new THREE.Mesh(new THREE.SphereGeometry(1.2, 8, 6), material);
+                this.mesh.position.copy(this.position); scene.add(this.mesh);
+            }
+            update() {
+                this.position.add(this.velocity); this.mesh.position.copy(this.position);
+                if (this.position.y < 1) { this.position.y = 1; this.velocity.y = 0; }
+                this.lifetime--;
+                if (this.lifetime < 100) { this.mesh.material.opacity = (this.lifetime / 100) * 0.9; }
+                return this.lifetime <= 0;
+            }
+        }
+
+        class Egg {
+            constructor(species, position, color, parentGeneration = 1) {
+                this.species = species; this.parentGeneration = parentGeneration; this.hatchTime = 500 + Math.random() * 200;
+                const material = new THREE.MeshBasicMaterial({ color: color, wireframe: false, transparent: true, opacity: 0.8 });
+                this.mesh = new THREE.Mesh(new THREE.SphereGeometry(1.5, 6, 4), material);
+                this.mesh.position.copy(position); scene.add(this.mesh);
+                simulationStats.eggsLaid[this.species] = (simulationStats.eggsLaid[this.species] || 0) + 1;
+            }
+            update() {
+                this.hatchTime--;
+                if (this.hatchTime <= 0) return this.hatch();
+                return null;
+            }
+            hatch() {
+                const baby = new Boid(this.species, true, this.parentGeneration);
+                baby.position.copy(this.mesh.position);
+                simulationStats.babiesHatched[this.species] = (simulationStats.babiesHatched[this.species] || 0) + 1;
+                showNotification(`Un ${this.species} est né.`, 'birth');
+                return [baby];
+            }
+        }
+
+        class Boid {
+            constructor(species, isBaby = false, parentGeneration = 0) {
+                this.species = species; const config = fishSpecies[species];
+                this.isPredator = config.type === 'predator'; this.maxSpeed = config.maxSpeed; this.maxForce = 0.05;
+                this.perceptionRadius = config.perceptionRadius; this.fearRadius = config.fearRadius || 0;
+                this.fertility = config.fertility || 0; this.satiation = this.isPredator ? 300 : 0; this.isEaten = false;
+                this.isDiseased = false; this.diseaseTimer = 0;
+                this.fertilityBoostTimer = 0;
+                this.generation = isBaby ? parentGeneration + 1 : 1;
+                if (this.generation > (simulationStats.maxGeneration[species] || 0)) { simulationStats.maxGeneration[species] = this.generation; }
+                this.adultAge = 800; this.maxAge = 6000; this.age = isBaby ? 0 : Math.random() * this.maxAge;
+                this.isAdult = this.age >= this.adultAge; this.wantsToMate = false; this.matingCooldown = Math.random() * 500;
+                this.isMating = false; this.matingPartner = null; this.matingTimer = 0;
+                const material = new THREE.MeshBasicMaterial({ color: config.color, side: THREE.DoubleSide, transparent: true });
+                this.mesh = new THREE.Mesh(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(config.vertices, 3)), material);
+                const initialScale = isBaby ? config.scale * 0.3 : config.scale;
+                this.mesh.scale.set(initialScale, initialScale, initialScale);
+                this.position = new THREE.Vector3(Math.random()*worldSize.width-worldSize.width/2, Math.random()*(worldSize.height-10)+5, Math.random()*worldSize.depth-worldSize.depth/2);
+                this.velocity = new THREE.Vector3(Math.random()*2-1, Math.random()*2-1, Math.random()*2-1).setLength(Math.random() * this.maxSpeed * 0.5 + 0.1);
+                this.acceleration = new THREE.Vector3(); this.mesh.position.copy(this.position); scene.add(this.mesh);
+            }
+            applyForce(force) { this.acceleration.add(force); }
+            update(allBoids) {
+                if (this.isEaten) return;
+
+                if (this.isDiseased) {
+                    this.diseaseTimer--;
+                    const duration = (boids.length > 600) ? 300 : 600;
+                    this.mesh.material.opacity = this.diseaseTimer / duration;
+                    if (this.diseaseTimer <= 0) {
+                        this.isEaten = true;
+                    }
+                    return;
+                }
+
+                this.age++;
+                if (!this.isAdult && this.age > this.adultAge) this.isAdult = true;
+                if (this.age > this.maxAge) {
+                    this.isEaten = true;
+                    showNotification(`${this.species} est mort de vieillesse.`, 'death');
+                    return;
+                }
+                
+                let currentFertility = this.fertility;
+                if (!this.isPredator && superPredator && superPredator.isActive) {
+                    currentFertility *= 0.5;
+                }
+                if (this.isPredator && this.fertilityBoostTimer > 0) {
+                    this.fertilityBoostTimer--;
+                    currentFertility *= 5;
+                }
+
+                if (this.matingCooldown > 0) this.matingCooldown--;
+                else if (this.isAdult && !this.isMating && Math.random() < currentFertility) this.wantsToMate = true;
+                
+                if (this.isMating) this.mate();
+                else {
+                    if (this.wantsToMate) this.findPartner(allBoids);
+                    if (this.isPredator) this.hunt(allBoids);
+                    else this.schoolAndFlee(allBoids);
+                }
+                this.velocity.add(this.acceleration); this.velocity.clampLength(0, this.maxSpeed);
+                this.position.add(this.velocity); this.acceleration.multiplyScalar(0);
+                this.checkBounds(); this.mesh.position.copy(this.position);
+                if (this.velocity.lengthSq() > 0.0001) {
+                    this.mesh.lookAt(new THREE.Vector3().addVectors(this.position, this.velocity));
+                    this.mesh.rotateY(-Math.PI / 2);
+                }
+            }
+            findPartner(allBoids) {
+                for (const other of allBoids) {
+                    if (other !== this && other.species === this.species && other.wantsToMate && !other.isMating) {
+                        if (this.position.distanceTo(other.position) < this.perceptionRadius) {
+                            this.isMating = true; this.wantsToMate = false; this.matingPartner = other; this.matingTimer = 300;
+                            other.isMating = true; other.wantsToMate = false; other.matingPartner = this; other.matingTimer = 300;
+                            return;
+                        }
+                    }
+                }
+            }
+            mate() {
+                this.matingTimer--;
+                if (this.matingTimer <= 0 || this.matingPartner.isEaten || !this.matingPartner) {
+                    if (this.matingPartner) { this.matingPartner.isMating = false; this.matingPartner.matingCooldown = 1500; }
+                    this.isMating = false; this.matingPartner = null; this.matingCooldown = 1500; return;
+                }
+                const directionToPartner = new THREE.Vector3().subVectors(this.matingPartner.position, this.position);
+                if (directionToPartner.length() > 20) this.applyForce(this.seek(this.matingPartner.position));
+                if (this.matingTimer === 1) {
+                    const eggPosition = new THREE.Vector3().addVectors(this.position, this.matingPartner.position).multiplyScalar(0.5); eggPosition.y = 2;
+                    const parentGeneration = Math.max(this.generation, this.matingPartner.generation);
+                    eggs.push(new Egg(this.species, eggPosition, fishSpecies[this.species].color, parentGeneration));
+                }
+            }
+            hunt(allBoids) {
+                if (this.schoolAndFlee(allBoids, true)) return;
+                if (this.satiation > 0) { this.satiation--; this.schoolAndFlee(allBoids, true); return; }
+                let bestTarget = null, minDistance = Infinity;
+                const preyBoids = allBoids.filter(b => !b.isEaten && !b.isPredator);
+                const riskConfig = fishSpecies[this.species].riskAssessment;
+                for (const target of preyBoids) {
+                    const d = this.position.distanceTo(target.position);
+                    if (d > riskConfig.maxDistance || d > minDistance) continue;
+                    let groupSize = preyBoids.filter(p => target.position.distanceTo(p.position) < 25).length;
+                    if (groupSize > riskConfig.maxGroupSize) continue;
+                    minDistance = d; bestTarget = target;
+                }
+                if (bestTarget) {
+                    this.applyForce(this.seek(bestTarget.position));
+                    if (this.position.distanceTo(bestTarget.position) < 5) {
+                        showNotification(`${bestTarget.species} a été mangé par ${this.species}.`, 'death');
+                        createEatEffect(bestTarget.position, fishSpecies[this.species].color);
+                        bestTarget.isEaten = true; simulationStats.preyEaten++; this.satiation = 300;
+                        this.matingCooldown = 0; this.fertilityBoostTimer = 600;
+                        showNotification(`Fertilité de ${this.species} augmentée !`, 'info');
+                    }
+                } else this.schoolAndFlee(allBoids, true);
+            }
+            schoolAndFlee(allBoids, ignorePredators = false) {
+                if (superPredator && superPredator.isActive) {
+                    const d = this.position.distanceTo(superPredator.segments[0].position);
+                    if (d < 200) {
+                        let diff = new THREE.Vector3().subVectors(this.position, superPredator.segments[0].position);
+                        let steer = this.seek(this.position.clone().add(diff.normalize()));
+                        steer.multiplyScalar(7.5);
+                        this.applyForce(steer);
+                        return true;
+                    }
+                }
+                if (!this.isPredator && !ignorePredators) {
+                    let fleeVector = new THREE.Vector3(), predatorCount = 0;
+                    for (const other of allBoids) {
+                        if (other.isPredator && this.position.distanceTo(other.position) < this.fearRadius) {
+                            fleeVector.add(new THREE.Vector3().subVectors(this.position, other.position)); predatorCount++;
+                        }
+                    }
+                    if (predatorCount > 0) {
+                        this.applyForce(this.seek(this.position.clone().add(fleeVector.normalize())).multiplyScalar(2.5)); return true;
+                    }
+                }
+                this.applyForce(this.separate(allBoids).multiplyScalar(flockingForces.separation));
+                this.applyForce(this.align(allBoids).multiplyScalar(flockingForces.alignment));
+                this.applyForce(this.cohere(allBoids).multiplyScalar(flockingForces.cohesion)); return false;
+            }
+            seek(target) {
+                let desired = new THREE.Vector3().subVectors(target, this.position).setLength(this.maxSpeed);
+                return new THREE.Vector3().subVectors(desired, this.velocity).clampLength(0, this.maxForce);
+            }
+            separate(boids) {
+                let steer = new THREE.Vector3(), count = 0;
+                for (let other of boids) {
+                    let d = this.position.distanceTo(other.position);
+                    if (d > 0 && d < 15) {
+                        steer.add(new THREE.Vector3().subVectors(this.position, other.position).normalize().divideScalar(d)); count++;
+                    }
+                }
+                if (count > 0) steer.divideScalar(count);
+                if (steer.length() > 0) steer.setLength(this.maxSpeed).sub(this.velocity).clampLength(0, this.maxForce);
+                return steer;
+            }
+            align(boids) {
+                let sum = new THREE.Vector3(), count = 0;
+                for (let other of boids) {
+                    if (other.species === this.species && this.position.distanceTo(other.position) < this.perceptionRadius) {
+                        sum.add(other.velocity); count++;
+                    }
+                }
+                if (count > 0) return sum.divideScalar(count).setLength(this.maxSpeed).sub(this.velocity).clampLength(0, this.maxForce);
+                return new THREE.Vector3();
+            }
+            cohere(boids) {
+                let sum = new THREE.Vector3(), count = 0;
+                for (let other of boids) {
+                    if (other.species === this.species && this.position.distanceTo(other.position) < this.perceptionRadius) {
+                        sum.add(other.position); count++;
+                    }
+                }
+                if (count > 0) return this.seek(sum.divideScalar(count));
+                return new THREE.Vector3();
+            }
+            checkBounds() {
+                const margin = 2;
+                if (this.position.x < -worldSize.width/2+margin) { this.position.x = -worldSize.width/2+margin; this.velocity.x *= -1; }
+                else if (this.position.x > worldSize.width/2-margin) { this.position.x = worldSize.width/2-margin; this.velocity.x *= -1; }
+                if (this.position.y < margin) { this.position.y = margin; this.velocity.y *= -1; }
+                else if (this.position.y > worldSize.height-margin) { this.position.y = worldSize.height-margin; this.velocity.y *= -1; }
+                if (this.position.z < -worldSize.depth/2+margin) { this.position.z = -worldSize.depth/2+margin; this.velocity.z *= -1; }
+                else if (this.position.z > worldSize.depth/2-margin) { this.position.z = worldSize.depth/2-margin; this.velocity.z *= -1; }
+            }
+        }
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xe0e7ff);
+            scene.fog = new THREE.Fog(0xe0e7ff, 500, 1500);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(50, 200, 100);
+            scene.add(directionalLight);
+
+            const canvas = document.getElementById('simulation-canvas');
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+            camera.position.set(0, 100, 450);
+            renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxDistance = 1500;
+            controls.target.set(0, worldSize.height / 2, 0);
+
+            createAquariumBox(); createDecor(); createPlants();
+            superPredator = new Ropefish();
+            submarine = new Submarine();
+            autoModeManager = new AutoModeManager();
+            
+            window.addEventListener('resize', onWindowResize, false);
+        }
+
+        function createEatEffect(position, color) {
+            const particleCount = 20;
+            const material = new THREE.LineBasicMaterial({ color: color });
+            for (let i = 0; i < particleCount; i++) {
+                const geometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5)]);
+                const particle = new THREE.Line(geometry, material);
+                particle.position.copy(position);
+                particle.userData = {
+                    velocity: new THREE.Vector3((Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2),
+                    life: 1.0
+                };
+                particles.push(particle); scene.add(particle);
+            }
+        }
+        
+        function createDiseaseEffect(position) {
+            const particleCount = 15;
+            const material = new THREE.MeshBasicMaterial({ color: 0x84cc16, transparent: true });
+            for (let i = 0; i < particleCount; i++) {
+                const geometry = new THREE.SphereGeometry(Math.random() * 1.5, 4, 4);
+                const particle = new THREE.Mesh(geometry, material);
+                particle.position.copy(position);
+                particle.userData = {
+                    velocity: new THREE.Vector3((Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.5),
+                    life: 1.5
+                };
+                particles.push(particle);
+                scene.add(particle);
+            }
+        }
+
+        function triggerProgressiveDisease(decimationRate) {
+            const fishToRemoveCount = Math.floor(boids.length * decimationRate);
+            const shuffledBoids = [...boids].sort(() => 0.5 - Math.random());
+            fishMarkedForCull = shuffledBoids.slice(0, fishToRemoveCount);
+            showNotification("ALERTE: Surpopulation. Une maladie se propage...", 'warning');
+        }
+
+        function triggerImmediateDisease(decimationRate) {
+            const fishToRemoveCount = Math.floor(boids.length * decimationRate);
+            const shuffledBoids = [...boids].filter(b => !b.isEaten).sort(() => 0.5 - Math.random());
+            for (let i = 0; i < fishToRemoveCount; i++) {
+                if (shuffledBoids[i]) {
+                    shuffledBoids[i].isEaten = true;
+                    createDiseaseEffect(shuffledBoids[i].position);
+                }
+            }
+            showNotification("ALERTE: Surpopulation critique ! Une épidémie décime 80% de la population.", 'danger');
+        }
+
+        function createAquariumBox() {
+            const geometry = new THREE.BoxGeometry(worldSize.width, worldSize.height, worldSize.depth);
+            const material = new THREE.MeshBasicMaterial({ color: 0x60a5fa, wireframe: true, transparent: true, opacity: 0.2 });
+            aquariumBox = new THREE.Mesh(geometry, material);
+            aquariumBox.position.set(0, worldSize.height / 2, 0);
+            scene.add(aquariumBox);
+        }
+
+        function createDecor() {
+            rocks.forEach(rock => scene.remove(rock)); rocks.length = 0;
+            const rockMaterial = new THREE.MeshLambertMaterial({ color: 0x9ca3af, wireframe: false });
+            for (let i = 0; i < environmentSettings.rockCount; i++) {
+                const size = Math.random() * 35 + 15;
+                const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(size, 0), rockMaterial);
+                rock.position.set((Math.random() - 0.5) * (worldSize.width - size * 2), size / 2, (Math.random() - 0.5) * (worldSize.depth - size * 2));
+                rock.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+                scene.add(rock); rocks.push(rock);
+            }
+        }
+
+        function createPlants() {
+            plants.forEach(plant => scene.remove(plant)); plants.length = 0;
+            const material = new THREE.LineBasicMaterial({ color: 0x22c55e, linewidth: 2 });
+            for (let i = 0; i < environmentSettings.plantCount; i++) {
+                const points = []; const height = Math.random() * 80 + 30;
+                points.push(new THREE.Vector3(0, 0, 0));
+                for(let j=1; j<5; j++) {
+                    points.push(new THREE.Vector3(Math.sin(j*0.5)*10, j*height/5, Math.cos(j*0.5)*10));
+                }
+                const plant = new THREE.Line(new THREE.BufferGeometry().setFromPoints(new THREE.CatmullRomCurve3(points).getPoints(20)), material);
+                plant.position.set((Math.random() - 0.5) * worldSize.width * 0.9, 0, (Math.random() - 0.5) * worldSize.depth * 0.9);
+                scene.add(plant); plants.push(plant);
+            }
+        }
+
+        function createBoids() {
+            boids.forEach(boid => scene.remove(boid.mesh)); boids.length = 0;
+            for (const species in fishSpecies) {
+                for (let i = 0; i < fishSpecies[species].count; i++) {
+                    boids.push(new Boid(species));
+                }
+            }
+        }
+        
+        function updateStats() {
+            const aliveBoids = boids.filter(b => !b.isEaten);
+            document.getElementById('fish-count').textContent = aliveBoids.filter(b => !b.isPredator).length;
+            document.getElementById('predator-count').textContent = aliveBoids.filter(b => b.isPredator).length;
+            
+            const statsContainer = document.getElementById('stats-panel-content');
+            if (statsContainer) {
+                statsContainer.querySelector('#stats-prey-eaten').textContent = simulationStats.preyEaten;
+                for (const species in fishSpecies) {
+                    const speciesContainer = statsContainer.querySelector(`#stats-container-${species}`);
+                    if (speciesContainer) {
+                        speciesContainer.querySelector(`#stats-${species}-count`).textContent = aliveBoids.filter(b => b.species === species).length;
+                        speciesContainer.querySelector(`#stats-${species}-eggs`).textContent = simulationStats.eggsLaid[species] || 0;
+                        speciesContainer.querySelector(`#stats-${species}-babies`).textContent = simulationStats.babiesHatched[species] || 0;
+                        speciesContainer.querySelector(`#stats-${species}-generation`).textContent = simulationStats.maxGeneration[species] || 1;
+                    }
+                }
+            }
+        }
+
+        function resetSimulation() {
+            simulationStats.preyEaten = 0;
+            Object.keys(fishSpecies).forEach(species => {
+                simulationStats.eggsLaid[species] = 0;
+                simulationStats.babiesHatched[species] = 0;
+                simulationStats.maxGeneration[species] = 1;
+            });
+            superPredator.remove();
+            food.forEach(f => scene.remove(f.mesh)); food.length = 0;
+            createBoids();
+        }
+
+        function saveSettings() {
+            const settings = { fishSpecies, flockingForces, environmentSettings };
+            try { localStorage.setItem('aquarium-settings', JSON.stringify(settings)); } catch(e) { console.error("Failed to save settings", e); }
+        }
+
+        function loadSettings() {
+            try {
+                const saved = localStorage.getItem('aquarium-settings');
+                if (saved) {
+                    const settings = JSON.parse(saved);
+                    Object.assign(fishSpecies, settings.fishSpecies);
+                    Object.assign(flockingForces, settings.flockingForces);
+                    Object.assign(environmentSettings, settings.environmentSettings);
+                }
+            } catch(e) { console.error("Failed to load settings", e); }
+        }
+
+        function setLanguage(lang) {
+            if (!translations[lang]) return;
+            currentLang = lang;
+            document.documentElement.lang = lang;
+            document.querySelectorAll('[data-lang-key]').forEach(el => {
+                const key = el.getAttribute('data-lang-key');
+                if (translations[lang][key]) {
+                    el.textContent = translations[lang][key];
+                }
+            });
+            document.querySelectorAll('.lang-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.lang === lang);
+            });
+            setupUI();
+        }
+        
+        function randomizeSettings() {
+            flockingForces.alignment = (Math.random() * 2).toFixed(1);
+            flockingForces.cohesion = (Math.random() * 2).toFixed(1);
+            flockingForces.separation = (Math.random() * 2).toFixed(1);
+            environmentSettings.rockCount = Math.floor(Math.random() * 50);
+            environmentSettings.plantCount = Math.floor(Math.random() * 100);
+            for (const species in fishSpecies) {
+                const config = fishSpecies[species];
+                config.count = Math.floor(Math.random() * 100) + 10;
+                config.scale = (Math.random() * 1.5 + 0.2).toFixed(1);
+                if (config.fertility !== undefined) {
+                    config.fertility = (Math.random() * 0.05).toFixed(3);
+                }
+            }
+            setupUI();
+            createDecor();
+            createPlants();
+            resetSimulation();
+        }
+
+        function toggleAutoModeUI(isActive) {
+            document.querySelectorAll('#accordion-container input[type="range"]').forEach(slider => {
+                slider.disabled = isActive;
+            });
+             document.querySelectorAll('#accordion-container button:not(#auto-mode-btn)').forEach(button => {
+                button.disabled = isActive;
+            });
+            document.querySelectorAll('.accordion-content').forEach(el => {
+                if (isActive) {
+                    el.classList.remove('open');
+                    el.style.maxHeight = null;
+                    el.previousElementSibling.querySelector('span.transform').classList.remove('rotate-180');
+                }
+            });
+            const btn = document.getElementById('auto-mode-btn');
+            if(isActive) {
+                btn.classList.add('bg-green-200', 'text-green-800');
+                autoModeManager.start();
+            } else {
+                btn.classList.remove('bg-green-200', 'text-green-800');
+                autoModeManager.stop();
+            }
+        }
+        
+        function showNotification(message, type = 'info') {
+            const logContainer = document.getElementById('log-content');
+            const latestEventText = document.getElementById('latest-event-text');
+            const latestEventIcon = document.getElementById('latest-event-icon');
+
+            if (!logContainer || !latestEventText || !latestEventIcon) return;
+
+            const logEntry = document.createElement('p');
+            let icon = '⚪';
+            let textColor = 'text-gray-300';
+
+            if (type === 'warning') { icon = '⚠️'; textColor = 'text-yellow-300'; }
+            if (type === 'danger') { icon = '🚨'; textColor = 'text-red-400'; }
+            if (type === 'death') { icon = '💀'; textColor = 'text-gray-500'; }
+            if (type === 'info') { icon = 'ℹ️'; textColor = 'text-blue-300'; }
+            if (type === 'birth') { icon = '🎉'; textColor = 'text-green-300'; }
+
+            const timestamp = new Date().toLocaleTimeString('fr-FR');
+            logEntry.className = `flex items-start ${textColor}`;
+            logEntry.innerHTML = `<span class="w-6 flex-shrink-0">${icon}</span><span class="flex-grow">${message}</span><span class="ml-2 text-gray-400">${timestamp}</span>`;
+
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+            if (logContainer.children.length > 50) {
+                logContainer.removeChild(logContainer.firstChild);
+            }
+            
+            latestEventIcon.textContent = icon;
+            latestEventText.textContent = message;
+            latestEventText.style.opacity = 1;
+            latestEventIcon.classList.add('icon-pulse');
+
+            clearTimeout(latestEventTimeout);
+            latestEventTimeout = setTimeout(() => {
+                latestEventText.style.opacity = 0;
+            }, 4000);
+            
+            latestEventIcon.addEventListener('animationend', () => {
+                latestEventIcon.classList.remove('icon-pulse');
+            }, { once: true });
+        }
+
+        function setupUI() {
+            const accordionContainer = document.getElementById('accordion-container');
+            accordionContainer.innerHTML = '';
+            const lang = translations[currentLang];
+
+            const createAccordionSection = (titleKey, contentHtml, icon) => {
+                const section = document.createElement('div');
+                section.className = 'bg-white/60 rounded-lg';
+                section.innerHTML = `
+                    <button class="w-full flex justify-between items-center p-3 text-left font-semibold text-gray-700 hover:bg-gray-200/50 rounded-lg transition-colors">
+                        <span class="flex items-center"><span class="mr-3 text-lg">${icon}</span> <span data-lang-key="${titleKey}">${lang[titleKey]}</span></span>
+                        <span class="transform transition-transform duration-300">▼</span>
+                    </button>
+                    <div class="accordion-content px-3 pb-3">
+                        <div class="border-t border-gray-200 pt-3">${contentHtml}</div>
+                    </div>
+                `;
+                accordionContainer.appendChild(section);
+                const button = section.querySelector('button');
+                const content = section.querySelector('.accordion-content');
+                const arrow = button.querySelector('span.transform');
+                button.addEventListener('click', () => {
+                    if (isAutoModeActive) return;
+                    const isOpen = content.classList.contains('open');
+                    document.querySelectorAll('.accordion-content.open').forEach(el => {
+                        el.classList.remove('open');
+                        el.style.maxHeight = null;
+                        el.previousElementSibling.querySelector('span.transform').classList.remove('rotate-180');
+                    });
+                    if (!isOpen) {
+                        content.classList.add('open');
+                        content.style.maxHeight = content.scrollHeight + "px";
+                        arrow.classList.add('rotate-180');
+                    }
+                });
+            };
+
+            const createSlider = (id, labelKey, min, max, step, value, dataAttributes) => {
+                const dataAttrString = Object.entries(dataAttributes).map(([key, val]) => `data-${key}="${val}"`).join(' ');
+                return `
+                    <div class="mb-3">
+                        <label for="${id}" class="flex justify-between items-center text-sm font-medium text-gray-600 mb-1">
+                            <span data-lang-key="${labelKey}">${lang[labelKey]}</span>
+                            <span id="${id}-value" class="font-mono bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded">${value}</span>
+                        </label>
+                        <input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${value}" ${dataAttrString}>
+                    </div>
+                `;
+            };
+
+            let speciesContent = '<div class="space-y-4">';
+            for (const species in fishSpecies) {
+                const config = fishSpecies[species];
+                const color = `#${config.color.toString(16).padStart(6, '0')}`;
+                speciesContent += `<div class="p-3 rounded-lg border" style="border-color: ${color}"><h4 class="font-bold mb-2" style="color: ${color};">${species.toUpperCase()}</h4>`;
+                speciesContent += createSlider(`${species}-count`, 'count', 0, 150, 1, config.count, { category: 'species', species: species, property: 'count', reset: 'true' });
+                speciesContent += createSlider(`${species}-scale`, 'scale', 0.1, 3, 0.1, config.scale, { category: 'species', species: species, property: 'scale', reset: 'true' });
+                if (config.fertility !== undefined) {
+                    speciesContent += createSlider(`${species}-fertility`, 'fertility', 0, 0.1, 0.001, config.fertility, { category: 'species', species: species, property: 'fertility' });
+                }
+                speciesContent += '</div>';
+            }
+            speciesContent += '</div>';
+            createAccordionSection('species', speciesContent, '🐠');
+
+            let paramsContent = `<h4 class="font-bold mb-2" data-lang-key="forces">${lang['forces']}</h4>`;
+            paramsContent += createSlider('alignment', 'alignment', 0, 2, 0.1, flockingForces.alignment, { category: 'flocking', property: 'alignment' });
+            paramsContent += createSlider('cohesion', 'cohesion', 0, 2, 0.1, flockingForces.cohesion, { category: 'flocking', property: 'cohesion' });
+            paramsContent += createSlider('separation', 'separation', 0, 2, 0.1, flockingForces.separation, { category: 'flocking', property: 'separation' });
+            paramsContent += `<h4 class="font-bold mb-2 mt-4" data-lang-key="environment">${lang['environment']}</h4>`;
+            paramsContent += createSlider('rockCount', 'rock_count', 0, 50, 1, environmentSettings.rockCount, { category: 'environment', property: 'rockCount', reset: 'decor' });
+            paramsContent += createSlider('plantCount', 'plant_count', 0, 100, 1, environmentSettings.plantCount, { category: 'environment', property: 'plantCount', reset: 'plants' });
+            createAccordionSection('parameters', paramsContent, '🛠️');
+
+            const createButton = (id, labelKey) => `<button id="${id}" class="w-full text-left px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors" data-lang-key="${labelKey}">${lang[labelKey]}</button>`;
+            let actionsContent = `<div class="space-y-2">${createButton('feed-btn', 'feed')}${createButton('release-ropefish-btn', 'release_ropefish')}${createButton('toggle-view-btn', 'toggle_view')}${createButton('auto-mode-btn', 'auto_mode')}${createButton('random-mode-btn', 'random_mode')}</div>`;
+            createAccordionSection('actions', actionsContent, '⚡');
+            
+            let statsContent = `<div id="stats-panel-content" class="text-sm space-y-3">`;
+            statsContent += `<p class="flex justify-between"><span data-lang-key="prey_eaten">${lang['prey_eaten']}:</span> <span id="stats-prey-eaten" class="font-mono">0</span></p><hr>`;
+            for (const s in fishSpecies) {
+                const color = `#${fishSpecies[s].color.toString(16).padStart(6, '0')}`;
+                statsContent += `<div id="stats-container-${s}" class="p-2 rounded border" style="border-color: ${color};">
+                    <h5 class="font-bold" style="color: ${color};">${s.toUpperCase()}</h5>
+                    <p class="flex justify-between"><span>Population:</span> <span id="stats-${s}-count" class="font-mono">0</span></p>
+                    <p class="flex justify-between"><span data-lang-key="eggs_laid">${lang['eggs_laid']}:</span> <span id="stats-${s}-eggs" class="font-mono">0</span></p>
+                    <p class="flex justify-between"><span data-lang-key="babies_hatched">${lang['babies_hatched']}:</span> <span id="stats-${s}-babies" class="font-mono">0</span></p>
+                    <p class="flex justify-between"><span data-lang-key="generation">${lang['generation']}:</span> <span id="stats-${s}-generation" class="font-mono">1</span></p>
+                </div>`;
+            }
+            statsContent += `</div>`;
+            createAccordionSection('statistics', statsContent, '📊');
+
+            let systemContent = `<div class="space-y-2">${createButton('save-btn', 'save')}${createButton('reset-btn', 'reset')}</div>`;
+            createAccordionSection('system', systemContent, '💾');
+
+            document.getElementById('feed-btn').addEventListener('click', generateFood);
+            document.getElementById('release-ropefish-btn').addEventListener('click', () => superPredator.spawn());
+            document.getElementById('toggle-view-btn').addEventListener('click', () => {
+                isSubmarineViewActive = !isSubmarineViewActive;
+                submarine.mesh.visible = !isSubmarineViewActive;
+                controls.enabled = !isSubmarineViewActive;
+                const btn = document.getElementById('toggle-view-btn');
+                btn.textContent = isSubmarineViewActive ? lang.view_orbital : lang.view_submarine;
+            });
+            document.getElementById('auto-mode-btn').addEventListener('click', (e) => {
+                isAutoModeActive = !isAutoModeActive;
+                toggleAutoModeUI(isAutoModeActive);
+            });
+            document.getElementById('random-mode-btn').addEventListener('click', randomizeSettings);
+            document.getElementById('save-btn').addEventListener('click', saveSettings);
+            document.getElementById('reset-btn').addEventListener('click', () => {
+                try { localStorage.removeItem('aquarium-settings'); location.reload(); } catch(e) {}
+            });
+
+            accordionContainer.addEventListener('input', (e) => {
+                if (e.target.type !== 'range') return;
+                const { value, id, dataset } = e.target;
+                const { category, species, property, reset } = dataset;
+                document.getElementById(`${id}-value`).textContent = parseFloat(value).toFixed(id.includes('fertility') ? 3 : (e.target.step < 1 ? 1 : 0));
+                
+                if (category === 'species') fishSpecies[species][property] = parseFloat(value);
+                else if (category === 'flocking') flockingForces[property] = parseFloat(value);
+                else if (category === 'environment') environmentSettings[property] = parseInt(value, 10);
+                
+                if (reset === 'true') resetSimulation();
+                else if (reset === 'decor') createDecor();
+                else if (reset === 'plants') createPlants();
+            });
+        }
+        
+        function generateFood() {
+            const count = Math.floor(Math.random() * 10) + 15;
+            for (let i = 0; i < count; i++) {
+                const position = new THREE.Vector3((Math.random() - 0.5) * worldSize.width * 0.8, worldSize.height * (0.8 + Math.random() * 0.15), (Math.random() - 0.5) * worldSize.depth * 0.8);
+                food.push(new FoodParticle(position));
+            }
+        }
+
+        function animate(time) {
+            requestAnimationFrame(animate);
+            if (lastFrameTime > 0) {
+                const fps = Math.round(1000 / (time - lastFrameTime));
+                if (isFinite(fps)) document.getElementById('fps').textContent = fps;
+            }
+            lastFrameTime = time;
+            
+            if (isAutoModeActive) autoModeManager.update();
+
+            const totalFish = boids.filter(b => !b.isEaten).length;
+            if (totalFish > 600 && !criticalDiseaseTriggered) {
+                criticalDiseaseTriggered = true;
+                diseaseEventTriggered = true;
+                fishMarkedForCull = [];
+                triggerImmediateDisease(0.8);
+            } else if (totalFish >= 500 && !diseaseEventTriggered && !criticalDiseaseTriggered) {
+                diseaseEventTriggered = true;
+                triggerProgressiveDisease(0.5 + Math.random() * 0.3);
+            } else if (totalFish < 400) {
+                diseaseEventTriggered = false;
+                criticalDiseaseTriggered = false;
+                fishMarkedForCull = [];
+            }
+
+            if (fishMarkedForCull.length > 0) {
+                diseaseSpreadCounter++;
+                if (diseaseSpreadCounter > 10) { 
+                    const fishToInfect = fishMarkedForCull.pop();
+                    if (fishToInfect && !fishToInfect.isDiseased) {
+                        fishToInfect.isDiseased = true;
+                        fishToInfect.diseaseTimer = 600; // 10 seconds
+                        createDiseaseEffect(fishToInfect.position);
+                        showNotification(`${fishToInfect.species} a été infecté.`, 'info');
+                    }
+                    diseaseSpreadCounter = 0;
+                }
+            }
+
+            let newBoids = [];
+            eggs.forEach((egg, i) => {
+                const hatched = egg.update();
+                if (hatched) { newBoids.push(...hatched); scene.remove(egg.mesh); eggs.splice(i, 1); }
+            });
+            if (newBoids.length > 0) boids.push(...newBoids);
+            
+            food.forEach((p, i) => { if(p.update()) { scene.remove(p.mesh); food.splice(i, 1); } });
+            particles.forEach((p, i) => {
+                p.position.add(p.userData.velocity); p.userData.life -= 0.05;
+                if (p.userData.life <= 0) { scene.remove(p); particles.splice(i, 1); }
+            });
+            
+            superPredator.update(boids);
+            submarine.update();
+            boids.forEach(boid => boid.update(boids));
+            boids = boids.filter(boid => {
+                if (boid.isEaten) {
+                    if (boid.isDiseased) {
+                        showNotification(`${boid.species} est mort de maladie.`, 'death');
+                    }
+                    scene.remove(boid.mesh); 
+                    return false; 
+                }
+                return true;
+            });
+
+            if (Math.random() < 0.05) updateStats();
+            
+            const activeCamera = isSubmarineViewActive ? submarine.camera : camera;
+            if (controls.enabled) controls.update();
+            renderer.render(scene, activeCamera);
+        }
+
+        function onWindowResize() {
+            const aspect = window.innerWidth / window.innerHeight;
+            camera.aspect = aspect;
+            camera.updateProjectionMatrix();
+            if (submarine) {
+                submarine.camera.aspect = aspect;
+                submarine.camera.updateProjectionMatrix();
+            }
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function initModal() {
+            const modal = document.getElementById('welcome-modal');
+            const startBtn = document.getElementById('start-simulation-btn');
+            const checkbox = document.getElementById('dont-show-again');
+            const content = modal.querySelector('.transform');
+            const langSelector = document.getElementById('lang-selector');
+
+            langSelector.addEventListener('click', (e) => {
+                if (e.target.tagName === 'BUTTON' && e.target.dataset.lang) {
+                    setLanguage(e.target.dataset.lang);
+                }
+            });
+
+            try {
+                if (localStorage.getItem('aquarium-welcome-dismissed')) {
+                    modal.classList.add('hidden');
+                    return;
+                }
+            } catch(e) {}
+
+            setTimeout(() => {
+                content.classList.remove('scale-95', 'opacity-0');
+                content.classList.add('scale-100', 'opacity-100');
+            }, 100);
+
+            startBtn.addEventListener('click', () => {
+                try {
+                    if (checkbox.checked) localStorage.setItem('aquarium-welcome-dismissed', 'true');
+                } catch(e) {}
+                content.classList.add('scale-95', 'opacity-0');
+                setTimeout(() => modal.classList.add('hidden'), 300);
+            });
+        }
+        
+        function setupUIToggle() {
+            const toggleButtons = document.querySelectorAll('.ui-toggle-btn');
+            toggleButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    const targetId = button.dataset.target;
+                    const targetElement = document.getElementById(targetId);
+                    if (!targetElement) return;
+
+                    let isVisible;
+                    if (targetId === 'main-header') {
+                        isVisible = !targetElement.classList.toggle('-translate-y-full');
+                    } else if (targetId === 'controls-sidebar') {
+                        const header = document.getElementById('main-header');
+                        const log = document.getElementById('event-log-container');
+                        isVisible = !targetElement.classList.toggle('-translate-x-full');
+                        header.classList.toggle('lg:left-80');
+                        log.classList.toggle('lg:left-80');
+                    } else if (targetId === 'event-log-container') {
+                        isVisible = !targetElement.classList.toggle('translate-y-full');
+                    }
+                    
+                    button.classList.toggle('opacity-50', !isVisible);
+                });
+            });
+        }
+
+        loadSettings();
+        init();
+        setupUI();
+        initModal();
+        setupUIToggle();
+        setLanguage(currentLang);
+        resetSimulation();
+        animate();
+
+    </script>
+</body>
+</html>
