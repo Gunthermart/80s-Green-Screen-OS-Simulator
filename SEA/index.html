@@ -87,14 +87,13 @@
     <div id="app-container" class="relative w-full h-screen overflow-hidden">
         <canvas id="simulation-canvas"></canvas>
 
-        <header id="main-header" class="fixed top-0 left-0 right-0 z-20 transition-all duration-300 lg:left-80">
+        <header id="main-header" class="fixed top-0 left-0 right-0 z-20 transition-all duration-300">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div class="flex items-center justify-between h-16 bg-white/50 backdrop-blur-md rounded-b-lg shadow-sm mt-4 px-6">
                     <div>
-                        <h1 class="text-xl font-bold text-gray-900">Simulation d'Écosystème Aquatique</h1>
-                        <p class="text-xs text-gray-600">Glissez pour explorer, utilisez le panneau pour contrôler.</p>
+                        <h1 class="text-lg sm:text-xl font-bold text-gray-900">Simulation d'Écosystème Aquatique</h1>
                     </div>
-                    <div id="stats" class="flex items-center space-x-4 text-sm text-center">
+                    <div id="stats" class="hidden sm:flex items-center space-x-4 text-sm text-center">
                         <div>
                             <span class="font-bold text-gray-900" id="fish-count">0</span>
                             <span class="block text-xs text-gray-500" data-lang-key="fish_count_label">Poissons</span>
@@ -128,6 +127,13 @@
                 <div id="accordion-container" class="space-y-2"></div>
             </div>
         </aside>
+        
+        <div id="mobile-controls-container" class="lg:hidden fixed bottom-0 left-0 right-0 z-30">
+            <div id="mobile-controls-drawer" class="w-full bg-white/50 backdrop-blur-md rounded-t-lg shadow-lg transition-transform duration-300 translate-y-full max-h-[75vh] overflow-y-auto">
+                <div class="p-4" id="mobile-accordion-container"></div>
+            </div>
+        </div>
+
 
         <div id="welcome-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-70 backdrop-blur-sm">
             <div class="bg-white rounded-lg shadow-2xl w-full max-w-2xl p-8 m-4 transform transition-all duration-300 scale-95 opacity-0">
@@ -173,7 +179,7 @@
             </div>
         </div>
 
-        <div id="event-log-container" class="fixed bottom-4 left-4 z-40 transition-all duration-300 lg:left-80">
+        <div id="event-log-container" class="fixed bottom-4 left-4 z-40 transition-all duration-300">
             <div id="full-log" class="absolute bottom-full mb-2 w-80 h-48 bg-gray-900/70 backdrop-blur-md rounded-lg p-2 text-xs font-mono text-white opacity-0 transform translate-y-4 pointer-events-none transition-all duration-300 overflow-y-auto sidebar-scrollbar">
                 <div id="log-content" class="space-y-1"></div>
             </div>
@@ -946,7 +952,9 @@
 
         function setupUI() {
             const accordionContainer = document.getElementById('accordion-container');
+            const mobileAccordionContainer = document.getElementById('mobile-accordion-container');
             accordionContainer.innerHTML = '';
+            mobileAccordionContainer.innerHTML = '';
             const lang = translations[currentLang];
 
             const createAccordionSection = (titleKey, contentHtml, icon) => {
@@ -961,14 +969,19 @@
                         <div class="border-t border-gray-200 pt-3">${contentHtml}</div>
                     </div>
                 `;
-                accordionContainer.appendChild(section);
+                return section;
+            };
+
+            const setupAccordionListeners = (section) => {
                 const button = section.querySelector('button');
                 const content = section.querySelector('.accordion-content');
                 const arrow = button.querySelector('span.transform');
                 button.addEventListener('click', () => {
                     if (isAutoModeActive) return;
                     const isOpen = content.classList.contains('open');
-                    document.querySelectorAll('.accordion-content.open').forEach(el => {
+                    // Close all others in the same container
+                    const container = section.parentElement;
+                    container.querySelectorAll('.accordion-content.open').forEach(el => {
                         el.classList.remove('open');
                         el.style.maxHeight = null;
                         el.previousElementSibling.querySelector('span.transform').classList.remove('rotate-180');
@@ -1007,8 +1020,7 @@
                 speciesContent += '</div>';
             }
             speciesContent += '</div>';
-            createAccordionSection('species', speciesContent, '🐠');
-
+            
             let paramsContent = `<h4 class="font-bold mb-2" data-lang-key="forces">${lang['forces']}</h4>`;
             paramsContent += createSlider('alignment', 'alignment', 0, 2, 0.1, flockingForces.alignment, { category: 'flocking', property: 'alignment' });
             paramsContent += createSlider('cohesion', 'cohesion', 0, 2, 0.1, flockingForces.cohesion, { category: 'flocking', property: 'cohesion' });
@@ -1016,11 +1028,9 @@
             paramsContent += `<h4 class="font-bold mb-2 mt-4" data-lang-key="environment">${lang['environment']}</h4>`;
             paramsContent += createSlider('rockCount', 'rock_count', 0, 50, 1, environmentSettings.rockCount, { category: 'environment', property: 'rockCount', reset: 'decor' });
             paramsContent += createSlider('plantCount', 'plant_count', 0, 100, 1, environmentSettings.plantCount, { category: 'environment', property: 'plantCount', reset: 'plants' });
-            createAccordionSection('parameters', paramsContent, '🛠️');
-
+            
             const createButton = (id, labelKey) => `<button id="${id}" class="w-full text-left px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors" data-lang-key="${labelKey}">${lang[labelKey]}</button>`;
             let actionsContent = `<div class="space-y-2">${createButton('feed-btn', 'feed')}${createButton('release-ropefish-btn', 'release_ropefish')}${createButton('toggle-view-btn', 'toggle_view')}${createButton('auto-mode-btn', 'auto_mode')}${createButton('random-mode-btn', 'random_mode')}</div>`;
-            createAccordionSection('actions', actionsContent, '⚡');
             
             let statsContent = `<div id="stats-panel-content" class="text-sm space-y-3">`;
             statsContent += `<p class="flex justify-between"><span data-lang-key="prey_eaten">${lang['prey_eaten']}:</span> <span id="stats-prey-eaten" class="font-mono">0</span></p><hr>`;
@@ -1035,46 +1045,79 @@
                 </div>`;
             }
             statsContent += `</div>`;
-            createAccordionSection('statistics', statsContent, '📊');
-
+            
             let systemContent = `<div class="space-y-2">${createButton('save-btn', 'save')}${createButton('reset-btn', 'reset')}</div>`;
-            createAccordionSection('system', systemContent, '💾');
+            
+            const sections = [
+                createAccordionSection('species', speciesContent, '🐠'),
+                createAccordionSection('parameters', paramsContent, '🛠️'),
+                createAccordionSection('actions', actionsContent, '⚡'),
+                createAccordionSection('statistics', statsContent, '📊'),
+                createAccordionSection('system', systemContent, '💾')
+            ];
 
-            document.getElementById('feed-btn').addEventListener('click', generateFood);
-            document.getElementById('release-ropefish-btn').addEventListener('click', () => superPredator.spawn());
-            document.getElementById('toggle-view-btn').addEventListener('click', () => {
-                isSubmarineViewActive = !isSubmarineViewActive;
-                submarine.mesh.visible = !isSubmarineViewActive;
-                controls.enabled = !isSubmarineViewActive;
-                const btn = document.getElementById('toggle-view-btn');
-                btn.textContent = isSubmarineViewActive ? lang.view_orbital : lang.view_submarine;
-            });
-            document.getElementById('auto-mode-btn').addEventListener('click', (e) => {
-                isAutoModeActive = !isAutoModeActive;
-                toggleAutoModeUI(isAutoModeActive);
-            });
-            document.getElementById('random-mode-btn').addEventListener('click', randomizeSettings);
-            document.getElementById('save-btn').addEventListener('click', saveSettings);
-            document.getElementById('reset-btn').addEventListener('click', () => {
-                try { localStorage.removeItem('aquarium-settings'); location.reload(); } catch(e) {}
+            sections.forEach(section => {
+                const desktopSection = section.cloneNode(true);
+                const mobileSection = section.cloneNode(true);
+                accordionContainer.appendChild(desktopSection);
+                mobileAccordionContainer.appendChild(mobileSection);
+                setupAccordionListeners(desktopSection);
+                setupAccordionListeners(mobileSection);
             });
 
-            accordionContainer.addEventListener('input', (e) => {
-                if (e.target.type !== 'range') return;
-                const { value, id, dataset } = e.target;
-                const { category, species, property, reset } = dataset;
-                document.getElementById(`${id}-value`).textContent = parseFloat(value).toFixed(id.includes('fertility') ? 3 : (e.target.step < 1 ? 1 : 0));
-                
-                if (category === 'species') fishSpecies[species][property] = parseFloat(value);
-                else if (category === 'flocking') flockingForces[property] = parseFloat(value);
-                else if (category === 'environment') environmentSettings[property] = parseInt(value, 10);
-                
-                if (reset === 'true') resetSimulation();
-                else if (reset === 'decor') createDecor();
-                else if (reset === 'plants') createPlants();
+            document.querySelectorAll('button').forEach(button => {
+                if (button.id) {
+                    button.addEventListener('click', handleButtonClick);
+                }
+            });
+
+            document.querySelectorAll('input[type=range]').forEach(slider => {
+                slider.addEventListener('input', handleSliderInput);
             });
         }
-        
+
+        function handleButtonClick(e) {
+            const id = e.currentTarget.id;
+            const lang = translations[currentLang];
+            switch(id) {
+                case 'feed-btn': generateFood(); break;
+                case 'release-ropefish-btn': superPredator.spawn(); break;
+                case 'toggle-view-btn': 
+                    isSubmarineViewActive = !isSubmarineViewActive;
+                    submarine.mesh.visible = !isSubmarineViewActive;
+                    controls.enabled = !isSubmarineViewActive;
+                    document.querySelectorAll('#toggle-view-btn').forEach(btn => {
+                        btn.textContent = isSubmarineViewActive ? lang.view_orbital : lang.view_submarine;
+                    });
+                    break;
+                case 'auto-mode-btn':
+                    isAutoModeActive = !isAutoModeActive;
+                    toggleAutoModeUI(isAutoModeActive);
+                    break;
+                case 'random-mode-btn': randomizeSettings(); break;
+                case 'save-btn': saveSettings(); break;
+                case 'reset-btn': 
+                    try { localStorage.removeItem('aquarium-settings'); location.reload(); } catch(e) {}
+                    break;
+            }
+        }
+
+        function handleSliderInput(e) {
+            const { value, id, dataset } = e.target;
+            const { category, species, property, reset } = dataset;
+            document.querySelectorAll(`#${id}-value`).forEach(el => {
+                el.textContent = parseFloat(value).toFixed(id.includes('fertility') ? 3 : (e.target.step < 1 ? 1 : 0));
+            });
+            
+            if (category === 'species') fishSpecies[species][property] = parseFloat(value);
+            else if (category === 'flocking') flockingForces[property] = parseFloat(value);
+            else if (category === 'environment') environmentSettings[property] = parseInt(value, 10);
+            
+            if (reset === 'true') resetSimulation();
+            else if (reset === 'decor') createDecor();
+            else if (reset === 'plants') createPlants();
+        }
+
         function generateFood() {
             const count = Math.floor(Math.random() * 10) + 15;
             for (let i = 0; i < count; i++) {
@@ -1203,6 +1246,8 @@
         
         function setupUIToggle() {
             const toggleButtons = document.querySelectorAll('.ui-toggle-btn');
+            const mobileDrawer = document.getElementById('mobile-controls-drawer');
+
             toggleButtons.forEach(button => {
                 button.addEventListener('click', () => {
                     const targetId = button.dataset.target;
@@ -1210,16 +1255,21 @@
                     if (!targetElement) return;
 
                     let isVisible;
-                    if (targetId === 'main-header') {
-                        isVisible = !targetElement.classList.toggle('-translate-y-full');
-                    } else if (targetId === 'controls-sidebar') {
-                        const header = document.getElementById('main-header');
-                        const log = document.getElementById('event-log-container');
-                        isVisible = !targetElement.classList.toggle('-translate-x-full');
-                        header.classList.toggle('lg:left-80');
-                        log.classList.toggle('lg:left-80');
-                    } else if (targetId === 'event-log-container') {
-                        isVisible = !targetElement.classList.toggle('translate-y-full');
+                    if (targetId === 'controls-sidebar') {
+                        // Desktop and Mobile toggle
+                        if (window.innerWidth < 1024) {
+                            isVisible = !mobileDrawer.classList.toggle('translate-y-full');
+                        } else {
+                            const header = document.getElementById('main-header');
+                            const log = document.getElementById('event-log-container');
+                            isVisible = !targetElement.classList.toggle('-translate-x-full');
+                            header.classList.toggle('lg:left-80');
+                            log.classList.toggle('lg:left-80');
+                        }
+                    } else {
+                        // Header and Log toggle
+                        isVisible = !targetElement.classList.toggle('opacity-0');
+                        targetElement.classList.toggle('pointer-events-none');
                     }
                     
                     button.classList.toggle('opacity-50', !isVisible);
