@@ -14,10 +14,6 @@
         }
     }
     </script>
-    <!-- Chosen Palette: Calm Harmony -->
-    <!-- Application Structure Plan: La SPA est conçue comme un tableau de bord immersif. La structure principale se compose d'une vue 3D centrale occupant la majorité de l'écran, d'un en-tête persistant affichant les statistiques vitales, et d'une barre latérale de contrôle fixe à gauche. Cette barre latérale utilise un système d'accordéon pour organiser les commandes en groupes logiques (Espèces, Paramètres, Actions, Système), évitant ainsi l'encombrement des panneaux flottants de l'original. Cette conception centralise les interactions de l'utilisateur, rendant la navigation intuitive et l'exploration des paramètres plus fluide, ce qui est idéal pour gérer une simulation complexe. -->
-    <!-- Visualization & Content Choices: Les paramètres de la simulation (ex: nombre de poissons, vitesse) sont gérés par des curseurs HTML pour un contrôle intuitif. Les statistiques en temps réel (ex: population, proies mangées) sont affichées sous forme de texte dynamique dans l'en-tête et une section dédiée, offrant une lisibilité maximale. L'écosystème 3D est rendu sur un canvas avec Three.js, la méthode la plus directe pour une visualisation de ce type. Les actions de l'utilisateur (ex: nourrir) sont déclenchées par des boutons. Cette approche utilise des éléments HTML standards pour l'interface, garantissant accessibilité et performance, tout en réservant la complexité du rendu au canvas WebGL. -->
-    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
     <style>
         body { font-family: 'Inter', sans-serif; }
         .backdrop-blur-md { backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
@@ -207,6 +203,14 @@
         let latestEventTimeout;
         let lastStatsUpdateTime = 0;
 
+        // --- OPTIMIZATION: Cache DOM elements ---
+        const dom = {};
+
+        // --- OPTIMIZATION: Reusable Vector3 objects to avoid garbage collection ---
+        const tempVec3 = new THREE.Vector3();
+        const desiredVelocity = new THREE.Vector3();
+        const steerForce = new THREE.Vector3();
+
         const simulationStats = { preyEaten: 0, eggsLaid: {}, babiesHatched: {}, maxGeneration: {}, totalBirths: 0, totalDeaths: 0 };
 
         const flockingForces = { alignment: 0.4, cohesion: 0.3, separation: 1.2 };
@@ -259,8 +263,8 @@
                 this.lastPreyCount = 0;
             }
             start() {
-                this.timerDisplayElement = document.getElementById('auto-mode-timer');
-                const statsEl = document.getElementById('auto-mode-stats');
+                this.timerDisplayElement = dom.autoModeTimer;
+                const statsEl = dom.autoModeStats;
                 if (!statsEl || !this.timerDisplayElement) return;
 
                 this.startTime = performance.now();
@@ -280,7 +284,7 @@
             stop(freeze = false) {
                 clearInterval(this.timerInterval); this.timerInterval = null;
                 if (!freeze) {
-                    const statsEl = document.getElementById('auto-mode-stats');
+                    const statsEl = dom.autoModeStats;
                     if (statsEl) {
                         statsEl.classList.add('hidden');
                     }
@@ -826,25 +830,27 @@
             const aliveBoids = boids.filter(b => !b.isEaten);
             const preyCount = aliveBoids.filter(b => !b.isPredator).length;
             const predatorCount = aliveBoids.filter(b => b.isPredator).length;
-            document.getElementById('fish-count').textContent = preyCount;
-            document.getElementById('predator-count').textContent = predatorCount;
+            dom.fishCount.textContent = preyCount;
+            dom.predatorCount.textContent = predatorCount;
             const ratio = predatorCount > 0 ? (preyCount / predatorCount).toFixed(1) : '∞';
-            document.getElementById('prey-predator-ratio').textContent = ratio;
-            document.getElementById('birth-count').textContent = simulationStats.totalBirths;
-            document.getElementById('death-count').textContent = simulationStats.totalDeaths;
+            dom.preyPredatorRatio.textContent = ratio;
+            dom.birthCount.textContent = simulationStats.totalBirths;
+            dom.deathCount.textContent = simulationStats.totalDeaths;
             
-            const statsContainer = document.getElementById('stats-panel-content');
-            if (statsContainer) {
-                statsContainer.querySelector('#stats-prey-eaten').textContent = simulationStats.preyEaten;
-                for (const species in fishSpecies) {
-                    const speciesContainer = statsContainer.querySelector(`#stats-container-${species}`);
-                    if (speciesContainer) {
-                        speciesContainer.querySelector(`#stats-${species}-count`).textContent = aliveBoids.filter(b => b.species === species).length;
-                        speciesContainer.querySelector(`#stats-${species}-eggs`).textContent = simulationStats.eggsLaid[species] || 0;
-                        speciesContainer.querySelector(`#stats-${species}-babies`).textContent = simulationStats.babiesHatched[species] || 0;
-                        speciesContainer.querySelector(`#stats-${species}-generation`).textContent = simulationStats.maxGeneration[species] || 1;
+            const statsContainers = document.querySelectorAll('#stats-panel-content');
+            if (statsContainers.length > 0) {
+                 statsContainers.forEach(statsContainer => {
+                    statsContainer.querySelector('#stats-prey-eaten').textContent = simulationStats.preyEaten;
+                    for (const species in fishSpecies) {
+                        const speciesContainer = statsContainer.querySelector(`#stats-container-${species}`);
+                        if (speciesContainer) {
+                            speciesContainer.querySelector(`#stats-${species}-count`).textContent = aliveBoids.filter(b => b.species === species).length;
+                            speciesContainer.querySelector(`#stats-${species}-eggs`).textContent = simulationStats.eggsLaid[species] || 0;
+                            speciesContainer.querySelector(`#stats-${species}-babies`).textContent = simulationStats.babiesHatched[species] || 0;
+                            speciesContainer.querySelector(`#stats-${species}-generation`).textContent = simulationStats.maxGeneration[species] || 1;
+                        }
                     }
-                }
+                });
             }
         }
 
@@ -934,9 +940,9 @@
         }
         
         function showNotification(key, type = 'info', params = {}) {
-            const logContainer = document.getElementById('log-content');
-            const latestEventText = document.getElementById('latest-event-text');
-            const latestEventIcon = document.getElementById('latest-event-icon');
+            const logContainer = dom.logContent;
+            const latestEventText = dom.latestEventText;
+            const latestEventIcon = dom.latestEventIcon;
 
             if (!logContainer || !latestEventText || !latestEventIcon) return;
 
@@ -981,8 +987,8 @@
         }
 
         function setupUI() {
-            const accordionContainer = document.getElementById('accordion-container');
-            const mobileAccordionContainer = document.getElementById('mobile-accordion-container');
+            const accordionContainer = dom.accordionContainer;
+            const mobileAccordionContainer = dom.mobileAccordionContainer;
             accordionContainer.innerHTML = '';
             mobileAccordionContainer.innerHTML = '';
             const lang = translations[currentLang];
@@ -1272,11 +1278,11 @@
         }
 
         function initModal() {
-            const modal = document.getElementById('welcome-modal');
-            const startBtn = document.getElementById('start-simulation-btn');
-            const checkbox = document.getElementById('dont-show-again');
+            const modal = dom.welcomeModal;
+            const startBtn = dom.startSimulationBtn;
+            const checkbox = dom.dontShowAgainCheckbox;
             const content = modal.querySelector('.transform');
-            const langSelector = document.getElementById('lang-selector');
+            const langSelector = dom.langSelector;
 
             langSelector.addEventListener('click', (e) => {
                 if (e.target.tagName === 'BUTTON' && e.target.dataset.lang) {
@@ -1307,9 +1313,9 @@
         
         function setupUIToggle() {
             const toggleButtons = document.querySelectorAll('.ui-toggle-btn');
-            const mobileDrawer = document.getElementById('mobile-controls-drawer');
-            const mobileContainer = document.getElementById('mobile-controls-container');
-            const sidebar = document.getElementById('controls-sidebar');
+            const mobileDrawer = dom.mobileControlsDrawer;
+            const mobileContainer = dom.mobileControlsContainer;
+            const sidebar = dom.controlsSidebar;
 
             toggleButtons.forEach(button => {
                 button.addEventListener('click', () => {
@@ -1335,7 +1341,30 @@
             });
         }
         
+        function cacheDOMElements() {
+            dom.fishCount = document.getElementById('fish-count');
+            dom.predatorCount = document.getElementById('predator-count');
+            dom.preyPredatorRatio = document.getElementById('prey-predator-ratio');
+            dom.birthCount = document.getElementById('birth-count');
+            dom.deathCount = document.getElementById('death-count');
+            dom.logContent = document.getElementById('log-content');
+            dom.latestEventText = document.getElementById('latest-event-text');
+            dom.latestEventIcon = document.getElementById('latest-event-icon');
+            dom.accordionContainer = document.getElementById('accordion-container');
+            dom.mobileAccordionContainer = document.getElementById('mobile-accordion-container');
+            dom.welcomeModal = document.getElementById('welcome-modal');
+            dom.startSimulationBtn = document.getElementById('start-simulation-btn');
+            dom.dontShowAgainCheckbox = document.getElementById('dont-show-again');
+            dom.langSelector = document.getElementById('lang-selector');
+            dom.mobileControlsDrawer = document.getElementById('mobile-controls-drawer');
+            dom.mobileControlsContainer = document.getElementById('mobile-controls-container');
+            dom.controlsSidebar = document.getElementById('controls-sidebar');
+            dom.autoModeTimer = document.getElementById('auto-mode-timer');
+            dom.autoModeStats = document.getElementById('auto-mode-stats');
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
+            cacheDOMElements();
             loadSettings();
             init();
             setupUI();
