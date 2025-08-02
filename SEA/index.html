@@ -378,6 +378,7 @@
             </div>
         </aside>
         
+        <!-- Conteneur pour le tiroir mobile -->
         <div id="mobile-controls-container" class="lg:hidden fixed bottom-0 left-0 right-0 z-30 pointer-events-none">
             <div id="mobile-controls-drawer" class="w-full glass-dark rounded-t-2xl shadow-xl transition-transform duration-500 translate-y-full max-h-[75vh] overflow-y-auto pointer-events-auto">
                 <div class="p-5" id="mobile-accordion-container"></div>
@@ -475,11 +476,18 @@
             </div>
         </div>
         
+        <!-- Ajout d'un bouton pour basculer le tiroir mobile -->
+        <div id="mobile-toggle-btn" class="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 block lg:hidden">
+            <button class="glass rounded-full h-16 w-16 flex items-center justify-center shadow-xl text-2xl transition-all duration-300 hover:shadow-primary-500/50 transform hover:scale-110">
+                <i class="fa-solid fa-sliders text-primary-300"></i>
+            </button>
+        </div>
+
         <div id="ui-toggle-cluster" class="fixed top-4 left-4 z-50 flex space-x-3">
             <button data-target="main-header" class="ui-toggle-btn glass rounded-full h-12 w-12 flex items-center justify-center shadow-xl text-xl transition-all duration-300 opacity-100 hover:shadow-primary-500/50 transform hover:scale-110">
                 <i class="fa-solid fa-chart-simple text-primary-300"></i>
             </button>
-            <button data-target="controls-sidebar" class="ui-toggle-btn glass rounded-full h-12 w-12 flex items-center justify-center shadow-xl text-xl transition-all duration-300 opacity-50 hover:shadow-primary-500/50 transform hover:scale-110">
+            <button data-target="controls-sidebar" class="ui-toggle-btn glass rounded-full h-12 w-12 flex items-center justify-center shadow-xl text-xl transition-all duration-300 opacity-50 hover:shadow-primary-500/50 transform hover:scale-110 hidden lg:flex">
                 <i class="fa-solid fa-sliders text-primary-300"></i>
             </button>
             <button data-target="event-log-container" class="ui-toggle-btn glass rounded-full h-12 w-12 flex items-center justify-center shadow-xl text-xl transition-all duration-300 opacity-100 hover:shadow-primary-500/50 transform hover:scale-110">
@@ -769,7 +777,7 @@
                     scene.remove(this.body);
                     this.isActive = false;
                     document.querySelectorAll('.ropefish-status-text').forEach(el => el.textContent = translations[currentLang].inactive);
-                    document.querySelectorAll('#release-ropefish-btn').forEach(btn => btn.textContent = translations[currentLang].release_ropefish);
+                    document.querySelectorAll('#release-ropefish-btn').forEach(btn => btn.textContent = translations[currentLang].remove_ropefish);
                     showNotification('notif_calm', 'info');
                 }
             }
@@ -1783,25 +1791,41 @@
             const mobileDrawer = dom.mobileControlsDrawer;
             const mobileContainer = dom.mobileControlsContainer;
             const sidebar = dom.controlsSidebar;
+            const mobileToggleBtn = document.getElementById('mobile-toggle-btn');
 
-            toggleButtons.forEach(button => {
+            // Toggle for the main controls sidebar (desktop only)
+            const desktopSidebarToggleBtn = document.querySelector('.ui-toggle-btn[data-target="controls-sidebar"]');
+            if (desktopSidebarToggleBtn) {
+                desktopSidebarToggleBtn.addEventListener('click', () => {
+                    const isVisible = !sidebar.classList.toggle('-translate-x-full');
+                    desktopSidebarToggleBtn.classList.toggle('opacity-50', !isVisible);
+                });
+            }
+
+            // Toggle for the mobile controls drawer
+            if (mobileToggleBtn) {
+                 mobileToggleBtn.addEventListener('click', () => {
+                    const isVisible = mobileDrawer.classList.contains('translate-y-full');
+                    if (isVisible) {
+                        mobileDrawer.classList.remove('translate-y-full');
+                        mobileContainer.classList.remove('pointer-events-none');
+                    } else {
+                        mobileDrawer.classList.add('translate-y-full');
+                        mobileContainer.classList.add('pointer-events-none');
+                    }
+                });
+            }
+           
+            // UI Toggle for header and event log (for all devices)
+            const otherUiToggles = document.querySelectorAll('.ui-toggle-btn:not([data-target="controls-sidebar"])');
+             otherUiToggles.forEach(button => {
                 button.addEventListener('click', () => {
                     const targetId = button.dataset.target;
                     const targetElement = document.getElementById(targetId);
                     if (!targetElement) return;
 
-                    let isVisible;
-                    if (targetId === 'controls-sidebar') {
-                        if (window.innerWidth < 1024) {
-                            isVisible = !mobileDrawer.classList.toggle('translate-y-full');
-                            mobileContainer.classList.toggle('pointer-events-none', !isVisible);
-                        } else {
-                            isVisible = !sidebar.classList.toggle('-translate-x-full');
-                        }
-                    } else {
-                        isVisible = !targetElement.classList.toggle('opacity-0');
-                        targetElement.classList.toggle('pointer-events-none', !isVisible);
-                    }
+                    const isVisible = !targetElement.classList.toggle('opacity-0');
+                    targetElement.classList.toggle('pointer-events-none', !isVisible);
                     
                     button.classList.toggle('opacity-50', !isVisible);
                 });
