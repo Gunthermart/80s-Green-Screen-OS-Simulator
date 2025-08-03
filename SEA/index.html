@@ -332,14 +332,45 @@
         <div class="wave"></div>
         <canvas id="simulation-canvas"></canvas>
 
-        <!-- Sur PC, le panneau de statistiques est toujours visible -->
-        <header id="main-header" class="fixed top-4 right-4 z-20 transition-all duration-300 hidden lg:block">
+        <!-- Panneau de statistiques pour mobile -->
+        <header id="mobile-header" class="fixed top-4 left-1/2 -translate-x-1/2 z-20 transition-all duration-300 block lg:hidden w-11/12 max-w-md">
             <div class="glass rounded-2xl shadow-xl p-3">
-                <div id="stats" class="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-4 text-sm text-center">
+                <div id="stats-mobile" class="flex justify-around items-center text-sm text-center">
                     <div>
                         <div class="relative flex items-center justify-center">
                             <i class="fa-solid fa-fish text-primary-300 fish-icon"></i>
-                            <span class="font-bold text-white stats-counter" id="fish-count">0</span>
+                            <span class="font-bold text-white stats-counter fish-count">0</span>
+                        </div>
+                        <span class="block text-xs text-primary-200" data-lang-key="fish_count_label">Poissons</span>
+                    </div>
+                    <div class="border-l border-primary-700/50 h-8"></div>
+                    <div>
+                        <div class="relative flex items-center justify-center">
+                            <i class="fa-solid fa-skull text-accent-300 fish-icon"></i>
+                            <span class="font-bold text-white stats-counter predator-count">0</span>
+                        </div>
+                        <span class="block text-xs text-primary-200" data-lang-key="predator_count_label">Prédateurs</span>
+                    </div>
+                    <div class="border-l border-primary-700/50 h-8"></div>
+                     <div>
+                        <div class="relative flex items-center justify-center">
+                            <i class="fa-solid fa-egg text-secondary-300 fish-icon"></i>
+                            <span class="font-bold text-secondary-300 stats-counter birth-count">0</span>
+                        </div>
+                        <span class="block text-xs text-primary-200" data-lang-key="births_label">Naissances</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Panneau de statistiques pour PC -->
+        <header id="main-header" class="fixed top-4 right-4 z-20 transition-all duration-300 hidden lg:block">
+            <div class="glass rounded-2xl shadow-xl p-3">
+                <div id="stats-desktop" class="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-4 text-sm text-center">
+                    <div>
+                        <div class="relative flex items-center justify-center">
+                            <i class="fa-solid fa-fish text-primary-300 fish-icon"></i>
+                            <span class="font-bold text-white stats-counter fish-count">0</span>
                         </div>
                         <span class="block text-xs text-primary-200" data-lang-key="fish_count_label">Poissons</span>
                     </div>
@@ -347,20 +378,20 @@
                     <div>
                         <div class="relative flex items-center justify-center">
                             <i class="fa-solid fa-skull text-accent-300 fish-icon"></i>
-                            <span class="font-bold text-white stats-counter" id="predator-count">0</span>
+                            <span class="font-bold text-white stats-counter predator-count">0</span>
                         </div>
                         <span class="block text-xs text-primary-200" data-lang-key="predator_count_label">Prédateurs</span>
                     </div>
                     <div class="border-b sm:border-l sm:border-b-0 border-primary-700/50 h-8 w-full sm:w-auto"></div>
                     <div class="hidden sm:block">
-                        <span class="font-bold text-white stats-counter" id="prey-predator-ratio">N/A</span>
+                        <span class="font-bold text-white stats-counter prey-predator-ratio">N/A</span>
                         <span class="block text-xs text-primary-200">Ratio Proie/Préd.</span>
                     </div>
                     <div class="hidden sm:block border-l border-primary-700/50 h-8"></div>
                     <div class="hidden md:block">
                         <div class="relative flex items-center justify-center">
                             <i class="fa-solid fa-egg text-secondary-300 fish-icon"></i>
-                            <span class="font-bold text-secondary-300 stats-counter" id="birth-count">0</span>
+                            <span class="font-bold text-secondary-300 stats-counter birth-count">0</span>
                         </div>
                         <span class="block text-xs text-primary-200" data-lang-key="births_label">Naissances</span>
                     </div>
@@ -368,7 +399,7 @@
                     <div class="hidden md:block">
                         <div class="relative flex items-center justify-center">
                             <i class="fa-solid fa-skull-crossbones text-accent-400 fish-icon"></i>
-                            <span class="font-bold text-accent-400 stats-counter" id="death-count">0</span>
+                            <span class="font-bold text-accent-400 stats-counter death-count">0</span>
                         </div>
                         <span class="block text-xs text-primary-200" data-lang-key="deaths_label">Morts</span>
                     </div>
@@ -1180,18 +1211,17 @@
         
         // --- UI update functions ---
         function updateStats() {
-            // First, update the boids array to remove eaten fish
             boids = boids.filter(boid => !boid.isEaten);
-
             const aliveBoids = boids.filter(b => !b.isEaten);
             const preyCount = aliveBoids.filter(b => !b.isPredator).length;
             const predatorCount = aliveBoids.filter(b => b.isPredator).length;
-            dom.fishCount.textContent = preyCount;
-            dom.predatorCount.textContent = predatorCount;
             const ratio = predatorCount > 0 ? (preyCount / predatorCount).toFixed(1) : '∞';
-            dom.preyPredatorRatio.textContent = ratio;
-            dom.birthCount.textContent = simulationStats.totalBirths;
-            dom.deathCount.textContent = simulationStats.totalDeaths;
+
+            dom.fishCounts.forEach(el => el.textContent = preyCount);
+            dom.predatorCounts.forEach(el => el.textContent = predatorCount);
+            dom.preyPredatorRatios.forEach(el => el.textContent = ratio);
+            dom.birthCounts.forEach(el => el.textContent = simulationStats.totalBirths);
+            dom.deathCounts.forEach(el => el.textContent = simulationStats.totalDeaths);
             
             const statsContainers = document.querySelectorAll('#stats-panel-content');
             if (statsContainers.length > 0) {
@@ -1301,11 +1331,14 @@
             }
         }
 
-        function loadState() {
+        function loadState(showAlertOnFailure = false) {
             try {
                 const savedStateJSON = localStorage.getItem('aquarium-state');
                 if (!savedStateJSON) {
                     console.warn("No saved state found.");
+                    if(showAlertOnFailure) {
+                        alert('Aucune sauvegarde trouvée.');
+                    }
                     return false;
                 }
                 const savedState = JSON.parse(savedStateJSON);
@@ -1414,7 +1447,9 @@
 
             } catch (e) {
                 console.error("Failed to load state", e);
-                alert('Erreur lors de la restauration de la sauvegarde.');
+                if(showAlertOnFailure) {
+                    alert('Erreur lors de la restauration de la sauvegarde.');
+                }
                 return false;
             }
         }
@@ -1656,7 +1691,7 @@
                         ${createButton('save-btn', 'save', 'flex-grow', 'fa-floppy-disk')}
                         <span class="save-feedback text-secondary-400 opacity-0"><i class="fa-solid fa-circle-check text-xl"></i></span>
                     </div>
-                    ${createButton('load-btn', 'load_save', 'opacity-50 cursor-not-allowed', 'fa-folder-open', true)}
+                    ${createButton('load-btn', 'load_save', '', 'fa-folder-open')}
                     ${createButton('reset-btn', 'reset', '', 'fa-arrows-rotate')}
                     ${createButton('clear-save-btn', 'clear_save', 'hover:bg-red-700/40 text-accent-300 hover:text-accent-200', 'fa-trash-can')}
                 </div>`;
@@ -1732,7 +1767,7 @@
                     break;
                 case 'random-mode-btn': randomizeSettings(); break;
                 case 'save-btn': saveState(); break;
-                case 'load-btn': loadState(true); break; // Pass true to show alert on failure
+                case 'load-btn': loadState(true); break; 
                 case 'reset-btn': resetSimulation(); break;
                 case 'clear-save-btn': 
                     try { 
@@ -1985,11 +2020,11 @@
         
         // --- Cache DOM elements on page load ---
         function cacheDOMElements() {
-            dom.fishCount = document.getElementById('fish-count');
-            dom.predatorCount = document.getElementById('predator-count');
-            dom.preyPredatorRatio = document.getElementById('prey-predator-ratio');
-            dom.birthCount = document.getElementById('birth-count');
-            dom.deathCount = document.getElementById('death-count');
+            dom.fishCounts = document.querySelectorAll('.fish-count');
+            dom.predatorCounts = document.querySelectorAll('.predator-count');
+            dom.preyPredatorRatios = document.querySelectorAll('.prey-predator-ratio');
+            dom.birthCounts = document.querySelectorAll('.birth-count');
+            dom.deathCounts = document.querySelectorAll('.death-count');
             dom.logContent = document.getElementById('log-content');
             dom.latestEventText = document.getElementById('latest-event-text');
             dom.latestEventIcon = document.getElementById('latest-event-icon');
