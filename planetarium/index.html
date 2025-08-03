@@ -43,24 +43,25 @@
             text-align: center;
             z-index: 100;
             transition: opacity 1s ease-out;
+            opacity: 1; /* Rendre visible au début */
         }
         #splash-screen.hidden {
             opacity: 0;
             pointer-events: none;
         }
-        #splash-screen h1 {
-            font-size: 2.5em;
-            margin-bottom: 20px;
-            text-transform: uppercase;
-            border-bottom: 2px solid #00ff00;
-            padding-bottom: 10px;
+        #splash-screen h1, #splash-screen p, #loading-dots {
+            opacity: 0;
+            transform: translateY(20px);
+            animation: fadeIn 1s forwards;
         }
-        #splash-screen p {
-            max-width: 500px;
-            margin: 0 auto 30px auto;
-            line-height: 1.6;
-        }
+        #splash-screen h1 { animation-delay: 0.5s; }
+        #splash-screen p { animation-delay: 1s; }
+        #loading-dots { animation-delay: 1.5s; }
+        
         #start-button {
+            opacity: 0;
+            animation: pulse 1.5s infinite, fadeIn 1.5s forwards;
+            animation-delay: 2s;
             background-color: transparent;
             border: 2px solid #00ff00;
             color: #00ff00;
@@ -74,6 +75,23 @@
         #start-button:hover {
             background-color: #00ff00;
             color: #000;
+        }
+        #loading-dots {
+            font-size: 1.5em;
+            margin-top: 20px;
+            overflow: hidden;
+            height: 1.5em;
+        }
+        @keyframes fadeIn {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
         }
 
         /* --- Interface Utilisateur (HUD) --- */
@@ -101,31 +119,70 @@
             display: block;
             margin-bottom: 5px;
         }
-        #info-panel select {
-            width: 100%;
-            padding: 5px;
-            border-radius: 0;
+
+        /* Styles du menu déroulant personnalisé */
+        .custom-select {
+            position: relative;
+            width: 200px; /* Augmentation de la largeur */
+            font-family: 'Courier New', Courier, monospace;
+            cursor: pointer;
+        }
+        .select-selected {
             background-color: #001400;
             color: #00ff00;
             border: 1px solid #00ff00;
-            font-family: inherit;
-            max-height: 150px; /* Ajout pour un meilleur contrôle sur mobile */
-            overflow-y: auto; /* Permet le défilement si la liste est longue */
+            padding: 5px 15px 5px 5px;
+            position: relative;
         }
-        #info-panel select:focus {
-            outline: 1px solid #00ff00;
+        .select-selected:after {
+            position: absolute;
+            content: "";
+            top: 14px;
+            right: 10px;
+            width: 0;
+            height: 0;
+            border: 6px solid transparent;
+            border-color: #00ff00 transparent transparent transparent;
         }
-        /* Style de la scrollbar pour le menu déroulant */
-        #info-panel select::-webkit-scrollbar {
+        .select-selected.select-arrow-active:after {
+            border-color: transparent transparent #00ff00 transparent;
+            top: 7px;
+        }
+        .select-items {
+            position: absolute;
+            background-color: #001400;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+            top: 100%;
+            left: 0;
+            right: 0;
+            z-index: 99;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .select-items div {
+            padding: 5px 15px;
+            border-bottom: 1px solid #00ff00;
+        }
+        .select-items div:hover {
+            background-color: #00ff00;
+            color: #000;
+        }
+        .select-hide {
+            display: none;
+        }
+        /* Style de la scrollbar du menu déroulant personnalisé */
+        .select-items::-webkit-scrollbar {
             width: 8px;
         }
-        #info-panel select::-webkit-scrollbar-track {
+        .select-items::-webkit-scrollbar-track {
             background: #001400;
         }
-        #info-panel select::-webkit-scrollbar-thumb {
+        .select-items::-webkit-scrollbar-thumb {
             background-color: #ffa500;
             border-radius: 4px;
         }
+
         #time-controls {
             display: flex;
             align-items: center;
@@ -241,6 +298,18 @@
 
         /* Styles spécifiques pour les appareils mobiles */
         @media (max-width: 768px) {
+            #splash-screen h1 {
+                font-size: 1.8em;
+                margin-bottom: 10px;
+            }
+            #splash-screen p {
+                font-size: 0.9em;
+                margin: 0 auto 20px auto;
+            }
+            #start-button {
+                padding: 10px 20px;
+                font-size: 1em;
+            }
             #hud-container {
                 flex-direction: column;
                 align-items: center;
@@ -257,24 +326,30 @@
                 justify-content: center;
                 gap: 8px;
             }
-            #info-panel select {
+            /* Style wireframe pour le sélecteur d'objets sur mobile */
+            .custom-select {
                 border: 1px dashed #00ff00;
-                color: #00ff00;
+                width: 100%;
             }
         }
     </style>
 </head>
 <body>
     <div id="splash-screen">
-        <h1>PLANÉTARIUM_v3.js</h1>
-        <p>Une simulation en rendu vectoriel du système solaire. Explorez les orbites des planètes, des lunes et d'autres corps célestes. Utilisez la souris pour naviguer et un clic droit pour ouvrir un menu d'options.</p>
+        <h1 id="splash-title">PLANÉTARIUM_v3.js</h1>
+        <p id="splash-description">Une simulation en rendu vectoriel du système solaire. Explorez les orbites des planètes, des lunes et d'autres corps célestes. Utilisez la souris pour naviguer et un clic droit pour ouvrir un menu d'options.</p>
+        <span id="loading-dots">Chargement...</span>
         <button id="start-button">LANCER LA SIMULATION</button>
     </div>
 
     <div id="hud-container">
         <div id="info-panel" class="hud-panel">
             <label for="target-selector">CIBLE :</label>
-            <select id="target-selector"></select>
+            <!-- Remplacement de la balise select par un div personnalisé -->
+            <div class="custom-select" id="target-selector-container">
+                <div class="select-selected">Aucune</div>
+                <div class="select-items select-hide"></div>
+            </div>
         </div>
         <div id="time-controls" class="hud-panel">
             <button id="pause-btn">PAUSE</button>
@@ -324,6 +399,7 @@
         const simulationStartDate = new Date('2025-01-01T00:00:00');
         let radialMenuContainer;
         let targetedObject = null;
+        let splashScreen;
 
         // --- INITIALISATION ---
         function main() {
@@ -358,6 +434,7 @@
             labelContainer = document.getElementById('label-container');
             datePanel = document.getElementById('date-panel');
             radialMenuContainer = document.getElementById('radial-menu-container');
+            splashScreen = document.getElementById('splash-screen');
             controls = new OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
             controls.dampingFactor = 0.05;
@@ -566,16 +643,40 @@
         
         // --- INTERFACE UTILISATEUR ---
         function setupUI() {
-            const selector = document.getElementById('target-selector');
+            // Initialisation du menu déroulant personnalisé
+            const selectContainer = document.getElementById('target-selector-container');
+            const selectSelected = selectContainer.getElementsByClassName('select-selected')[0];
+            const selectItems = selectContainer.getElementsByClassName('select-items')[0];
+            
+            // Remplir le menu déroulant avec les options
             const options = ['Aucune', ...celestialBodies.keys()];
             options.sort();
             options.forEach(name => {
-                const option = document.createElement('option');
-                option.value = name;
-                option.textContent = name;
-                selector.appendChild(option);
+                const item = document.createElement('div');
+                item.textContent = name;
+                item.addEventListener('click', () => {
+                    selectSelected.textContent = name;
+                    setTarget(name);
+                    selectItems.classList.add('select-hide');
+                    selectSelected.classList.remove('select-arrow-active');
+                });
+                selectItems.appendChild(item);
             });
-            selector.addEventListener('change', (e) => setTarget(e.target.value));
+
+            // Gérer l'ouverture/fermeture du menu
+            selectSelected.addEventListener('click', (e) => {
+                e.stopPropagation();
+                selectItems.classList.toggle('select-hide');
+                selectSelected.classList.toggle('select-arrow-active');
+            });
+
+            // Fermer le menu si on clique en dehors
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('.custom-select')) {
+                    selectItems.classList.add('select-hide');
+                    selectSelected.classList.remove('select-arrow-active');
+                }
+            });
 
             const speedSlider = document.getElementById('speed-slider');
             const speedValue = document.getElementById('speed-value');
@@ -608,15 +709,16 @@
         }
 
         function setTarget(name) {
-            const selector = document.getElementById('target-selector');
+            // Mise à jour de l'affichage du nom sélectionné
+            const selectedText = document.querySelector('.select-selected');
+            selectedText.textContent = name;
+
             if (name === 'Aucune' || !celestialBodies.has(name)) {
                 cameraTarget = null;
                 controls.target.set(0, 0, 0);
-                selector.value = 'Aucune';
             } else {
                 const body = celestialBodies.get(name);
                 cameraTarget = body.mesh;
-                selector.value = name;
             }
         }
         
@@ -646,9 +748,15 @@
         }
 
         function onLeftClick(event) {
-            // Cacher le menu radial si l'utilisateur clique ailleurs
+            // Cacher le menu radial et le menu déroulant si l'utilisateur clique ailleurs
             if (!event.target.closest('#radial-menu-container') && !event.target.closest('.hud-panel')) {
                 radialMenuContainer.style.display = 'none';
+                const selectItems = document.querySelector('.custom-select .select-items');
+                const selectSelected = document.querySelector('.custom-select .select-selected');
+                if (selectItems && !selectItems.classList.contains('select-hide')) {
+                    selectItems.classList.add('select-hide');
+                    selectSelected.classList.remove('select-arrow-active');
+                }
                 targetedObject = null;
             }
         }
@@ -741,13 +849,30 @@
 
         // --- DÉMARRAGE ---
         document.getElementById('start-button').addEventListener('click', () => {
-            const splash = document.getElementById('splash-screen');
-            splash.classList.add('hidden');
-            splash.addEventListener('transitionend', () => {
-                splash.remove();
-            });
-            main(); // CORRECTION : Appeler main() immédiatement
+            if (splashScreen) {
+              splashScreen.classList.add('hidden');
+              splashScreen.addEventListener('transitionend', () => {
+                  splashScreen.remove();
+              });
+            }
+            main();
         }, { once: true });
+
+        // Démarrer l'animation de l'écran de démarrage au chargement de la page
+        document.addEventListener('DOMContentLoaded', () => {
+            splashScreen = document.getElementById('splash-screen');
+            const splashTitle = document.getElementById('splash-title');
+            const splashDescription = document.getElementById('splash-description');
+            const loadingDots = document.getElementById('loading-dots');
+            const startButton = document.getElementById('start-button');
+            
+            if (splashTitle) {
+                void splashTitle.offsetWidth;
+                void splashDescription.offsetWidth;
+                void loadingDots.offsetWidth;
+                void startButton.offsetWidth;
+            }
+        });
 
     </script>
 </body>
