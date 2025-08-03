@@ -3,7 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Planétarium 3D - Affichage de la Date</title>
+    <title>Planétarium 3D - Simulation du Système Solaire</title>
+    
+    <meta name="description" content="Une simulation interactive et visuelle du système solaire en 3D avec un rendu de style fil de fer. Explorez les planètes, lunes, astéroïdes et sondes spatiales.">
+    <meta name="keywords" content="planétarium, système solaire, simulation 3D, Three.js, rendu vectoriel, orbites, planètes, étoiles, astéroïdes, sondes spatiales">
+    <meta name="author" content="Leonce Equity">
+
+    <meta property="og:title" content="Planétarium 3D - Une simulation du Système Solaire">
+    <meta property="og:description" content="Explorez le système solaire d'une manière unique avec cette simulation interactive. Un rendu rétro-futuriste pour un voyage dans l'espace.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://leonce-equity.com/planetarium/">
+    <meta property="og:image" content="https://leonce-equity.com/planetarium/planetarium.png">
+    
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Planétarium 3D - Simulation du Système Solaire">
+    <meta name="twitter:description" content="Découvrez une simulation interactive du système solaire en 3D avec un style vectoriel unique. Planets, lunes, comètes, tout y est !">
+    <meta name="twitter:image" content="https://leonce-equity.com/planetarium/planetarium.png">
+
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Courier New', Courier, monospace; }
         canvas { display: block; }
@@ -94,6 +110,17 @@
         #info-panel select:focus {
             outline: 1px solid #00ff00;
         }
+        /* Style de la scrollbar pour le menu déroulant */
+        #info-panel select::-webkit-scrollbar {
+            width: 8px;
+        }
+        #info-panel select::-webkit-scrollbar-track {
+            background: #001400;
+        }
+        #info-panel select::-webkit-scrollbar-thumb {
+            background-color: #ffa500;
+            border-radius: 4px;
+        }
         #time-controls {
             display: flex;
             align-items: center;
@@ -122,33 +149,37 @@
             width: 120px;
             background: transparent;
         }
+        /* Style du curseur pour les navigateurs basés sur WebKit (Chrome, Safari) */
         input[type=range]::-webkit-slider-thumb {
             -webkit-appearance: none;
-            border: 1px solid #00ff00;
+            border: 1px solid #ffa500; /* Couleur orange pour le curseur */
             height: 18px;
             width: 10px;
-            background: #00ff00;
+            background: #ffa500; /* Couleur orange pour le curseur */
             cursor: pointer;
             margin-top: -8px;
         }
+        /* Style du curseur pour Firefox */
         input[type=range]::-moz-range-thumb {
-            border: 1px solid #00ff00;
+            border: 1px solid #ffa500; /* Couleur orange pour le curseur */
             height: 18px;
             width: 10px;
-            background: #00ff00;
+            background: #ffa500; /* Couleur orange pour le curseur */
             cursor: pointer;
         }
+        /* Style de la piste pour les navigateurs basés sur WebKit (Chrome, Safari) */
         input[type=range]::-webkit-slider-runnable-track {
             width: 100%;
             height: 2px;
             cursor: pointer;
-            background: #00ff00;
+            background: #ffa500; /* Couleur orange pour la piste */
         }
+        /* Style de la piste pour Firefox */
         input[type=range]::-moz-range-track {
             width: 100%;
             height: 2px;
             cursor: pointer;
-            background: #00ff00;
+            background: #ffa500; /* Couleur orange pour la piste */
         }
         .label {
             position: absolute;
@@ -166,6 +197,41 @@
             position: absolute;
             bottom: 10px;
             left: 10px;
+        }
+
+        /* --- Menu Radial --- */
+        #radial-menu-container {
+            position: absolute;
+            display: none;
+            z-index: 1000;
+        }
+        .radial-menu-button {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: #00ff00;
+            color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+            border: 1px solid #00ff00;
+        }
+        .radial-menu-button:hover {
+            transform: scale(1.2);
+            box-shadow: 0 0 10px #00ff00;
+        }
+        .radial-menu-center {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background-color: #00ff00;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
         }
 
         @media (max-width: 768px) {
@@ -191,7 +257,7 @@
 <body>
     <div id="splash-screen">
         <h1>PLANÉTARIUM_v3.js</h1>
-        <p>Une simulation en rendu vectoriel du système solaire. Explorez les orbites des planètes, des lunes et d'autres corps célestes. Utilisez la souris pour naviguer et cliquez sur un objet pour le cibler.</p>
+        <p>Une simulation en rendu vectoriel du système solaire. Explorez les orbites des planètes, des lunes et d'autres corps célestes. Utilisez la souris pour naviguer et un clic droit pour ouvrir un menu d'options.</p>
         <button id="start-button">LANCER LA SIMULATION</button>
     </div>
 
@@ -212,6 +278,13 @@
     </div>
     <div id="label-container"></div>
     <div id="date-panel" class="hud-panel"></div>
+
+    <div id="radial-menu-container">
+        <div class="radial-menu-center"></div>
+        <div class="radial-menu-button" id="radial-target-btn" style="top: -60px; left: -20px;">CIBLER</div>
+        <div class="radial-menu-button" id="radial-info-btn" style="top: 20px; left: 40px;">INFO</div>
+    </div>
+    
     <script type="importmap">
         {
             "imports": {
@@ -227,7 +300,8 @@
         // --- VARIABLES GLOBALES ---
         let scene, camera, renderer, controls;
         const celestialBodies = new Map();
-        const GLOW_COLOR = 0x00ff00;
+        const GLOW_COLOR = 0x00ff00; // Couleur verte
+        const ORANGE_COLOR = 0xffa500; // Couleur orange
         let simulationTime;
         let timeScale = 10;
         let isPaused = false;
@@ -237,6 +311,8 @@
         const mouse = new THREE.Vector2();
         let datePanel;
         const simulationStartDate = new Date('2025-01-01T00:00:00');
+        let radialMenuContainer;
+        let targetedObject = null;
 
         // --- INITIALISATION ---
         function main() {
@@ -270,6 +346,7 @@
             document.body.appendChild(renderer.domElement);
             labelContainer = document.getElementById('label-container');
             datePanel = document.getElementById('date-panel');
+            radialMenuContainer = document.getElementById('radial-menu-container');
             controls = new OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
             controls.dampingFactor = 0.05;
@@ -304,7 +381,7 @@
             createMoon(pluto, { name: 'Charon', size: 1, distance: 15, period: 0.0175, eccentricity: 0.000, info: "Lune binaire" });
             const eris = createPlanet('Eris', { size: 1.8, distance: 1600, period: 558, tilt: 97.5, eccentricity: 0.44, orbitTilt: 44, info: "Planète naine lointaine" });
             createAsteroidBelt();
-            createPlanet('Cérès', { size: 1.5, distance: 374, period: 4.6, tilt: 10.6, eccentricity: 0.076, orbitTilt: 10.6, info: "Dans la ceinture d'astéroïdes" });
+            createPlanet('Cérès', { size: 1.5, distance: 374, period: 4.6, tilt: 10.6, eccentricity: 0.076, orbitTilt: 10.6, info: "Dans la ceinture d'astéroïdes" }, ORANGE_COLOR);
             createComet('Halley', { size: 2, distance: 1200, period: 76, orbitTilt: 162.3, eccentricity: 0.967, info: "Comète périodique" });
             createTrojanAsteroids(jupiter);
             createProbe('Voyager 1', { startDistance: 1300, speed: 3.6, direction: new THREE.Vector3(0.5, 0.1, -0.8).normalize(), info: "Objet humain le plus lointain" });
@@ -322,8 +399,8 @@
             celestialBodies.set(data.name, { mesh: sun, label: label, data: data });
         }
 
-        function createPlanet(name, data) {
-            const material = new THREE.MeshBasicMaterial({ color: GLOW_COLOR, wireframe: true });
+        function createPlanet(name, data, color = GLOW_COLOR) {
+            const material = new THREE.MeshBasicMaterial({ color: color, wireframe: true });
             const planet = new THREE.Mesh(new THREE.SphereGeometry(data.size, 24, 24), material);
             planet.name = name;
             planet.rotation.z = THREE.MathUtils.degToRad(data.tilt);
@@ -337,12 +414,12 @@
             }
             if (data.rings) {
                 const ringGeo = new THREE.RingGeometry(data.rings.inner, data.rings.outer, 64);
-                const ringMat = new THREE.MeshBasicMaterial({ color: GLOW_COLOR, wireframe: true, side: THREE.DoubleSide });
+                const ringMat = new THREE.MeshBasicMaterial({ color: color, wireframe: true, side: THREE.DoubleSide });
                 const ringsMesh = new THREE.Mesh(ringGeo, ringMat);
                 ringsMesh.rotation.x = -Math.PI / 2;
                 planet.add(ringsMesh);
             }
-            const { semiMajorAxis, semiMinorAxis } = createOrbit(data.distance, data.eccentricity, orbitPivot);
+            const { semiMajorAxis, semiMinorAxis } = createOrbit(data.distance, data.eccentricity, orbitPivot, color);
             const label = createLabel(name, data.info);
             const planetData = { name, mesh: planet, pivot: pivot, orbitPivot: orbitPivot, period: data.period, moons: [], semiMajorAxis, semiMinorAxis, label: label, data: data };
             celestialBodies.set(name, planetData);
@@ -365,13 +442,13 @@
         }
 
         function createComet(name, data) {
-            const material = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true });
+            const material = new THREE.MeshBasicMaterial({ color: ORANGE_COLOR, wireframe: true });
             const comet = new THREE.Mesh(new THREE.SphereGeometry(data.size, 16, 16), material);
             comet.name = name;
             const tailGeometry = new THREE.BufferGeometry();
             const tailPositions = new Float32Array([0, 0, 0, 0, 0, 50]);
             tailGeometry.setAttribute('position', new THREE.Float32BufferAttribute(tailPositions, 3));
-            const tailMaterial = new THREE.LineBasicMaterial({ color: GLOW_COLOR, transparent: true, opacity: 0.5 });
+            const tailMaterial = new THREE.LineBasicMaterial({ color: ORANGE_COLOR, transparent: true, opacity: 0.5 });
             const tail = new THREE.Line(tailGeometry, tailMaterial);
             comet.add(tail);
             const pivot = new THREE.Object3D();
@@ -380,7 +457,7 @@
             pivot.add(comet);
             scene.add(orbitPivot);
             orbitPivot.rotation.x = THREE.MathUtils.degToRad(data.orbitTilt);
-            const { semiMajorAxis, semiMinorAxis } = createOrbit(data.distance, data.eccentricity, orbitPivot);
+            const { semiMajorAxis, semiMinorAxis } = createOrbit(data.distance, data.eccentricity, orbitPivot, ORANGE_COLOR);
             const label = createLabel(name, data.info);
             const cometData = { name, mesh: comet, pivot: pivot, orbitPivot: orbitPivot, period: data.period, semiMajorAxis, semiMinorAxis, tail: tail, label: label, data: data };
             celestialBodies.set(name, cometData);
@@ -425,7 +502,7 @@
             }
             const geometry = new THREE.BufferGeometry();
             geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-            const material = new THREE.PointsMaterial({ color: GLOW_COLOR, size: 0.5, transparent: true, opacity: 0.5 });
+            const material = new THREE.PointsMaterial({ color: ORANGE_COLOR, size: 0.5, transparent: true, opacity: 0.5 });
             const asteroidBelt = new THREE.Points(geometry, material);
             scene.add(asteroidBelt);
         }
@@ -444,7 +521,7 @@
                 }
                 const geometry = new THREE.BufferGeometry();
                 geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-                const material = new THREE.PointsMaterial({ color: GLOW_COLOR, size: 0.4, transparent: true, opacity: 0.4 });
+                const material = new THREE.PointsMaterial({ color: ORANGE_COLOR, size: 0.4, transparent: true, opacity: 0.4 });
                 const points = new THREE.Points(geometry, material);
                 points.name = name;
                 const pivot = new THREE.Object3D();
@@ -461,13 +538,13 @@
         }
 
         function createProbe(name, data) {
-            const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            const material = new THREE.MeshBasicMaterial({ color: ORANGE_COLOR });
             const probe = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 8), material);
             probe.name = name;
             const startPos = data.direction.clone().multiplyScalar(data.startDistance);
             probe.position.copy(startPos);
             scene.add(probe);
-            const lineMat = new THREE.LineBasicMaterial({ color: 0xaaaaaa, transparent: true, opacity: 0.5 });
+            const lineMat = new THREE.LineBasicMaterial({ color: ORANGE_COLOR, transparent: true, opacity: 0.5 });
             const points = [new THREE.Vector3(0,0,0), startPos];
             const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
             const line = new THREE.Line(lineGeo, lineMat);
@@ -498,6 +575,25 @@
             
             document.getElementById('pause-btn').addEventListener('click', () => isPaused = true);
             document.getElementById('play-btn').addEventListener('click', () => isPaused = false);
+
+            document.getElementById('radial-target-btn').addEventListener('click', () => {
+                if (targetedObject) {
+                    const bodyData = celestialBodies.get(targetedObject.name);
+                    if (bodyData) {
+                        setTarget(bodyData.name);
+                    }
+                }
+                radialMenuContainer.style.display = 'none';
+            });
+            document.getElementById('radial-info-btn').addEventListener('click', () => {
+                const bodyData = celestialBodies.get(targetedObject.name);
+                if (bodyData && bodyData.data) {
+                    alert(`${bodyData.name.toUpperCase()}\n${bodyData.data.info}`);
+                } else {
+                    console.error("Impossible de trouver les informations de l'objet ciblé.");
+                }
+                radialMenuContainer.style.display = 'none';
+            });
         }
 
         function setTarget(name) {
@@ -516,17 +612,33 @@
         // --- GESTIONNAIRES D'ÉVÉNEMENTS ---
         function setupEventListeners() {
             window.addEventListener('resize', onWindowResize, false);
-            window.addEventListener('click', onClick, false);
+            window.addEventListener('contextmenu', onRightClick, false);
+            window.addEventListener('click', onLeftClick, false);
         }
 
-        function onClick(event) {
-            if (event.target.closest('.hud-panel')) return;
+        function onRightClick(event) {
+            event.preventDefault(); // Empêche le menu contextuel par défaut du navigateur
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = - (event.clientY / window.innerHeight) * 2 + 1;
             raycaster.setFromCamera(mouse, camera);
             const intersects = raycaster.intersectObjects(Array.from(celestialBodies.values()).map(b => b.mesh));
+            
             if (intersects.length > 0) {
-                setTarget(intersects[0].object.name);
+                const object = intersects[0].object;
+                targetedObject = object;
+                radialMenuContainer.style.display = 'block';
+                radialMenuContainer.style.left = `${event.clientX}px`;
+                radialMenuContainer.style.top = `${event.clientY}px`;
+            } else {
+                radialMenuContainer.style.display = 'none';
+            }
+        }
+
+        function onLeftClick(event) {
+            // Cacher le menu radial si l'utilisateur clique ailleurs
+            if (!event.target.closest('#radial-menu-container') && !event.target.closest('.hud-panel')) {
+                radialMenuContainer.style.display = 'none';
+                targetedObject = null;
             }
         }
 
