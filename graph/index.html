@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Stock Analyzer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111827;
+            color: #f9fafb;
+        }
+        .card {
+            background-color: #1f2937;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        .spinner {
+            border-top-color: #3b82f6;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .fade-in { animation: fadeIn 0.5s ease-in-out forwards; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .tag { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 9999px; font-weight: 500; font-size: 0.875rem; }
+        .tag-positive { background-color: #10b981; color: #ffffff; }
+        .tag-negative { background-color: #ef4444; color: #ffffff; }
+        .tag-neutral { background-color: #6b7280; color: #ffffff; }
+        .tab-btn { transition: all 0.3s ease; }
+        .tab-btn.active { border-color: #3b82f6; color: #3b82f6; }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+    <div class="container mx-auto max-w-4xl">
+        <div class="text-center mb-8">
+            <h1 class="text-4xl sm:text-5xl font-bold text-white">Analyse de Graphiques Boursiers</h1>
+            <p class="text-lg text-gray-400 mt-2">Obtenez une analyse technique instantanée et gérez vos rapports.</p>
+        </div>
+        <div class="card p-6">
+            <div class="mb-4 border-b border-gray-700">
+                <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+                    <button id="tab-analyzer" class="tab-btn active whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Analyseur</button>
+                    <button id="tab-pdf" class="tab-btn border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Gestionnaire PDF</button>
+                </nav>
+            </div>
+            <div id="analyzer-content">
+                <div class="flex flex-col items-center justify-center w-full">
+                    <label for="dropzone-file" class="flex flex-col items-center justify-center w-full h-64 border-2 border-gray-600 border-dashed rounded-lg cursor-pointer bg-gray-700 hover:bg-gray-600">
+                        <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                            <i class="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-4"></i>
+                            <p class="mb-2 text-sm text-gray-400"><span class="font-semibold">Cliquez pour télécharger</span> ou glissez-déposez</p>
+                            <p class="text-xs text-gray-500">PNG, JPG, GIF</p>
+                        </div>
+                        <input id="dropzone-file" type="file" class="hidden" multiple accept="image/png, image/jpeg, image/gif"/>
+                    </label>
+                </div>
+                <div class="mt-6 text-center space-x-4">
+                    <button id="analyzeBtn" class="bg-blue-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-blue-700 transition duration-300 disabled:bg-gray-500 disabled:cursor-not-allowed" disabled>
+                        <i class="fas fa-chart-line mr-2"></i>Lancer l'Analyse
+                    </button>
+                    <button id="pdfBtn" class="bg-green-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-green-700 transition duration-300 disabled:bg-gray-500 disabled:cursor-not-allowed" disabled>
+                        <i class="fas fa-file-pdf mr-2"></i>Télécharger PDF
+                    </button>
+                </div>
+            </div>
+            <div id="pdf-content" class="hidden">
+                <div class="text-center py-16">
+                    <i class="fas fa-folder-open text-6xl text-gray-500"></i>
+                    <h3 class="mt-4 text-xl font-semibold text-white">Gestionnaire de PDF</h3>
+                    <p class="mt-2 text-gray-400">Cette section est en cours de développement.</p>
+                </div>
+            </div>
+        </div>
+        <div id="results" class="mt-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+        <div id="messageBox" class="hidden fixed top-5 right-5 bg-red-600 text-white py-3 px-5 rounded-lg shadow-lg z-50 fade-in"><p id="messageText"></p></div>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const { jsPDF } = window.jspdf;
+            
+            const dropzoneFile = document.getElementById('dropzone-file');
+            const dropzoneLabel = document.querySelector('label[for="dropzone-file"]');
+            const analyzeBtn = document.getElementById('analyzeBtn');
+            const pdfBtn = document.getElementById('pdfBtn');
+            const resultsContainer = document.getElementById('results');
+            const messageBox = document.getElementById('messageBox');
+            const messageText = document.getElementById('messageText');
+            const tabAnalyzer = document.getElementById('tab-analyzer');
+            const tabPdf = document.getElementById('tab-pdf');
+            const analyzerContent = document.getElementById('analyzer-content');
+            const pdfContent = document.getElementById('pdf-content');
+
+            let filesToAnalyze = [];
+            let analysisComplete = false;
+
+            dropzoneFile.addEventListener('change', (e) => handleFiles(e.target.files));
+            dropzoneLabel.addEventListener('dragover', (e) => { e.preventDefault(); dropzoneLabel.classList.add('border-blue-500', 'bg-gray-600'); });
+            dropzoneLabel.addEventListener('dragleave', (e) => { e.preventDefault(); dropzoneLabel.classList.remove('border-blue-500', 'bg-gray-600'); });
+            dropzoneLabel.addEventListener('drop', (e) => { e.preventDefault(); dropzoneLabel.classList.remove('border-blue-500', 'bg-gray-600'); handleFiles(e.dataTransfer.files); });
+            analyzeBtn.addEventListener('click', runAnalysis);
+            pdfBtn.addEventListener('click', generatePDF);
+            tabAnalyzer.addEventListener('click', () => switchTab('analyzer'));
+            tabPdf.addEventListener('click', () => switchTab('pdf'));
+
+            function switchTab(tabName) {
+                analyzerContent.classList.toggle('hidden', tabName !== 'analyzer');
+                pdfContent.classList.toggle('hidden', tabName === 'analyzer');
+                tabAnalyzer.classList.toggle('active', tabName === 'analyzer');
+                tabPdf.classList.toggle('active', tabName !== 'analyzer');
+            }
+
+            function handleFiles(files) {
+                filesToAnalyze = Array.from(files);
+                analysisComplete = false;
+                updateButtonStates();
+                previewFiles();
+            }
+
+            function updateButtonStates() {
+                analyzeBtn.disabled = filesToAnalyze.length === 0;
+                pdfBtn.disabled = !analysisComplete;
+            }
+
+            function previewFiles() {
+                resultsContainer.innerHTML = '';
+                filesToAnalyze.forEach(file => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const card = createResultCard(file.name, e.target.result);
+                        resultsContainer.appendChild(card);
+                    };
+                    reader.readAsDataURL(file);
+                });
+            }
+
+            async function runAnalysis() {
+                if (filesToAnalyze.length === 0) return;
+                analysisComplete = false;
+                setButtonLoading(true);
+                updateButtonStates();
+                await Promise.allSettled(filesToAnalyze.map(file => dispatchAnalysis(file)));
+                setButtonLoading(false);
+                analysisComplete = true;
+                updateButtonStates();
+                filesToAnalyze = [];
+            }
+
+            async function dispatchAnalysis(file) {
+                const cardId = `card-${file.name.replace(/[^a-zA-Z0-9]/g, '-')}`;
+                try {
+                    const base64Image = await toBase64(file);
+                    const prompt = `Analyse ce graphique boursier. Identifie les figures chartistes, les indicateurs clés (comme les moyennes mobiles, le RSI, le MACD si visibles), et le volume. Fournis une analyse concise et une prédiction (Haussier, Baissier, Neutre). Réponds UNIQUEMENT avec un objet JSON valide avec les clés "analyse", "prediction", et "sentiment".`;
+                    
+                    const result = await callBackendAPI(prompt, base64Image.split(',')[1]);
+                    
+                    const part = result?.candidates?.[0]?.content?.parts?.[0];
+                    if (!part || !part.text) {
+                        if (result?.candidates?.[0]?.finishReason === 'SAFETY') throw new Error("Analyse bloquée par les filtres de sécurité.");
+                        throw new Error("Réponse invalide de l'API.");
+                    }
+                    const responseText = part.text;
+                    const match = responseText.match(/\{[\s\S]*\}/);
+                    if (!match) throw new Error("La réponse ne contenait pas d'objet JSON.");
+                    
+                    const analysisData = JSON.parse(match[0]);
+                    updateCardWithAnalysis(cardId, analysisData);
+                } catch (error) {
+                    updateCardWithError(cardId, error.message);
+                }
+            }
+
+            async function callBackendAPI(prompt, imageData) {
+                const response = await fetch('/api/analyser', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt, imageData }),
+                });
+
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.message || 'Erreur du serveur.');
+                }
+                return data;
+            }
+            
+            function generatePDF() {
+                const doc = new jsPDF();
+                const tableData = [];
+                let successfulReports = 0;
+                document.querySelectorAll('.result-card').forEach(card => {
+                    if (card.querySelector('.is-error')) return;
+                    try {
+                        const fileName = card.querySelector('h3[data-filename]').dataset.filename;
+                        const analyse = card.querySelector('.data-analyse').textContent;
+                        const prediction = card.querySelector('.data-prediction').textContent;
+                        const sentiment = card.querySelector('.data-sentiment').textContent;
+                        tableData.push([fileName, analyse, prediction, sentiment]);
+                        successfulReports++;
+                    } catch (e) { console.error("Impossible de lire la carte pour le PDF:", e); }
+                });
+                
+                if (successfulReports === 0) {
+                    showMessage("Aucun rapport valide à exporter.");
+                    return;
+                }
+
+                doc.text("Rapport d'Analyse Boursière", 14, 15);
+                doc.autoTable({
+                    head: [['Fichier', 'Analyse', 'Prédiction', 'Sentiment']],
+                    body: tableData,
+                    startY: 20,
+                    theme: 'grid',
+                    styles: { cellPadding: 2, fontSize: 8 },
+                    headStyles: { fillColor: [31, 41, 55] }
+                });
+                doc.save(`Analyse_Boursiere_${new Date().toISOString().slice(0, 10)}.pdf`);
+            }
+
+            function createResultCard(fileName, imageSrc) {
+                const card = document.createElement('div');
+                card.className = 'card p-4 flex flex-col justify-between fade-in result-card';
+                card.id = `card-${fileName.replace(/[^a-zA-Z0-9]/g, '-')}`;
+                card.innerHTML = `
+                    <div>
+                        <h3 class="font-bold text-lg truncate mb-2" data-filename="${fileName}">${fileName}</h3>
+                        <img src="${imageSrc}" alt="Graphique" class="rounded-md mb-4 w-full h-48 object-contain bg-gray-800">
+                        <div class="analysis-content space-y-2"><div class="flex items-center justify-center h-16"><div class="spinner w-8 h-8 rounded-full border-4 border-gray-600"></div></div></div>
+                    </div>`;
+                return card;
+            }
+
+            function updateCardWithAnalysis(cardId, analysis) {
+                const card = document.getElementById(cardId);
+                if (!card) return;
+                const sentimentTag = getSentimentTag(analysis.sentiment);
+                card.querySelector('.analysis-content').innerHTML = `
+                    <p class="text-sm text-gray-300"><strong class="font-semibold text-white">Analyse :</strong> <span class="data-analyse">${analysis.analyse}</span></p>
+                    <p class="text-sm text-gray-300"><strong class="font-semibold text-white">Prédiction :</strong> <span class="data-prediction">${analysis.prediction}</span></p>
+                    <div class="pt-2"><span class="tag ${sentimentTag} data-sentiment">${analysis.sentiment}</span></div>`;
+            }
+
+            function updateCardWithError(cardId, errorMsg) {
+                const card = document.getElementById(cardId);
+                if (!card) return;
+                card.querySelector('.analysis-content').innerHTML = `<div class="text-red-400 text-sm p-4 bg-red-900/50 rounded-lg is-error"><p><strong>Erreur :</strong> ${errorMsg}</p></div>`;
+            }
+
+            function getSentimentTag(s) {
+                const sentiment = s?.toLowerCase() || '';
+                if (sentiment === 'haussier' || sentiment === 'bullish') return 'tag-positive';
+                if (sentiment === 'baissier' || sentiment === 'bearish') return 'tag-negative';
+                return 'tag-neutral';
+            }
+
+            function setButtonLoading(isLoading) {
+                analyzeBtn.disabled = isLoading;
+                analyzeBtn.innerHTML = isLoading ? '<i class="fas fa-spinner fa-spin mr-2"></i>Analyse...' : '<i class="fas fa-chart-line mr-2"></i>Lancer l\'Analyse';
+            }
+
+            const toBase64 = (file) => new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = (error) => reject(error);
+            });
+
+            function showMessage(message) {
+                messageText.textContent = message;
+                messageBox.classList.remove('hidden');
+                setTimeout(() => { messageBox.classList.add('hidden'); }, 3000);
+            }
+        });
+    </script>
+</body>
+</html>
