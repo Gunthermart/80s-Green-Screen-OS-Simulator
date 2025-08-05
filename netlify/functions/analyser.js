@@ -1,25 +1,26 @@
 // Fichier : netlify/functions/analyser.js
-// Cette version ajoute une validation robuste de la réponse de l'API Google
-// pour éviter les erreurs de JSON vide et fournir des messages clairs.
+// Version avec une journalisation (logging) ultra-détaillée pour diagnostiquer les réponses vides.
 
 exports.handler = async function (event) {
-    // On s'assure que la requête est de type POST
+    console.log("INFO: La fonction Netlify 'analyser' a été appelée.");
+
     if (event.httpMethod !== 'POST') {
+        console.error("ERREUR: La requête a été rejetée car la méthode n'était pas POST.");
         return { statusCode: 405, body: 'Method Not Allowed' };
     }
 
     try {
-        // 1. Récupérer les données envoyées par la page web
+        console.log("INFO: Analyse du corps de la requête...");
         const { prompt, imageData, mimeType } = JSON.parse(event.body);
+        console.log(`INFO: Requête analysée avec succès pour le type de média : ${mimeType}`);
 
-        // 2. Récupérer la clé API depuis les variables d'environnement de Netlify
         const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-
         if (!GEMINI_API_KEY) {
+            console.error("ERREUR FATALE: La clé API GEMINI_API_KEY n'est pas configurée sur le serveur.");
             return { statusCode: 500, body: JSON.stringify({ message: "Erreur: La clé API n'est pas configurée sur le serveur." }) };
         }
 
-        // 3. Appeler l'API Google
+        console.log("INFO: Appel de l'API Google Gemini...");
         const googleApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${GEMINI_API_KEY}`;
         
         const response = await fetch(googleApiUrl, {
@@ -35,33 +36,40 @@ exports.handler = async function (event) {
                 generationConfig: { "responseMimeType": "application/json" }
             })
         });
+        console.log(`INFO: L'API Google a répondu avec le statut : ${response.status}`);
 
-        const data = await response.json();
-
-        if (!response.ok) {
-            console.error('Erreur de l\'API Google:', data);
-            return { statusCode: response.status, body: JSON.stringify(data.error || { message: 'Erreur inconnue de l\'API Google.'}) };
-        }
+        const responseText = await response.text();
         
-        // --- NOUVEAU BLOC DE VALIDATION ---
-        // On vérifie si la réponse de Google est valide avant de la renvoyer.
+        if (!response.ok) {
+            console.error(`ERREUR de l'API Google. Statut: ${response.status}, Corps: ${responseText}`);
+            try {
+                const errorData = JSON.parse(responseText);
+                return { statusCode: response.status, body: JSON.stringify(errorData.error || { message: 'Erreur inconnue de l\'API Google.'}) };
+            } catch (e) {
+                 return { statusCode: response.status, body: JSON.stringify({ message: `Erreur non-JSON de l'API Google: ${responseText}`}) };
+            }
+        }
+
+        if (!responseText) {
+            console.error("ERREUR: La réponse de l'API Google est complètement vide.");
+            return { statusCode: 500, body: JSON.stringify({ message: "La réponse de l'API était vide." }) };
+        }
+
+        console.log("INFO: Analyse de la réponse JSON de l'API Google...");
+        const data = JSON.parse(responseText);
+
         const part = data?.candidates?.[0]?.content?.parts?.[0];
         if (!part || !part.text) {
-            // Si la réponse est vide, c'est probablement à cause des filtres de sécurité ou d'un timeout.
             const finishReason = data?.candidates?.[0]?.finishReason;
-            let errorMessage = "L'analyse a échoué car la réponse de l'API était vide.";
+            let errorMessage = "L'analyse a échoué car la réponse de l'API était vide ou mal formée.";
             if (finishReason === 'SAFETY') {
                 errorMessage = "L'analyse a été bloquée par les filtres de sécurité de l'API.";
-            } else if (finishReason === 'RECITATION') {
-                 errorMessage = "L'analyse a été bloquée pour des raisons de contenu.";
             }
-            console.error('Réponse API invalide:', JSON.stringify(data));
-            // On renvoie un statut d'erreur clair au client.
+            console.error(`ERREUR: Réponse API invalide. Raison: ${finishReason}. Réponse complète: ${JSON.stringify(data)}`);
             return { statusCode: 422, body: JSON.stringify({ message: errorMessage }) };
         }
-        // --- FIN DU BLOC DE VALIDATION ---
 
-        // 4. Renvoyer la réponse de Google (qui est maintenant validée) à la page web
+        console.log("INFO: Réponse de l'API validée. Envoi de la réponse au client.");
         return {
             statusCode: 200,
             headers: { 'Content-Type': 'application/json' },
@@ -69,10 +77,10 @@ exports.handler = async function (event) {
         };
 
     } catch (error) {
-        console.error('Erreur dans la fonction Netlify:', error);
+        console.error('ERREUR CRITIQUE dans la fonction Netlify:', error);
         return {
             statusCode: 500,
-            body: JSON.stringify({ message: error.message })
+            body: JSON.stringify({ message: `Erreur interne du serveur: ${error.message}` })
         };
     }
 };
