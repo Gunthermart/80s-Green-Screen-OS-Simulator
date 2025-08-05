@@ -34,7 +34,6 @@
                 </nav>
             </div>
 
-            <!-- Analyzer Tab Content -->
             <div id="analyzer-content">
                 <div class="flex flex-col items-center justify-center w-full">
                     <label for="dropzone-file-graphic" class="flex flex-col items-center justify-center w-full h-64 border-2 border-gray-600 border-dashed rounded-lg cursor-pointer bg-gray-700 hover:bg-gray-600">
@@ -52,7 +51,6 @@
                 </div>
             </div>
 
-            <!-- PDF Manager Tab Content -->
             <div id="pdf-content" class="hidden">
                  <div class="flex flex-col items-center justify-center w-full">
                     <label for="dropzone-file-financial" class="flex flex-col items-center justify-center w-full h-64 border-2 border-gray-600 border-dashed rounded-lg cursor-pointer bg-gray-700 hover:bg-gray-600">
@@ -185,28 +183,66 @@
                 setButtonLoading(false, type);
                 updateButtonStates(type);
             }
-
+            
             async function dispatchAnalysis(file, type) {
                 const cardId = `card-${file.name.replace(/[^a-zA-Z0-9]/g, '-')}`;
                 try {
                     const base64Data = await toBase64(file);
                     const { prompt, mimeType } = getPromptAndMimeType(type);
-                    const result = await callBackendAPI(prompt, base64Data.split(',')[1], mimeType);
-                    
-                    const part = result?.candidates?.[0]?.content?.parts?.[0];
-                    if (!part || !part.text) {
-                        if (result?.candidates?.[0]?.finishReason === 'SAFETY') throw new Error("Analyse bloquée par les filtres de sécurité.");
-                        throw new Error("Réponse invalide de l'API.");
+
+                    // L'analyse graphique reste synchrone, l'analyse financière devient asynchrone
+                    if (type === 'graphic') {
+                        const result = await callBackendAPI('/graph/api/analyser-sync', { prompt, imageData: base64Data.split(',')[1], mimeType });
+                        const part = result?.candidates?.[0]?.content?.parts?.[0];
+                        if (!part || !part.text) throw new Error("Réponse de l'API graphique invalide.");
+                        const analysisData = JSON.parse(part.text.match(/\{[\s\S]*\}/)[0]);
+                        updateCard(cardId, analysisData, 'graphic');
+                    } else {
+                        const { jobId } = await callBackendAPI('/graph/api/initiate-analysis', { prompt, imageData: base64Data.split(',')[1], mimeType });
+                        if (!jobId) throw new Error("Impossible de démarrer le job d'analyse.");
+                        pollForStatus(jobId, cardId);
                     }
-                    const responseText = part.text;
-                    const match = responseText.match(/\{[\s\S]*\}/);
-                    if (!match) throw new Error("La réponse ne contenait pas d'objet JSON.");
-                    
-                    const analysisData = JSON.parse(match[0]);
-                    updateCard(cardId, analysisData, type);
                 } catch (error) {
                     updateCardWithError(cardId, error.message);
                 }
+            }
+            
+            async function pollForStatus(jobId, cardId) {
+                const intervalId = setInterval(async () => {
+                    try {
+                        const statusResponse = await callBackendAPI(`/graph/api/check-status?jobId=${jobId}`, null, 'GET');
+                        
+                        if (statusResponse.status === 'complete') {
+                            clearInterval(intervalId);
+                            const result = statusResponse.result;
+                            const part = result?.candidates?.[0]?.content?.parts?.[0];
+                            if (!part || !part.text) throw new Error("Résultat d'analyse invalide.");
+                             const analysisData = JSON.parse(part.text.match(/\{[\s\S]*\}/)[0]);
+                            updateCard(cardId, analysisData, 'financial');
+                        } else if (statusResponse.status === 'failed') {
+                            clearInterval(intervalId);
+                            throw new Error(statusResponse.error || "Le job d'analyse a échoué.");
+                        }
+                    } catch (error) {
+                         clearInterval(intervalId);
+                         updateCardWithError(cardId, error.message);
+                    }
+                }, 5000);
+            }
+
+            async function callBackendAPI(endpoint, body, method = 'POST') {
+                const options = { method };
+                if (body) {
+                    options.headers = { 'Content-Type': 'application/json' };
+                    options.body = JSON.stringify(body);
+                }
+                
+                const response = await fetch(endpoint, options);
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.message || 'Erreur du serveur.');
+                }
+                return data;
             }
 
             function getPromptAndMimeType(type) {
@@ -234,20 +270,6 @@
                 };
             }
 
-            async function callBackendAPI(prompt, imageData, mimeType) {
-                const response = await fetch('/graph/api/analyser', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ prompt, imageData, mimeType }),
-                });
-
-                const data = await response.json();
-                if (!response.ok) {
-                    throw new Error(data.message || 'Erreur du serveur.');
-                }
-                return data;
-            }
-            
             function generatePDF(type) {
                  if (type === 'graphic') generateGraphicPDF();
                  else generateFinancialPDF();
