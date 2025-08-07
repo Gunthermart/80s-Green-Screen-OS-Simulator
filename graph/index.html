@@ -154,16 +154,6 @@
     </div>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // --- Le code JavaScript est long et complexe. Seules les parties modifiées sont décrites ci-dessous. ---
-            // 1. Ajout des éléments du DOM pour l'onglet Weinstein.
-            // 2. Ajout des traductions pour l'onglet Weinstein.
-            // 3. Mise à jour de la logique des onglets pour inclure Weinstein.
-            // 4. Mise à jour de la logique de gestion des fichiers, des boutons et de la réinitialisation pour le type 'weinstein'.
-            // 5. Ajout d'un nouveau prompt pour l'analyse Weinstein dans getPromptAndMimeType.
-            // 6. Ajout d'une nouvelle fonction generateWeinsteinPDF.
-            // 7. Mise à jour de la fonction updateCard pour afficher les résultats de l'analyse Weinstein.
-            
-            // --- Code complet ci-dessous ---
             const { jsPDF } = window.jspdf;
             
             const messageBox = document.getElementById('messageBox');
@@ -260,6 +250,7 @@
                     jsonError: "La réponse ne contenait pas d'objet JSON.",
                     securityError: "Analyse bloquée par les filtres de sécurité.",
                     serverError: "Erreur du serveur.",
+                    requestTimeout: "La requête a expiré (délai de 35s). Le fichier est probablement trop volumineux.",
                     graphicPrompt: `En tant que gérant de fonds actions expérimenté, spécialiste de l’analyse technique et comportementale, analyse ce graphique boursier. Structure ta réponse en JSON valide avec les clés suivantes : "tendances", "niveauxCles", "indicateursTechniques", "signauxTiming", "interpretationGerant". Pour "tendances", inclus : "tendanceDominante", "figuresChartistes", "structures". Pour "niveauxCles", inclus : "supportsResistances", "moyennesMobiles", "gaps". Pour "indicateursTechniques", inclus : "rsi", "macd", "volume", "autres". Pour "signauxTiming", inclus : "signaux", "zones", "timingEntree". Pour "interpretationGerant", inclus : "synthese" (Favorable/Neutre/Défavorable), "contexte", "scenario", "horizon" (Court/Moyen/Long terme). Adopte un style clair, synthétique et orienté prise de décision pour un comité d’allocation. Fournis uniquement le JSON.`,
                     weinsteinPrompt: `En tant que Stan Weinstein, analyse ce graphique boursier et identifie les quatre phases du cycle. Structure ta réponse en JSON valide avec les clés : "phase1", "phase2", "phase3", "phase4", et "conclusion". Pour "phase1", décris : "evolutionPrix", "moyenneMobile", "consolidation". Pour "phase2", décris : "sortiePhase1", "depassementMM30", "orientationMM30". Pour "phase3", décris : "comportementPrix", "stagnation", "mm30Plate". Pour "phase4", décris : "inversionTendance", "passageSousMM30", "orientationBaisseMM30". Pour "conclusion", donne la "phaseActuelle" et une "recommandationStrategique". Fournis uniquement le JSON.`,
                     ichimokuPrompt: `En tant qu'expert en analyse technique spécialisé dans l’indicateur Ichimoku Kinko Hyo, analyse ce graphique. Structure ta réponse en JSON valide avec les clés : "contexteGeneral", "etudeLignes", "analyseNuage", "signaux", "conclusion". Pour "contexteGeneral", inclus : "tendanceGlobale", "volatilite". Pour "etudeLignes", inclus : "tenkanKijun", "orientationPente", "chikouSpan". Pour "analyseNuage", inclus : "prixVsKumo", "formeNuage", "interpretationSenkou". Pour "signaux", inclus : "signauxClassiques", "validationChikou". Pour "conclusion", inclus : "biaisGlobal" (Acheteur/Vendeur/Neutre), "niveauxTechniques", "recommandation". Sois clair, pédagogique et orienté décision. Fournis uniquement le JSON.`,
@@ -306,6 +297,7 @@
                     jsonError: "The response did not contain a JSON object.",
                     securityError: "Analysis blocked by security filters.",
                     serverError: "Server error.",
+                    requestTimeout: "Request timed out (35s). The file is likely too large.",
                     graphicPrompt: `As an experienced equity fund manager specializing in technical and behavioral analysis, analyze this stock chart. Structure your response as a valid JSON with the following keys: "tendances", "niveauxCles", "indicateursTechniques", "signauxTiming", "interpretationGerant". For "tendances", include: "tendanceDominante", "figuresChartistes", "structures". For "niveauxCles", include: "supportsResistances", "moyennesMobiles", "gaps". For "indicateursTechniques", include: "rsi", "macd", "volume", "autres". For "signauxTiming", include: "signaux", "zones", "timingEntree". For "interpretationGerant", include: "synthese" (Favorable/Neutral/Unfavorable), "contexte", "scenario", "horizon" (Short/Medium/Long term). Adopt a clear, concise, and decision-oriented style for an asset allocation committee. Provide only the JSON.`,
                     weinsteinPrompt: `As Stan Weinstein, analyze this stock chart and identify the four cycle phases. Structure your response as a valid JSON with the keys: "phase1", "phase2", "phase3", "phase4", and "conclusion". For "phase1", describe: "evolutionPrix", "moyenneMobile", "consolidation". For "phase2", describe: "sortiePhase1", "depassementMM30", "orientationMM30". For "phase3", describe: "comportementPrix", "stagnation", "mm30Plate". For "phase4", describe: "inversionTendance", "passageSousMM30", "orientationBaisseMM30". For "conclusion", provide the "phaseActuelle" and a "recommandationStrategique". Provide only the JSON.`,
                     ichimokuPrompt: `As a technical analysis expert specializing in the Ichimoku Kinko Hyo indicator, analyze this chart. Structure your response as a valid JSON with the keys: "contexteGeneral", "etudeLignes", "analyseNuage", "signaux", "conclusion". For "contexteGeneral", include: "tendanceGlobale", "volatilite". For "etudeLignes", include: "tenkanKijun", "orientationPente", "chikouSpan". For "analyseNuage", include: "prixVsKumo", "formeNuage", "interpretationSenkou". For "signaux", include: "signauxClassiques", "validationChikou". For "conclusion", include: "biaisGlobal" (Bullish/Bearish/Neutral), "niveauxTechniques", "recommandation". Be clear, educational, and decision-oriented. Provide only the JSON.`,
@@ -463,17 +455,31 @@
             }
 
             async function callBackendAPI(prompt, imageData, mimeType) {
-                const response = await fetch('/graph/api/analyser', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ prompt, imageData, mimeType }),
-                });
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 35000); // 35 seconds timeout
 
-                const data = await response.json();
-                if (!response.ok) {
-                    throw new Error(data.message || translations[currentLanguage].serverError);
+                try {
+                    const response = await fetch('/graph/api/analyser', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ prompt, imageData, mimeType }),
+                        signal: controller.signal
+                    });
+
+                    clearTimeout(timeoutId);
+
+                    const data = await response.json();
+                    if (!response.ok) {
+                        throw new Error(data.message || translations[currentLanguage].serverError);
+                    }
+                    return data;
+                } catch (error) {
+                    clearTimeout(timeoutId);
+                    if (error.name === 'AbortError') {
+                        throw new Error(translations[currentLanguage].requestTimeout);
+                    }
+                    throw error;
                 }
-                return data;
             }
             
             function getPromptAndMimeType(type) {
@@ -535,8 +541,6 @@
                 doc.save(`${translations[currentLanguage].weinsteinPDFTitle}_${new Date().toISOString().slice(0, 10)}.pdf`);
             }
             
-            // --- Autres fonctions (generateGraphicPDF, generateIchimokuPDF, etc.) ---
-            // Le code de ces fonctions est omis pour la lisibilité mais reste présent et fonctionnel
             function generateGraphicPDF() { /* ... */ }
             function generateIchimokuPDF() { /* ... */ }
             function generateFinancialPDF() { /* ... */ }
