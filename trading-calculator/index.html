@@ -1,1 +1,442 @@
+import { useState, useEffect, useCallback, useRef } from 'react';
 
+// --- DICTIONNAIRE DE TRADUCTIONS (i18n) ---
+const translations = {
+  en: {
+    title: "Trading Calculator",
+    subtitle: "Calculate your position size and risk/reward ratio.",
+    long: "LONG",
+    short: "SHORT",
+    capitalLabel: "Capital ($)",
+    capitalPlaceholder: "10000",
+    riskLabel: "Risk (%)",
+    riskPlaceholder: "1",
+    entryLabel: "Entry Price ($)",
+    entryPlaceholder: "50.25",
+    stopLossLabel: "Stop-Loss ($)",
+    stopLossPlaceholder: "49.50",
+    takeProfitLabel: "Take-Profit ($)",
+    takeProfitPlaceholder: "52.00",
+    resultsTitle: "Results",
+    monetaryRisk: "Monetary Risk:",
+    positionSize: "Position Size:",
+    riskRewardRatio: "Risk/Reward Ratio:",
+    units: "Units",
+    reset: "Reset",
+    // --- Erreurs ---
+    errorFillAllFields: "Please fill in all fields to perform the calculation.",
+    errorInvalidNumbers: "Please enter valid numbers for all fields.",
+    errorPositiveValues: "Capital and risk percentage must be greater than zero.",
+    errorEntryStopSame: "Entry price cannot be the same as the stop-loss price.",
+    errorLongStopLoss: "For a Long trade, stop-loss must be below the entry price.",
+    errorLongTakeProfit: "For a Long trade, take-profit must be above the entry price.",
+    errorShortStopLoss: "For a Short trade, stop-loss must be above the entry price.",
+    errorShortTakeProfit: "For a Short trade, take-profit must be below the entry price.",
+    errorCalculation: "An error occurred during calculation.",
+    // --- Aide ---
+    helpTitle: "How the Calculator Works",
+    helpObjectiveTitle: "Objective",
+    helpObjectiveText: "This tool helps you manage your risk in trading by calculating the optimal position size based on your capital, risk percentage, and trade setup (entry, stop-loss, and take-profit prices).",
+    helpHowToTitle: "How to Use",
+    helpHowToText1: "1. **Select Trade Type:** Choose 'LONG' if you are buying or 'SHORT' if you are selling.",
+    helpHowToText2: "2. **Enter your Capital:** The total amount of money in your trading account.",
+    helpHowToText3: "3. **Define your Risk:** The percentage of your capital you are willing to risk on this single trade (e.g., 1% or 2%).",
+    helpHowToText4: "4. **Set your Prices:** Enter your entry price, your stop-loss price (where you will exit if the trade goes against you), and your take-profit price.",
+    helpHowToText5: "The results will automatically show you the amount of money at risk, the exact position size to take, and the risk/reward ratio of your trade.",
+  },
+  fr: {
+    title: "Calculateur de Trading",
+    subtitle: "Calculez votre taille de position et votre ratio risque/récompense.",
+    long: "LONG",
+    short: "SHORT",
+    capitalLabel: "Capital ($)",
+    capitalPlaceholder: "10000",
+    riskLabel: "Risque (%)",
+    riskPlaceholder: "1",
+    entryLabel: "Prix d'Entrée ($)",
+    entryPlaceholder: "50.25",
+    stopLossLabel: "Stop-Loss ($)",
+    stopLossPlaceholder: "49.50",
+    takeProfitLabel: "Take-Profit ($)",
+    takeProfitPlaceholder: "52.00",
+    resultsTitle: "Résultats",
+    monetaryRisk: "Risque Monétaire:",
+    positionSize: "Taille de la Position:",
+    riskRewardRatio: "Ratio Risque/Récompense:",
+    units: "Unités",
+    reset: "Réinitialiser",
+    errorFillAllFields: "Veuillez remplir tous les champs pour effectuer le calcul.",
+    errorInvalidNumbers: "Veuillez entrer des nombres valides pour tous les champs.",
+    errorPositiveValues: "Le capital et le pourcentage de risque doivent être supérieurs à zéro.",
+    errorEntryStopSame: "Le prix d'entrée ne peut pas être le même que le prix du stop-loss.",
+    errorLongStopLoss: "Pour un achat (Long), le stop-loss doit être inférieur au prix d'entrée.",
+    errorLongTakeProfit: "Pour un achat (Long), le take-profit doit être supérieur au prix d'entrée.",
+    errorShortStopLoss: "Pour une vente (Short), le stop-loss doit être supérieur au prix d'entrée.",
+    errorShortTakeProfit: "Pour une vente (Short), le take-profit doit être inférieur au prix d'entrée.",
+    errorCalculation: "Une erreur est survenue lors du calcul.",
+    helpTitle: "Fonctionnement du Calculateur",
+    helpObjectiveTitle: "Objectif",
+    helpObjectiveText: "Cet outil vous aide à gérer votre risque en trading en calculant la taille de position optimale en fonction de votre capital, de votre pourcentage de risque et de votre configuration de trade (prix d'entrée, de stop-loss et de take-profit).",
+    helpHowToTitle: "Comment l'utiliser",
+    helpHowToText1: "1. **Sélectionnez le type de trade :** Choisissez 'LONG' si vous achetez ou 'SHORT' si vous vendez.",
+    helpHowToText2: "2. **Entrez votre Capital :** Le montant total de votre compte de trading.",
+    helpHowToText3: "3. **Définissez votre Risque :** Le pourcentage de votre capital que vous êtes prêt à risquer sur ce trade (ex: 1% ou 2%).",
+    helpHowToText4: "4. **Fixez vos Prix :** Entrez votre prix d'entrée, votre prix de stop-loss (où vous sortirez si le trade va contre vous) et votre prix de take-profit.",
+    helpHowToText5: "Les résultats afficheront automatiquement le montant risqué, la taille de position exacte à prendre et le ratio risque/récompense de votre trade.",
+  },
+  es: {
+    title: "Calculadora de Trading",
+    subtitle: "Calcule el tamaño de su posición y la relación riesgo/recompensa.",
+    long: "COMPRA",
+    short: "VENTA",
+    capitalLabel: "Capital ($)",
+    capitalPlaceholder: "10000",
+    riskLabel: "Riesgo (%)",
+    riskPlaceholder: "1",
+    entryLabel: "Precio de Entrada ($)",
+    entryPlaceholder: "50.25",
+    stopLossLabel: "Stop-Loss ($)",
+    stopLossPlaceholder: "49.50",
+    takeProfitLabel: "Take-Profit ($)",
+    takeProfitPlaceholder: "52.00",
+    resultsTitle: "Resultados",
+    monetaryRisk: "Riesgo Monetario:",
+    positionSize: "Tamaño de Posición:",
+    riskRewardRatio: "Relación Riesgo/Recompensa:",
+    units: "Unidades",
+    reset: "Reiniciar",
+    errorFillAllFields: "Por favor, rellene todos los campos para realizar el cálculo.",
+    errorInvalidNumbers: "Por favor, introduzca números válidos en todos los campos.",
+    errorPositiveValues: "El capital y el porcentaje de riesgo deben ser mayores que cero.",
+    errorEntryStopSame: "El precio de entrada no puede ser el mismo que el stop-loss.",
+    errorLongStopLoss: "Para una compra (Long), el stop-loss debe ser inferior al precio de entrada.",
+    errorLongTakeProfit: "Para una compra (Long), el take-profit debe ser superior al precio de entrada.",
+    errorShortStopLoss: "Para una venta (Short), el stop-loss debe ser superior al precio de entrada.",
+    errorShortTakeProfit: "Para una venta (Short), el take-profit debe ser inferior al precio de entrada.",
+    errorCalculation: "Se ha producido un error durante el cálculo.",
+    helpTitle: "Cómo Funciona la Calculadora",
+    helpObjectiveTitle: "Objetivo",
+    helpObjectiveText: "Esta herramienta le ayuda a gestionar su riesgo en el trading calculando el tamaño de posición óptimo en función de su capital, porcentaje de riesgo y configuración de la operación (precios de entrada, stop-loss y take-profit).",
+    helpHowToTitle: "Cómo Usar",
+    helpHowToText1: "1. **Seleccione el tipo de operación:** Elija 'COMPRA' si va a comprar o 'VENTA' si va a vender.",
+    helpHowToText2: "2. **Introduzca su Capital:** La cantidad total de dinero en su cuenta de trading.",
+    helpHowToText3: "3. **Defina su Riesgo:** El porcentaje de su capital que está dispuesto a arriesgar en esta operación (ej: 1% o 2%).",
+    helpHowToText4: "4. **Establezca sus Precios:** Introduzca su precio de entrada, su precio de stop-loss (donde saldrá si la operación va en su contra) y su precio de take-profit.",
+    helpHowToText5: "Los resultados mostrarán automáticamente la cantidad de dinero en riesgo, el tamaño exacto de la posición a tomar y la relación riesgo/recompensa de su operación.",
+  },
+  de: {
+    title: "Trading-Rechner",
+    subtitle: "Berechnen Sie Ihre Positionsgröße und Ihr Chance-Risiko-Verhältnis.",
+    long: "KAUFEN",
+    short: "VERKAUFEN",
+    capitalLabel: "Kapital ($)",
+    capitalPlaceholder: "10000",
+    riskLabel: "Risiko (%)",
+    riskPlaceholder: "1",
+    entryLabel: "Einstiegspreis ($)",
+    entryPlaceholder: "50.25",
+    stopLossLabel: "Stop-Loss ($)",
+    stopLossPlaceholder: "49.50",
+    takeProfitLabel: "Take-Profit ($)",
+    takeProfitPlaceholder: "52.00",
+    resultsTitle: "Ergebnisse",
+    monetaryRisk: "Monetäres Risiko:",
+    positionSize: "Positionsgröße:",
+    riskRewardRatio: "Chance-Risiko-Verhältnis:",
+    units: "Einheiten",
+    reset: "Zurücksetzen",
+    errorFillAllFields: "Bitte füllen Sie alle Felder aus, um die Berechnung durchzuführen.",
+    errorInvalidNumbers: "Bitte geben Sie für alle Felder gültige Zahlen ein.",
+    errorPositiveValues: "Kapital und Risikoprozentsatz müssen größer als Null sein.",
+    errorEntryStopSame: "Der Einstiegspreis darf nicht mit dem Stop-Loss-Preis identisch sein.",
+    errorLongStopLoss: "Bei einem Kauf (Long) muss der Stop-Loss unter dem Einstiegspreis liegen.",
+    errorLongTakeProfit: "Bei einem Kauf (Long) muss der Take-Profit über dem Einstiegspreis liegen.",
+    errorShortStopLoss: "Bei einem Verkauf (Short) muss der Stop-Loss über dem Einstiegspreis liegen.",
+    errorShortTakeProfit: "Bei einem Verkauf (Short) muss der Take-Profit unter dem Einstiegspreis liegen.",
+    errorCalculation: "Bei der Berechnung ist ein Fehler aufgetreten.",
+    helpTitle: "So Funktioniert der Rechner",
+    helpObjectiveTitle: "Ziel",
+    helpObjectiveText: "Dieses Tool hilft Ihnen, Ihr Risiko beim Trading zu managen, indem es die optimale Positionsgröße basierend auf Ihrem Kapital, Ihrem Risikoprozentsatz und Ihrem Trade-Setup (Einstiegs-, Stop-Loss- und Take-Profit-Preise) berechnet.",
+    helpHowToTitle: "Anwendung",
+    helpHowToText1: "1. **Trade-Typ auswählen:** Wählen Sie 'KAUFEN', wenn Sie kaufen, oder 'VERKAUFEN', wenn Sie verkaufen.",
+    helpHowToText2: "2. **Ihr Kapital eingeben:** Der Gesamtbetrag auf Ihrem Handelskonto.",
+    helpHowToText3: "3. **Ihr Risiko definieren:** Der Prozentsatz Ihres Kapitals, den Sie bereit sind, bei diesem einen Trade zu riskieren (z.B. 1% oder 2%).",
+    helpHowToText4: "4. **Ihre Preise festlegen:** Geben Sie Ihren Einstiegspreis, Ihren Stop-Loss-Preis (wo Sie aussteigen, wenn der Trade gegen Sie läuft) und Ihren Take-Profit-Preis ein.",
+    helpHowToText5: "Die Ergebnisse zeigen Ihnen automatisch den riskierten Geldbetrag, die exakte Positionsgröße und das Chance-Risiko-Verhältnis Ihres Trades an.",
+  },
+  zh: {
+    title: "交易计算器",
+    subtitle: "计算您的头寸规模和风险/回报率。",
+    long: "做多",
+    short: "做空",
+    capitalLabel: "资金 ($)",
+    capitalPlaceholder: "10000",
+    riskLabel: "风险 (%)",
+    riskPlaceholder: "1",
+    entryLabel: "入场价 ($)",
+    entryPlaceholder: "50.25",
+    stopLossLabel: "止损价 ($)",
+    stopLossPlaceholder: "49.50",
+    takeProfitLabel: "止盈价 ($)",
+    takeProfitPlaceholder: "52.00",
+    resultsTitle: "结果",
+    monetaryRisk: "风险金额:",
+    positionSize: "头寸规模:",
+    riskRewardRatio: "风险/回报率:",
+    units: "单位",
+    reset: "重置",
+    errorFillAllFields: "请填写所有字段以执行计算。",
+    errorInvalidNumbers: "请输入所有字段的有效数字。",
+    errorPositiveValues: "资金和风险百分比必须大于零。",
+    errorEntryStopSame: "入场价不能与止损价相同。",
+    errorLongStopLoss: "做多交易，止损价必须低于入场价。",
+    errorLongTakeProfit: "做多交易，止盈价必须高于入场价。",
+    errorShortStopLoss: "做空交易，止损价必须高于入场价。",
+    errorShortTakeProfit: "做空交易，止盈价必须低于入场价。",
+    errorCalculation: "计算过程中发生错误。",
+    helpTitle: "计算器如何工作",
+    helpObjectiveTitle: "目标",
+    helpObjectiveText: "该工具通过根据您的资金、风险百分比和交易设置（入场价、止损价和止盈价）计算最佳头寸规模，帮助您管理交易风险。",
+    helpHowToTitle: "如何使用",
+    helpHowToText1: "1. **选择交易类型：** 如果您是买入，请选择“做多”；如果您是卖出，请选择“做空”。",
+    helpHowToText2: "2. **输入您的资金：** 您交易账户中的总金额。",
+    helpHowToText3: "3. **定义您的风险：** 您愿意在此次交易中承担的资金百分比（例如1%或2%）。",
+    helpHowToText4: "4. **设置您的价格：** 输入您的入场价、止损价（如果交易对您不利，您将在此退出）和止盈价。",
+    helpHowToText5: "结果将自动显示您的风险金额、应持有的确切头寸规模以及交易的风险/回报率。",
+  },
+};
+
+// A small component to inject our custom color palette as CSS variables
+const StyleInjector = () => (
+  <style>{`
+    :root {
+      /* Elegant Light Mode Palette */
+      --color-background: #FDF6E3;
+      --color-card-background: #FFFFFF;
+      --color-secondary-background: #E6D8AD;
+      --color-text-main: #333333;
+      --color-text-secondary: #777777;
+      --color-border: #D1C4A8;
+      --color-input-background: #FFFFFF;
+      --color-accent-primary: #B0C4DE; /* Sky Blue */
+      --color-accent-primary-text: #FFFFFF;
+      --color-accent-success: #6B8E23; /* Olive Drab */
+      --color-accent-danger: #8B0000; /* Deep Red */
+      --color-accent-danger-bg: #FADADD;
+    }
+    html.dark {
+      /* Elegant Dark Mode Palette (as requested) */
+      --color-background: #121212;
+      --color-card-background: #1E1E1E;
+      --color-secondary-background: #2a2a2a;
+      --color-text-main: rgba(255, 255, 255, 0.87);
+      --color-text-secondary: rgba(255, 255, 255, 0.60);
+      --color-border: #646464;
+      --color-input-background: #2a2a2a;
+      --color-accent-primary: #3777d3; /* Soft Blue */
+      --color-accent-primary-text: #FFFFFF;
+      --color-accent-success: #4CAF50; /* Desaturated Green */
+      --color-accent-danger: #ff3232; /* Light Red */
+      --color-accent-danger-bg: rgba(255, 50, 50, 0.15);
+    }
+    body {
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+  `}</style>
+);
+
+// --- COMPOSANTS AUXILIAIRES ---
+
+const HelpModal = ({ t, onClose }) => (
+  <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50" onClick={onClose}>
+    <div className="bg-[var(--color-card-background)] rounded-lg shadow-xl w-full max-w-lg p-6 sm:p-8 relative" onClick={e => e.stopPropagation()}>
+      <button onClick={onClose} className="absolute top-4 right-4 text-[var(--color-text-secondary)] hover:text-[var(--color-text-main)]">
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+      </button>
+      <h2 className="text-xl sm:text-2xl font-bold mb-4 text-[var(--color-text-main)]">{t.helpTitle}</h2>
+      <div className="space-y-4 text-[var(--color-text-secondary)] text-sm sm:text-base">
+        <div>
+          <h3 className="font-semibold text-[var(--color-text-main)] mb-1">{t.helpObjectiveTitle}</h3>
+          <p>{t.helpObjectiveText}</p>
+        </div>
+        <div>
+          <h3 className="font-semibold text-[var(--color-text-main)] mb-1">{t.helpHowToTitle}</h3>
+          <ul className="space-y-2 list-inside">
+            <li>{t.helpHowToText1}</li>
+            <li>{t.helpHowToText2}</li>
+            <li>{t.helpHowToText3}</li>
+            <li>{t.helpHowToText4}</li>
+            <li className="pt-2 text-[var(--color-text-main)]">{t.helpHowToText5}</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+const LanguageSelector = ({ setLanguage }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+  const languages = { en: "English", fr: "Français", es: "Español", de: "Deutsch", zh: "中文" };
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const selectLanguage = (lang) => {
+    setLanguage(lang);
+    setIsOpen(false);
+  };
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button onClick={() => setIsOpen(!isOpen)} className="p-2 rounded-full text-[var(--color-text-secondary)] hover:bg-black/10 dark:hover:bg-white/10 transition-colors duration-200" aria-label="Select Language">
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1V10a1 1 0 00-1-1H7a1 1 0 00-1 1v10a1 1 0 001 1h2a1 1 0 001-1zm-1-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1h-2a1 1 0 01-1-1v-4z" /></svg>
+      </button>
+      {isOpen && (
+        <div className="absolute right-0 mt-2 w-36 bg-[var(--color-card-background)] rounded-md shadow-lg z-20 border border-[var(--color-border)]">
+          <ul className="py-1">
+            {Object.entries(languages).map(([code, name]) => (
+              <li key={code}>
+                <button onClick={() => selectLanguage(code)} className="w-full text-left px-4 py-2 text-sm text-[var(--color-text-main)] hover:bg-[var(--color-secondary-background)]/50">
+                  {name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// --- COMPOSANT PRINCIPAL ---
+const App = () => {
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [language, setLanguage] = useState('en');
+  const [tradeType, setTradeType] = useState('long');
+  const [capital, setCapital] = useState('');
+  const [riskPercentage, setRiskPercentage] = useState('');
+  const [entryPrice, setEntryPrice] = useState('');
+  const [stopLossPrice, setStopLossPrice] = useState('');
+  const [takeProfitPrice, setTakeProfitPrice] = useState('');
+  const [positionSize, setPositionSize] = useState(null);
+  const [riskAmount, setRiskAmount] = useState(null);
+  const [riskRewardRatio, setRiskRewardRatio] = useState(null);
+  const [error, setError] = useState('');
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+
+  const t = translations[language];
+
+  const handleReset = () => {
+    setCapital(''); setRiskPercentage(''); setEntryPrice(''); setStopLossPrice(''); setTakeProfitPrice('');
+    setPositionSize(null); setRiskAmount(null); setRiskRewardRatio(null); setError('');
+  };
+
+  const calculatePositionSize = useCallback(() => {
+    setPositionSize(null); setRiskAmount(null); setRiskRewardRatio(null); setError('');
+
+    const numCapital = Number(capital); const numRiskPercentage = Number(riskPercentage);
+    const numEntryPrice = Number(entryPrice); const numStopLossPrice = Number(stopLossPrice);
+    const numTakeProfitPrice = Number(takeProfitPrice);
+
+    if (!capital || !riskPercentage || !entryPrice || !stopLossPrice || !takeProfitPrice) { setError('errorFillAllFields'); return; }
+    if (isNaN(numCapital) || isNaN(numRiskPercentage) || isNaN(numEntryPrice) || isNaN(numStopLossPrice) || isNaN(numTakeProfitPrice)) { setError('errorInvalidNumbers'); return; }
+    if (numCapital <= 0 || numRiskPercentage <= 0) { setError('errorPositiveValues'); return; }
+    if (numEntryPrice === numStopLossPrice) { setError('errorEntryStopSame'); return; }
+
+    if (tradeType === 'long') {
+      if (numStopLossPrice >= numEntryPrice) { setError('errorLongStopLoss'); return; }
+      if (numTakeProfitPrice <= numEntryPrice) { setError('errorLongTakeProfit'); return; }
+    } else {
+      if (numStopLossPrice <= numEntryPrice) { setError('errorShortStopLoss'); return; }
+      if (numTakeProfitPrice >= numEntryPrice) { setError('errorShortTakeProfit'); return; }
+    }
+
+    try {
+      const calculatedRiskAmount = numCapital * (numRiskPercentage / 100);
+      const stopLossDifference = tradeType === 'long' ? numEntryPrice - numStopLossPrice : numStopLossPrice - numEntryPrice;
+      const takeProfitDifference = tradeType === 'long' ? numTakeProfitPrice - numEntryPrice : numEntryPrice - numTakeProfitPrice;
+      const calculatedPositionSize = calculatedRiskAmount / stopLossDifference;
+      const calculatedRiskRewardRatio = takeProfitDifference / stopLossDifference;
+      setRiskAmount(calculatedRiskAmount.toFixed(2));
+      setPositionSize(calculatedPositionSize.toFixed(4));
+      setRiskRewardRatio(calculatedRiskRewardRatio.toFixed(2));
+      setError('');
+    } catch (e) { setError("errorCalculation"); }
+  }, [capital, riskPercentage, entryPrice, stopLossPrice, takeProfitPrice, tradeType]);
+
+  useEffect(() => {
+    if (capital && riskPercentage && entryPrice && stopLossPrice && takeProfitPrice) { calculatePositionSize(); }
+    else { setPositionSize(null); setRiskAmount(null); setRiskRewardRatio(null); setError(''); }
+  }, [capital, riskPercentage, entryPrice, stopLossPrice, takeProfitPrice, calculatePositionSize]);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', isDarkMode);
+  }, [isDarkMode]);
+
+  return (
+    <>
+      <StyleInjector />
+      <main className="flex flex-col items-center justify-center min-h-screen p-4 transition-colors duration-300 bg-[var(--color-background)] text-[var(--color-text-main)] font-sans">
+        <div className="bg-[var(--color-card-background)] p-6 sm:p-8 rounded-xl shadow-2xl w-full max-w-md relative transition-colors duration-300">
+          
+          <div className="absolute top-4 right-4 flex items-center space-x-2">
+            <LanguageSelector setLanguage={setLanguage} />
+            <button onClick={() => setIsHelpModalOpen(true)} className="p-2 rounded-full text-[var(--color-text-secondary)] hover:bg-black/10 dark:hover:bg-white/10 transition-colors duration-200" aria-label="Help">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            </button>
+            <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 rounded-full text-[var(--color-text-secondary)] hover:bg-black/10 dark:hover:bg-white/10 transition-colors duration-200" aria-label="Toggle Dark Mode">
+              {isDarkMode ? <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg> : <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>}
+            </button>
+          </div>
+
+          <h1 className="text-2xl sm:text-3xl font-bold mb-2 text-center pt-10">{t.title}</h1>
+          <p className="text-center text-[var(--color-text-secondary)] mb-6 text-sm sm:text-base">{t.subtitle}</p>
+
+          <div className="flex justify-center mb-6">
+            <div className="flex rounded-lg p-1 bg-[var(--color-secondary-background)]/50">
+              <button onClick={() => setTradeType('long')} className={`px-4 sm:px-6 py-2 text-sm font-bold rounded-md transition-all duration-300 ${tradeType === 'long' ? 'bg-[var(--color-accent-success)] text-[var(--color-accent-primary-text)] shadow-md' : 'text-[var(--color-text-main)]'}`}>{t.long}</button>
+              <button onClick={() => setTradeType('short')} className={`px-4 sm:px-6 py-2 text-sm font-bold rounded-md transition-all duration-300 ${tradeType === 'short' ? 'bg-[var(--color-accent-danger)] text-[var(--color-accent-primary-text)] shadow-md' : 'text-[var(--color-text-main)]'}`}>{t.short}</button>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div><label htmlFor="capital" className="block text-sm font-medium text-[var(--color-text-secondary)]">{t.capitalLabel}</label><input type="number" id="capital" value={capital} onChange={(e) => setCapital(e.target.value)} className="mt-1 block w-full px-3 py-2 bg-[var(--color-input-background)] border border-[var(--color-border)] rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-accent-primary)]" placeholder={t.capitalPlaceholder} /></div>
+              <div><label htmlFor="risk_percentage" className="block text-sm font-medium text-[var(--color-text-secondary)]">{t.riskLabel}</label><input type="number" id="risk_percentage" value={riskPercentage} onChange={(e) => setRiskPercentage(e.target.value)} className="mt-1 block w-full px-3 py-2 bg-[var(--color-input-background)] border border-[var(--color-border)] rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-accent-primary)]" placeholder={t.riskPlaceholder} /></div>
+            </div>
+            <div><label htmlFor="entry_price" className="block text-sm font-medium text-[var(--color-text-secondary)]">{t.entryLabel}</label><input type="number" id="entry_price" value={entryPrice} onChange={(e) => setEntryPrice(e.target.value)} className="mt-1 block w-full px-3 py-2 bg-[var(--color-input-background)] border border-[var(--color-border)] rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-accent-primary)]" placeholder={t.entryPlaceholder} /></div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div><label htmlFor="stop_loss_price" className="block text-sm font-medium text-[var(--color-text-secondary)]">{t.stopLossLabel}</label><input type="number" id="stop_loss_price" value={stopLossPrice} onChange={(e) => setStopLossPrice(e.target.value)} className="mt-1 block w-full px-3 py-2 bg-[var(--color-input-background)] border border-[var(--color-border)] rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-accent-primary)]" placeholder={t.stopLossPlaceholder} /></div>
+              <div><label htmlFor="take_profit_price" className="block text-sm font-medium text-[var(--color-text-secondary)]">{t.takeProfitLabel}</label><input type="number" id="take_profit_price" value={takeProfitPrice} onChange={(e) => setTakeProfitPrice(e.target.value)} className="mt-1 block w-full px-3 py-2 bg-[var(--color-input-background)] border border-[var(--color-border)] rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-accent-primary)]" placeholder={t.takeProfitPlaceholder} /></div>
+            </div>
+          </div>
+
+          {error && <div className="mt-6 p-3 bg-[var(--color-accent-danger-bg)] text-[var(--color-accent-danger)] rounded-lg"><p className="text-center font-medium text-sm">{t[error]}</p></div>}
+          {positionSize && !error && (
+            <div className="mt-6 p-4 sm:p-6 bg-[var(--color-accent-primary)]/20 rounded-lg border border-[var(--color-accent-primary)]/50">
+              <h2 className="text-xl sm:text-2xl font-semibold mb-4 text-center">{t.resultsTitle}</h2>
+              <div className="space-y-3 text-sm sm:text-base">
+                <div className="flex justify-between items-center"><span className="font-medium text-[var(--color-text-secondary)]">{t.monetaryRisk}</span><span className="font-bold text-lg sm:text-xl text-[var(--color-text-main)]">${riskAmount}</span></div>
+                <div className="flex justify-between items-center"><span className="font-medium text-[var(--color-text-secondary)]">{t.positionSize}</span><span className="font-bold text-lg sm:text-xl text-[var(--color-text-main)]">{positionSize} {t.units}</span></div>
+                <div className="flex justify-between items-center"><span className="font-medium text-[var(--color-text-secondary)]">{t.riskRewardRatio}</span><span className="font-bold text-lg sm:text-xl text-[var(--color-text-main)]">1 : {riskRewardRatio}</span></div>
+              </div>
+            </div>
+          )}
+          <div className="mt-6"><button onClick={handleReset} className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-[var(--color-text-secondary)] bg-black/10 hover:bg-black/20 dark:bg-white/10 dark:hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors">{t.reset}</button></div>
+        </div>
+      </main>
+      {isHelpModalOpen && <HelpModal t={t} onClose={() => setIsHelpModalOpen(false)} />}
+    </>
+  );
+};
+
+export default App;
