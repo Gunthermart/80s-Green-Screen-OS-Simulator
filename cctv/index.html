@@ -1,1 +1,264 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Lecteur YouTube Multi-Flux</title>
+  <!-- Ajout de la bibliothèque pour la capture d'écran -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <style>
+    body {  
+      background: #000;  
+      font-family: sans-serif;  
+      margin: 0;
+      height: 100vh;
+      overflow: hidden;
+    }
 
+    /* Conteneur principal en grille */
+    #grid-container {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      width: 100%;
+      height: 100%;
+      gap: 2px;
+      background-color: #111;
+    }
+
+    /* Conteneur pour chaque vidéo et son effet */
+    .crt-container {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      overflow: hidden;
+      cursor: zoom-in;
+      transition: all 0.3s ease-in-out;
+    }
+    
+    /* Style pour le mode plein écran */
+    .crt-container.fullscreen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: 1000;
+        cursor: zoom-out;
+    }
+
+    .player-instance {  
+      width: 100%;  
+      height: 100%;
+      pointer-events: none;
+      transition: filter 0.3s ease;
+    }
+    
+    /* --- Styles pour les filtres --- */
+    .crt-effect-enabled .player-instance { filter: grayscale(100%) contrast(2) brightness(1.3); }
+    .crt-effect-enabled.crt-container::after {
+      content: ' '; display: block; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(24, 255, 24, 0.15); 
+      mix-blend-mode: screen;
+      background-image: 
+        repeating-linear-gradient(0deg, transparent 0px, transparent 1px, rgba(0,0,0,0.5) 2px, rgba(0,0,0,0.5) 3px),
+        repeating-linear-gradient(90deg, rgba(24, 255, 24, 0.2) 0, rgba(24, 255, 24, 0.2) 1px, transparent 1px, transparent 25px),
+        repeating-linear-gradient(0deg, rgba(24, 255, 24, 0.2) 0, rgba(24, 255, 24, 0.2) 1px, transparent 1px, transparent 25px);
+      pointer-events: none; 
+      animation: flicker 0.1s infinite;
+    }
+    .heat-vision-enabled .player-instance { filter: grayscale(1) contrast(2.5) brightness(1.2); }
+    .heat-vision-enabled.crt-container::after {
+      content: ' '; display: block; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      background: linear-gradient(to top, #0000ff, #00ffff, #00ff00, #ffff00, #ff0000);
+      mix-blend-mode: color; opacity: 0.9; pointer-events: none;
+    }
+    .night-vision-enabled .player-instance { filter: grayscale(1) contrast(2) brightness(1.8); }
+    .night-vision-enabled.crt-container::after {
+      content: ' '; display: block; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      background: #00ff00; mix-blend-mode: multiply; opacity: 0.7; pointer-events: none;
+    }
+    .old-film-enabled .player-instance { filter: sepia(0.9) contrast(1.1) brightness(0.9); }
+    .old-film-enabled.crt-container::after {
+      content: ' '; display: block; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      background: repeating-linear-gradient(90deg, rgba(0,0,0,0.2) 0, rgba(0,0,0,0.2) 1px, transparent 1px, transparent 10px);
+      pointer-events: none; opacity: 0.3; animation: flicker 0.15s infinite;
+    }
+    .negative-enabled .player-instance { filter: invert(1); }
+    .max-saturation-enabled .player-instance { filter: saturate(3); }
+
+    @keyframes flicker {
+      0% { opacity: 0.95; } 50% { opacity: 1; } 100% { opacity: 0.95; }
+    }
+    
+    /* Conteneur pour les boutons */
+    .controls-container {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 1001;
+      display: flex;
+      gap: 10px;
+    }
+
+    .control-button {
+      padding: 8px 12px;
+      font-size: 14px; background: rgba(0, 20, 0, 0.5); color: #00ff00;
+      border: 1px solid rgba(0, 255, 0, 0.4); border-radius: 6px; cursor: pointer;
+      backdrop-filter: blur(5px);
+      font-family: 'Courier New', Courier, monospace;
+      text-shadow: 0 0 5px #00ff00;
+      width: 130px;
+      text-align: center;
+    }
+    .control-button:hover { 
+      background: rgba(0, 50, 0, 0.7);
+      border-color: #00ff00;
+    }
+    #captureButton {
+      width: auto;
+    }
+    
+    .video-name {
+      position: absolute; bottom: 10px; left: 10px; z-index: 5;
+      background-color: rgba(0, 20, 0, 0.6); color: #00ff00; padding: 4px 8px;
+      border-radius: 4px; font-size: 12px; pointer-events: none;
+      opacity: 0; transition: opacity 0.3s ease-in-out;
+      font-family: 'Courier New', Courier, monospace;
+      text-shadow: 0 0 5px #00ff00;
+      border: 1px solid rgba(0, 255, 0, 0.2);
+    }
+    .crt-container:hover .video-name { opacity: 1; }
+    .crt-container.fullscreen .video-name { display: none; }
+
+  </style>
+</head>
+<body>
+
+  <div id="grid-container">
+    <div class="crt-container"><div id="player1" class="player-instance"></div></div>
+    <div class="crt-container"><div id="player2" class="player-instance"></div></div>
+    <div class="crt-container"><div id="player3" class="player-instance"></div></div>
+    <div class="crt-container"><div id="player4" class="player-instance"></div></div>
+    <div class="crt-container"><div id="player5" class="player-instance"></div></div>
+    <div class="crt-container"><div id="player6" class="player-instance"></div></div>
+    <div class="crt-container"><div id="player7" class="player-instance"></div></div>
+    <div class="crt-container"><div id="player8" class="player-instance"></div></div>
+    <div class="crt-container"><div id="player9" class="player-instance"></div></div>
+    <div class="crt-container"><div id="player10" class="player-instance"></div></div>
+    <div class="crt-container"><div id="player11" class="player-instance"></div></div>
+    <div class="crt-container"><div id="player12" class="player-instance"></div></div>
+  </div>
+  
+  <div class="controls-container">
+    <button id="toggleFilter" class="control-button">Filtre: Terminal</button>
+    <button id="captureButton" class="control-button">📸 Capture</button>
+  </div>
+
+
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script>
+    let players = [];
+    const videoIds = [
+      'cH7VBI4QQzA', 'oZ1HZsP74jM', 'G1SBh8081ws', 'p6nAlz4_bdI', 
+      'dXckWr5B8f8', 'WKGK_hYnlGE', 'AeMUdOPFcXI', 'ydYDqZQpim8',
+      '73-EekdVVU8', 'LM1YPBWn5jQ', 'Cq2qCph6Lx8', 'BMQifTcOgts'
+    ];
+    const videoNames = [
+      "Tokyo", "Hyères", "Aéroport Ajaccio", "Saint-Malo", "Vannes", "Londres", 
+      "Namibie #1", "Namibie #2", "Alaska #1", "Alaska #2", "Greater Kruger Park", "Afrique du Sud"
+    ];
+
+    function onYouTubeIframeAPIReady() {
+      videoIds.forEach((videoId, i) => {
+        players[i] = new YT.Player('player' + (i + 1), {
+          videoId: videoId,
+          playerVars: { autoplay: 1, controls: 0, rel: 0, modestbranding: 1, loop: 1, playlist: videoId, mute: 1, showinfo: 0 }
+        });
+      });
+    }
+
+    const toggleButton = document.getElementById('toggleFilter');
+    const captureButton = document.getElementById('captureButton');
+    const crtContainers = document.querySelectorAll('.crt-container');
+
+    // --- Logique de basculement des filtres ---
+    let filterState = 1; 
+
+    const filterStates = [
+      { name: 'OFF', class: '' },
+      { name: 'Terminal', class: 'crt-effect-enabled' },
+      { name: 'Chaleur', class: 'heat-vision-enabled' },
+      { name: 'Nocturne', class: 'night-vision-enabled' },
+      { name: 'Vieux Film', class: 'old-film-enabled' },
+      { name: 'Négatif', class: 'negative-enabled' },
+      { name: 'Saturé', class: 'max-saturation-enabled' }
+    ];
+
+    function applyFilter() {
+      const currentState = filterStates[filterState];
+      toggleButton.textContent = `Filtre: ${currentState.name}`;
+
+      crtContainers.forEach(container => {
+        filterStates.forEach(state => {
+          if (state.class) container.classList.remove(state.class);
+        });
+        if (currentState.class) {
+          container.classList.add(currentState.class);
+        }
+      });
+    }
+    
+    applyFilter();
+
+    toggleButton.onclick = () => {
+      filterState = (filterState + 1) % filterStates.length;
+      applyFilter();
+    };
+
+    // --- Logique pour la capture d'écran ---
+    captureButton.onclick = () => {
+      // Utilise html2canvas pour capturer le conteneur de la grille
+      html2canvas(document.getElementById('grid-container'), {
+        useCORS: true, // Tente de charger les images cross-origin (peut ne pas fonctionner pour les iframes YouTube)
+        allowTaint: true,
+        logging: false
+      }).then(canvas => {
+        // Crée un lien de téléchargement temporaire
+        const link = document.createElement('a');
+        link.download = `capture-cctv-${new Date().toISOString().slice(0,19).replace('T','_').replace(/:/g,'-')}.png`;
+        link.href = canvas.toDataURL("image/png");
+        link.click();
+      });
+    };
+
+    // --- Logique pour le plein écran ---
+    crtContainers.forEach(container => {
+      container.addEventListener('click', (e) => {
+        // S'assure que le clic n'est pas sur un bouton
+        if (e.target.closest('.controls-container')) return;
+
+        if (container.classList.contains('fullscreen')) {
+          container.classList.remove('fullscreen');
+        } else {
+          const currentFullscreen = document.querySelector('.crt-container.fullscreen');
+          if (currentFullscreen) {
+            currentFullscreen.classList.remove('fullscreen');
+          }
+          container.classList.add('fullscreen');
+        }
+      });
+    });
+
+    // --- Ajout des noms de caméras ---
+    crtContainers.forEach((container, index) => {
+      if(videoNames[index]) {
+        const nameElement = document.createElement('div');
+        nameElement.className = 'video-name';
+        nameElement.textContent = videoNames[index];
+        container.appendChild(nameElement);
+      }
+    });
+  </script>
+</body>
+</html>
+```eof
