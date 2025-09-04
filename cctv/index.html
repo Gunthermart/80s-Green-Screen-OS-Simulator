@@ -4,21 +4,23 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Lecteur YouTube Multi-Flux</title>
-  <!-- Ajout de la bibliothèque pour la capture d'écran -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <style>
+    :root {
+      --terminal-green: #00ff00;
+      --terminal-bg: rgba(0, 20, 0, 0.5);
+      --terminal-border: rgba(0, 255, 0, 0.4);
+    }
     body {  
       background: #000;  
-      font-family: sans-serif;  
+      font-family: 'Courier New', Courier, monospace;
       margin: 0;
       height: 100vh;
-      overflow: hidden; /* Désactivé par défaut sur mobile via media query */
+      overflow: hidden;
     }
 
-    /* Conteneur principal en grille responsive */
     #grid-container {
       display: grid;
-      /* La grille s'adapte automatiquement en créant des colonnes de 320px minimum */
       grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
       width: 100%;
       height: 100%;
@@ -26,46 +28,42 @@
       background-color: #111;
     }
 
-    /* Conteneur pour chaque vidéo, avec un ratio d'aspect fixe */
     .crt-container {
       width: 100%;
       aspect-ratio: 16 / 9;
       position: relative;
       overflow: hidden;
-      cursor: zoom-in;
+      cursor: grab;
       transition: all 0.3s ease-in-out;
+      background: #000;
+    }
+    .crt-container:active {
+      cursor: grabbing;
+    }
+    .crt-container.dragging {
+      opacity: 0.5;
     }
     
-    /* Style pour le mode plein écran */
     .crt-container.fullscreen {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
-        z-index: 1000;
-        cursor: zoom-out;
+      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+      z-index: 1000; cursor: zoom-out; aspect-ratio: auto;
     }
 
     .player-instance {  
-      width: 100%;  
-      height: 100%;
-      pointer-events: none;
-      transition: filter 0.3s ease;
+      width: 100%; height: 100%;
+      pointer-events: none; transition: filter 0.3s ease;
     }
     
     /* --- Styles pour les filtres --- */
     .crt-effect-enabled .player-instance { filter: grayscale(100%) contrast(2) brightness(1.3); }
     .crt-effect-enabled.crt-container::after {
       content: ' '; display: block; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(24, 255, 24, 0.15); 
-      mix-blend-mode: screen;
+      background: rgba(24, 255, 24, 0.15); mix-blend-mode: screen;
       background-image: 
         repeating-linear-gradient(0deg, transparent 0px, transparent 1px, rgba(0,0,0,0.5) 2px, rgba(0,0,0,0.5) 3px),
         repeating-linear-gradient(90deg, rgba(24, 255, 24, 0.2) 0, rgba(24, 255, 24, 0.2) 1px, transparent 1px, transparent 25px),
         repeating-linear-gradient(0deg, rgba(24, 255, 24, 0.2) 0, rgba(24, 255, 24, 0.2) 1px, transparent 1px, transparent 25px);
-      pointer-events: none; 
-      animation: flicker 0.1s infinite;
+      pointer-events: none; animation: flicker 0.1s infinite;
     }
     .heat-vision-enabled .player-instance { filter: grayscale(1) contrast(2.5) brightness(1.2); }
     .heat-vision-enabled.crt-container::after {
@@ -91,183 +89,457 @@
       0% { opacity: 0.95; } 50% { opacity: 1; } 100% { opacity: 0.95; }
     }
     
-    /* Conteneur pour les boutons */
     .controls-container {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      z-index: 1001;
-      display: flex;
-      gap: 10px;
+      position: fixed; bottom: 20px; right: 20px; z-index: 1001; display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end;
     }
 
     .control-button {
-      padding: 8px 12px;
-      font-size: 14px; background: rgba(0, 20, 0, 0.5); color: #00ff00;
-      border: 1px solid rgba(0, 255, 0, 0.4); border-radius: 6px; cursor: pointer;
-      backdrop-filter: blur(5px);
-      font-family: 'Courier New', Courier, monospace;
-      text-shadow: 0 0 5px #00ff00;
-      width: 130px;
-      text-align: center;
+      padding: 8px 12px; font-size: 14px; background: var(--terminal-bg); color: var(--terminal-green);
+      border: 1px solid var(--terminal-border); border-radius: 6px; cursor: pointer;
+      backdrop-filter: blur(5px); font-family: 'Courier New', Courier, monospace;
+      text-shadow: 0 0 5px var(--terminal-green); text-align: center;
     }
-    .control-button:hover { 
-      background: rgba(0, 50, 0, 0.7);
-      border-color: #00ff00;
-    }
-    #captureButton {
-      width: auto;
-    }
+    .control-button:hover { background: rgba(0, 50, 0, 0.7); border-color: var(--terminal-green); }
+    #toggleFilter { width: 130px; }
+    #captureButton, #settingsButton, #tourButton { width: auto; }
     
-    .video-name {
-      position: absolute; bottom: 10px; left: 10px; z-index: 5;
-      background-color: rgba(0, 20, 0, 0.6); color: #00ff00; padding: 4px 8px;
-      border-radius: 4px; font-size: 12px; pointer-events: none;
-      opacity: 0; transition: opacity 0.3s ease-in-out;
-      font-family: 'Courier New', Courier, monospace;
-      text-shadow: 0 0 5px #00ff00;
+    .video-overlay-icon {
+      position: absolute; z-index: 5; background-color: rgba(0, 20, 0, 0.6); 
+      color: var(--terminal-green); padding: 4px 8px; border-radius: 4px; font-size: 12px; 
+      pointer-events: none; opacity: 0; transition: opacity 0.3s ease-in-out;
+      font-family: 'Courier New', Courier, monospace; text-shadow: 0 0 5px var(--terminal-green);
       border: 1px solid rgba(0, 255, 0, 0.2);
     }
-    .crt-container:hover .video-name { opacity: 1; }
+    .video-name { bottom: 10px; left: 10px; }
+    .audio-control {
+      top: 10px; right: 10px; font-size: 18px; cursor: pointer; pointer-events: all;
+    }
+    .crt-container:hover .video-overlay-icon { opacity: 1; }
     .crt-container.fullscreen .video-name { display: none; }
 
-    /* Media query pour les écrans plus petits (tablettes et mobiles) */
-    @media (max-width: 768px) {
-      body {
-        overflow-y: auto; /* Active le défilement vertical */
-      }
-      #grid-container {
-        height: auto; /* La hauteur de la grille s'adapte au contenu */
-      }
+    /* --- Settings Modal --- */
+    #settingsModal {
+      display: none; position: fixed; z-index: 2000; left: 0; top: 0;
+      width: 100%; height: 100%; background-color: rgba(0,0,0,0.7);
+      backdrop-filter: blur(5px);
     }
+    #settingsPanel {
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      width: 90%; max-width: 600px; max-height: 80vh; overflow-y: auto;
+      background: #0a0a0a; border: 1px solid var(--terminal-border);
+      color: var(--terminal-green); padding: 20px;
+    }
+    #settingsPanel h2, #settingsPanel h3 { margin-top: 0; text-align: center; border-bottom: 1px solid var(--terminal-border); padding-bottom: 10px; margin-bottom: 15px; }
+    #settingsPanel h3 { margin-top: 25px; font-size: 1em;}
+    #cameraList { list-style: none; padding: 0; }
+    #cameraList li { display: flex; gap: 10px; margin-bottom: 10px; align-items: center; }
+    #cameraList input { flex-grow: 1; background: #222; border: 1px solid #444; color: #eee; padding: 5px; }
+    .delete-cam-btn { background: #800; color: #fff; border: none; cursor: pointer; padding: 5px 8px; }
+    .form-group { display: flex; gap: 10px; margin-top: 10px; }
+    .form-group input { flex-grow: 1; }
+    .modal-actions { text-align: right; margin-top: 20px; border-top: 1px solid var(--terminal-border); padding-top: 15px;}
 
+    #presetManager, #savePresetForm { display: flex; gap: 10px; align-items: center; justify-content: center; }
+    #presetManager select, #savePresetForm input { background: #222; border: 1px solid #444; color: #eee; padding: 5px; }
+
+
+    @media (max-width: 768px) {
+      body { overflow-y: auto; }
+      #grid-container { height: auto; }
+    }
   </style>
 </head>
 <body>
 
-  <div id="grid-container">
-    <div class="crt-container"><div id="player1" class="player-instance"></div></div>
-    <div class="crt-container"><div id="player2" class="player-instance"></div></div>
-    <div class="crt-container"><div id="player3" class="player-instance"></div></div>
-    <div class="crt-container"><div id="player4" class="player-instance"></div></div>
-    <div class="crt-container"><div id="player5" class="player-instance"></div></div>
-    <div class="crt-container"><div id="player6" class="player-instance"></div></div>
-    <div class="crt-container"><div id="player7" class="player-instance"></div></div>
-    <div class="crt-container"><div id="player8" class="player-instance"></div></div>
-    <div class="crt-container"><div id="player9" class="player-instance"></div></div>
-    <div class="crt-container"><div id="player10" class="player-instance"></div></div>
-    <div class="crt-container"><div id="player11" class="player-instance"></div></div>
-    <div class="crt-container"><div id="player12" class="player-instance"></div></div>
-  </div>
+  <div id="grid-container"></div>
   
   <div class="controls-container">
+    <button id="tourButton" class="control-button">▶️ Tournée</button>
+    <button id="settingsButton" class="control-button">⚙️ Réglages</button>
     <button id="toggleFilter" class="control-button">Filtre: Terminal</button>
     <button id="captureButton" class="control-button">📸 Capture</button>
   </div>
 
+  <!-- Modal pour les réglages -->
+  <div id="settingsModal">
+    <div id="settingsPanel">
+      <h2>Réglages</h2>
+      
+      <h3>Mises en Page (Presets)</h3>
+      <div id="presetManager">
+        <select id="presetSelector"></select>
+        <button id="loadPresetBtn" class="control-button">Charger</button>
+        <button id="deletePresetBtn" class="control-button">Supprimer</button>
+      </div>
+      <div id="savePresetForm" class="form-group">
+        <input type="text" id="newPresetName" placeholder="Nom du nouveau preset">
+        <button id="saveAsPresetBtn" class="control-button">Sauvegarder Preset</button>
+      </div>
+
+      <h3>Liste des Caméras du Preset Actif</h3>
+      <ul id="cameraList"></ul>
+      <div id="addCamForm" class="form-group">
+        <input type="text" id="newCamName" placeholder="Nom de la caméra">
+        <input type="text" id="newCamUrl" placeholder="URL ou ID YouTube">
+        <button id="addCamBtn" class="control-button">Ajouter</button>
+      </div>
+
+      <div class="modal-actions">
+        <button id="cancelSettings" class="control-button">Annuler</button>
+        <button id="saveSettings" class="control-button">Sauvegarder & Fermer</button>
+      </div>
+    </div>
+  </div>
 
   <script src="https://www.youtube.com/iframe_api"></script>
   <script>
     let players = [];
-    const videoIds = [
-      'cH7VBI4QQzA', 'oZ1HZsP74jM', 'G1SBh8081ws', 'p6nAlz4_bdI', 
-      'dXckWr5B8f8', 'WKGK_hYnlGE', 'AeMUdOPFcXI', 'ydYDqZQpim8',
-      '73-EekdVVU8', 'LM1YPBWn5jQ', 'Cq2qCph6Lx8', 'BMQifTcOgts'
-    ];
-    const videoNames = [
-      "Tokyo", "Hyères", "Aéroport Ajaccio", "Saint-Malo", "Vannes", "Londres", 
-      "Namibie #1", "Namibie #2", "Alaska #1", "Alaska #2", "Greater Kruger Park", "Afrique du Sud"
+    let cameras = [];
+    let presets = {};
+    let activePresetName = 'Défaut';
+    let activeAudioIndex = -1;
+    let ytApiReady = false;
+    let draggedIndex = null;
+    let visibilityObserver = null;
+    let tourInterval = null;
+    let isTouring = false;
+    let tourIndex = -1;
+    const TOUR_DURATION = 10000; // 10 seconds
+
+    const defaultCameras = [
+      { name: "Tokyo", id: "cH7VBI4QQzA" }, { name: "Hyères", id: "oZ1HZsP74jM" },
+      { name: "Aéroport Ajaccio", id: "G1SBh8081ws" }, { name: "Saint-Malo", id: "p6nAlz4_bdI" },
+      { name: "Vannes", id: "dXckWr5B8f8" }, { name: "Londres", id: "WKGK_hYnlGE" },
+      { name: "Namibie #1", id: "AeMUdOPFcXI" }, { name: "Namibie #2", id: "ydYDqZQpim8" },
+      { name: "Alaska #1", id: "73-EekdVVU8" }, { name: "Alaska #2", id: "LM1YPBWn5jQ" },
+      { name: "Greater Kruger Park", id: "Cq2qCph6Lx8" }, { name: "Afrique du Sud", id: "BMQifTcOgts" }
     ];
 
     function onYouTubeIframeAPIReady() {
-      videoIds.forEach((videoId, i) => {
-        players[i] = new YT.Player('player' + (i + 1), {
-          videoId: videoId,
-          playerVars: { autoplay: 1, controls: 0, rel: 0, modestbranding: 1, loop: 1, playlist: videoId, mute: 1, showinfo: 0 }
+      ytApiReady = true;
+      initializePlayers();
+    }
+    
+    function initializePlayers() {
+        if (!ytApiReady || cameras.length === 0) return;
+        players.forEach(p => { if(p && typeof p.destroy === 'function') p.destroy(); });
+        players = [];
+        cameras.forEach((cam, i) => {
+            if (document.getElementById('player' + i)) {
+                players[i] = new YT.Player('player' + i, {
+                    videoId: cam.id,
+                    playerVars: { autoplay: 1, controls: 0, rel: 0, modestbranding: 1, loop: 1, playlist: cam.id, mute: 1, showinfo: 0 }
+                });
+            }
         });
-      });
+        updateAudioIcons();
     }
 
+    function renderGrid() {
+        const grid = document.getElementById('grid-container');
+        grid.innerHTML = '';
+        cameras.forEach((cam, index) => {
+            const container = document.createElement('div');
+            container.className = 'crt-container';
+            container.dataset.index = index;
+            container.setAttribute('draggable', true);
+            container.innerHTML = `
+                <div id="player${index}" class="player-instance"></div>
+                <div class="video-name video-overlay-icon">${cam.name}</div>
+                <div class="audio-control video-overlay-icon" data-index="${index}">🔇</div>`;
+            grid.appendChild(container);
+        });
+        attachGridEventListeners();
+        applyFilter();
+        if(ytApiReady) {
+            initializePlayers();
+        }
+    }
+    
+    function attachGridEventListeners() {
+        if (visibilityObserver) visibilityObserver.disconnect();
+        const observerOptions = { root: null, threshold: 0.1 };
+        const observerCallback = (entries) => {
+            entries.forEach(entry => {
+                const index = parseInt(entry.target.dataset.index);
+                const player = players[index];
+                if (player && typeof player.playVideo === 'function' && !isTouring) {
+                    if (entry.isIntersecting) player.playVideo();
+                    else player.pauseVideo();
+                }
+            });
+        };
+        visibilityObserver = new IntersectionObserver(observerCallback, observerOptions);
+
+        document.querySelectorAll('.crt-container').forEach(container => {
+            container.addEventListener('click', handleFullscreenClick);
+            container.addEventListener('dragstart', handleDragStart);
+            container.addEventListener('dragover', handleDragOver);
+            container.addEventListener('drop', handleDrop);
+            container.addEventListener('dragend', handleDragEnd);
+            visibilityObserver.observe(container);
+        });
+        document.querySelectorAll('.audio-control').forEach(icon => {
+            icon.addEventListener('click', handleAudioClick);
+        });
+    }
+
+    // --- Drag & Drop Logic ---
+    function handleDragStart(e) {
+        draggedIndex = parseInt(e.currentTarget.dataset.index);
+        e.currentTarget.classList.add('dragging');
+    }
+    function handleDragOver(e) { e.preventDefault(); }
+    function handleDrop(e) {
+        e.preventDefault();
+        const droppedOnIndex = parseInt(e.currentTarget.dataset.index);
+        if (draggedIndex !== null && draggedIndex !== droppedOnIndex) {
+            const item = cameras.splice(draggedIndex, 1)[0];
+            cameras.splice(droppedOnIndex, 0, item);
+            renderGrid();
+        }
+    }
+    function handleDragEnd(e) {
+        draggedIndex = null;
+        e.currentTarget.classList.remove('dragging');
+    }
+
+    // --- Audio Logic ---
+    function handleAudioClick(e) {
+        e.stopPropagation();
+        const index = parseInt(e.target.dataset.index);
+        if (index === activeAudioIndex) {
+            if (players[index]) players[index].mute();
+            activeAudioIndex = -1;
+        } else {
+            players.forEach((player, i) => {
+                if (player && typeof player.mute === 'function') {
+                   i === index ? player.unMute() : player.mute();
+                }
+            });
+            activeAudioIndex = index;
+        }
+        updateAudioIcons();
+    }
+    function updateAudioIcons() {
+        document.querySelectorAll('.audio-control').forEach((icon, i) => {
+            icon.textContent = (i === activeAudioIndex) ? '🔈' : '🔇';
+        });
+    }
+
+    // --- Filter Logic ---
     const toggleButton = document.getElementById('toggleFilter');
-    const captureButton = document.getElementById('captureButton');
-    const crtContainers = document.querySelectorAll('.crt-container');
-
-    // --- Logique de basculement des filtres ---
     let filterState = 1; 
-
     const filterStates = [
-      { name: 'OFF', class: '' },
-      { name: 'Terminal', class: 'crt-effect-enabled' },
-      { name: 'Chaleur', class: 'heat-vision-enabled' },
-      { name: 'Nocturne', class: 'night-vision-enabled' },
-      { name: 'Vieux Film', class: 'old-film-enabled' },
-      { name: 'Négatif', class: 'negative-enabled' },
+      { name: 'OFF', class: '' }, { name: 'Terminal', class: 'crt-effect-enabled' },
+      { name: 'Chaleur', class: 'heat-vision-enabled' }, { name: 'Nocturne', class: 'night-vision-enabled' },
+      { name: 'Vieux Film', class: 'old-film-enabled' }, { name: 'Négatif', class: 'negative-enabled' },
       { name: 'Saturé', class: 'max-saturation-enabled' }
     ];
-
     function applyFilter() {
       const currentState = filterStates[filterState];
       toggleButton.textContent = `Filtre: ${currentState.name}`;
-
-      crtContainers.forEach(container => {
-        filterStates.forEach(state => {
-          if (state.class) container.classList.remove(state.class);
-        });
-        if (currentState.class) {
-          container.classList.add(currentState.class);
-        }
+      document.querySelectorAll('.crt-container').forEach(container => {
+        filterStates.forEach(state => { if (state.class) container.classList.remove(state.class); });
+        if (currentState.class) container.classList.add(currentState.class);
       });
     }
-    
-    applyFilter();
-
     toggleButton.onclick = () => {
       filterState = (filterState + 1) % filterStates.length;
       applyFilter();
     };
 
-    // --- Logique pour la capture d'écran ---
-    captureButton.onclick = () => {
-      // Utilise html2canvas pour capturer le conteneur de la grille
-      html2canvas(document.getElementById('grid-container'), {
-        useCORS: true, // Tente de charger les images cross-origin (peut ne pas fonctionner pour les iframes YouTube)
-        allowTaint: true,
-        logging: false
-      }).then(canvas => {
-        // Crée un lien de téléchargement temporaire
-        const link = document.createElement('a');
-        link.download = `capture-cctv-${new Date().toISOString().slice(0,19).replace('T','_').replace(/:/g,'-')}.png`;
-        link.href = canvas.toDataURL("image/png");
-        link.click();
+    // --- Fullscreen & Tour Logic ---
+    function stopTour() {
+        if (!isTouring) return;
+        isTouring = false;
+        clearInterval(tourInterval);
+        tourInterval = null;
+        document.getElementById('tourButton').textContent = '▶️ Tournée';
+        tourIndex = -1;
+        document.querySelector('.crt-container.fullscreen')?.classList.remove('fullscreen');
+    }
+
+    function startTour() {
+        if (isTouring || cameras.length === 0) return;
+        isTouring = true;
+        document.getElementById('tourButton').textContent = '⏹️ Arrêter';
+        document.querySelector('.crt-container.fullscreen')?.classList.remove('fullscreen');
+
+        const cycle = () => {
+            tourIndex = (tourIndex + 1) % cameras.length;
+            const allContainers = document.querySelectorAll('.crt-container');
+            allContainers.forEach(c => c.classList.remove('fullscreen'));
+            if (allContainers[tourIndex]) {
+                allContainers[tourIndex].classList.add('fullscreen');
+            }
+        };
+        cycle();
+        tourInterval = setInterval(cycle, TOUR_DURATION);
+    }
+
+    function handleFullscreenClick(e) {
+        if (e.target.closest('.controls-container') || e.target.classList.contains('audio-control')) return;
+        if (isTouring) stopTour();
+        const container = e.currentTarget;
+        if (container.classList.contains('fullscreen')) {
+            container.classList.remove('fullscreen');
+        } else {
+            document.querySelector('.crt-container.fullscreen')?.classList.remove('fullscreen');
+            container.classList.add('fullscreen');
+        }
+    }
+    
+    // --- Preset and Settings Logic ---
+    function loadPresets() {
+        const savedPresets = localStorage.getItem('cctv_presets_v2');
+        if (savedPresets) presets = JSON.parse(savedPresets);
+        else presets = { 'Configuration par Défaut': [...defaultCameras] };
+        const lastActive = localStorage.getItem('cctv_activePreset_v2');
+        activePresetName = lastActive && presets[lastActive] ? lastActive : Object.keys(presets)[0];
+    }
+    function savePresets() {
+        localStorage.setItem('cctv_presets_v2', JSON.stringify(presets));
+        localStorage.setItem('cctv_activePreset_v2', activePresetName);
+    }
+    function loadActivePresetData() {
+        cameras = presets[activePresetName] ? [...presets[activePresetName]] : [];
+    }
+
+    const settingsModal = document.getElementById('settingsModal');
+    
+    function populateSettingsModal() {
+        const camList = document.getElementById('cameraList');
+        camList.innerHTML = '';
+        cameras.forEach((cam) => {
+            const li = document.createElement('li');
+            li.innerHTML = `<input type="text" value="${cam.name}" class="cam-name-input" data-id="${cam.id}">
+                            <input type="text" value="${cam.id}" class="cam-id-input" readonly>
+                            <button class="delete-cam-btn">X</button>`;
+            camList.appendChild(li);
+        });
+        camList.querySelectorAll('.delete-cam-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => e.target.closest('li').remove());
+        });
+        const presetSelector = document.getElementById('presetSelector');
+        presetSelector.innerHTML = '';
+        Object.keys(presets).forEach(name => {
+            const option = document.createElement('option');
+            option.value = name;
+            option.textContent = name;
+            if (name === activePresetName) option.selected = true;
+            presetSelector.appendChild(option);
+        });
+    }
+    
+    document.getElementById('settingsButton').onclick = () => {
+        if(isTouring) stopTour();
+        populateSettingsModal();
+        settingsModal.style.display = 'block';
+    }
+    document.getElementById('cancelSettings').onclick = () => { settingsModal.style.display = 'none'; loadActivePresetData(); }
+    
+    document.getElementById('saveSettings').onclick = () => {
+        const newCameras = [];
+        document.getElementById('cameraList').querySelectorAll('li').forEach(li => {
+            newCameras.push({
+                name: li.querySelector('.cam-name-input').value,
+                id: li.querySelector('.cam-id-input').value
+            });
+        });
+        cameras = newCameras;
+        presets[activePresetName] = [...cameras];
+        savePresets();
+        renderGrid();
+        settingsModal.style.display = 'none';
+    }
+    
+    function extractVideoID(url) {
+        const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+        const match = url.match(regExp);
+        return (match && match[2].length === 11) ? match[2] : url;
+    }
+
+    document.getElementById('addCamBtn').onclick = () => {
+        const name = document.getElementById('newCamName').value.trim();
+        const url = document.getElementById('newCamUrl').value.trim();
+        const id = extractVideoID(url);
+        if (name && id) {
+            const list = document.getElementById('cameraList');
+            const li = document.createElement('li');
+            li.innerHTML = `<input type="text" value="${name}" class="cam-name-input" data-id="${id}">
+                            <input type="text" value="${id}" class="cam-id-input" readonly>
+                            <button class="delete-cam-btn">X</button>`;
+            list.appendChild(li);
+            li.querySelector('.delete-cam-btn').addEventListener('click', (e) => e.target.closest('li').remove());
+            document.getElementById('newCamName').value = '';
+            document.getElementById('newCamUrl').value = '';
+        } else {
+            alert("Veuillez entrer un nom et une URL/ID YouTube valide.");
+        }
+    }
+    
+    document.getElementById('loadPresetBtn').onclick = () => {
+        activePresetName = document.getElementById('presetSelector').value;
+        loadActivePresetData();
+        savePresets();
+        renderGrid();
+        settingsModal.style.display = 'none';
+    };
+
+    document.getElementById('saveAsPresetBtn').onclick = () => {
+        const newName = document.getElementById('newPresetName').value.trim();
+        if (newName && !presets[newName]) {
+            const currentCamsInModal = [];
+            document.getElementById('cameraList').querySelectorAll('li').forEach(li => {
+                currentCamsInModal.push({ name: li.querySelector('.cam-name-input').value, id: li.querySelector('.cam-id-input').value });
+            });
+            presets[newName] = [...currentCamsInModal];
+            activePresetName = newName;
+            savePresets();
+            populateSettingsModal();
+            document.getElementById('newPresetName').value = '';
+        } else if (presets[newName]) {
+            alert("Une mise en page avec ce nom existe déjà.");
+        } else {
+            alert("Veuillez entrer un nom pour la mise en page.");
+        }
+    };
+    
+    document.getElementById('deletePresetBtn').onclick = () => {
+        const selectedName = document.getElementById('presetSelector').value;
+        if (Object.keys(presets).length > 1) {
+            if (confirm(`Êtes-vous sûr de vouloir supprimer la mise en page "${selectedName}" ?`)) {
+                delete presets[selectedName];
+                activePresetName = Object.keys(presets)[0];
+                loadActivePresetData();
+                savePresets();
+                populateSettingsModal();
+            }
+        } else {
+            alert("Impossible de supprimer la dernière mise en page.");
+        }
+    };
+
+    // --- Capture & Init ---
+    document.getElementById('captureButton').onclick = () => {
+      html2canvas(document.getElementById('grid-container'), { useCORS: true, allowTaint: true, logging: false })
+        .then(canvas => {
+          const link = document.createElement('a');
+          link.download = `capture-cctv-${new Date().toISOString().slice(0,19).replace('T','_').replace(/:/g,'-')}.png`;
+          link.href = canvas.toDataURL("image/png");
+          link.click();
       });
     };
 
-    // --- Logique pour le plein écran ---
-    crtContainers.forEach(container => {
-      container.addEventListener('click', (e) => {
-        // S'assure que le clic n'est pas sur un bouton
-        if (e.target.closest('.controls-container')) return;
-
-        if (container.classList.contains('fullscreen')) {
-          container.classList.remove('fullscreen');
-        } else {
-          const currentFullscreen = document.querySelector('.crt-container.fullscreen');
-          if (currentFullscreen) {
-            currentFullscreen.classList.remove('fullscreen');
-          }
-          container.classList.add('fullscreen');
-        }
-      });
-    });
-
-    // --- Ajout des noms de caméras ---
-    crtContainers.forEach((container, index) => {
-      if(videoNames[index]) {
-        const nameElement = document.createElement('div');
-        nameElement.className = 'video-name';
-        nameElement.textContent = videoNames[index];
-        container.appendChild(nameElement);
-      }
+    document.addEventListener('DOMContentLoaded', () => {
+        loadPresets();
+        loadActivePresetData();
+        renderGrid();
+        applyFilter();
+        document.getElementById('tourButton').onclick = () => {
+            isTouring ? stopTour() : startTour();
+        };
     });
   </script>
 </body>
