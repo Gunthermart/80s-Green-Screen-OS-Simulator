@@ -1,1 +1,313 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geo Explorer - Un jeu d'exploration</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        #map { height: 100%; width: 100%; border-radius: 0.5rem; }
+        #pano { height: 100vh; width: 100vw; position: absolute; top: 0; left: 0; z-index: 10; }
+        .leaflet-bottom, .leaflet-top { z-index: 400 !important; }
+        .fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .slide-in { animation: slideIn 0.5s ease-in-out forwards; }
+        @keyframes slideIn { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        .custom-dialog-backdrop {
+            position: fixed;
+            inset: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 450;
+        }
+        .custom-dialog-content {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 500;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white overflow-hidden">
+
+    <div id="pano"></div>
+
+    <div id="ui-container" class="absolute top-0 left-0 w-full h-full z-20 pointer-events-none p-4 md:p-6 flex flex-col justify-between">
+        
+        <div class="flex justify-between items-start pointer-events-auto">
+            <div class="bg-gray-800 bg-opacity-80 backdrop-blur-sm p-3 rounded-lg shadow-lg">
+                <h1 class="text-xl font-bold">Geo Explorer</h1>
+                <p class="text-sm text-gray-300">Ronde <span id="current-round">1</span> sur 5</p>
+                <p class="text-sm text-gray-300">Score: <span id="current-score">0</span></p>
+            </div>
+        </div>
+
+        <div class="flex items-end gap-4">
+            <div id="map-container" class="w-full md:w-1/3 h-48 md:h-64 border-4 border-gray-800 border-opacity-80 rounded-lg shadow-2xl pointer-events-auto transition-all duration-300 ease-in-out">
+                <div id="map"></div>
+            </div>
+            <button id="guess-button" class="bg-blue-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg hover:bg-blue-700 transition-transform transform hover:scale-105 pointer-events-auto disabled:bg-gray-500 disabled:cursor-not-allowed">
+                Deviner
+            </button>
+        </div>
+    </div>
+
+    <!-- Result Modal -->
+    <div id="result-modal" class="hidden absolute bottom-0 left-0 w-full z-30 pointer-events-auto">
+        <div class="bg-gray-800 bg-opacity-90 backdrop-blur-sm p-6 rounded-t-lg shadow-2xl text-center slide-in">
+            <h2 class="text-2xl font-bold" id="result-message"></h2>
+            <p class="text-lg mb-4">Vous étiez à <span id="result-distance" class="font-bold"></span> km.</p>
+            <div id="result-map" class="w-full h-64 md:h-80 rounded-lg my-4 border-2 border-gray-600"></div>
+            <button id="next-round-button" class="bg-green-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-green-700 transition-colors w-full md:w-auto">Manche Suivante</button>
+        </div>
+    </div>
+    
+    <!-- Final Score Modal -->
+    <div id="final-score-modal" class="hidden custom-dialog-backdrop">
+       <div class="custom-dialog-content bg-gray-800 p-8 rounded-xl shadow-2xl text-center w-11/12 max-w-md fade-in">
+            <h2 class="text-3xl font-bold mb-2">Partie Terminée !</h2>
+            <p class="text-lg text-gray-300 mb-4">Votre score final est de :</p>
+            <p class="text-6xl font-bold text-blue-400 mb-6" id="final-score"></p>
+            <button id="play-again-button" class="bg-blue-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-blue-700 transition-colors w-full">Rejouer</button>
+        </div>
+    </div>
+    
+    <!-- Status Modal -->
+    <div id="status-modal" class="custom-dialog-backdrop">
+        <div class="custom-dialog-content bg-gray-800 p-8 rounded-xl shadow-2xl w-11/12 max-w-md fade-in text-center">
+             <h2 id="status-title" class="text-2xl font-bold mb-4">Chargement...</h2>
+             <div id="status-spinner" class="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto"></div>
+             <p id="status-message" class="text-gray-300 mt-4">Récupération de la configuration sécurisée...</p>
+        </div>
+    </div>
+
+
+    <script>
+        function gm_authFailure() {
+            const statusTitle = document.getElementById('status-title');
+            const statusMessage = document.getElementById('status-message');
+            const statusSpinner = document.getElementById('status-spinner');
+
+            if(statusTitle) statusTitle.innerText = "Erreur de Clé API";
+            if(statusSpinner) statusSpinner.style.display = 'none';
+            if(statusMessage) {
+                statusMessage.innerHTML = `<strong>Erreur d'authentification Google Maps.</strong><br>Veuillez vérifier les points suivants dans votre console Google Cloud :<ul class='list-disc list-inside mt-2 text-left'><li>La clé API est-elle correcte dans vos variables d'environnement Netlify ?</li><li>Avez-vous bien activé <strong>"Maps JavaScript API"</strong> ?</li><li>Les restrictions de la clé ("Référents HTTP") autorisent-elles bien l'URL de votre site Netlify ?</li></ul>`;
+            }
+        }
+
+        const EARTH_RADIUS_KM = 6371;
+        const MAX_SCORE_PER_ROUND = 5000;
+        const TOTAL_ROUNDS = 5;
+
+        let panorama, map, guessMarker;
+        let streetViewService;
+        let actualLocation = null;
+        let guessLocation = null;
+        let currentRound = 1;
+        let totalScore = 0;
+
+        const ui = {
+            pano: document.getElementById('pano'),
+            guessButton: document.getElementById('guess-button'),
+            currentRoundEl: document.getElementById('current-round'),
+            currentScoreEl: document.getElementById('current-score'),
+            resultModal: document.getElementById('result-modal'),
+            resultMessage: document.getElementById('result-message'),
+            resultDistance: document.getElementById('result-distance'),
+            nextRoundButton: document.getElementById('next-round-button'),
+            finalScoreModal: document.getElementById('final-score-modal'),
+            finalScoreEl: document.getElementById('final-score'),
+            playAgainButton: document.getElementById('play-again-button'),
+            statusModal: document.getElementById('status-modal'),
+            statusTitle: document.getElementById('status-title'),
+            statusMessage: document.getElementById('status-message'),
+            statusSpinner: document.getElementById('status-spinner'),
+        };
+        
+        async function fetchApiKey() {
+            try {
+                const response = await fetch('/.netlify/functions/get-api-key');
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to fetch API Key from server.');
+                }
+                const data = await response.json();
+                return data.apiKey;
+            } catch (error) {
+                ui.statusTitle.innerText = "Erreur de Configuration";
+                ui.statusSpinner.style.display = 'none';
+                ui.statusMessage.innerText = `Impossible de charger la clé API depuis le serveur. Assurez-vous que la fonction Netlify est correctement déployée et que la variable d'environnement est définie. Détail: ${error.message}`;
+                return null;
+            }
+        }
+
+        function loadGoogleMapsScript(apiKey) {
+            const script = document.createElement('script');
+            script.id = 'google-maps-script';
+            script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=initGame&auth_failure_callback=gm_authFailure`;
+            script.async = true;
+            script.defer = true;
+            document.head.appendChild(script);
+        }
+
+        window.initGame = () => {
+            ui.statusModal.classList.add('hidden');
+            streetViewService = new google.maps.StreetViewService();
+            initMap();
+            startNewRound();
+        };
+
+        function initMap() {
+            map = L.map('map', { center: [20, 0], zoom: 1, zoomControl: false });
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            map.on('click', (e) => {
+                if (guessMarker) {
+                    guessMarker.setLatLng(e.latlng);
+                } else {
+                    guessMarker = L.marker(e.latlng).addTo(map);
+                }
+                guessLocation = e.latlng;
+                ui.guessButton.disabled = false;
+            });
+        }
+        
+        function startNewRound() {
+            resetRound();
+            findRandomLocation();
+            ui.currentRoundEl.textContent = currentRound;
+            ui.guessButton.disabled = true;
+        }
+
+        function findRandomLocation() {
+            const randomLat = Math.random() * 170 - 85;
+            const randomLng = Math.random() * 360 - 180;
+            const randomLocation = new google.maps.LatLng(randomLat, randomLng);
+
+            streetViewService.getPanorama({
+                location: randomLocation,
+                radius: 50000,
+                source: google.maps.StreetViewSource.OUTDOOR
+            }, (data, status) => {
+                if (status === google.maps.StreetViewStatus.OK) {
+                    actualLocation = data.location.latLng;
+                    initPanorama(actualLocation);
+                } else {
+                    findRandomLocation();
+                }
+            });
+        }
+
+        function initPanorama(location) {
+            panorama = new google.maps.StreetViewPanorama(ui.pano, {
+                position: location, pov: { heading: 165, pitch: 0 }, zoom: 1,
+                addressControl: false, showRoadLabels: false, disableDefaultUI: true,
+                clickToGo: true, scrollwheel: true
+            });
+        }
+        
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return EARTH_RADIUS_KM * c;
+        }
+
+        function calculateScore(distance) {
+            if (distance < 0.25) return MAX_SCORE_PER_ROUND;
+            const score = MAX_SCORE_PER_ROUND * Math.exp(-distance / 2000);
+            return Math.round(score);
+        }
+
+        function handleGuess() {
+            if (!guessLocation) return;
+
+            const distance = calculateDistance(
+                actualLocation.lat(), actualLocation.lng(),
+                guessLocation.lat, guessLocation.lng
+            );
+            const score = calculateScore(distance);
+            totalScore += score;
+            
+            ui.currentScoreEl.textContent = totalScore;
+            ui.resultMessage.textContent = `+${score} points !`;
+            ui.resultDistance.textContent = distance.toFixed(1);
+            
+            showResultView();
+        }
+
+        function showResultView() {
+            ui.resultModal.classList.remove('hidden');
+            const resultLatlngs = [[guessLocation.lat, guessLocation.lng], [actualLocation.lat(), actualLocation.lng()]];
+
+            const resultMap = L.map('result-map').fitBounds(resultLatlngs, {padding: [50, 50]});
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(resultMap);
+            
+            L.marker(resultLatlngs[0]).addTo(resultMap).bindPopup("Votre estimation").openPopup();
+            L.marker(resultLatlngs[1]).addTo(resultMap).bindPopup("Lieu réel").openPopup();
+            L.polyline(resultLatlngs, {color: 'white', weight: 2, dashArray: '5, 10'}).addTo(resultMap);
+        }
+
+        function resetRound() {
+            ui.resultModal.classList.add('hidden');
+            const mapEl = document.getElementById('result-map');
+            if (mapEl) {
+                mapEl.innerHTML = '';
+                if(mapEl._leaflet_id) mapEl._leaflet_id = null;
+            }
+            if (guessMarker) {
+                map.removeLayer(guessMarker);
+                guessMarker = null;
+            }
+            guessLocation = null;
+        }
+
+        function nextRound() {
+            if (currentRound < TOTAL_ROUNDS) {
+                currentRound++;
+                startNewRound();
+            } else {
+                showFinalScore();
+            }
+        }
+        
+        function showFinalScore() {
+            ui.resultModal.classList.add('hidden');
+            ui.finalScoreEl.textContent = totalScore;
+            ui.finalScoreModal.classList.remove('hidden');
+        }
+
+        function playAgain() {
+            currentRound = 1;
+            totalScore = 0;
+            ui.currentScoreEl.textContent = totalScore;
+            ui.finalScoreModal.classList.add('hidden');
+            startNewRound();
+        }
+        
+        function setupEventListeners() {
+            ui.guessButton.addEventListener('click', handleGuess);
+            ui.nextRoundButton.addEventListener('click', nextRound);
+            ui.playAgainButton.addEventListener('click', playAgain);
+        }
+        
+        document.addEventListener('DOMContentLoaded', async () => {
+            setupEventListeners();
+            const apiKey = await fetchApiKey();
+            if (apiKey) {
+                loadGoogleMapsScript(apiKey);
+            }
+        });
+    </script>
+</body>
+</html>
 
