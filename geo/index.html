@@ -164,10 +164,7 @@
         <p><i id="toast-icon" class="fas fa-trophy"></i> <span id="toast-message"></span></p>
         <p id="toast-title" class="font-bold"></p>
     </div>
-    <script type="module" src="get_api_key.js"></script>
-    <script type="module">
-        import { startApiKeyFlow } from './get_api_key.js';
-        
+    <script>
         const themedLocations = {
             monuments: [
                 { lat: 48.8584, lng: 2.2945, heading: 200 }, { lat: 40.6892, lng: -74.0445, heading: 270 }, { lat: -22.9519, lng: -43.2105, heading: 0 }, { lat: 41.8902, lng: 12.4922, heading: 100 }, { lat: 29.9792, lng: 31.1342, heading: 90 }, { lat: -33.8568, lng: 151.2153, heading: 180 }, { lat: 27.1751, lng: 78.0421, heading: 0 }, { lat: -13.1631, lng: -72.5450, heading: 45 }, { lat: 30.3285, lng: 35.4444, heading: 300 }, { lat: 40.4319, lng: 116.5704, heading: 0 }, { lat: 37.9715, lng: 23.7257, heading: 135 }, { lat: 13.4125, lng: 103.8667, heading: 180 }, { lat: 55.7522, lng: 37.6231, heading: 270 }, { lat: 20.6843, lng: -88.5678, heading: 90 }, { lat: 47.5576, lng: 10.7498, heading: 180 }, { lat: 41.0082, lng: 28.9784, heading: 200 }, { lat: 25.1972, lng: 55.2744, heading: 150 }, { lat: 43.8791, lng: -103.4591, heading: 90 }, { lat: 51.1789, lng: -1.8262, heading: 0 }, { lat: -27.1127, lng: -109.3497, heading: 225 }, { lat: 34.9922, lng: 135.7720, heading: 0 }, { lat: 36.1069, lng: -112.1129, heading: 180 }, { lat: -17.9243, lng: 25.8572, heading: 90 }, { lat: 20.855, lng: 107.078, heading: 0 }, { lat: 41.4036, lng: 2.1744, heading: 120 }, { lat: 52.5163, lng: 13.3777, heading: 270 }, { lat: 37.8199, lng: -122.4783, heading: 180 }, { lat: 43.7230, lng: 10.3966, heading: 90 }, { lat: 41.9022, lng: 12.4539, heading: 270 }, { lat: 35.3606, lng: 138.7278, heading: 0 }, { lat: 48.8606, lng: 2.3376, heading: 90 }, { lat: 43.0896, lng: -79.0849, heading: 0 }, { lat: 36.4167, lng: 25.4333, heading: 180 }, { lat: 51.5007, lng: -0.1246, heading: 200 }, { lat: 39.9163, lng: 116.3972, heading: 180 }, { lat: -0.9935, lng: -91.1702, heading: 0 }
@@ -309,7 +306,7 @@
                     const unlockedAchievements = {};
                     Object.keys(achievements).forEach(key => { if (achievements[key].unlocked) unlockedAchievements[key] = true; });
                     localStorage.setItem('geoGameAchievements', JSON.stringify(unlockedAchievements));
-                } catch (e) { console.error("Error saving data", e); }
+                } catch (e) { console. error("Error saving data", e); }
             };
             const showToast = (key, isShare = false) => {
                 clearTimeout(timers.toast);
@@ -456,11 +453,24 @@
                     const animatedPolyline = L.polyline(latlngs, { color: 'red' }).addTo(resMap);
                     let i = 0;
                     const steps = 50;
+
+                    // Fixed logic for drawing the line across the anti-meridian
+                    const startLng = guess[1];
+                    let endLng = actual[1];
+                    let lngDiff = endLng - startLng;
+                    if (Math.abs(lngDiff) > 180) {
+                        if (lngDiff > 0) {
+                            endLng -= 360;
+                        } else {
+                            endLng += 360;
+                        }
+                    }
+                    const finalLngDiff = endLng - startLng;
+                    
                     const animationInterval = setInterval(() => {
                         i++;
                         const lat = guess[0] + (actual[0] - guess[0]) * (i / steps);
-                        // CORRECTED: Fixed the animation logic to use the correct longitude difference
-                        const lng = guess[1] + (actual[1] - guess[1]) * (i / steps);
+                        const lng = startLng + finalLngDiff * (i / steps);
                         animatedPolyline.addLatLng([lat, lng]);
                         if (i >= steps) clearInterval(animationInterval);
                     }, 20);
@@ -624,33 +634,56 @@
                     if (navigator.share) {
                         await navigator.share(shareData);
                     } else {
-                        navigator.clipboard.writeText(`${shareText} ${window.location.href}`);
+                        document.execCommand('copy');
                         showToast(null, true);
                     }
                 } catch (err) {
                     console.error("Share failed:", err);
-                    navigator.clipboard.writeText(`${shareText} ${window.location.href}`);
+                    document.execCommand('copy');
                     showToast(null, true);
                 }
             };
             
             // --- API Key & Init ---
+            const loadGoogleMapsScript = (apiKey) => {
+                const script = document.createElement('script');
+                script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=initGame&libraries=geocoding`;
+                script.async = true; script.defer = true;
+                window.handleApiError = () => {
+                    localStorage.removeItem('googleMapsApiKey');
+                    document.body.innerHTML = `<div class="w-full h-screen flex items-center justify-center text-center bg-red-900 text-white p-4"><div><h1 class="text-2xl font-bold">Erreur de Clé API</h1><p>La clé est invalide ou les APIs requises (Maps, Street View, Geocoding) ne sont pas activées. La page va se recharger.</p></div></div>`;
+                    setTimeout(() => window.location.reload(), 5000);
+                };
+                script.onerror = window.handleApiError;
+                document.head.appendChild(script);
+            };
+
+            const startApiKeyFlow = () => {
+                const netlifyApiKey = "YOUR_NETLIFY_API_KEY_HERE";
+                const savedApiKey = localStorage.getItem('googleMapsApiKey');
+
+                if (netlifyApiKey && netlifyApiKey !== "YOUR_NETLIFY_API_KEY_HERE") {
+                    loadGoogleMapsScript(netlifyApiKey);
+                } else if (savedApiKey) {
+                    loadGoogleMapsScript(savedApiKey);
+                } else {
+                    els.apiKeyModal.classList.remove('hidden');
+                }
+            };
             
             const init = () => {
                 loadData();
-                els.languageScreen.classList.remove('hidden');
                 document.querySelectorAll('.lang-btn').forEach(btn => btn.addEventListener('click', (e) => {
                     const lang = e.currentTarget.dataset.lang;
                     setLanguage(lang);
+                    localStorage.setItem('geoGameLang', lang);
                     els.languageScreen.classList.add('hidden');
-                    startApiKeyFlow(els, translations);
+                    startApiKeyFlow();
                 }));
 
                 const savedLang = localStorage.getItem('geoGameLang');
                 if (savedLang) {
                      setLanguage(savedLang);
-                     els.languageScreen.classList.add('hidden');
-                     startApiKeyFlow(els, translations);
                 }
             };
             
@@ -672,6 +705,17 @@
 
 
             // --- Event Listeners Setup ---
+            els.saveApiKeyBtn.addEventListener('click', () => {
+                const apiKey = els.apiKeyInput.value.trim();
+                if (apiKey) {
+                    localStorage.setItem('googleMapsApiKey', apiKey);
+                    els.apiKeyModal.classList.add('hidden');
+                    loadGoogleMapsScript(apiKey);
+                } else {
+                    els.apiKeyError.classList.remove('hidden');
+                }
+            });
+
             document.querySelectorAll('.game-mode-btn').forEach(btn => btn.addEventListener('click', (e) => {
                 const settings = {
                     mode: e.currentTarget.dataset.mode,
