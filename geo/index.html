@@ -215,10 +215,6 @@
         document.addEventListener('DOMContentLoaded', () => {
             const els = {
                 languageScreen: document.getElementById('language-screen'),
-                apiKeyModal: document.getElementById('api-key-modal'),
-                apiKeyInput: document.getElementById('api-key-input'),
-                saveApiKeyBtn: document.getElementById('save-api-key-btn'),
-                apiKeyError: document.getElementById('api-key-error'),
                 gameSetupScreen: document.getElementById('game-setup-screen'),
                 gameContainer: document.getElementById('game-container'),
                 totalScore: document.getElementById('total-score'),
@@ -420,7 +416,7 @@
                 const modalContent = `
                     <h2 class="text-2xl md:text-4xl font-bold">${T.distance}: ${Math.round(distance)} km</h2>
                     <p class="text-md text-gray-400 -mt-1 mb-3">${T.locationWas}: <span class="font-semibold text-white">${currentLoc.locationName}</span></p>
-                    <p class="text-lg md:text-xl text-gray-300 mb-4">${T.youScored} <span id="round-score-anim" class="font-bold text-yellow-400 score-pop">${finalRoundScore}</span> ${T.points}</p>
+                    <p class="text-lg md:text-xl text-gray-300 mb-4">${T.youScored} <span id="round-score-anim" class="font-bold text-yellow-400 score-pop">${finalScore}</span> ${T.points}</p>
                     <div class="text-xs md:text-sm text-gray-400 mb-6">${breakdown}</div>
                     <div id="result-map" class="w-full h-64 rounded-lg border-2 border-gray-600"></div>
                     <button id="next-round-btn" class="bg-green-600 font-bold py-3 px-6 rounded-lg mt-4 transition">
@@ -429,7 +425,7 @@
                 showModal(modalContent);
                 document.getElementById('next-round-btn').addEventListener('click', nextRound);
                 
-                animateValue(document.getElementById('round-score-anim'), 0, finalRoundScore, 1000);
+                animateValue(document.getElementById('round-score-anim'), 0, finalScore, 1000);
 
                 const resMap = L.map('result-map');
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(resMap);
@@ -621,29 +617,27 @@
             };
             
             // --- API Key & Init ---
-            const loadGoogleMapsScript = async () => {
-                const apiKey = await getApiKeyFromFunction();
-                if (!apiKey) {
-                    document.body.innerHTML = `<div class="w-full h-screen flex items-center justify-center text-center bg-red-900 text-white p-4"><div><h1 class="text-2xl font-bold">Erreur de Clé API</h1><p>Impossible de récupérer la clé API depuis le serveur.</p><p>Assurez-vous que la variable d'environnement 'GOOGLE_MAPS_API_KEY' est bien configurée dans Netlify.</p></div></div>`;
-                    return;
-                }
+            const loadGoogleMapsScript = (apiKey) => {
                 const script = document.createElement('script');
                 script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=initGame&libraries=geocoding`;
                 script.async = true; script.defer = true;
                 window.handleApiError = () => {
-                    document.body.innerHTML = `<div class="w-full h-screen flex items-center justify-center text-center bg-red-900 text-white p-4"><div><h1 class="text-2xl font-bold">Erreur de Clé API</h1><p>La clé est invalide ou les APIs requises (Maps, Street View, Geocoding) ne sont pas activées.</p><p>Veuillez vérifier les services activés sur votre console Google Cloud.</p></div></div>`;
+                    document.body.innerHTML = `<div class="w-full h-screen flex items-center justify-center text-center bg-red-900 text-white p-4"><div><h1 class="text-2xl font-bold">Erreur de Clé API</h1><p>La clé est invalide ou les APIs requises (Maps, Street View, Geocoding) ne sont pas activées. La page va se recharger.</p></div></div>`;
+                    setTimeout(() => window.location.reload(), 5000);
                 };
                 script.onerror = window.handleApiError;
                 document.head.appendChild(script);
             };
-
-            const getApiKeyFromFunction = async () => {
+            
+            const getApiKey = async () => {
                 try {
                     const response = await fetch('/.netlify/functions/get-api-key');
+                    if (!response.ok) throw new Error("Could not get API key from Netlify function.");
                     const data = await response.json();
                     return data.apiKey;
-                } catch (e) {
-                    console.error("Erreur lors de la récupération de la clé API", e);
+                } catch (error) {
+                    console.error(error);
+                    alert("Erreur: Impossible de récupérer la clé API. Veuillez vérifier les logs de la fonction Netlify.");
                     return null;
                 }
             };
@@ -651,11 +645,16 @@
             const init = () => {
                 loadData();
                 els.languageScreen.classList.remove('hidden');
-                document.querySelectorAll('.lang-btn').forEach(btn => btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.lang-btn').forEach(btn => btn.addEventListener('click', async (e) => {
                     const lang = e.currentTarget.dataset.lang;
                     setLanguage(lang);
                     els.languageScreen.classList.add('hidden');
-                    loadGoogleMapsScript();
+                    const apiKey = await getApiKey();
+                    if (apiKey) {
+                        loadGoogleMapsScript(apiKey);
+                    } else {
+                        alert("Erreur: Impossible de charger la carte sans clé API.");
+                    }
                 }));
             };
 
@@ -666,7 +665,6 @@
                 map.on('click', (e) => {
                     if (guessMarker) guessMarker.setLatLng(e.latlng);
                     else guessMarker = L.marker(e.latlng).addTo(map);
-                    // Le bouton de validation est activé dès qu'un marqueur est placé sur la carte
                     els.guessBtn.disabled = false;
                 });
             }
@@ -697,7 +695,6 @@
                     els.mapWrapper.classList.remove('hidden');
                     setTimeout(() => map.invalidateSize(), 100);
                     els.guessBtn.innerHTML = translations[currentLang].confirmGuessButton;
-                    // Le bouton est désactivé après le premier clic pour forcer l'utilisateur à placer un marqueur
                     els.guessBtn.disabled = true;
                     mapVisible = true;
                 } else {
