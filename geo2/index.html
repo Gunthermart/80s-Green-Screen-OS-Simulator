@@ -77,7 +77,7 @@
             <h2 id="game-title" class="text-5xl font-black text-white mb-2 tracking-wider">
                 <span>G</span><span>E</span><span>O</span> <span>C</span><span>H</span><span>A</span><span>L</span><span>L</span><span>E</span><span>N</span><span>G</span><span>E</span>
             </h2>
-            <p class="text-sm text-gray-500 mb-8">version 0.95 (c) EXJV</p>
+            <p class="text-sm text-gray-500 mb-8">version 0.96 (c) EXJV</p>
             <h1 class="text-2xl md:text-3xl font-bold mb-2">Welcome / Bienvenue</h1>
             <p class="text-gray-400 mb-8">Please select your language / Veuillez sélectionner votre langue</p>
             <div class="grid grid-cols-2 gap-4">
@@ -487,13 +487,23 @@
                 const googleSubmitBtn = document.getElementById('google-submit-btn');
                 if (googleSubmitBtn) {
                     googleSubmitBtn.addEventListener('click', () => {
+                        googleSubmitBtn.disabled = true;
+                        googleSubmitBtn.innerHTML = `<div class="w-5 h-5 border-2 border-dashed rounded-full animate-spin mx-auto"></div>`;
+                        
                         auth.signInWithPopup(googleProvider)
                             .then(result => {
+                                // The onAuthStateChanged listener will handle the UI update globally.
+                                // We just need to re-render the modal with the new state.
                                 closeModal();
-                                showSubmitScoreModal(score);
+                                showSubmitScoreModal(score); 
                             })
                             .catch(error => {
-                                document.getElementById('submit-error').textContent = error.message;
+                                closeModal();
+                                showSubmitScoreModal(score);
+                                setTimeout(() => {
+                                    const errorEl = document.getElementById('submit-error');
+                                    if(errorEl) errorEl.textContent = error.message;
+                                }, 100);
                             });
                     });
                 }
@@ -541,13 +551,6 @@
                             await auth.signInAnonymously();
                         }
                         
-                        console.log("Submitting score with:", {
-                            pseudo: nickname,
-                            country: detectedCountry,
-                            score: score,
-                            uid: auth.currentUser.uid
-                        });
-
                         await db.collection('hallOfFame').add({
                             pseudo: nickname,
                             country: detectedCountry,
@@ -558,7 +561,7 @@
 
                         showToast(null, true, T.scoreSubmitted);
                         closeModal();
-                        showHallOfFameModal(true); // Pass true to indicate return to main menu
+                        showHallOfFameModal(true);
                     } catch (err) {
                         console.error("Erreur lors de l'écriture du document: ", err);
                         errorEl.textContent = `${T.submitError}: ${err.code || err.message}`;
