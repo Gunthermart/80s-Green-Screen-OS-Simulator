@@ -77,7 +77,7 @@
             <h2 id="game-title" class="text-5xl font-black text-white mb-2 tracking-wider">
                 <span>G</span><span>E</span><span>O</span> <span>C</span><span>H</span><span>A</span><span>L</span><span>L</span><span>E</span><span>N</span><span>G</span><span>E</span>
             </h2>
-            <p class="text-sm text-gray-500 mb-8">version 0.94 (c) EXJV</p>
+            <p class="text-sm text-gray-500 mb-8">version 0.95 (c) EXJV</p>
             <h1 class="text-2xl md:text-3xl font-bold mb-2">Welcome / Bienvenue</h1>
             <p class="text-gray-400 mb-8">Please select your language / Veuillez sélectionner votre langue</p>
             <div class="grid grid-cols-2 gap-4">
@@ -484,12 +484,13 @@
                     nicknameInput.value = currentUser.displayName;
                 }
 
-                if (!currentUser || currentUser.isAnonymous) {
-                    document.getElementById('google-submit-btn').addEventListener('click', () => {
+                const googleSubmitBtn = document.getElementById('google-submit-btn');
+                if (googleSubmitBtn) {
+                    googleSubmitBtn.addEventListener('click', () => {
                         auth.signInWithPopup(googleProvider)
                             .then(result => {
                                 closeModal();
-                                showSubmitScoreModal(score); // Re-open modal with new user state
+                                showSubmitScoreModal(score);
                             })
                             .catch(error => {
                                 document.getElementById('submit-error').textContent = error.message;
@@ -540,27 +541,34 @@
                             await auth.signInAnonymously();
                         }
                         
+                        console.log("Submitting score with:", {
+                            pseudo: nickname,
+                            country: detectedCountry,
+                            score: score,
+                            uid: auth.currentUser.uid
+                        });
+
                         await db.collection('hallOfFame').add({
                             pseudo: nickname,
                             country: detectedCountry,
                             score: score,
                             date: firebase.firestore.FieldValue.serverTimestamp(),
-                            uid: auth.currentUser.uid // Store user ID
+                            uid: auth.currentUser.uid
                         });
 
                         showToast(null, true, T.scoreSubmitted);
                         closeModal();
-                        showHallOfFameModal();
+                        showHallOfFameModal(true); // Pass true to indicate return to main menu
                     } catch (err) {
                         console.error("Erreur lors de l'écriture du document: ", err);
-                        errorEl.textContent = T.submitError + ': ' + err.message;
+                        errorEl.textContent = `${T.submitError}: ${err.code || err.message}`;
                         confirmBtn.disabled = false;
                         confirmBtn.innerHTML = T.submitButton;
                     }
                 });
             };
 
-            const showHallOfFameModal = async () => {
+            const showHallOfFameModal = async (fromSubmit = false) => {
                 const T = translations[currentLang];
                 showLoading(true);
                 let listHTML = `<div class="text-center text-gray-400 p-8">${T.loading}</div>`;
@@ -569,7 +577,13 @@
                     <div id="hall-of-fame-list" class="max-h-[70vh] overflow-y-auto pr-2">${listHTML}</div>
                     <div class="text-center mt-6"><button id="close-hof-btn" class="bg-blue-600 font-bold py-3 px-6 rounded-lg transition">${T.close}</button></div>`;
                 showModal(modalContent);
-                document.getElementById('close-hof-btn').addEventListener('click', closeModal);
+                document.getElementById('close-hof-btn').addEventListener('click', () => {
+                    closeModal();
+                    if (fromSubmit) {
+                        els.gameContainer.classList.add('hidden');
+                        els.gameSetupScreen.classList.remove('hidden');
+                    }
+                });
                 
                 try {
                     const scoresRef = db.collection('hallOfFame');
@@ -926,7 +940,7 @@
             });
 
             els.achievementsBtn.addEventListener('click', showAchievementsModal);
-            els.hallOfFameBtn.addEventListener('click', showHallOfFameModal);
+            els.hallOfFameBtn.addEventListener('click', () => showHallOfFameModal(false));
             els.endGameBtn.addEventListener('click', endGame);
             els.hintCompass.addEventListener('click', (e) => {
                 els.compassContainer.classList.remove('hidden');
