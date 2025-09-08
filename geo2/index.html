@@ -89,6 +89,17 @@
             </div>
         </div>
     </div>
+
+    <!-- API Key Modal -->
+    <div id="api-key-modal" class="hidden absolute inset-0 bg-gray-900 bg-opacity-95 flex items-center justify-center z-50 p-4">
+        <div class="bg-gray-800 p-8 rounded-lg shadow-2xl text-center w-full max-w-lg fade-in">
+            <h2 class="text-2xl font-bold mb-4" data-lang-key="apiKeyTitle"></h2>
+            <p class="text-gray-400 mb-6" data-lang-key="apiKeyDesc"></p>
+            <input type="text" id="api-key-input" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 mb-4" data-lang-key="apiKeyPlaceholder" placeholder="">
+            <button id="save-api-key-btn" class="w-full bg-blue-600 hover:bg-blue-700 font-bold py-3 px-4 rounded-lg transition" data-lang-key="apiKeyButton"></button>
+            <p id="api-key-error" class="text-red-400 text-sm mt-4 hidden" data-lang-key="apiKeyError"></p>
+        </div>
+    </div>
     
     <!-- Game Setup Screen -->
     <div id="game-setup-screen" class="w-full h-screen flex items-center justify-center fade-in hidden p-4">
@@ -913,22 +924,31 @@
                 document.head.appendChild(script);
             };
 
-            const startApiKeyFlow = async () => {
+             const startApiKeyFlow = async () => {
                 showLoading(true);
                 try {
+                    // First, try to fetch the key from the Netlify function
                     const response = await fetch('/.netlify/functions/getApiKey');
                     if (!response.ok) {
-                        throw new Error('Network response was not ok');
+                        throw new Error('Server function not found, falling back to local mode.');
                     }
                     const data = await response.json();
                     if (data.apiKey) {
                         loadGoogleMapsScript(data.apiKey);
                     } else {
-                        throw new Error('API key not found');
+                        throw new Error('API key not found on server.');
                     }
                 } catch (error) {
-                    console.error('Failed to fetch API key:', error);
-                    document.body.innerHTML = `<div class="w-full h-screen flex items-center justify-center text-center bg-red-900 text-white p-4"><div><h1 class="text-2xl font-bold">Erreur de configuration</h1><p>Impossible de récupérer la clé API depuis le serveur. Assurez-vous que la variable d'environnement GOOGLE_MAPS_API_KEY est bien configurée dans Netlify.</p></div></div>`;
+                    console.warn('Could not fetch API key from server:', error.message);
+                    console.log('Attempting to use local key...');
+                    showLoading(false); 
+
+                    const savedApiKey = localStorage.getItem('googleMapsApiKey');
+                    if (savedApiKey) {
+                        loadGoogleMapsScript(savedApiKey);
+                    } else {
+                        els.apiKeyModal.classList.remove('hidden');
+                    }
                 }
             };
             
@@ -962,6 +982,17 @@
                     els.guessBtn.disabled = false;
                 });
             }
+
+            els.saveApiKeyBtn.addEventListener('click', () => {
+                const apiKey = els.apiKeyInput.value.trim();
+                if (apiKey) {
+                    localStorage.setItem('googleMapsApiKey', apiKey);
+                    els.apiKeyModal.classList.add('hidden');
+                    loadGoogleMapsScript(apiKey);
+                } else {
+                    els.apiKeyError.classList.remove('hidden');
+                }
+            });
 
             document.querySelectorAll('.game-mode-btn').forEach(btn => btn.addEventListener('click', (e) => {
                 const settings = {
