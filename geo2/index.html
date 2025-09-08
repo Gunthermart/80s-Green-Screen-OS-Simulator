@@ -34,6 +34,7 @@
     
     <!-- Firebase -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
 
     <style>
@@ -76,7 +77,7 @@
             <h2 id="game-title" class="text-5xl font-black text-white mb-2 tracking-wider">
                 <span>G</span><span>E</span><span>O</span> <span>C</span><span>H</span><span>A</span><span>L</span><span>L</span><span>E</span><span>N</span><span>G</span><span>E</span>
             </h2>
-            <p class="text-sm text-gray-500 mb-8">version 0.91 (c) EXJV</p>
+            <p class="text-sm text-gray-500 mb-8">version 0.92 (c) EXJV</p>
             <h1 class="text-2xl md:text-3xl font-bold mb-2">Welcome / Bienvenue</h1>
             <p class="text-gray-400 mb-8">Please select your language / Veuillez sélectionner votre langue</p>
             <div class="grid grid-cols-2 gap-4">
@@ -85,6 +86,19 @@
                 <button data-lang="es" class="lang-btn bg-yellow-600 hover:bg-yellow-700 w-full font-bold py-4 rounded-lg transition">Español 🇪🇸</button>
                 <button data-lang="de" class="lang-btn bg-gray-600 hover:bg-gray-700 w-full font-bold py-4 rounded-lg transition">Deutsch 🇩🇪</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Login Screen -->
+    <div id="login-screen" class="hidden w-full h-screen flex items-center justify-center p-4">
+        <div class="bg-gray-900 p-8 rounded-lg shadow-2xl text-center w-full max-w-sm fade-in">
+            <h1 class="text-2xl font-bold mb-2" data-lang-key="loginTitle">Connexion</h1>
+            <p class="text-gray-400 mb-8" data-lang-key="loginSubtitle">Choisissez une méthode pour continuer</p>
+            <button id="google-login-btn" class="bg-white text-gray-800 font-bold py-3 px-4 rounded-lg w-full flex items-center justify-center transition hover:bg-gray-200">
+                <svg class="w-6 h-6 mr-3" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path><path fill="none" d="M0 0h48v48H0z"></path></svg>
+                <span data-lang-key="loginGoogle">Se connecter avec Google</span>
+            </button>
+            <button id="anon-login-btn" class="mt-4 text-gray-400 hover:text-white transition text-sm" data-lang-key="loginAnon">Continuer en anonyme</button>
         </div>
     </div>
 
@@ -121,6 +135,17 @@
         </div>
     </div>
     
+    <!-- User Profile -->
+    <div id="user-profile" class="hidden absolute top-5 right-5 z-20 pointer-events-auto">
+        <div class="flex items-center bg-gray-900 bg-opacity-80 p-2 rounded-lg shadow-lg">
+            <img id="user-avatar" src="" class="w-8 h-8 rounded-full mr-3">
+            <span id="user-name" class="font-bold text-sm"></span>
+            <button id="logout-btn" class="ml-4 text-gray-400 hover:text-white transition" title="Logout">
+                <i class="fas fa-sign-out-alt"></i>
+            </button>
+        </div>
+    </div>
+
     <!-- Main Game Container -->
     <div id="game-container" class="hidden relative">
         <div id="street-view"></div>
@@ -215,20 +240,18 @@
 
         const translations = {
             fr: {
-                apiKeyTitle: "Clé API Google Maps requise", apiKeyDesc: "Veuillez entrer votre clé API pour jouer. Elle sera sauvegardée localement.", apiKeyPlaceholder: "Collez votre clé API ici...", apiKeyButton: "Sauvegarder et Jouer", apiKeyError: "Clé API invalide.", mainTitle: "Geo Challenge", mainSubtitle: "Choisissez votre mode de jeu.", modeClassic: "Mode Classique", modeClassicSub: "(5 manches)", modeEndless: "Mode Infini", modeEndlessSub: "(Battez votre record)", modeMonuments: "Défi: Monuments du Monde", modeMonumentsSub: "(5 manches)", modeMuseums: "Défi: Musées du Monde", modeMuseumsSub: "(5 manches)", timedMode: "Partie chronométrée (90s / manche)", achievementsButton: "Succès", hallOfFameButton: "Classement", score: "Score", round: "Manche", hints: "Indices", hintCompass: "Boussole", hintCountry: "Pays", endGameButton: "Terminer la partie", loading: "Chargement...", achievementUnlocked: "Succès débloqué !", achievements: { firstGame: { title: "Premiers Pas", desc: "Terminer votre première partie." }, globetrotter: { title: "Globe-trotter", desc: "Jouer 25 parties." }, precision: { title: "Précision Chirurgicale", desc: "Faire une estimation à moins de 10m." }, highScore: { title: "Maître du Monde", desc: "Marquer plus de 24,000 points." }, worldTour: { title: "Tour du Monde", desc: "Jouer sur les 5 continents habités." }, monumentalist: { title: "Le Monumentaliste", desc: "Terminer le défi des monuments." }, artConnoisseur: { title: "L'Expert en Art", desc: "Terminer le défi des musées." } }, distance: "Distance", youScored: "Vous avez marqué", points: "points!", baseScore: "Score de base", timeBonus: "Bonus temps", perfectBonus: "Parfait !", hintPenalty: "Malus indices", nextRound: "Manche Suivante", finalScoreBtn: "Voir le Score Final", gameFinished: "Partie terminée !", yourFinalScore: "Votre score final est de", replay: "Rejouer", summary: "Voir le Bilan", summaryTitle: "Bilan de la Partie", back: "Retour", achievementsTitle: "Succès", close: "Fermer", locationWas: "Le lieu était", placeGuessButton: "Placer une estimation", confirmGuessButton: "Valider la position", shareButton: "Partager", shareMessage: "J'ai obtenu [SCORE] points sur Geo Challenge! Pouvez-vous faire mieux ?", linkCopied: "Lien copié !", hallOfFameTitle: "Temple de la Renommée", submitToHallOfFame: "Inscrire mon score", submitScoreTitle: "Inscrire votre score", nickname: "Pseudo", countryLabel: "Pays (optionnel)", submitButton: "Valider", rank: "Rang", player: "Joueur", date: "Date", nicknameRequired: "Un pseudo est requis.", scoreSubmitted: "Score enregistré !"
+                apiKeyTitle: "Clé API Google Maps requise", apiKeyDesc: "Veuillez entrer votre clé API pour jouer. Elle sera sauvegardée localement.", apiKeyPlaceholder: "Collez votre clé API ici...", apiKeyButton: "Sauvegarder et Jouer", apiKeyError: "Clé API invalide.", mainTitle: "Geo Challenge", mainSubtitle: "Choisissez votre mode de jeu.", modeClassic: "Mode Classique", modeClassicSub: "(5 manches)", modeEndless: "Mode Infini", modeEndlessSub: "(Battez votre record)", modeMonuments: "Défi: Monuments du Monde", modeMonumentsSub: "(5 manches)", modeMuseums: "Défi: Musées du Monde", modeMuseumsSub: "(5 manches)", timedMode: "Partie chronométrée (90s / manche)", achievementsButton: "Succès", hallOfFameButton: "Classement", score: "Score", round: "Manche", hints: "Indices", hintCompass: "Boussole", hintCountry: "Pays", endGameButton: "Terminer la partie", loading: "Chargement...", achievementUnlocked: "Succès débloqué !", achievements: { firstGame: { title: "Premiers Pas", desc: "Terminer votre première partie." }, globetrotter: { title: "Globe-trotter", desc: "Jouer 25 parties." }, precision: { title: "Précision Chirurgicale", desc: "Faire une estimation à moins de 10m." }, highScore: { title: "Maître du Monde", desc: "Marquer plus de 24,000 points." }, worldTour: { title: "Tour du Monde", desc: "Jouer sur les 5 continents habités." }, monumentalist: { title: "Le Monumentaliste", desc: "Terminer le défi des monuments." }, artConnoisseur: { title: "L'Expert en Art", desc: "Terminer le défi des musées." } }, distance: "Distance", youScored: "Vous avez marqué", points: "points!", baseScore: "Score de base", timeBonus: "Bonus temps", perfectBonus: "Parfait !", hintPenalty: "Malus indices", nextRound: "Manche Suivante", finalScoreBtn: "Voir le Score Final", gameFinished: "Partie terminée !", yourFinalScore: "Votre score final est de", replay: "Rejouer", summary: "Voir le Bilan", summaryTitle: "Bilan de la Partie", back: "Retour", achievementsTitle: "Succès", close: "Fermer", locationWas: "Le lieu était", placeGuessButton: "Placer une estimation", confirmGuessButton: "Valider la position", shareButton: "Partager", shareMessage: "J'ai obtenu [SCORE] points sur Geo Challenge! Pouvez-vous faire mieux ?", linkCopied: "Lien copié !", hallOfFameTitle: "Temple de la Renommée", submitToHallOfFame: "Inscrire mon score", submitScoreTitle: "Inscrire votre score", nickname: "Pseudo", countryLabel: "Pays", submitButton: "Valider", rank: "Rang", player: "Joueur", date: "Date", nicknameRequired: "Un pseudo est requis.", scoreSubmitted: "Score enregistré !", submitError: "Erreur d'envoi", detectingCountry: "Détection du pays...", countryDetected: "Pays détecté : ", loginTitle: "Connexion", loginSubtitle: "Choisissez une méthode pour continuer", loginGoogle: "Se connecter avec Google", loginAnon: "Continuer en anonyme"
             },
             en: {
-                apiKeyTitle: "Google Maps API Key Required", apiKeyDesc: "Please enter your API key to play. It will be saved locally.", apiKeyPlaceholder: "Paste your API key here...", apiKeyButton: "Save and Play", apiKeyError: "Invalid API key.", mainTitle: "Geo Challenge", mainSubtitle: "Choose your game mode.", modeClassic: "Classic Mode", modeClassicSub: "(5 rounds)", modeEndless: "Endless Mode", modeEndlessSub: "(Beat your high score)", modeMonuments: "Challenge: World Monuments", modeMonumentsSub: "(5 rounds)", modeMuseums: "Challenge: World Museums", modeMuseumsSub: "(5 rounds)", timedMode: "Timed game (90s / round)", achievementsButton: "Achievements", hallOfFameButton: "Hall of Fame", score: "Score", round: "Round", hints: "Hints", hintCompass: "Compass", hintCountry: "Country", endGameButton: "End Game", loading: "Loading...", achievementUnlocked: "Achievement Unlocked!", achievements: { firstGame: { title: "First Steps", desc: "Finish your first game." }, globetrotter: { title: "Globetrotter", desc: "Play 25 games." }, precision: { title: "Surgical Precision", desc: "Make a guess within 10m." }, highScore: { title: "Master of the World", desc: "Score over 24,000 points." }, worldTour: { title: "World Tour", desc: "Play on all 5 inhabited continents." }, monumentalist: { title: "The Monumentalist", desc: "Complete the Monuments challenge." }, artConnoisseur: { title: "The Art Connoisseur", desc: "Complete the Museums challenge." } }, distance: "Distance", youScored: "You scored", points: "points!", baseScore: "Base score", timeBonus: "Time bonus", perfectBonus: "Perfect!", hintPenalty: "Hint penalty", nextRound: "Next Round", finalScoreBtn: "View Final Score", gameFinished: "Game Over!", yourFinalScore: "Your final score is", replay: "Play Again", summary: "View Summary", summaryTitle: "Game Summary", back: "Back", achievementsTitle: "Achievements", close: "Close", locationWas: "The location was", placeGuessButton: "Place Guess", confirmGuessButton: "Confirm Guess", shareButton: "Share", shareMessage: "I scored [SCORE] on Geo Challenge! Can you beat me?", linkCopied: "Link copied!", hallOfFameTitle: "Hall of Fame", submitToHallOfFame: "Submit Score", submitScoreTitle: "Submit Your Score", nickname: "Nickname", countryLabel: "Country (optional)", submitButton: "Submit", rank: "Rank", player: "Player", date: "Date", nicknameRequired: "A nickname is required.", scoreSubmitted: "Score submitted!"
+                apiKeyTitle: "Google Maps API Key Required", apiKeyDesc: "Please enter your API key to play. It will be saved locally.", apiKeyPlaceholder: "Paste your API key here...", apiKeyButton: "Save and Play", apiKeyError: "Invalid API key.", mainTitle: "Geo Challenge", mainSubtitle: "Choose your game mode.", modeClassic: "Classic Mode", modeClassicSub: "(5 rounds)", modeEndless: "Endless Mode", modeEndlessSub: "(Beat your high score)", modeMonuments: "Challenge: World Monuments", modeMonumentsSub: "(5 rounds)", modeMuseums: "Challenge: World Museums", modeMuseumsSub: "(5 rounds)", timedMode: "Timed game (90s / round)", achievementsButton: "Achievements", hallOfFameButton: "Hall of Fame", score: "Score", round: "Round", hints: "Hints", hintCompass: "Compass", hintCountry: "Country", endGameButton: "End Game", loading: "Loading...", achievementUnlocked: "Achievement Unlocked!", achievements: { firstGame: { title: "First Steps", desc: "Finish your first game." }, globetrotter: { title: "Globetrotter", desc: "Play 25 games." }, precision: { title: "Surgical Precision", desc: "Make a guess within 10m." }, highScore: { title: "Master of the World", desc: "Score over 24,000 points." }, worldTour: { title: "World Tour", desc: "Play on all 5 inhabited continents." }, monumentalist: { title: "The Monumentalist", desc: "Complete the Monuments challenge." }, artConnoisseur: { title: "The Art Connoisseur", desc: "Complete the Museums challenge." } }, distance: "Distance", youScored: "You scored", points: "points!", baseScore: "Base score", timeBonus: "Time bonus", perfectBonus: "Perfect!", hintPenalty: "Hint penalty", nextRound: "Next Round", finalScoreBtn: "View Final Score", gameFinished: "Game Over!", yourFinalScore: "Your final score is", replay: "Play Again", summary: "View Summary", summaryTitle: "Game Summary", back: "Back", achievementsTitle: "Achievements", close: "Close", locationWas: "The location was", placeGuessButton: "Place Guess", confirmGuessButton: "Confirm Guess", shareButton: "Share", shareMessage: "I scored [SCORE] on Geo Challenge! Can you beat me?", linkCopied: "Link copied!", hallOfFameTitle: "Hall of Fame", submitToHallOfFame: "Submit Score", submitScoreTitle: "Submit Your Score", nickname: "Nickname", countryLabel: "Country", submitButton: "Submit", rank: "Rank", player: "Player", date: "Date", nicknameRequired: "A nickname is required.", scoreSubmitted: "Score submitted!", submitError: "Submission Error", detectingCountry: "Detecting country...", countryDetected: "Country detected: ", loginTitle: "Login", loginSubtitle: "Choose a method to continue", loginGoogle: "Sign in with Google", loginAnon: "Continue anonymously"
             },
             es: {
-                apiKeyTitle: "Se requiere clave de API de Google Maps", apiKeyDesc: "Por favor, introduce tu clave de API para jugar. Se guardará localmente.", apiKeyPlaceholder: "Pega tu clave de API aquí...", apiKeyButton: "Guardar y Jugar", apiKeyError: "Clave de API no válida.", mainTitle: "Geo Challenge", mainSubtitle: "Elige tu modo de juego.", modeClassic: "Modo Clásico", modeClassicSub: "(5 rondas)", modeEndless: "Modo Infinito", modeEndlessSub: "(Bate tu récord)", modeMonuments: "Reto: Monumentos del Mundo", modeMonumentsSub: "(5 rondas)", modeMuseums: "Reto: Museos del Mundo", modeMuseumsSub: "(5 rondas)", timedMode: "Partida cronometrada (90s / ronda)", achievementsButton: "Logros", hallOfFameButton: "Salón de la Fama", score: "Puntuación", round: "Ronda", hints: "Pistas", hintCompass: "Brújula", hintCountry: "País", endGameButton: "Terminar Partida", loading: "Cargando...", achievementUnlocked: "¡Logro desbloqueado!", achievements: { firstGame: { title: "Primeros Pasos", desc: "Completa tu primera partida." }, globetrotter: { title: "Trotamundos", desc: "Juega 25 partidas." }, precision: { title: "Precisión Quirúrgica", desc: "Haz una estimación a menos de 10m." }, highScore: { title: "Maestro del Mundo", desc: "Consigue más de 24.000 puntos." }, worldTour: { title: "Vuelta al Mundo", desc: "Juega en los 5 continentes habitados." }, monumentalist: { title: "El Monumentalista", desc: "Completa el reto de Monumentos." }, artConnoisseur: { title: "El Experto en Arte", desc: "Completa el reto de Museos." } }, distance: "Distancia", youScored: "Conseguiste", points: "puntos!", baseScore: "Puntuación base", timeBonus: "Bonus de tiempo", perfectBonus: "¡Perfecto!", hintPenalty: "Penalización de pistas", nextRound: "Siguiente Ronda", finalScoreBtn: "Ver Puntuación Final", gameFinished: "¡Partida Terminada!", yourFinalScore: "Tu puntuación final es", replay: "Jugar de Nuevo", summary: "Ver Resumen", summaryTitle: "Resumen de la Partida", back: "Volver", achievementsTitle: "Logros", close: "Cerrar", locationWas: "La ubicación era", placeGuessButton: "Hacer suposición", confirmGuessButton: "Confirmar suposición", shareButton: "Compartir", shareMessage: "I scored [SCORE] on Geo Challenge! Can you beat me?", linkCopied: "¡Enlace copiado!", hallOfFameTitle: "Salón de la Fama", submitToHallOfFame: "Enviar Puntuación", submitScoreTitle: "Enviar Tu Puntuación", nickname: "Apodo", countryLabel: "País (opcional)", submitButton: "Enviar", rank: "Rango", player: "Jugador", date: "Fecha", nicknameRequired: "Se requiere un apodo.", scoreSubmitted: "¡Puntuación enviada!"
+                apiKeyTitle: "Se requiere clave de API de Google Maps", apiKeyDesc: "Por favor, introduce tu clave de API para jugar. Se guardará localmente.", apiKeyPlaceholder: "Pega tu clave de API aquí...", apiKeyButton: "Guardar y Jugar", apiKeyError: "Clave de API no válida.", mainTitle: "Geo Challenge", mainSubtitle: "Elige tu modo de jeu.", modeClassic: "Modo Clásico", modeClassicSub: "(5 rondas)", modeEndless: "Modo Infinito", modeEndlessSub: "(Bate tu récord)", modeMonuments: "Reto: Monumentos del Mundo", modeMonumentsSub: "(5 rondas)", modeMuseums: "Reto: Museos del Mundo", modeMuseumsSub: "(5 rondas)", timedMode: "Partida cronometrada (90s / ronda)", achievementsButton: "Logros", hallOfFameButton: "Salón de la Fama", score: "Puntuación", round: "Ronda", hints: "Pistas", hintCompass: "Brújula", hintCountry: "País", endGameButton: "Terminar Partida", loading: "Cargando...", achievementUnlocked: "¡Logro desbloqueado!", achievements: { firstGame: { title: "Primeros Pasos", desc: "Completa tu primera partida." }, globetrotter: { title: "Trotamundos", desc: "Juega 25 partidas." }, precision: { title: "Precisión Quirúrgica", desc: "Haz una estimación a menos de 10m." }, highScore: { title: "Maestro del Mundo", desc: "Consigue más de 24.000 puntos." }, worldTour: { title: "Vuelta al Mundo", desc: "Juega en los 5 continentes habitados." }, monumentalist: { title: "El Monumentalista", desc: "Completa el reto de Monumentos." }, artConnoisseur: { title: "El Experto en Arte", desc: "Completa el reto de Museos." } }, distance: "Distancia", youScored: "Conseguiste", points: "puntos!", baseScore: "Puntuación base", timeBonus: "Bonus de tiempo", perfectBonus: "¡Perfecto!", hintPenalty: "Penalización de pistas", nextRound: "Siguiente Ronda", finalScoreBtn: "Ver Puntuación Final", gameFinished: "¡Partida Terminada!", yourFinalScore: "Tu puntuación final es", replay: "Jugar de Nuevo", summary: "Ver Resumen", summaryTitle: "Resumen de la Partida", back: "Volver", achievementsTitle: "Logros", close: "Cerrar", locationWas: "La ubicación era", placeGuessButton: "Hacer suposición", confirmGuessButton: "Confirmar suposición", shareButton: "Compartir", shareMessage: "I scored [SCORE] on Geo Challenge! Can you beat me?", linkCopied: "¡Enlace copiado!", hallOfFameTitle: "Salón de la Fama", submitToHallOfFame: "Enviar Puntuación", submitScoreTitle: "Enviar Tu Puntuación", nickname: "Apodo", countryLabel: "País", submitButton: "Enviar", rank: "Rango", player: "Jugador", date: "Fecha", nicknameRequired: "Se requiere un apodo.", scoreSubmitted: "¡Puntuación enviada!", submitError: "Error al enviar", detectingCountry: "Detectando país...", countryDetected: "País detectado: ", loginTitle: "Iniciar sesión", loginSubtitle: "Elige un método para continuar", loginGoogle: "Iniciar sesión con Google", loginAnon: "Continuar de forma anónima"
             },
             de: {
-                apiKeyTitle: "Google Maps API-Schlüssel erforderlich", apiKeyDesc: "Bitte geben Sie Ihren API-Schlüssel ein, um zu spielen. Er wird lokal gespeichert.", apiKeyPlaceholder: "Fügen Sie Ihren API-Schlüssel hier ein...", apiKeyButton: "Speichern und Spielen", apiKeyError: "Ungültiger API-Schlüssel.", mainTitle: "Geo Challenge", mainSubtitle: "Wähle deinen Spielmodus.", modeClassic: "Klassischer Modus", modeClassicSub: "(5 Runden)", modeEndless: "Endlos-Modus", modeEndlessSub: "(Schlage deinen Highscore)", modeMonuments: "Herausforderung: Weltmonumente", modeMonumentsSub: "(5 rondas)", modeMuseums: "Herausforderung: Weltmuseen", modeMuseumsSub: "(5 Runden)", timedMode: "Zeitspiel (90s / Runde)", achievementsButton: "Erfolge", hallOfFameButton: "Ruhmeshalle", score: "Punktzahl", round: "Runde", hints: "Hinweise", hintCompass: "Kompass", hintCountry: "Land", endGameButton: "Spiel beenden", loading: "Laden...", achievementUnlocked: "Erfolg freigeschaltet!", achievements: { firstGame: { title: "Erste Schritte", desc: "Beende dein erstes Spiel." }, globetrotter: { title: "Weltenbummler", desc: "Spiele 25 Spiele." }, precision: { title: "Chirurgische Präzision", desc: "Rate auf unter 10m genau." }, highScore: { title: "Meister der Welt", desc: "Erziele über 24.000 Punkte." }, worldTour: { title: "Weltreise", desc: "Spiele auf allen 5 bewohnten Kontinenten." }, monumentalist: { title: "Der Monumentalist", desc: "Schließe die Monumente-Herausforderung ab." }, artConnoisseur: { title: "Der Kunstkenner", desc: "Schließe die Museen-Herausforderung ab." } }, distance: "Entfernung", youScored: "Du hast", points: "Punkte erzielt!", baseScore: "Basispunktzahl", timeBonus: "Zeitbonus", perfectBonus: "Perfekt!", hintPenalty: "Hinweis-Malus", nextRound: "Nächste Runde", finalScoreBtn: "Endergebnis ansehen", gameFinished: "Spiel vorbei!", yourFinalScore: "Dein Endergebnis ist", replay: "Nochmal spielen", summary: "Zusammenfassung", summaryTitle: "Spielzusammenfassung", back: "Zurück", achievementsTitle: "Erfolge", close: "Schließen", locationWas: "Der Ort war", placeGuessButton: "Schätzung abgeben", confirmGuessButton: "Bestätigen", shareButton: "Teilen", shareMessage: "I scored [SCORE] on Geo Challenge! Can you beat me?", linkCopied: "Link kopiert!", hallOfFameTitle: "Ruhmeshalle", submitToHallOfFame: "Punktzahl einreichen", submitScoreTitle: "Deine Punktzahl einreichen", nickname: "Spitzname", countryLabel: "Land (optional)", submitButton: "Einreichen", rank: "Rang", player: "Spieler", date: "Datum", nicknameRequired: "Ein Spitzname ist erforderlich.", scoreSubmitted: "Punktzahl eingereicht!"
+                apiKeyTitle: "Google Maps API-Schlüssel erforderlich", apiKeyDesc: "Bitte geben Sie Ihren API-Schlüssel ein, um zu spielen. Er wird lokal gespeichert.", apiKeyPlaceholder: "Fügen Sie Ihren API-Schlüssel hier ein...", apiKeyButton: "Speichern und Spielen", apiKeyError: "Ungültiger API-Schlüssel.", mainTitle: "Geo Challenge", mainSubtitle: "Wähle deinen Spielmodus.", modeClassic: "Klassischer Modus", modeClassicSub: "(5 Runden)", modeEndless: "Endlos-Modus", modeEndlessSub: "(Schlage deinen Highscore)", modeMonuments: "Herausforderung: Weltmonumente", modeMonumentsSub: "(5 rondas)", modeMuseums: "Herausforderung: Weltmuseen", modeMuseumsSub: "(5 Runden)", timedMode: "Zeitspiel (90s / Runde)", achievementsButton: "Erfolge", hallOfFameButton: "Ruhmeshalle", score: "Punktzahl", round: "Runde", hints: "Hinweise", hintCompass: "Kompass", hintCountry: "Land", endGameButton: "Spiel beenden", loading: "Laden...", achievementUnlocked: "Erfolg freigeschaltet!", achievements: { firstGame: { title: "Erste Schritte", desc: "Beende dein erstes Spiel." }, globetrotter: { title: "Weltenbummler", desc: "Spiele 25 Spiele." }, precision: { title: "Chirurgische Präzision", desc: "Rate auf unter 10m genau." }, highScore: { title: "Meister der Welt", desc: "Erziele über 24.000 Punkte." }, worldTour: { title: "Weltreise", desc: "Spiele auf allen 5 bewohnten Kontinenten." }, monumentalist: { title: "Der Monumentalist", desc: "Schließe die Monumente-Herausforderung ab." }, artConnoisseur: { title: "Der Kunstkenner", desc: "Schließe die Museen-Herausforderung ab." } }, distance: "Entfernung", youScored: "Du hast", points: "Punkte erzielt!", baseScore: "Basispunktzahl", timeBonus: "Zeitbonus", perfectBonus: "Perfekt!", hintPenalty: "Hinweis-Malus", nextRound: "Nächste Runde", finalScoreBtn: "Endergebnis ansehen", gameFinished: "Spiel vorbei!", yourFinalScore: "Dein Endergebnis ist", replay: "Nochmal spielen", summary: "Zusammenfassung", summaryTitle: "Spielzusammenfassung", back: "Zurück", achievementsTitle: "Erfolge", close: "Schließen", locationWas: "Der Ort war", placeGuessButton: "Schätzung abgeben", confirmGuessButton: "Bestätigen", shareButton: "Teilen", shareMessage: "I scored [SCORE] on Geo Challenge! Can you beat me?", linkCopied: "Link kopiert!", hallOfFameTitle: "Ruhmeshalle", submitToHallOfFame: "Punktzahl einreichen", submitScoreTitle: "Deine Punktzahl einreichen", nickname: "Spitzname", countryLabel: "Land", submitButton: "Einreichen", rank: "Rang", player: "Spieler", date: "Datum", nicknameRequired: "Ein Spitzname ist erforderlich.", scoreSubmitted: "Punktzahl eingereicht!", submitError: "Fehler beim Senden", detectingCountry: "Land wird erkannt...", countryDetected: "Land erkannt: ", loginTitle: "Anmelden", loginSubtitle: "Wähle eine Methode zum Fortfahren", loginGoogle: "Mit Google anmelden", loginAnon: "Anonym fortfahren"
             }
         };
-        
-        // --- All functions are defined here ---
         
         document.addEventListener('DOMContentLoaded', () => {
             const firebaseConfig = {
@@ -241,14 +264,23 @@
             };
             firebase.initializeApp(firebaseConfig);
             const db = firebase.firestore();
+            const auth = firebase.auth();
+            const googleProvider = new firebase.auth.GoogleAuthProvider();
 
             const els = {
                 languageScreen: document.getElementById('language-screen'),
+                loginScreen: document.getElementById('login-screen'),
+                googleLoginBtn: document.getElementById('google-login-btn'),
+                anonLoginBtn: document.getElementById('anon-login-btn'),
                 apiKeyModal: document.getElementById('api-key-modal'),
                 apiKeyInput: document.getElementById('api-key-input'),
                 saveApiKeyBtn: document.getElementById('save-api-key-btn'),
                 apiKeyError: document.getElementById('api-key-error'),
                 gameSetupScreen: document.getElementById('game-setup-screen'),
+                userProfile: document.getElementById('user-profile'),
+                userAvatar: document.getElementById('user-avatar'),
+                userName: document.getElementById('user-name'),
+                logoutBtn: document.getElementById('logout-btn'),
                 gameContainer: document.getElementById('game-container'),
                 totalScore: document.getElementById('total-score'),
                 roundInfo: document.getElementById('round-info'),
@@ -272,7 +304,7 @@
                 mapWrapper: document.getElementById('map-wrapper'),
             };
 
-            let sv, map, guessMarker;
+            let sv, map, guessMarker, currentUser;
             let currentLoc = {};
             let gameState = {};
             let timers = { round: null, toast: null };
@@ -280,6 +312,47 @@
             let achievements = {};
             let gameStats = {};
             
+            // --- Authentication ---
+            auth.onAuthStateChanged(user => {
+                currentUser = user;
+                if (user) {
+                    updateUserProfileUI(user);
+                    els.loginScreen.classList.add('hidden');
+                    els.languageScreen.classList.add('hidden');
+                    startApiKeyFlow();
+                } else {
+                    updateUserProfileUI(null);
+                    els.gameSetupScreen.classList.add('hidden');
+                    els.gameContainer.classList.add('hidden');
+                    els.apiKeyModal.classList.add('hidden');
+                    els.loginScreen.classList.add('hidden');
+                    els.languageScreen.classList.remove('hidden');
+                }
+            });
+
+            const signInWithGoogle = () => {
+                auth.signInWithPopup(googleProvider).catch(error => {
+                    console.error("Erreur de connexion Google:", error);
+                });
+            };
+
+            const signInAnonymously = () => {
+                auth.signInAnonymously().catch(error => {
+                    console.error("L'authentification anonyme a échoué:", error);
+                });
+            };
+            
+            const updateUserProfileUI = (user) => {
+                if (user && !user.isAnonymous) {
+                    els.userAvatar.src = user.photoURL;
+                    els.userName.textContent = user.displayName;
+                    els.userProfile.classList.remove('hidden');
+                } else {
+                    els.userProfile.classList.add('hidden');
+                }
+            };
+
+            // --- UI Functions ---
             const animateValue = (obj, start, end, duration) => {
                 let startTimestamp = null;
                 const step = (timestamp) => {
@@ -296,20 +369,23 @@
                 document.documentElement.lang = lang;
                 document.querySelectorAll('[data-lang-key]').forEach(el => {
                     const key = el.dataset.langKey;
-                    const translation = translations[lang][key];
+                    const translation = translations[lang] ? translations[lang][key] : null;
                     if (translation) {
                         if (el.tagName === 'INPUT' && el.type === 'text') el.placeholder = translation;
                         else el.innerHTML = translation;
                     }
                 });
-                Object.keys(achievementsConfig).forEach(key => {
-                    achievements[key] = {
-                        ...achievementsConfig[key],
-                        ...translations[currentLang].achievements[key],
-                        unlocked: achievements[key]?.unlocked || false
-                    };
-                });
+                if (translations[currentLang] && translations[currentLang].achievements) {
+                    Object.keys(achievementsConfig).forEach(key => {
+                        achievements[key] = {
+                            ...achievementsConfig[key],
+                            ...translations[currentLang].achievements[key],
+                            unlocked: achievements[key]?.unlocked || false
+                        };
+                    });
+                }
             };
+
             const loadData = () => {
                 try {
                     const stats = JSON.parse(localStorage.getItem('geoGameStats'));
@@ -320,6 +396,7 @@
                     });
                 } catch (e) { console.error("Error loading data", e); }
             };
+
             const saveData = () => {
                 try {
                     const stats = { ...gameStats, continentsVisited: Array.from(gameStats.continentsVisited) };
@@ -329,6 +406,7 @@
                     localStorage.setItem('geoGameAchievements', JSON.stringify(unlockedAchievements));
                 } catch (e) { console. error("Error saving data", e); }
             };
+
             const showToast = (key, isShare = false, customMessage = '') => {
                 clearTimeout(timers.toast);
                 if (isShare) {
@@ -345,6 +423,7 @@
                 els.toast.classList.add('toast-animation');
                 timers.toast = setTimeout(() => els.toast.classList.add('hidden'), 3900);
             };
+
             const checkAchievements = (checkType, data = {}) => {
                 let newAchievementUnlocked = false;
                 const unlock = (key) => {
@@ -439,16 +518,40 @@
                     <p class="text-lg mb-4">${T.score}: <span class="font-bold">${score.toLocaleString()}</span></p>
                     <div class="space-y-4 text-left w-full max-w-sm mx-auto">
                         <input type="text" id="nickname-input" class="w-full bg-gray-700 border border-gray-600 text-white p-3 rounded-lg" placeholder="${T.nickname}">
-                        <input type="text" id="country-input" class="w-full bg-gray-700 border border-gray-600 text-white p-3 rounded-lg" placeholder="${T.countryLabel}">
                     </div>
-                    <div id="submit-error" class="text-red-400 text-sm mt-4 h-5"></div>
+                    <div id="country-display" class="text-gray-400 mt-4 h-5"></div>
+                    <div id="submit-error" class="text-red-400 text-sm mt-2 h-5"></div>
                     <button id="confirm-submit-btn" class="mt-4 bg-green-600 font-bold py-3 px-8 rounded-lg">${T.submitButton}</button>
                 `;
                 showModal(modalContent);
+                
+                const nicknameInput = document.getElementById('nickname-input');
+                if (currentUser && !currentUser.isAnonymous) {
+                    nicknameInput.value = currentUser.displayName;
+                }
 
-                document.getElementById('confirm-submit-btn').addEventListener('click', async () => {
+                const countryDisplay = document.getElementById('country-display');
+                let detectedCountry = '';
+                countryDisplay.textContent = T.detectingCountry;
+
+                fetch('https://ip-api.com/json/')
+                    .then(response => response.json())
+                    .then(data => {
+                        if(data.status === 'success' && data.country) {
+                            detectedCountry = data.country;
+                            countryDisplay.textContent = T.countryDetected + detectedCountry;
+                        } else {
+                            countryDisplay.textContent = '';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error fetching country:', error);
+                        countryDisplay.textContent = '';
+                    });
+
+
+                document.getElementById('confirm-submit-btn').addEventListener('click', () => {
                     const nickname = document.getElementById('nickname-input').value.trim();
-                    const country = document.getElementById('country-input').value.trim();
                     const errorEl = document.getElementById('submit-error');
 
                     if (!nickname) {
@@ -461,22 +564,24 @@
                     btn.disabled = true;
                     btn.innerHTML = `<div class="w-5 h-5 border-2 border-dashed rounded-full animate-spin mx-auto"></div>`;
 
-                    try {
-                        await db.collection('hallOfFame').add({
-                            pseudo: nickname,
-                            country: country,
-                            score: score,
-                            date: new Date()
-                        });
+                    db.collection('hallOfFame').add({
+                        pseudo: nickname,
+                        country: detectedCountry,
+                        score: score,
+                        date: firebase.firestore.FieldValue.serverTimestamp()
+                    })
+                    .then((docRef) => {
+                        console.log("Document écrit avec l'ID: ", docRef.id);
                         showToast(null, true, T.scoreSubmitted);
                         closeModal();
                         showHallOfFameModal();
-                    } catch (err) {
-                        console.error("Error writing document: ", err);
-                        errorEl.textContent = "Error submitting score.";
+                    })
+                    .catch((err) => {
+                        console.error("Erreur lors de l'écriture du document: ", err);
+                        errorEl.textContent = T.submitError + ': ' + err.message;
                         btn.disabled = false;
                         btn.innerHTML = T.submitButton;
-                    }
+                    });
                 });
             };
             const showHallOfFameModal = async () => {
@@ -502,7 +607,7 @@
                             </tr></thead><tbody>`;
                         snapshot.docs.forEach((doc, index) => {
                             const data = doc.data();
-                            const date = data.date.toDate ? data.date.toDate().toLocaleDateString() : new Date(data.date).toLocaleDateString();
+                            const date = data.date && data.date.toDate ? data.date.toDate().toLocaleDateString() : 'N/A';
                             listHTML += `<tr class="border-b border-gray-700">
                                 <td class="p-2 font-bold">${index + 1}</td>
                                 <td class="p-2">${data.pseudo}</td>
@@ -515,8 +620,8 @@
                     }
                     document.getElementById('hall-of-fame-list').innerHTML = listHTML;
                 } catch (error) {
-                    console.error("Error getting scores: ", error);
-                    document.getElementById('hall-of-fame-list').innerHTML = `<div class="text-center text-red-400 p-8">Error loading scores.</div>`;
+                    console.error("Erreur lors de la récupération des scores: ", error);
+                    document.getElementById('hall-of-fame-list').innerHTML = `<div class="text-center text-red-400 p-8">Erreur lors du chargement des scores.</div>`;
                 } finally {
                     showLoading(false);
                 }
@@ -759,6 +864,9 @@
             
             // --- API Key & Init ---
             const loadGoogleMapsScript = (apiKey) => {
+                if (window.google && window.google.maps) {
+                    return initGame();
+                }
                 const script = document.createElement('script');
                 script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=initGame&libraries=geocoding`;
                 script.async = true; script.defer = true;
@@ -782,30 +890,26 @@
             
             const init = () => {
                 loadData();
+                const savedLang = localStorage.getItem('geoGameLang') || 'fr';
+                setLanguage(savedLang);
+
                 document.querySelectorAll('.lang-btn').forEach(btn => btn.addEventListener('click', (e) => {
                     const lang = e.currentTarget.dataset.lang;
                     setLanguage(lang);
                     localStorage.setItem('geoGameLang', lang);
                     els.languageScreen.classList.add('hidden');
-                    startApiKeyFlow();
+                    els.loginScreen.classList.remove('hidden');
                 }));
-
-                const savedLang = localStorage.getItem('geoGameLang');
-                if (savedLang) {
-                     setLanguage(savedLang);
-                     els.languageScreen.classList.add('hidden');
-                     startApiKeyFlow();
-                }
-                // No else, language screen is visible by default
             };
             
             window.initGame = () => {
                 els.gameSetupScreen.classList.remove('hidden');
+                els.apiKeyModal.classList.add('hidden');
                 setupGameUI();
             };
 
             const setupGameUI = () => {
-                if (map) map.remove();
+                if (map) return;
                 map = L.map('map').setView([20, 0], 2);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
                 map.on('click', (e) => {
@@ -814,7 +918,6 @@
                     els.guessBtn.disabled = false;
                 });
             }
-
 
             // --- Event Listeners Setup ---
             els.saveApiKeyBtn.addEventListener('click', () => {
@@ -867,6 +970,10 @@
                 e.currentTarget.disabled = true;
             });
             
+            els.googleLoginBtn.addEventListener('click', signInWithGoogle);
+            els.anonLoginBtn.addEventListener('click', signInAnonymously);
+            els.logoutBtn.addEventListener('click', () => auth.signOut());
+
             document.querySelectorAll('#game-title span').forEach((span, index) => {
                 span.style.animationDelay = `${index * 0.15}s`;
             });
@@ -876,5 +983,4 @@
     </script>
 </body>
 </html>
-
 
