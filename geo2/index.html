@@ -516,23 +516,44 @@
                 confirmBtn.disabled = true;
                 countryDisplay.textContent = T.detectingCountry;
 
-                fetch('https://ip-api.com/json/')
-                    .then(response => response.ok ? response.json() : Promise.reject('Network response failed'))
-                    .then(data => {
+                const fetchCountry = async () => {
+                    try {
+                        const response = await fetch('https://ip-api.com/json/');
+                        if (!response.ok) throw new Error(`ip-api.com status: ${response.status}`);
+                        const data = await response.json();
                         if (data.status === 'success' && data.country) {
-                            detectedCountry = data.country;
-                            countryDisplay.textContent = T.countryDetected + detectedCountry;
-                        } else {
-                            countryDisplay.textContent = T.countryError;
+                            return data.country;
                         }
-                    })
-                    .catch(error => {
-                        console.error('Error fetching country:', error);
+                        throw new Error('ip-api.com did not return success');
+                    } catch (error1) {
+                        console.warn('Primary IP API (ip-api.com) failed:', error1);
+                        try {
+                            const response2 = await fetch('https://ipwho.is/');
+                            if (!response2.ok) throw new Error(`ipwho.is status: ${response2.status}`);
+                            const data2 = await response2.json();
+                            if (data2.success && data2.country) {
+                                return data2.country;
+                            }
+                            throw new Error('ipwho.is did not return success');
+                        } catch (error2) {
+                            console.error('Fallback IP API (ipwho.is) also failed:', error2);
+                            return null;
+                        }
+                    }
+                };
+
+                fetchCountry().then(countryName => {
+                    if (countryName) {
+                        detectedCountry = countryName;
+                        countryDisplay.textContent = T.countryDetected + detectedCountry;
+                    } else {
+                        detectedCountry = ''; 
                         countryDisplay.textContent = T.countryError;
-                    })
-                    .finally(() => {
-                        confirmBtn.disabled = false;
-                    });
+                    }
+                }).finally(() => {
+                    confirmBtn.disabled = false;
+                });
+
 
                 confirmBtn.addEventListener('click', async () => {
                     const nicknameInput = document.getElementById('nickname-input');
