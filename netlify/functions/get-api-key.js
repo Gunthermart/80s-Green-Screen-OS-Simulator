@@ -1,23 +1,30 @@
-// This function will run on Netlify's servers.
-// It securely accesses the API key stored as an environment variable.
-exports.handler = async function(event, context) {
-  // Access the secret environment variable.
-  // Make sure to set this in your Netlify site's settings.
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+// netlify/functions/get-api-key.js
 
-  // Basic validation
-  if (!apiKey) {
+exports.handler = async function(event, context) {
+  // Cette fonction est conçue pour être exécutée sur Netlify.
+  // Elle récupère la clé API Google Maps à partir des variables d'environnement
+  // configurées dans l'interface de Netlify.
+  // C'est une méthode sécurisée pour ne pas exposer votre clé dans le code côté client.
+
+  try {
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+
+    if (!apiKey) {
+      throw new Error("La variable d'environnement GOOGLE_MAPS_API_KEY n'est pas définie.");
+    }
+
+    return {
+      statusCode: 200,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ apiKey: apiKey }),
+    };
+  } catch (error) {
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: "La variable d'environnement GOOGLE_MAPS_API_KEY n'est pas configurée sur Netlify." })
+      body: JSON.stringify({ error: error.message }),
     };
   }
-
-  // Return the key to the client-side script
-  return {
-    statusCode: 200,
-    body: JSON.stringify({ apiKey: apiKey })
-  };
 };
-
 
