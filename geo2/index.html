@@ -541,24 +541,79 @@
                 document.getElementById('share-btn').addEventListener('click', shareScore);
                 document.getElementById('submit-score-btn').addEventListener('click', () => {
                     closeModal();
-                    showSubmitScoreModal(gameState.totalScore, gameState.settings.mode);
+                    showSubmitScoreModal();
                 });
             };
             
-            const showSubmitScoreModal = (score, mode) => {
+            const submitScoreToServer = async () => {
+                const T = translations[currentLang];
+                const nicknameInput = document.getElementById('nickname-input');
+                const nickname = nicknameInput.value.trim();
+                const errorEl = document.getElementById('submit-error');
+                const confirmBtn = document.getElementById('confirm-submit-btn');
+
+                if (!nickname) {
+                    errorEl.textContent = T.nicknameRequired;
+                    return;
+                }
+                errorEl.textContent = '';
+                
+                confirmBtn.disabled = true;
+                confirmBtn.innerHTML = `<div class="w-5 h-5 border-2 border-dashed rounded-full animate-spin mx-auto"></div>`;
+
+                try {
+                    if (!auth.currentUser) {
+                        await auth.signInAnonymously();
+                    }
+                    const idToken = await auth.currentUser.getIdToken(true);
+
+                    const response = await fetch('/.netlify/functions/submit-score', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${idToken}`
+                        },
+                        body: JSON.stringify({
+                            nickname: nickname,
+                            gameMode: gameState.settings.mode,
+                            rounds: gameState.history,
+                        })
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || 'Server error');
+                    }
+
+                    showToast(null, true, T.scoreSubmitted);
+                    closeModal();
+                    showHallOfFameModal(true, 'all');
+
+                } catch (err) {
+                    console.error("Erreur lors de l'envoi du score: ", err);
+                    errorEl.textContent = `${T.submitError}: ${err.message}`;
+                    confirmBtn.disabled = false;
+                    confirmBtn.innerHTML = T.submitButton;
+                }
+            };
+            
+            const showSubmitScoreModal = () => {
                 const T = translations[currentLang];
                 const modalContent = `
                     <h2 class="text-2xl font-bold mb-4">${T.submitScoreTitle}</h2>
-                    <p class="text-lg mb-4">${T.score}: <span class="font-bold">${score.toLocaleString()}</span></p>
+                    <p class="text-lg mb-4">${T.score}: <span class="font-bold">${gameState.totalScore.toLocaleString()}</span></p>
                     <div id="auth-section" class="mb-4"></div>
                     <div class="space-y-4 text-left w-full max-w-sm mx-auto">
                         <input type="text" id="nickname-input" class="w-full bg-gray-700 border border-gray-600 text-white p-3 rounded-lg" placeholder="${T.nickname}">
                     </div>
-                    <div id="country-display" class="text-gray-400 mt-4 h-5"></div>
                     <div id="submit-error" class="text-red-400 text-sm mt-2 h-5"></div>
                     <button id="confirm-submit-btn" class="mt-4 bg-green-600 font-bold py-3 px-8 rounded-lg">${T.submitButton}</button>
                 `;
                 showModal(modalContent);
+
+                const confirmBtn = document.getElementById('confirm-submit-btn');
+                confirmBtn.addEventListener('click', submitScoreToServer);
+
 
                 const renderAuthSection = (user) => {
                     const authSection = document.getElementById('auth-section');
@@ -588,7 +643,6 @@
                 };
                 
                 let unsubscribeAuth;
-
                 const observer = new MutationObserver((mutations, obs) => {
                     if (els.modalsContainer.innerHTML === '') {
                         if(unsubscribeAuth) unsubscribeAuth();
@@ -601,93 +655,6 @@
                 unsubscribeAuth = auth.onAuthStateChanged(user => {
                     currentUser = user;
                     renderAuthSection(user);
-                });
-
-                const countryDisplay = document.getElementById('country-display');
-                const confirmBtn = document.getElementById('confirm-submit-btn');
-                let detectedCountry = '';
-
-                confirmBtn.disabled = true;
-                countryDisplay.textContent = T.detectingCountry;
-
-                const fetchCountry = async () => {
-                    try {
-                        const response = await fetch('https://ip-api.com/json/');
-                        if (!response.ok) throw new Error(`ip-api.com status: ${response.status}`);
-                        const data = await response.json();
-                        if (data.status === 'success' && data.country) {
-                            return data.country;
-                        }
-                        throw new Error('ip-api.com did not return success');
-                    } catch (error1) {
-                        console.warn('Primary IP API (ip-api.com) failed:', error1);
-                        try {
-                            const response2 = await fetch('https://ipwho.is/');
-                            if (!response2.ok) throw new Error(`ipwho.is status: ${response2.status}`);
-                            const data2 = await response2.json();
-                            if (data2.success && data2.country) {
-                                return data2.country;
-                            }
-                            throw new Error('ipwho.is did not return success');
-                        } catch (error2) {
-                            console.error('Fallback IP API (ipwho.is) also failed:', error2);
-                            return null;
-                        }
-                    }
-                };
-
-                fetchCountry().then(countryName => {
-                    if (countryName) {
-                        detectedCountry = countryName;
-                        countryDisplay.textContent = T.countryDetected + detectedCountry;
-                    } else {
-                        detectedCountry = ''; 
-                        countryDisplay.textContent = T.countryError;
-                    }
-                }).finally(() => {
-                    confirmBtn.disabled = false;
-                });
-
-
-                confirmBtn.addEventListener('click', async () => {
-                    const nicknameInput = document.getElementById('nickname-input');
-                    const nickname = nicknameInput.value.trim();
-                    const errorEl = document.getElementById('submit-error');
-
-                    if (!nickname) {
-                        errorEl.textContent = T.nicknameRequired;
-                        return;
-                    }
-                    errorEl.textContent = '';
-                    
-                    confirmBtn.disabled = true;
-                    confirmBtn.innerHTML = `<div class="w-5 h-5 border-2 border-dashed rounded-full animate-spin mx-auto"></div>`;
-
-                    try {
-                        let userToSubmit = currentUser;
-                        if (!userToSubmit) {
-                           const anonUser = await auth.signInAnonymously();
-                           userToSubmit = anonUser.user;
-                        }
-                        
-                        await db.collection('hallOfFame').add({
-                            pseudo: nickname,
-                            country: detectedCountry,
-                            score: score,
-                            mode: mode,
-                            date: firebase.firestore.FieldValue.serverTimestamp(),
-                            uid: userToSubmit.uid
-                        });
-
-                        showToast(null, true, T.scoreSubmitted);
-                        closeModal();
-                        showHallOfFameModal(true, 'all');
-                    } catch (err) {
-                        console.error("Erreur lors de l'écriture du document: ", err);
-                        errorEl.textContent = `${T.submitError}: ${err.code || err.message}`;
-                        confirmBtn.disabled = false;
-                        confirmBtn.innerHTML = T.submitButton;
-                    }
                 });
             };
 
@@ -925,7 +892,14 @@
                 const finalRoundScore = Math.max(0, Math.round(baseScore + precisionBonus + timeBonus + timedModeBonus) - gameState.hintPenalty);
                 
                 gameState.totalScore += finalRoundScore;
-                gameState.history.push({ actual: {lat: currentLoc.lat, lng: currentLoc.lng}, guess: guessPos ? {lat: guessPos.lat, lng: guessPos.lng} : null });
+                gameState.history.push({
+                    actual: { lat: currentLoc.lat, lng: currentLoc.lng },
+                    guess: guessPos ? { lat: guessPos.lat, lng: guessPos.lng } : null,
+                    timeBonus,
+                    precisionBonus,
+                    timedModeBonus,
+                    hintPenalty: gameState.hintPenalty 
+                });
                 showResultModal(distance, finalRoundScore, Math.round(baseScore), timeBonus, precisionBonus, timedModeBonus);
                 checkAchievements('roundEnd', { distance });
             };
@@ -947,7 +921,6 @@
                 resetRoundUI();
                 currentLoc = await getRandomLocation();
 
-                // S'assurer que le pays est connu avant de continuer
                 await new Promise((resolve) => {
                     const geocoder = new google.maps.Geocoder();
                     geocoder.geocode({ 'location': { lat: currentLoc.lat, lng: currentLoc.lng } }, (results, status) => {
@@ -963,7 +936,7 @@
                             currentLoc.locationName = "Lieu Mystérieux";
                             console.error('Geocode failed with status:', status);
                         }
-                        resolve(); // Résoudre la promesse pour continuer
+                        resolve();
                     });
                 });
 
@@ -1233,7 +1206,6 @@
             const showRewardedAd = () => {
                 const T = translations[currentLang];
 
-                // Configuration de la publicité récompense (fictive ou réelle)
                 adBreak({
                     type: 'reward',
                     name: 'country_hint_reward',
@@ -1254,7 +1226,7 @@
                         els.geocodedInfo.textContent = `${translations[currentLang].hintCountry}: ${currentLoc.country || '...'}`;
                         els.hintCountry.disabled = true;
                     },
-                    onError: (error) => { // Uniquement pour la vraie pub, mais bon à garder
+                    onError: (error) => {
                         console.error("Ad error:", error);
                         const adErrorMessage = document.getElementById('ad-error-message');
                          if (adErrorMessage) adErrorMessage.textContent = T.adError;
