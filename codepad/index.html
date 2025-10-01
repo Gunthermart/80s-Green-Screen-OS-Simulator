@@ -1,1 +1,2406 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bloc-notes Ace</title>
+    <!-- Chargement de Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Style général */
+        :root {
+            --scrollbar-track-bg: #f1f1f1;
+            --scrollbar-thumb-bg: #c1c1c1;
+            --scrollbar-thumb-hover-bg: #a8a8a8;
+        }
 
+        .dark {
+            --scrollbar-track-bg: #2d3748;
+            --scrollbar-thumb-bg: #718096;
+            --scrollbar-thumb-hover-bg: #a0aec0;
+        }
+
+        /* Scrollbar personnalisée */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: var(--scrollbar-track-bg);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--scrollbar-thumb-bg);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--scrollbar-thumb-hover-bg);
+        }
+
+        /* Conteneur de l'éditeur */
+        .editor-container {
+            position: relative;
+            width: 100%;
+            /* Nous laissons de l'espace pour la barre de statut en bas */
+            height: calc(100% - 32px); /* Hauteur moins la barre de statut */
+        }
+
+        /* Cacher les conteneurs inactifs */
+        .editor-container:not(.active) {
+            display: none;
+        }
+        
+        /* Assurez-vous que l'éditeur ACE prend toute la place dans son conteneur */
+        .ace_editor {
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+        }
+        /* Style pour la barre de statut */
+        #status-bar {
+            height: 32px;
+            transition: background-color 0.1s; /* Transition pour un clignotement doux */
+        }
+
+        /* Définition de l'animation de clignotement */
+        @keyframes saveFlash {
+            0% { background-color: #48bb78; } /* Vert vif (green-500) */
+            100% { background-color: inherit; } /* Retour à la couleur initiale */
+        }
+
+        /* Classe appliquée lors de la sauvegarde réussie */
+        .save-success-flash {
+            animation: saveFlash 0.3s ease-out;
+        }
+
+
+        /* --- Styles spécifiques pour la barre de recherche Ace (ACE_SEARCH) --- */
+
+        /* Styles par défaut (Thème Clair) */
+        .ace_search {
+            background-color: #f7fafc !important; /* gray-50 */
+            border: 1px solid #e2e8f0 !important; /* gray-200 */
+            color: #1a202c !important; /* gray-900 */
+            border-radius: 0.375rem; /* rounded-md */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+            /* S'assurer que le searchbox est au-dessus du code */
+            z-index: 2000 !important;
+        }
+        .ace_search_field {
+            background-color: white !important;
+            border: 1px solid #cbd5e0 !important; /* gray-300 */
+            color: #1a202c !important;
+            border-radius: 0.25rem;
+        }
+        .ace_searchbtn {
+            background-color: #e2e8f0 !important; /* gray-200 */
+            color: #1a202c !important;
+            border-radius: 0.25rem !important;
+        }
+        .ace_searchbtn.checked {
+            background-color: #63b3ed !important; /* blue-400 */
+            color: white !important;
+        }
+        .ace_replace_success {
+            background-color: #48bb78 !important; /* green-500 */
+        }
+        
+        /* Styles pour le Thème Sombre */
+        .dark .ace_search {
+            background-color: #2d3748 !important; /* gray-800 */
+            border: 1px solid #4a5568 !important; /* gray-600 */
+            color: #e2e8f0 !important; /* gray-200 */
+        }
+        .dark .ace_search_field {
+            background-color: #1a202c !important; /* gray-900 */
+            border: 1px solid #4a5568 !important; /* gray-600 */
+            color: #e2e8f0 !important;
+        }
+        .dark .ace_searchbtn {
+            background-color: #4a5568 !important; /* gray-600 */
+            color: #e2e8f0 !important;
+        }
+        .dark .ace_searchbtn.checked {
+            background-color: #4c7c8c !important; /* blue-800/teal */
+            color: white !important;
+        }
+
+        /* Style pour la modale de saisie de nom */
+        #input-modal-content {
+            z-index: 60; /* Au-dessus de modal-overlay */
+        }
+        #input-modal-overlay {
+            z-index: 55;
+        }
+        
+        /* Style pour l'indicateur de point d'arrêt */
+        .ace_gutter-cell.ace_error {
+            background-image: none !important;
+            border-radius: 50%;
+            background-color: #f87171 !important; /* red-400 */
+            box-shadow: 0 0 5px #f87171;
+        }
+
+        /* Style spécifique pour la modale Aller à la Ligne */
+        #goto-line-modal-overlay {
+            z-index: 55;
+        }
+        #goto-line-modal-content {
+            z-index: 60;
+        }
+        
+    </style>
+</head>
+<body class="font-sans flex flex-col h-screen bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200">
+
+    <!-- Conteneur principal de l'application -->
+    <div class="flex flex-col h-full p-4 gap-4">
+
+        <!-- Barre de Menu -->
+        <header class="flex-shrink-0 flex gap-2">
+            <!-- Menu Fichier -->
+            <div class="relative group">
+                <button id="file-menu-btn" class="bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 px-4 py-2 rounded-md text-sm font-medium">Fichier</button>
+                <div class="absolute left-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-gray-700 ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                    <div class="py-1" role="menu" aria-orientation="vertical">
+                        <a href="#" id="new-tab-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 flex justify-between items-center">
+                            <span id="new-tab-text">Nouvel Onglet</span> <span class="float-right text-gray-500 dark:text-gray-400 text-xs ml-4">Ctrl+T</span></a>
+                        <a href="#" id="open-file-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 flex justify-between items-center">
+                            <span id="open-file-text">Ouvrir un Fichier...</span> <span class="float-right text-gray-500 dark:text-gray-400 text-xs ml-4">Ctrl+O</span></a>
+
+                        <!-- NOUVEAU: Menu Fichiers Récents -->
+                        <div class="relative group/recent">
+                             <span id="recent-files-span" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-default flex justify-between items-center">
+                                Fichiers Récents <span class="text-gray-500 dark:text-gray-400">&rsaquo;</span>
+                             </span>
+                             <div id="recent-files-submenu" class="absolute left-full top-0 ml-1 w-56 max-h-80 overflow-y-auto rounded-md shadow-lg bg-white dark:bg-gray-700 ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover/recent:opacity-100 group-hover/recent:visible transition-all duration-200 z-50">
+                                <!-- Les fichiers récents seront insérés ici par JS -->
+                             </div>
+                        </div>
+                        <!-- /NOUVEAU: Menu Fichiers Récents -->
+                        
+                        <div class="border-t border-gray-200 dark:border-gray-600 my-1"></div>
+                        <a href="#" id="save-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 flex justify-between items-center">
+                            <span id="save-text">Enregistrer</span> <span class="float-right text-gray-500 dark:text-gray-400 text-xs ml-4">Ctrl+S</span></a>
+                        <a href="#" id="save-as-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 flex justify-between items-center">
+                            <span id="save-as-text">Enregistrer Sous...</span> <span class="float-right text-gray-500 dark:text-gray-400 text-xs ml-4">Ctrl+Shift+S</span></a>
+                         <div class="border-t border-gray-200 dark:border-gray-600 my-1"></div>
+                        <a href="#" id="save-session-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">
+                            Enregistrer la Session...</a>
+                        <a href="#" id="load-session-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">
+                            Charger la Session...</a>
+                         <div class="border-t border-gray-200 dark:border-gray-600 my-1"></div>
+                        <!-- NOUVEAU: Option Effacer Session -->
+                        <a href="#" id="clear-session-btn" class="block px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-800">
+                            Effacer la Session Locale</a>
+                        <div class="border-t border-gray-200 dark:border-gray-600 my-1"></div>
+                        <a href="#" id="close-tab-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 flex justify-between items-center">
+                            <span id="close-tab-text">Fermer l'Onglet</span> <span class="float-right text-gray-500 dark:text-gray-400 text-xs ml-4">Ctrl+W</span></a>
+                    </div>
+                </div>
+            </div>
+             <!-- Menu Rechercher -->
+             <div class="relative group">
+                <button id="search-menu-btn" class="bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 px-4 py-2 rounded-md text-sm font-medium">Rechercher</button>
+                <div class="absolute left-0 mt-2 w-64 rounded-md shadow-lg bg-white dark:bg-gray-700 ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                    <div class="py-1" role="menu" aria-orientation="vertical">
+                        <!-- Option Rechercher uniquement -->
+                        <a href="#" id="find-only-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 flex justify-between items-center">
+                            <span id="find-text">Rechercher</span> <span class="float-right text-gray-500 dark:text-gray-400 text-xs ml-4">Ctrl+F</span></a>
+                         <!-- Option Remplacer (ouvre la boîte de dialogue complète) -->
+                        <a href="#" id="replace-menu-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 flex justify-between items-center">
+                            <span id="replace-text">Remplacer</span> <span class="float-right text-gray-500 dark:text-gray-400 text-xs ml-4">Ctrl+H</span></a>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Menu Naviguer (NEW) -->
+             <div class="relative group">
+                <button id="navigate-menu-btn" class="bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 px-4 py-2 rounded-md text-sm font-medium">Naviguer</button>
+                <div id="navigate-menu-dropdown" class="absolute left-0 mt-2 w-64 rounded-md shadow-lg bg-white dark:bg-gray-700 ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                    <div class="py-1" role="menu" aria-orientation="vertical">
+                        <a href="#" id="goto-line-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 flex justify-between items-center">
+                            <span id="goto-line-text">Aller à la Ligne...</span> <span class="float-right text-gray-500 dark:text-gray-400 text-xs ml-4">Ctrl+L</span></a>
+                        <a href="#" id="goto-definition-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 flex justify-between items-center">
+                            <span id="goto-definition-text">Aller à la Définition...</span> <span class="float-right text-gray-500 dark:text-gray-400 text-xs ml-4">Ctrl+Shift+G</span></a>
+                        <div class="border-t border-gray-200 dark:border-gray-600 my-1"></div>
+                        <a href="#" id="toggle-breakpoint-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">
+                            Basculer Point d'Arrêt (Ligne)</a>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Menu Langue -->
+             <div class="relative group">
+                <button id="lang-menu-btn" class="bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 px-4 py-2 rounded-md text-sm font-medium">Langue</button>
+                <div id="lang-menu-dropdown" class="absolute left-0 mt-2 w-40 rounded-md shadow-lg bg-white dark:bg-gray-700 ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                    <div class="py-1" role="menu" aria-orientation="vertical">
+                        <a href="#" data-lang="fr" class="lang-option block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">Français</a>
+                        <a href="#" data-lang="en" class="lang-option block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">English</a>
+                        <a href="#" data-lang="es" class="lang-option block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">Español</a>
+                        <a href="#" data-lang="de" class="lang-option block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">Deutsch</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Menu Affichage -->
+             <div class="relative group">
+                <button id="view-menu-btn" class="bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 px-4 py-2 rounded-md text-sm font-medium">Affichage</button>
+                <div class="absolute left-0 mt-2 w-64 rounded-md shadow-lg bg-white dark:bg-gray-700 ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                    <div class="py-1" role="menu" aria-orientation="vertical">
+                        
+                        <!-- NOUVEAU: Menu Thème -->
+                        <div class="relative group/theme">
+                             <span id="view-theme-span" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-default flex justify-between items-center">
+                                Thème de l'Éditeur <span class="text-gray-500 dark:text-gray-400">&rsaquo;</span>
+                            </span>
+                             <div id="theme-menu-submenu" class="absolute left-full top-0 ml-1 w-56 max-h-80 overflow-y-auto rounded-md shadow-lg bg-white dark:bg-gray-700 ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover/theme:opacity-100 group-hover/theme:visible transition-all duration-200 z-50">
+                                <!-- Les thèmes seront insérés ici par JS -->
+                                <a href="#" data-theme-name="light" class="theme-option block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">Clair (Chrome)</a>
+                                <a href="#" data-theme-name="dark" class="theme-option block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">Sombre (Tomorrow Night)</a>
+                                <a href="#" data-theme-name="monokai" class="theme-option block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">Monokai</a>
+                                <a href="#" data-theme-name="github" class="theme-option block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">GitHub</a>
+                                <a href="#" data-theme-name="solarized_dark" class="theme-option block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">Solarized Dark</a>
+                            </div>
+                        </div>
+
+                        <div class="border-t border-gray-200 dark:border-gray-600 my-1"></div>
+
+                        <!-- NOUVEAU: Sélection de Langage -->
+                        <div class="relative group/lang">
+                             <span id="view-lang-span" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-default flex justify-between items-center">
+                                Définir le Langage <span class="text-gray-500 dark:text-gray-400">&rsaquo;</span>
+                            </span>
+                             <div id="language-menu-submenu" class="absolute left-full top-0 ml-1 w-56 max-h-80 overflow-y-auto rounded-md shadow-lg bg-white dark:bg-gray-700 ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover/lang:opacity-100 group-hover/lang:visible transition-all duration-200 z-50">
+                                <!-- Les langues seront insérées ici par JS -->
+                            </div>
+                        </div>
+
+                        <div class="border-t border-gray-200 dark:border-gray-600 my-1"></div>
+                        
+                        <!-- L'option Division de Vue est retirée ici -->
+
+                        <!-- Sous-menu Configuration de l'Éditeur -->
+                        <div class="relative group/config">
+                            <span id="view-config-span" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-default flex justify-between items-center">
+                                Configuration de l'Éditeur <span class="text-gray-500 dark:text-gray-400">&rsaquo;</span>
+                            </span>
+                             <div class="absolute left-full top-0 ml-1 w-64 rounded-md shadow-lg bg-white dark:bg-gray-700 ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover/config:opacity-100 group-hover/config:visible transition-all duration-200 z-50">
+                                <div class="py-1">
+                                    <a href="#" id="font-size-up-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">Taille de Police +</a>
+                                    <a href="#" id="font-size-down-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">Taille de Police -</a>
+                                    <div class="border-t border-gray-200 dark:border-gray-600 my-1"></div>
+                                    <a href="#" id="word-wrap-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">Activer/Désactiver Word Wrap</a>
+                                    <!-- NOUVEAU: Option Caractères invisibles -->
+                                    <a href="#" id="show-invisibles-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">Afficher Caractères Invisibles</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- NOUVEAU: Bouton Aide -->
+            <button id="help-btn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium ml-auto">?</button>
+
+        </header>
+
+        <!-- Conteneur des onglets -->
+        <div id="tab-container" class="flex-shrink-0 flex items-end border-b border-gray-300 dark:border-gray-700">
+            <!-- Les onglets seront ajoutés ici par JS -->
+            <button id="add-tab-btn" class="ml-2 mb-[-1px] text-gray-500 hover:text-black dark:text-gray-400 dark:hover:text-white bg-gray-200 hover:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 px-3 py-2 rounded-t-lg border border-b-0 border-transparent">+</button>
+        </div>
+
+        <!-- Conteneur du contenu des onglets -->
+        <main id="content-container" class="flex-grow rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-800 relative">
+            <!-- Les éditeurs Ace seront ajoutés ici par JS -->
+        </main>
+
+        <!-- Barre de Statut -->
+        <footer id="status-bar" class="flex-shrink-0 flex justify-end items-center px-4 bg-gray-200 dark:bg-gray-700 text-sm rounded-lg">
+            <span id="status-mode" class="mr-4 font-mono text-gray-700 dark:text-gray-300">Mode: PlainText</span>
+            <span id="status-cursor" class="text-gray-700 dark:text-gray-300">L: 1, Col: 1</span>
+        </footer>
+    </div>
+
+    <!-- Modale pour les confirmations -->
+    <div id="modal-overlay" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center hidden z-50">
+        <div id="modal-dialog" class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-sm border-2 border-transparent">
+            <h3 id="modal-title" class="text-lg font-bold mb-4">
+                <!-- Icône retirée -->
+            </h3>
+            <p id="modal-message" class="mb-6"></p>
+            <div class="flex justify-end gap-4">
+                <button id="modal-cancel" class="bg-gray-500 hover:bg-gray-600 dark:bg-gray-600 dark:hover:bg-gray-500 text-white font-bold py-2 px-4 rounded">Annuler</button>
+                <button id="modal-confirm" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded">Confirmer</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modale d'Input (Pour Renommer l'Onglet ou Enregistrer Sous) -->
+    <div id="input-modal-overlay" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+        <div id="input-modal-content" class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-sm">
+            <h3 id="input-modal-title" class="text-lg font-bold mb-4 text-gray-900 dark:text-gray-100">Renommer l'Onglet</h3>
+            <label for="input-modal-field" class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Nouveau nom de fichier :</label>
+            <input type="text" id="input-modal-field" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-200 mb-6" />
+            <div class="flex justify-end gap-4">
+                <button id="input-modal-cancel" class="bg-gray-500 hover:bg-gray-600 dark:bg-gray-600 dark:hover:bg-gray-500 text-white font-bold py-2 px-4 rounded">Annuler</button>
+                <button id="input-modal-confirm" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded">Renommer</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modale Aller à la Ligne (Go To Line) -->
+    <div id="goto-line-modal-overlay" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
+        <div id="goto-line-modal-content" class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-xs">
+            <h3 id="goto-line-title" class="text-lg font-bold mb-4 text-gray-900 dark:text-gray-100">Aller à la Ligne</h3>
+            <label for="goto-line-field" id="goto-line-label" class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Ligne cible (ex: 120) :</label>
+            <input type="text" id="goto-line-field" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-200 mb-6" placeholder="Numéro de ligne" />
+            <div class="flex justify-end gap-4">
+                <button id="goto-line-cancel" class="bg-gray-500 hover:bg-gray-600 dark:bg-gray-600 dark:hover:bg-gray-500 text-white font-bold py-2 px-4 rounded">Annuler</button>
+                <button id="goto-line-confirm" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded">Aller</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- NOUVEAU: Modale d'Aide (Help Modal) -->
+    <div id="help-modal-overlay" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center hidden z-50">
+        <div id="help-modal-content" class="bg-white dark:bg-gray-800 rounded-lg shadow-2xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <h3 id="help-title" class="text-2xl font-bold mb-4 border-b pb-2 text-gray-900 dark:text-gray-100">Aide - Utilisation du Bloc-notes Ace</h3>
+            <div id="help-body" class="text-gray-700 dark:text-gray-300 space-y-4">
+                <!-- Content will be injected here by JS -->
+            </div>
+            <div class="flex justify-end mt-6">
+                <button id="help-close-btn" class="bg-gray-500 hover:bg-gray-600 dark:bg-gray-600 dark:hover:bg-gray-500 text-white font-bold py-2 px-4 rounded">Fermer</button>
+            </div>
+        </div>
+    </div>
+    <!-- FIN Modale d'Aide -->
+
+
+    <!-- Input de fichier caché -->
+    <input type="file" id="file-opener" class="hidden" />
+
+    <!-- Chargement de l'éditeur Ace (Minifié) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/ace.js" type="text/javascript" charset="utf-8"></script>
+    <!-- Chargement des modules supplémentaires pour les snippets et l'autocomplétion -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/ext-language_tools.min.js" type="text/javascript" charset="utf-8"></script>
+    <!-- NOUVEAU: Chargement de l'extension Emmet -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/ext-emmet.min.js" type="text/javascript" charset="utf-8"></script>
+    
+
+    <!-- Chargement des thèmes additionnels -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/theme-monokai.min.js" type="text/javascript" charset="utf-8"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/theme-github.min.js" type="text/javascript" charset="utf-8"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/theme-solarized_dark.min.js" type="text/javascript" charset="utf-8"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/mode-css.min.js" type="text/javascript" charset="utf-8"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/mode-json.min.js" type="text/javascript" charset="utf-8"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/mode-html.min.js" type="text/javascript" charset="utf-8"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/mode-javascript.min.js" type="text/javascript" charset="utf-8"></script>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const tabContainer = document.getElementById('tab-container');
+        const contentContainer = document.getElementById('content-container');
+        const addTabBtn = document.getElementById('add-tab-btn');
+        const statusBar = document.getElementById('status-bar'); // NOUVEAU: Référence à la barre de statut
+        const statusCursor = document.getElementById('status-cursor');
+        const statusMode = document.getElementById('status-mode');
+        const languageMenuSubmenu = document.getElementById('language-menu-submenu');
+
+        let tabs = [];
+        let tabCounter = 0;
+        let activeTabId = null;
+        let currentTheme = 'ace/theme/tomorrow_night'; // Thème sombre par défaut pour Ace
+        let currentFontSize = 14;
+        let wordWrapEnabled = false;
+        let showInvisiblesEnabled = false;
+        
+        // NOUVEAU: Gestion de la traduction (i18n)
+        let currentLang = localStorage.getItem('app-language') || 'fr'; // Langue par défaut
+        
+        const i18n = {
+            'fr': {
+                // App
+                'app_title': 'Bloc-notes Ace',
+                'untitled': 'Sans titre',
+                'tab_placeholder': 'Nouveau fichier',
+                'status_mode': 'Mode: ',
+                'status_cursor': 'L: {{line}}, Col: {{col}}',
+                'close_btn': '&times;',
+                'add_tab_btn': '+',
+
+                // Menus (Header)
+                'menu_file': 'Fichier',
+                'menu_search': 'Rechercher',
+                'menu_navigate': 'Naviguer', // NOUVEAU
+                'menu_view': 'Affichage',
+                'menu_language': 'Langue', 
+                'menu_help_btn': '?', // NOUVEAU
+                'menu_recent_files': 'Fichiers Récents', // NOUVEAU
+                'menu_recent_clear': 'Effacer la liste', // NOUVEAU
+                'menu_recent_empty': 'Aucun fichier récent', // NOUVEAU
+
+                // File Submenu
+                'file_new_tab': 'Nouvel Onglet',
+                'file_open': 'Ouvrir un Fichier...',
+                'file_save': 'Enregistrer',
+                'file_save_as': 'Enregistrer Sous...',
+                'file_save_session': 'Enregistrer la Session...',
+                'file_load_session': 'Charger la Session...',
+                'file_clear_session': 'Effacer la Session Locale',
+                'file_close_tab': 'Fermer l\'Onglet',
+                'shortcut_ctrl_t': 'Ctrl+T',
+                'shortcut_ctrl_o': 'Ctrl+O',
+                'shortcut_ctrl_s': 'Ctrl+S',
+                'shortcut_ctrl_shift_s': 'Ctrl+Shift+S',
+                'shortcut_ctrl_w': 'Ctrl+W',
+                
+                // Search Submenu
+                'search_find': 'Rechercher',
+                'search_replace': 'Remplacer',
+                'shortcut_ctrl_f': 'Ctrl+F',
+                'shortcut_ctrl_h': 'Ctrl+H',
+                
+                // Navigate Submenu (NEW)
+                'navigate_goto_line': 'Aller à la Ligne...',
+                'navigate_goto_def': 'Aller à la Définition...',
+                'navigate_toggle_breakpoint': 'Basculer Point d\'Arrêt (Ligne)',
+                'shortcut_ctrl_l': 'Ctrl+L',
+                'shortcut_ctrl_shift_g': 'Ctrl+Shift+G',
+
+                // View Submenu
+                'view_editor_theme': 'Thème de l\'Éditeur',
+                'view_set_language': 'Définir le Langage', // (Syntax highlighting)
+                'view_editor_config': 'Configuration de l\'Éditeur',
+                'config_font_up': 'Taille de Police +',
+                'config_font_down': 'Taille de Police -',
+                'config_word_wrap': 'Activer/Désactiver Word Wrap',
+                'config_show_invisibles': 'Afficher Caractères Invisibles',
+
+                // Modals
+                'modal_unsaved_title': 'Modifications non enregistrées',
+                'modal_unsaved_message': 'Voulez-vous enregistrer les modifications apportées à "{{title}}" ?',
+                'modal_load_unsaved_message': 'Certains onglets ont des modifications non enregistrées qui seront perdues. Continuer ?',
+                'modal_clear_session_title': 'Effacer la Session',
+                'modal_clear_session_message': 'Êtes-vous sûr de vouloir effacer toutes les données de session enregistrées localement ? Tous les onglets non enregistrés seront perdus.',
+                'modal_session_error_title': 'Erreur de Session',
+                'modal_session_error_message': 'Le fichier de session est invalide.',
+                'modal_session_cleared_title': 'Session Effacée',
+                'modal_session_cleared_message': 'Les données de session ont été effacées. L\'application va redémarrer.',
+                'modal_cancel': 'Annuler',
+                'modal_confirm': 'Confirmer',
+                'modal_close': 'Fermer',
+                'input_modal_title_rename': 'Renommer l\'Onglet',
+                'input_modal_label_filename': 'Nouveau nom de fichier :',
+                'input_modal_confirm_rename': 'Renommer',
+                'input_modal_title_save_as': 'Enregistrer Sous',
+                'input_modal_label_save_as': 'Nom du fichier :',
+                'input_modal_confirm_save_as': 'Enregistrer',
+                'modal_recent_warning': 'Pour des raisons de sécurité du navigateur, vous devez réouvrir manuellement le fichier "{{filename}}" en utilisant "Ouvrir un Fichier...".', 
+                
+                // Go To Line Modal (NOUVEAU) - SIMPLIFIÉ
+                'goto_line_title': 'Aller à la Ligne',
+                'goto_line_label': 'Ligne cible (ex: 120) :',
+                'goto_line_placeholder': 'Numéro de ligne',
+                'goto_line_confirm': 'Aller',
+                
+                // Help Modal (NOUVEAU)
+                'help_title': 'Aide - Utilisation Détaillée du Bloc-notes Ace',
+                'help_content': `
+                    <h4 class="text-xl font-semibold text-blue-600 dark:text-blue-400">Fonctionnalités de base (Fichier)</h4>
+                    <ul class="list-disc list-inside ml-4 space-y-1">
+                        <li><strong>Nouvel Onglet</strong> (Ctrl+T) : Ouvre un nouvel espace d'édition.</li>
+                        <li><strong>Enregistrer</strong> (Ctrl+S) : Télécharge le contenu de l'onglet actif sur votre machine.</li>
+                        <li><strong>Enregistrer Sous...</strong> (Ctrl+Shift+S) : Permet de définir un nouveau nom de fichier et télécharge le contenu.</li>
+                        <li><strong>Fermer l'Onglet</strong> (Ctrl+W) : Ferme l'onglet actif après confirmation si des modifications sont non enregistrées.</li>
+                    </ul>
+
+                    <h4 class="text-xl font-semibold text-blue-600 dark:text-blue-400 mt-6">Gestion de Session et Récents</h4>
+                    <ul class="list-disc list-inside ml-4 space-y-1">
+                        <li><strong>Enregistrer/Charger la Session</strong> : Sauvegarde/Charge l'état de TOUS les onglets dans un fichier <code>.cp</code>.</li>
+                        <li><strong>Restauration Automatique</strong> : L'état de votre travail est sauvegardé localement dans le navigateur lors de la fermeture ou du rechargement.</li>
+                        <li><strong>Effacer la Session Locale</strong> : Supprime toutes les données de sauvegarde locale du navigateur.</li>
+                        <li><strong>Fichiers Récents</strong> : Mémorise les 5 derniers noms de fichiers ouverts localement.</li>
+                    </ul>
+
+                    <h4 class="text-xl font-semibold text-blue-600 dark:text-blue-400 mt-6">Édition, Navigation et Raccourcis</h4>
+                    <ul class="list-disc list-inside ml-4 space-y-1">
+                        <li><strong>Emmet</strong> : Dans les modes HTML/CSS, tapez une abréviation (ex: <code>div.conteneur>p*2</code>) et appuyez sur <kbd>Tab</kbd> pour la développer.</li>
+                        <li><strong>Aller à la Ligne...</strong> (Ctrl+L) : Se déplace rapidement au numéro de ligne spécifié.</li>
+                        <li><strong>Points d'Arrêt Simulé</strong> : Cliquez sur la gouttière (zone des numéros de ligne) pour marquer/retirer un point d'arrêt (marque rouge).</li>
+                        <li><strong>Raccourcis de Tabulation</strong> (Ctrl+Tab / Ctrl+Shift+Tab) : Permet de naviguer rapidement entre les onglets.</li>
+                        <li><strong>Rechercher/Remplacer</strong> (Ctrl+F / Ctrl+H) : Boîtes de dialogue de recherche et de remplacement natives.</li>
+                    </ul>
+
+                    <h4 class="text-xl font-semibold text-blue-600 dark:text-blue-400 mt-6">Personnalisation (Affichage)</h4>
+                    <ul class="list-disc list-inside ml-4 space-y-1">
+                        <li><strong>Thèmes</strong> : Change l'apparence visuelle de l'éditeur.</li>
+                        <li><strong>Définir le Langage</strong> : Active la coloration syntaxique et l'autocomplétion pour le langage sélectionné (ex: JavaScript, Python, Markdown).</li>
+                        <li><strong>Configuration</strong> : Options pour ajuster la taille de la police, le retour à la ligne (Word Wrap) et l'affichage des caractères invisibles.</li>
+                    </ul>
+                `,
+            },
+            'en': {
+                // App
+                'app_title': 'Ace Notepad',
+                'untitled': 'Untitled',
+                'tab_placeholder': 'New File',
+                'status_mode': 'Mode: ',
+                'status_cursor': 'L: {{line}}, Col: {{col}}',
+                'close_btn': '&times;',
+                'add_tab_btn': '+',
+
+                // Menus (Header)
+                'menu_file': 'File',
+                'menu_search': 'Search',
+                'menu_navigate': 'Navigate', 
+                'menu_view': 'View',
+                'menu_language': 'Language', 
+                'menu_help_btn': '?',
+                'menu_recent_files': 'Recent Files', 
+                'menu_recent_clear': 'Clear List', 
+                'menu_recent_empty': 'No recent files', 
+
+                // File Submenu
+                'file_new_tab': 'New Tab',
+                'file_open': 'Open File...',
+                'file_save': 'Save',
+                'file_save_as': 'Save As...',
+                'file_save_session': 'Save Session...',
+                'file_load_session': 'Load Session...',
+                'file_clear_session': 'Clear Local Session',
+                'file_close_tab': 'Close Tab',
+                'shortcut_ctrl_t': 'Ctrl+T',
+                'shortcut_ctrl_o': 'Ctrl+O',
+                'shortcut_ctrl_s': 'Ctrl+S',
+                'shortcut_ctrl_shift_s': 'Ctrl+Shift+S',
+                'shortcut_ctrl_w': 'Ctrl+W',
+                
+                // Search Submenu
+                'search_find': 'Find',
+                'search_replace': 'Replace',
+                'shortcut_ctrl_f': 'Ctrl+F',
+                'shortcut_ctrl_h': 'Ctrl+H',
+                
+                // Navigate Submenu (NEW)
+                'navigate_goto_line': 'Go to Line...',
+                'navigate_goto_def': 'Go to Definition...',
+                'navigate_toggle_breakpoint': 'Toggle Breakpoint (Gutter)',
+                'shortcut_ctrl_l': 'Ctrl+L',
+                'shortcut_ctrl_shift_g': 'Ctrl+Shift+G',
+
+                // View Submenu
+                'view_editor_theme': 'Editor Theme',
+                'view_set_language': 'Set Language', 
+                'view_editor_config': 'Editor Configuration',
+                'config_font_up': 'Font Size +',
+                'config_font_down': 'Font Size -',
+                'config_word_wrap': 'Toggle Word Wrap',
+                'config_show_invisibles': 'Show Invisibles',
+
+                // Modals
+                'modal_unsaved_title': 'Unsaved Changes',
+                'modal_unsaved_message': 'Do you want to save changes to "{{title}}" ?',
+                'modal_load_unsaved_message': 'Some tabs have unsaved changes which will be lost. Continue?',
+                'modal_clear_session_title': 'Clear Session',
+                'modal_clear_session_message': 'Are you sure you want to clear all locally saved session data? All unsaved tabs will be lost.',
+                'modal_session_error_title': 'Session Error',
+                'modal_session_error_message': 'The session file is invalid.',
+                'modal_session_cleared_title': 'Session Cleared',
+                'modal_session_cleared_message': 'Session data has been cleared. The application will restart.',
+                'modal_cancel': 'Cancel',
+                'modal_confirm': 'Confirm',
+                'modal_close': 'Close',
+                'input_modal_title_rename': 'Rename Tab',
+                'input_modal_label_filename': 'New filename:',
+                'input_modal_confirm_rename': 'Rename',
+                'input_modal_title_save_as': 'Save As',
+                'input_modal_label_save_as': 'Filename:',
+                'input_modal_confirm_save_as': 'Save',
+                'modal_recent_warning': 'Due to browser security restrictions, you must manually re-open the file "{{filename}}" using "Open File...".', 
+                
+                // Go To Line Modal (NOUVEAU) - SIMPLIFIÉ
+                'goto_line_title': 'Go to Line',
+                'goto_line_label': 'Target line (e.g. 120) :',
+                'goto_line_placeholder': 'Line number',
+                'goto_line_confirm': 'Go',
+
+                // Help Modal (NOUVEAU)
+                'help_title': 'Help - Detailed Usage Guide for Ace Notepad',
+                'help_content': `
+                    <h4 class="text-xl font-semibold text-blue-600 dark:text-blue-400">Basic Features (File)</h4>
+                    <ul class="list-disc list-inside ml-4 space-y-1">
+                        <li><strong>New Tab</strong> (Ctrl+T): Opens a new editing space.</li>
+                        <li><strong>Save</strong> (Ctrl+S): Downloads the content of the active tab to your machine.</li>
+                        <li><strong>Save As...</strong> (Ctrl+Shift+S): Allows you to define a new filename and download the content.</li>
+                        <li><strong>Close Tab</strong> (Ctrl+W): Closes the active tab after confirmation if there are unsaved changes.</li>
+                    </ul>
+
+                    <h4 class="text-xl font-semibold text-blue-600 dark:text-blue-400 mt-6">Session Management and Recents</h4>
+                    <ul class="list-disc list-inside ml-4 space-y-1">
+                        <li><strong>Save/Load Session</strong>: Saves/Loads the complete state of ALL tabs (content, title, cursor position, breakpoints) to a <code>.cp</code> file.</li>
+                        <li><strong>Auto-Restore</strong>: Your session state is saved locally in the browser before closing or reloading.</li>
+                        <li><strong>Clear Local Session</strong>: Deletes all auto-save and session data from the browser.</li>
+                        <li><strong>Recent Files</strong>: Stores the last 5 file names opened locally for quick reference (requires manual re-opening for security reasons).</li>
+                    </ul>
+
+                    <h4 class="text-xl font-semibold text-blue-600 dark:text-blue-400 mt-6">Editing, Navigation, and Shortcuts</h4>
+                    <ul class="list-disc list-inside ml-4 space-y-1">
+                        <li><strong>Themes and Languages</strong>: The *View* menu allows you to change the visual theme (Light/Dark) and set the syntax highlighting mode (JavaScript, HTML, Python, etc.).</li>
+                        <li><strong>Emmet</strong>: In HTML/CSS modes, type an abbreviation (e.g., <code>div.container>p*2</code>) and press <kbd>Tab</kbd> to expand it instantly.</li>
+                        <li><strong>Go to Line...</strong> (Ctrl+L): Opens a modal to quickly move to a specific line number.</li>
+                        <li><strong>Simulated Breakpoints</strong>: Click the line number area (gutter) to mark or remove a red breakpoint. These marks are saved with your session.</li>
+                        <li><strong>Find/Replace</strong> (Ctrl+F / Ctrl+H): Integrated search and replace dialogs from Ace Editor.</li>
+                    </ul>
+
+                    <h4 class="text-xl font-semibold text-blue-600 dark:text-blue-400 mt-6">Configuration (View > Editor Configuration)</h4>
+                    <ul class="list-disc list-inside ml-4 space-y-1">
+                        <li><strong>Font Size +/-</strong>: Adjusts the editor text size.</li>
+                        <li><strong>Word Wrap</strong>: Toggles automatic line wrapping on/off.</li>
+                        <li><strong>Invisible Characters</strong>: Displays spaces, tabs, and carriage returns.</li>
+                    </ul>
+                `,
+            },
+            'es': {
+                // App
+                'app_title': 'Bloc de notas Ace',
+                'untitled': 'Sin título',
+                'tab_placeholder': 'Nuevo archivo',
+                'status_mode': 'Modo: ',
+                'status_cursor': 'L: {{line}}, Col: {{col}}',
+                'close_btn': '&times;',
+                'add_tab_btn': '+',
+
+                // Menus (Header)
+                'menu_file': 'Archivo',
+                'menu_search': 'Buscar',
+                'menu_navigate': 'Navegar', 
+                'menu_view': 'Ver',
+                'menu_language': 'Idioma', 
+                'menu_help_btn': '?',
+                'menu_recent_files': 'Archivos Recientes', 
+                'menu_recent_clear': 'Borrar Lista', 
+                'menu_recent_empty': 'Ningún archivo reciente', 
+
+                // File Submenu
+                'file_new_tab': 'Nueva Pestaña',
+                'file_open': 'Abrir Archivo...',
+                'file_save': 'Guardar',
+                'file_save_as': 'Guardar Como...',
+                'file_save_session': 'Guardar Sesión...',
+                'file_load_session': 'Cargar Sesión...',
+                'file_clear_session': 'Borrar Sesión Local',
+                'file_close_tab': 'Cerrar Pestaña',
+                'shortcut_ctrl_t': 'Ctrl+T',
+                'shortcut_ctrl_o': 'Ctrl+O',
+                'shortcut_ctrl_s': 'Ctrl+S',
+                'shortcut_ctrl_shift_s': 'Ctrl+Shift+S',
+                'shortcut_ctrl_w': 'Ctrl+W',
+                
+                // Search Submenu
+                'search_find': 'Buscar',
+                'search_replace': 'Reemplazar',
+                'shortcut_ctrl_f': 'Ctrl+F',
+                'shortcut_ctrl_h': 'Ctrl+H',
+                
+                // Navigate Submenu (NEW)
+                'navigate_goto_line': 'Ir a la Línea...',
+                'navigate_goto_def': 'Ir a la Definición...',
+                'navigate_toggle_breakpoint': 'Alternar Punto de Interrupción (Margen)',
+                'shortcut_ctrl_l': 'Ctrl+L',
+                'shortcut_ctrl_shift_g': 'Ctrl+Shift+G',
+
+                // View Submenu
+                'view_editor_theme': 'Tema del Editor',
+                'view_set_language': 'Establecer Lenguaje',
+                'view_editor_config': 'Configuración del Editor',
+                'config_font_up': 'Tamaño de Fuente +',
+                'config_font_down': 'Tamaño de Fuente -',
+                'config_word_wrap': 'Activar/Desactivar Ajuste de Línea',
+                'config_show_invisibles': 'Mostrar Caracteres Invisibles',
+
+                // Modals
+                'modal_unsaved_title': 'Cambios no guardados',
+                'modal_unsaved_message': '¿Desea guardar los cambios realizados en "{{title}}" ?',
+                'modal_load_unsaved_message': 'Algunas pestañas tienen cambios sin guardar que se perderán. ¿Continuar?',
+                'modal_clear_session_title': 'Borrar Sesión',
+                'modal_clear_session_message': '¿Está seguro de que desea borrar todos los datos de sesión guardados localmente? Todas las pestañas no guardadas se perderán.',
+                'modal_session_error_title': 'Error de Sesión',
+                'modal_session_error_message': 'El archivo de sesión no es válido.',
+                'modal_session_cleared_title': 'Sesión Borrada',
+                'modal_session_cleared_message': 'Los datos de la sesión han sido borrados. La aplicación se reiniciará.',
+                'modal_cancel': 'Cancelar',
+                'modal_confirm': 'Confirmar',
+                'modal_close': 'Cerrar',
+                'input_modal_title_rename': 'Renombrar Pestaña',
+                'input_modal_label_filename': 'Nuevo nombre de archivo:',
+                'input_modal_confirm_rename': 'Renombrar',
+                'input_modal_title_save_as': 'Guardar Como',
+                'input_modal_label_save_as': 'Nombre del archivo:',
+                'input_modal_confirm_save_as': 'Guardar',
+                'modal_recent_warning': 'Debido a restricciones de seguridad del navegador, debe volver a abrir manualmente el archivo "{{filename}}" utilizando "Abrir Archivo...".', 
+                
+                // Go To Line Modal (NOUVEAU) - SIMPLIFIÉ
+                'goto_line_title': 'Ir a la Línea',
+                'goto_line_label': 'Línea objetivo (ej. 120) :',
+                'goto_line_placeholder': 'Número de línea',
+                'goto_line_confirm': 'Ir',
+
+                // Help Modal (NOUVEAU)
+                'help_title': 'Ayuda - Guía de Uso Detallada para Bloc de notas Ace',
+                'help_content': `
+                    <h4 class="text-xl font-semibold text-blue-600 dark:text-blue-400">Funciones Básicas (Archivo)</h4>
+                    <ul class="list-disc list-inside ml-4 space-y-1">
+                        <li><strong>Nueva Pestaña</strong> (Ctrl+T): Abre un nuevo espacio de edición.</li>
+                        <li><strong>Guardar</strong> (Ctrl+S): Descarga el contenido de la pestaña activa a su máquina.</li>
+                        <li><strong>Guardar Como...</strong> (Ctrl+Shift+S): Permite definir un nuevo nombre de archivo y descargar el contenido.</li>
+                        <li><strong>Cerrar Pestaña</strong> (Ctrl+W): Cierra la pestaña activa después de la confirmación si hay cambios sin guardar.</li>
+                    </ul>
+
+                    <h4 class="text-xl font-semibold text-blue-600 dark:text-blue-400 mt-6">Gestión de Sesiones y Recientes</h4>
+                    <ul class="list-disc list-inside ml-4 space-y-1">
+                        <li><strong>Guardar/Cargar Sesión</strong>: Guarda/Carga el estado completo de TODAS las pestañas (contenido, título, posición del cursor, puntos de interrupción) en un archivo <code>.cp</code>.</li>
+                        <li><strong>Restauración Automática</strong>: El estado de su sesión se guarda localmente en el navegador antes de cerrar o recargar.</li>
+                        <li><strong>Borrar Sesión Local</strong>: Elimina todos los datos de auto-guardado y sesión del navegador.</li>
+                        <li><strong>Archivos Recientes</strong>: Almacena los últimos 5 nombres de archivos abiertos localmente para una referencia rápida (requiere la reapertura manual por motivos de seguridad).</li>
+                    </ul>
+
+                    <h4 class="text-xl font-semibold text-blue-600 dark:text-blue-400 mt-6">Edición, Navegación y Atajos</h4>
+                    <ul class="list-disc list-inside ml-4 space-y-1">
+                        <li><strong>Temas e Idiomas</strong>: El menú *Ver* le permite cambiar el tema visual (Claro/Oscuro) y establecer el modo de resaltado de sintaxis (JavaScript, HTML, Python, etc.).</li>
+                        <li><strong>Emmet</strong>: En los modos HTML/CSS, escriba una abreviatura (ej: <code>div.contenedor>p*2</code>) y presione <kbd>Tab</kbd> para expandirla al instante.</li>
+                        <li><strong>Ir a la Línea...</strong> (Ctrl+L): Abre un modal para moverse rápidamente al número de línea especificado.</li>
+                        <li><strong>Puntos de Interrupción Simulados</strong>: Haga clic en el área del número de línea (margen) para marcar o eliminar un punto de interrupción rojo. Estas marcas se guardan con su sesión.</li>
+                        <li><strong>Buscar/Reemplazar</strong> (Ctrl+F / Ctrl+H): Diálogos de búsqueda y reemplazo integrados de Ace Editor.</li>
+                    </ul>
+
+                    <h4 class="text-xl font-semibold text-blue-600 dark:text-blue-400 mt-6">Configuración (Ver > Configuración del Editor)</h4>
+                    <ul class="list-disc list-inside ml-4 space-y-1">
+                        <li><strong>Tamaño de Fuente +/-</strong>: Ajusta el tamaño del texto del editor.</li>
+                        <li><strong>Ajuste de Línea</strong>: Activa/Desactiva el ajuste de línea automático.</li>
+                        <li><strong>Caracteres Invisibles</strong>: Muestra espacios, tabulaciones y retornos de carro.</li>
+                    </ul>
+                `,
+            },
+            'de': {
+                // App
+                'app_title': 'Ace Notizblock',
+                'untitled': 'Unbenannt',
+                'tab_placeholder': 'Neue Datei',
+                'status_mode': 'Modus: ',
+                'status_cursor': 'Z: {{line}}, Sp: {{col}}',
+                'close_btn': '&times;',
+                'add_tab_btn': '+',
+
+                // Menus (Header)
+                'menu_file': 'Datei',
+                'menu_search': 'Suchen',
+                'menu_navigate': 'Navigieren', 
+                'menu_view': 'Ansicht',
+                'menu_language': 'Sprache', 
+                'menu_help_btn': '?',
+                'menu_recent_files': 'Zuletzt verwendete Dateien', 
+                'menu_recent_clear': 'Liste löschen', 
+                'menu_recent_empty': 'Keine kürzlichen Dateien', 
+
+                // File Submenu
+                'file_new_tab': 'Neuer Tab',
+                'file_open': 'Datei öffnen...',
+                'file_save': 'Speichern',
+                'file_save_as': 'Speichern unter...',
+                'file_save_session': 'Sitzung speichern...',
+                'file_load_session': 'Sitzung laden...',
+                'file_clear_session': 'Lokale Sitzung löschen',
+                'file_close_tab': 'Tab schließen',
+                'shortcut_ctrl_t': 'Strg+T',
+                'shortcut_ctrl_o': 'Strg+O',
+                'shortcut_ctrl_s': 'Strg+S',
+                'shortcut_ctrl_shift_s': 'Strg+Umschalt+S',
+                'shortcut_ctrl_w': 'Strg+W',
+                
+                // Search Submenu
+                'search_find': 'Suchen',
+                'search_replace': 'Ersetzen',
+                'shortcut_ctrl_f': 'Strg+F',
+                'shortcut_ctrl_h': 'Strg+H',
+                
+                // Navigate Submenu (NEW)
+                'navigate_goto_line': 'Gehe zu Zeile...',
+                'navigate_goto_def': 'Gehe zu Definition...',
+                'navigate_toggle_breakpoint': 'Haltepunkt umschalten (Rand)',
+                'shortcut_ctrl_l': 'Strg+L',
+                'shortcut_ctrl_shift_g': 'Strg+Umschalt+G',
+
+                // View Submenu
+                'view_editor_theme': 'Editor-Thema',
+                'view_set_language': 'Sprache festlegen',
+                'view_editor_config': 'Editor-Konfiguration',
+                'config_font_up': 'Schriftgröße +',
+                'config_font_down': 'Schriftgröße -',
+                'config_word_wrap': 'Zeilenumbruch umschalten',
+                'config_show_invisibles': 'Unsichtbare Zeichen anzeigen',
+
+                // Modals
+                'modal_unsaved_title': 'Ungespeicherte Änderungen',
+                'modal_unsaved_message': 'Möchten Sie die Änderungen an "{{title}}" speichern?',
+                'modal_load_unsaved_message': 'Einige Tabs haben ungespeicherte Änderungen, die verloren gehen. Fortfahren?',
+                'modal_clear_session_title': 'Sitzung löschen',
+                'modal_clear_session_message': 'Sind Sie sicher, dass Sie alle lokal gespeicherten Sitzungsdaten löschen möchten? Alle ungespeicherten Tabs gehen verloren.',
+                'modal_session_error_title': 'Sitzungsfehler',
+                'modal_session_error_message': 'Die Sitzungsdatei ist ungültig.',
+                'modal_session_cleared_title': 'Sitzung gelöscht',
+                'modal_session_cleared_message': 'Sitzungsdaten wurden gelöscht. Die Anwendung wird neu gestartet.',
+                'modal_cancel': 'Abbrechen',
+                'modal_confirm': 'Bestätigen',
+                'modal_close': 'Schließen',
+                'input_modal_title_rename': 'Tab umbenennen',
+                'input_modal_label_filename': 'Neuer Dateiname:',
+                'input_modal_confirm_rename': 'Umbenennen',
+                'input_modal_title_save_as': 'Speichern unter',
+                'input_modal_label_save_as': 'Dateiname:',
+                'input_modal_confirm_save_as': 'Speichern',
+                'modal_recent_warning': 'Aufgrund von Browsersicherheitseinschränkungen müssen Sie die Datei "{{filename}}" manuell über "Datei öffnen..." erneut öffnen.', 
+                
+                // Go To Line Modal (NOUVEAU) - SIMPLIFIÉ
+                'goto_line_title': 'Gehe zu Zeile',
+                'goto_line_label': 'Zielzeile (z.B. 120) :',
+                'goto_line_placeholder': 'Zeilennummer',
+                'goto_line_confirm': 'Gehe',
+
+                // Help Modal (NOUVEAU)
+                'help_title': 'Hilfe - Detaillierte Bedienungsanleitung für Ace Notizblock',
+                'help_content': `
+                    <h4 class="text-xl font-semibold text-blue-600 dark:text-blue-400">Grundfunktionen (Datei)</h4>
+                    <ul class="list-disc list-inside ml-4 space-y-1">
+                        <li><strong>Neuer Tab</strong> (Strg+T): Öffnet einen neuen Editor-Bereich.</li>
+                        <li><strong>Speichern</strong> (Strg+S): Lädt den Inhalt des aktiven Tabs auf Ihren Computer herunter.</li>
+                        <li><strong>Speichern unter...</strong> (Strg+Umschalt+S): Ermöglicht die Definition eines neuen Dateinamens und lädt den Inhalt herunter.</li>
+                        <li><strong>Tab schließen</strong> (Strg+W): Schließt den aktiven Tab nach Bestätigung, falls ungespeicherte Änderungen vorliegen.</li>
+                    </ul>
+
+                    <h4 class="text-xl font-semibold text-blue-600 dark:text-blue-400 mt-6">Sitzungsverwaltung und kürzlich verwendete Dateien</h4>
+                    <ul class="list-disc list-inside ml-4 space-y-1">
+                        <li><strong>Sitzung speichern/laden</strong>: Speichert/lädt den gesamten Zustand ALLER Tabs (Inhalt, Titel, Cursorposition, Haltepunkte) in eine <code>.cp</code> Datei.</li>
+                        <li><strong>Automatische Wiederherstellung</strong>: Ihr Sitzungsstatus wird vor dem Schließen oder Neuladen lokal im Browser gespeichert.</li>
+                        <li><strong>Lokale Sitzung löschen</strong>: Löscht alle Auto-Speicher- und Sitzungsdaten aus dem Browser.</li>
+                        <li><strong>Zuletzt verwendete Dateien</strong>: Speichert die letzten 5 lokal geöffneten Dateinamen zum schnellen Nachschlagen (erfordert manuelles erneutes Öffnen aus Sicherheitsgründen).</li>
+                    </ul>
+
+                    <h4 class="text-xl font-semibold text-blue-600 dark:text-blue-400 mt-6">Bearbeitung, Navigation und Tastenkürzel</h4>
+                    <ul class="list-disc list-inside ml-4 space-y-1">
+                        <li><strong>Themen und Sprachen</strong>: Das Menü *Ansicht* ermöglicht das Ändern des visuellen Themas (Hell/Dunkel) und das Festlegen des Syntax-Highlighting-Modus (JavaScript, HTML, Python usw.).</li>
+                        <li><strong>Emmet</strong>: Geben Sie im HTML/CSS-Modus eine Abkürzung ein (z. B. <code>div.container>p*2</code>) und drücken Sie <kbd>Tab</kbd>, um sie sofort zu erweitern.</li>
+                        <li><strong>Gehe zu Zeile...</strong> (Strg+L): Öffnet ein Modal, um schnell zu einer bestimmten Zeilennummer zu springen.</li>
+                        <li><strong>Simulierte Haltepunkte</strong>: Klicken Sie auf den Zeilennummern-Bereich (Gutter), um einen roten Haltepunkt zu setzen oder zu entfernen. Diese Markierungen werden mit Ihrer Sitzung gespeichert.</li>
+                        <li><strong>Suchen/Ersetzen</strong> (Strg+F / Strg+H): Integrierte Such- und Ersetzungsdialoge von Ace Editor.</li>
+                    </ul>
+
+                    <h4 class="text-xl font-semibold text-blue-600 dark:text-blue-400 mt-6">Konfiguration (Ansicht > Editor-Konfiguration)</h4>
+                    <ul class="list-disc list-inside ml-4 space-y-1">
+                        <li><strong>Schriftgröße +/-</strong>: Passt die Textgröße des Editors an.</li>
+                        <li><strong>Zeilenumbruch</strong>: Schaltet den automatischen Zeilenumbruch ein/aus.</li>
+                        <li><strong>Unsichtbare Zeichen</strong>: Zeigt Leerzeichen, Tabulatoren und Wagenrückläufe an.</li>
+                    </ul>
+                `,
+            }
+        };
+        
+        // Constantes pour les fichiers récents
+        const MAX_RECENT_FILES = 5;
+        const RECENT_STORAGE_KEY = 'notepad-recent-files';
+
+        // Fonction d'aide à la traduction (Translation Helper)
+        function T(key, placeholders = {}) {
+            let text = i18n[currentLang][key] || i18n['fr'][key] || key;
+            for (const [placeholder, value] of Object.entries(placeholders)) {
+                // Utiliser une expression régulière pour remplacer toutes les occurrences du placeholder
+                text = text.replace(new RegExp(`{{${placeholder}}}`, 'g'), value);
+            }
+            return text;
+        }
+        
+        // --- NOUVEAU: Fonctions de gestion des fichiers récents ---
+        function getRecentFiles() {
+            try {
+                const json = localStorage.getItem(RECENT_STORAGE_KEY);
+                return json ? JSON.parse(json) : [];
+            } catch (e) {
+                console.error("Failed to load recent files:", e);
+                return [];
+            }
+        }
+
+        function addRecentFile(filepath) {
+            let recent = getRecentFiles();
+            
+            // Nettoyer le titre (garder seulement le nom du fichier)
+            const filename = filepath.split('/').pop().split('\\').pop();
+
+            // Supprimer les doublons basés sur le nom de fichier
+            recent = recent.filter(f => f.filename !== filename);
+
+            // Ajouter le nouveau fichier en tête
+            recent.unshift({ filename: filename, path: filepath });
+
+            // Tronquer la liste
+            recent = recent.slice(0, MAX_RECENT_FILES);
+
+            try {
+                localStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(recent));
+            } catch (e) {
+                console.error("Failed to save recent files:", e);
+            }
+            updateRecentFilesUI();
+        }
+
+        function clearRecentFiles() {
+            localStorage.removeItem(RECENT_STORAGE_KEY);
+            updateRecentFilesUI();
+        }
+
+        function updateRecentFilesUI() {
+            const submenu = document.getElementById('recent-files-submenu');
+            if (!submenu) return;
+            
+            const recentFiles = getRecentFiles();
+            submenu.innerHTML = '';
+            
+            if (recentFiles.length === 0) {
+                const item = document.createElement('span');
+                item.className = 'block px-4 py-2 text-sm text-gray-500 dark:text-gray-400';
+                item.textContent = T('menu_recent_empty');
+                submenu.appendChild(item);
+            } else {
+                recentFiles.forEach((file, index) => {
+                    const link = document.createElement('a');
+                    link.href = '#';
+                    link.className = 'block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 truncate';
+                    link.title = file.filename;
+                    link.textContent = `${index + 1}. ${file.filename}`;
+                    link.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        // Informer l'utilisateur qu'il doit utiliser l'outil de sélection de fichier pour des raisons de sécurité
+                        showNotificationModal(T('file_open'), T('modal_recent_warning', { filename: file.filename }), 'warning');
+                    });
+                    submenu.appendChild(link);
+                });
+
+                // Séparateur
+                const separator = document.createElement('div');
+                separator.className = 'border-t border-gray-200 dark:border-gray-600 my-1';
+                submenu.appendChild(separator);
+
+                // Option Effacer la liste
+                const clearLink = document.createElement('a');
+                clearLink.href = '#';
+                clearLink.id = 'clear-recent-files-btn';
+                clearLink.className = 'block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600';
+                clearLink.textContent = T('menu_recent_clear');
+                clearLink.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    clearRecentFiles();
+                });
+                submenu.appendChild(clearLink);
+            }
+        }
+        // --- FIN des Fonctions de gestion des fichiers récents ---
+
+
+        // Fonction de mise à jour de l'UI (User Interface)
+        function updateUI(langCode = currentLang) {
+            currentLang = langCode;
+            localStorage.setItem('app-language', currentLang);
+            document.documentElement.lang = currentLang; // Mise à jour de l'attribut lang de l'HTML
+            
+            // Mise à jour du titre de la fenêtre/document
+            updateWindowTitle(); 
+
+            // Menus d'en-tête
+            document.getElementById('file-menu-btn').textContent = T('menu_file');
+            document.getElementById('search-menu-btn').textContent = T('menu_search');
+            document.getElementById('navigate-menu-btn').textContent = T('menu_navigate'); // NOUVEAU
+            document.getElementById('lang-menu-btn').textContent = T('menu_language');
+            document.getElementById('view-menu-btn').textContent = T('menu_view');
+            document.getElementById('help-btn').textContent = T('menu_help_btn');
+
+            // --- Menu Fichier ---
+            document.getElementById('new-tab-text').textContent = T('file_new_tab');
+            document.getElementById('open-file-text').textContent = T('file_open');
+            document.getElementById('save-text').textContent = T('file_save');
+            document.getElementById('save-as-text').textContent = T('file_save_as');
+            document.getElementById('close-tab-text').textContent = T('file_close_tab');
+
+            document.getElementById('save-session-btn').textContent = T('file_save_session');
+            document.getElementById('load-session-btn').textContent = T('file_load_session');
+            document.getElementById('clear-session-btn').textContent = T('file_clear_session');
+            
+            // --- Menu Rechercher ---
+            document.getElementById('find-text').textContent = T('search_find');
+            document.getElementById('replace-text').textContent = T('search_replace');
+
+            // --- Menu Naviguer ---
+            document.getElementById('goto-line-text').textContent = T('navigate_goto_line');
+            document.getElementById('goto-definition-text').textContent = T('navigate_goto_def');
+            document.getElementById('toggle-breakpoint-btn').textContent = T('navigate_toggle_breakpoint');
+
+            // NOUVEAU: Menu Récents
+            document.getElementById('recent-files-span').childNodes[0].nodeValue = T('menu_recent_files') + ' ';
+            updateRecentFilesUI(); // Re-génère le contenu du sous-menu Récents
+
+            
+            // Éléments du menu Affichage (Submenu Titles)
+            // Utilisation de childNodes[0].nodeValue pour mettre à jour le texte directement
+            document.getElementById('view-theme-span').childNodes[0].nodeValue = T('view_editor_theme') + ' ';
+            document.getElementById('view-lang-span').childNodes[0].nodeValue = T('view_set_language') + ' ';
+            document.getElementById('view-config-span').childNodes[0].nodeValue = T('view_editor_config') + ' ';
+
+            // Éléments du menu Affichage (Config Items)
+            document.getElementById('font-size-up-btn').textContent = T('config_font_up');
+            document.getElementById('font-size-down-btn').textContent = T('config_font_down');
+            document.getElementById('word-wrap-btn').textContent = T('config_word_wrap');
+            document.getElementById('show-invisibles-btn').textContent = T('config_show_invisibles');
+
+
+            // Bouton Ajouter Onglet
+            document.getElementById('add-tab-btn').textContent = T('add_tab_btn');
+
+            // Mise à jour de la barre de statut (si un onglet est actif)
+            const activeEditor = activeTabId ? findTabById(activeTabId).editor : null;
+            updateStatusBar(activeEditor);
+
+            // Mise à jour des modales d'Input/GotoLine/Confirmation (boutons et textes)
+            document.getElementById('input-modal-title').textContent = T('input_modal_title_rename');
+            document.getElementById('input-modal-confirm').textContent = T('input_modal_confirm_rename');
+            document.getElementById('input-modal-cancel').textContent = T('modal_cancel');
+            document.querySelector('label[for="input-modal-field"]').textContent = T('input_modal_label_filename');
+
+            document.getElementById('goto-line-title').textContent = T('goto_line_title');
+            document.getElementById('goto-line-label').textContent = T('goto_line_label');
+            document.getElementById('goto-line-field').placeholder = T('goto_line_placeholder');
+            document.getElementById('goto-line-confirm').textContent = T('goto_line_confirm');
+            document.getElementById('goto-line-cancel').textContent = T('modal_cancel');
+
+            document.getElementById('modal-cancel').textContent = T('modal_cancel');
+            document.getElementById('modal-confirm').textContent = T('modal_confirm');
+            
+            // Mise à jour de la modale d'Aide
+            document.getElementById('help-title').textContent = T('help_title');
+            document.getElementById('help-close-btn').textContent = T('modal_close');
+
+
+            // Mise à jour des onglets existants (titres)
+            tabs.forEach(tab => {
+                // Remplacer les titres "Sans titre-N" par la version localisée
+                const titleRegex = new RegExp(`^(${i18n['fr'].untitled}|${i18n['en'].untitled}|${i18n['es'].untitled}|${i18n['de'].untitled})-\\d+`, 'i');
+                if (titleRegex.test(tab.title)) {
+                    tab.title = tab.title.replace(titleRegex, T('untitled') + tab.title.match(/-\d+$/)[0]);
+                }
+                updateTabDisplay(tab.id); // Re-rend le titre/état "sale"
+            });
+            
+            // Mise à jour de l'indicateur de langue dans le menu
+            document.querySelectorAll('.lang-option').forEach(el => {
+                el.textContent = el.textContent.replace(' ✓', ''); // Enlever le coche existant
+                if (el.dataset.lang === langCode) {
+                    el.textContent += ' ✓';
+                }
+            });
+        }
+        
+        // Mappage des noms de thèmes Ace aux noms affichables
+        const themeMap = {
+            'light': { ace: 'ace/theme/chrome', display: 'Clair (Chrome)' },
+            'dark': { ace: 'ace/theme/tomorrow_night', display: 'Sombre (Tomorrow Night)' },
+            'monokai': { ace: 'ace/theme/monokai', display: 'Monokai' },
+            'github': { ace: 'ace/theme/github', display: 'GitHub' },
+            'solarized_dark': { ace: 'ace/theme/solarized_dark', display: 'Solarized Dark' },
+        };
+
+        // Mappage des modes Ace aux noms affichables (avec abréviations pour l'onglet)
+        const modeMap = {
+            'text': { display: 'PlainText', abbr: 'TXT' }, 
+            'javascript': { display: 'JavaScript', abbr: 'JS' }, 
+            'typescript': { display: 'TypeScript', abbr: 'TS' }, 
+            'html': { display: 'HTML', abbr: 'HTML' }, 
+            'css': { display: 'CSS', abbr: 'CSS' }, 
+            'json': { display: 'JSON', abbr: 'JSON' }, 
+            'markdown': { display: 'Markdown', abbr: 'MD' }, 
+            'python': { display: 'Python', abbr: 'PY' }, 
+            'java': { display: 'Java', abbr: 'JAVA' }, 
+            'c_cpp': { display: 'C/C++', abbr: 'C++' }, 
+            'csharp': { display: 'C#', abbr: 'CS' }, 
+            'php': { display: 'PHP', abbr: 'PHP' }, 
+            'sql': { display: 'SQL', abbr: 'SQL' }, 
+            'xml': { display: 'XML', abbr: 'XML' },
+            'ruby': { display: 'Ruby', abbr: 'RB' }, 
+            'golang': { display: 'Go', abbr: 'GO' }, 
+            'r': { display: 'R', abbr: 'R' }, 
+            'sh': { display: 'Bash/Shell', abbr: 'SH' }, 
+            'yaml': { display: 'YAML', abbr: 'YAML' } 
+        };
+
+        // Remplir le sous-menu des langues
+        function populateLanguageMenu() {
+            languageMenuSubmenu.innerHTML = '';
+            // Créer et trier la liste des modes disponibles
+            const modes = Object.keys(modeMap).map(modeKey => ({
+                id: `ace/mode/${modeKey}`,
+                display: modeMap[modeKey].display // Assuré d'être une chaîne de caractères
+            }));
+
+            modes.sort((a, b) => a.display.localeCompare(b.display));
+
+            modes.forEach(mode => {
+                const link = document.createElement('a');
+                link.href = "#";
+                link.className = "block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600";
+                link.textContent = mode.display;
+                link.dataset.mode = mode.id;
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    setEditorMode(activeTabId, mode.id, mode.display);
+                });
+                languageMenuSubmenu.appendChild(link);
+            });
+        }
+        
+        // Activation des outils de langage Ace (snippets, autocomplétion)
+        ace.require("ace/ext/language_tools");
+        // NOUVEAU: Activation de l'extension Emmet
+        ace.require("ace/ext/emmet");
+
+
+        // --- Fonctions de gestion des onglets ---
+        
+        function createNewTab(title = null, content = '', filepath = null, scroll = 0, cursor = {row: 0, column: 0}) {
+            tabCounter++;
+            const tabId = `tab-${Date.now()}`;
+            // Utiliser la traduction pour le titre par défaut
+            const tabTitle = title || T('untitled') + `-${tabCounter}`;
+
+            // Créer l'élément de l'onglet
+            const tabElement = document.createElement('div');
+            tabElement.className = 'flex items-center cursor-pointer px-4 py-2 text-sm font-medium border-t border-l border-r rounded-t-lg';
+            tabElement.dataset.tabId = tabId;
+            // Info-bulle
+            tabElement.title = tabTitle; 
+            tabElement.innerHTML = `
+                <span class="tab-title flex-grow">${tabTitle}</span>
+                <!-- NOUVEAU: Indicateur de mode/langue -->
+                <span class="tab-mode-indicator text-xs bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-200 px-1 ml-2 rounded opacity-70">TXT</span>
+                <button class="close-tab-btn ml-3 text-gray-600 dark:text-gray-500 hover:text-black dark:hover:text-white">${T('close_btn')}</button>
+            `;
+            tabContainer.insertBefore(tabElement, addTabBtn);
+
+            // Créer le conteneur pour l'éditeur Ace
+            const editorContainer = document.createElement('div');
+            editorContainer.id = `editor-${tabId}`; // ID spécifique pour l'initialisation Ace
+            editorContainer.className = 'editor-container';
+            contentContainer.appendChild(editorContainer);
+            
+            const mode = getModeFromFilename(tabTitle);
+
+            // Créer l'instance de l'éditeur Ace
+            const editor = ace.edit(editorContainer.id);
+            editor.setValue(content, -1);
+            editor.setTheme(currentTheme);
+            editor.session.setMode(mode);
+            editor.setOptions({
+                enableBasicAutocompletion: true,
+                enableLiveAutocompletion: true,
+                enableSnippets: true,
+                // NOUVEAU: Activation d'Emmet
+                enableEmmet: true,
+                showPrintMargin: false,
+                fontSize: `${currentFontSize}pt`,
+                wrap: wordWrapEnabled,
+                showInvisibles: showInvisiblesEnabled, 
+                // Auto-fermeture des paires
+                autoClosingBrackets: true,
+                // CORRECTION: Désactiver l'affichage des guides d'indentation
+                showIndentationGuids: false, 
+            });
+            editor.setReadOnly(false);
+            
+            // CORRECTION SUPPLÉMENTAIRE : Désactiver explicitement les guides d'indentation sur l'éditeur
+            editor.setShowInvisibles(false); // S'assurer que showInvisibles ne cause pas de conflit.
+            editor.setShowPrintMargin(false); 
+            editor.setShowFoldWidgets(true);
+            editor.setShowInvisibles(showInvisiblesEnabled); // Rétablir showInvisibles si nécessaire
+
+            // Ace API call pour l'indentation
+            if (editor.renderer.setShowIndentGuides) {
+                editor.renderer.setShowIndentGuides(false);
+            }
+
+            // *******************************************************************
+            // CORRECTION CRITIQUE DU RACCOURCI CTRL+L (GoToLine)
+            // Désactiver la commande native d'Ace pour utiliser notre modale custom
+            // *******************************************************************
+            editor.commands.removeCommand("gotoline");
+            editor.commands.addCommand({
+                name: 'custom_gotoline',
+                bindKey: {win: 'Ctrl-L', mac: 'Command-L'},
+                exec: triggerGotoLine, // Utilise notre fonction modale
+                readOnly: true
+            });
+            // *******************************************************************
+
+
+            // Corriger l'affichage des points d'arrêt après l'initialisation
+            editor.session.setBreakpoints = function (rows) {
+                this.$breakpoints = rows;
+                this._emit("changeBreakpoints", rows);
+            };
+
+            const newTab = {
+                id: tabId,
+                title: tabTitle,
+                filepath: filepath,
+                dirty: false,
+                scroll: scroll, // NOUVEAU: position de défilement
+                cursor: cursor, // NOUVEAU: position du curseur
+                element: tabElement,
+                container: editorContainer,
+                editor: editor,
+                breakpoints: [] // NOUVEAU: pour les points d'arrêt
+            };
+            
+            // Écouteurs de changement de contenu et de curseur pour Ace
+            editor.session.on('change', () => {
+                markTabAsDirty(tabId);
+            });
+            
+            // Écouteur pour la mise à jour de la barre de statut (et le stockage de la position)
+            editor.session.selection.on('changeCursor', () => {
+                if (tabId === activeTabId) {
+                    updateStatusBar(editor);
+                    newTab.cursor = editor.getCursorPosition(); // Stocker la position
+                }
+            });
+
+            // Écouteur pour le défilement (et le stockage de la position)
+            editor.session.on('changeScrollTop', (newScroll) => {
+                newTab.scroll = newScroll;
+            });
+            editor.session.on('changeScrollLeft', (newScroll) => {
+                 // On pourrait stocker le scrollLeft aussi si nécessaire
+            });
+            
+            // NOUVEAU: Écouteur pour les points d'arrêt dans la gouttière
+            editor.on('gutterclick', (e) => {
+                if (tabId === activeTabId && e.domEvent.target.classList.contains('ace_gutter-cell')) {
+                    const row = e.row;
+                    toggleBreakpoint(row);
+                    e.domEvent.preventDefault();
+                }
+            });
+
+
+            tabs.push(newTab);
+            
+            switchTab(tabId);
+            
+            // Écouteurs d'événements
+            tabElement.addEventListener('click', (e) => {
+                if (e.target.tagName !== 'BUTTON') switchTab(tabId);
+            });
+            tabElement.querySelector('.close-tab-btn').addEventListener('click', () => closeTab(tabId));
+
+            // NOUVEAU: Utilisation de la modale personnalisée pour renommer
+            tabElement.addEventListener('contextmenu', async e => {
+                e.preventDefault();
+                const newTitle = await showInputDialog(
+                    T('input_modal_title_rename'), 
+                    T('input_modal_label_filename'), 
+                    newTab.title, 
+                    T('input_modal_confirm_rename')
+                );
+                if (newTitle) renameTab(tabId, newTitle);
+            });
+            
+            return newTab;
+        }
+
+        function switchTab(tabId) {
+            // NOUVEAU: Sauvegarder la position de l'ancien onglet avant de basculer
+            if (activeTabId) {
+                const oldTab = findTabById(activeTabId);
+                if (oldTab) {
+                    oldTab.cursor = oldTab.editor.getCursorPosition();
+                    oldTab.scroll = oldTab.editor.session.getScrollTop();
+                }
+            }
+
+            activeTabId = tabId;
+            const activeTab = findTabById(activeTabId);
+
+            tabs.forEach(tab => {
+                const isActive = tab.id === tabId;
+                
+                // Style des onglets (omitted for brevity, remains as is)
+                tab.element.classList.toggle('bg-gray-50', isActive);
+                tab.element.classList.toggle('dark:bg-gray-800', isActive);
+                tab.element.classList.toggle('border-gray-300', isActive);
+                tab.element.classList.toggle('dark:border-gray-700', isActive);
+                tab.element.classList.toggle('mb-[-1px]', isActive);
+                tab.element.classList.toggle('text-gray-800', isActive);
+                tab.element.classList.toggle('dark:text-white', isActive);
+                tab.element.classList.toggle('bg-transparent', !isActive);
+                tab.element.classList.toggle('border-transparent', !isActive);
+                tab.element.classList.toggle('text-gray-500', !isActive);
+                tab.element.classList.toggle('dark:text-gray-400', !isActive);
+                tab.element.classList.toggle('hover:bg-gray-200', !isActive);
+                tab.element.classList.toggle('dark:hover:bg-gray-700', !isActive);
+                tab.element.classList.toggle('hover:text-gray-800', !isActive);
+                tab.element.classList.toggle('dark:hover:text-white', !isActive);
+
+
+                // Affichage de l'éditeur
+                tab.container.classList.toggle('active', isActive);
+            });
+            
+            // Gestion de la vue simple (plus de gestion split)
+            if (activeTab) {
+                activeTab.editor.focus();
+                activeTab.editor.resize();
+                
+                // NOUVEAU: Restaurer la position du curseur et du défilement
+                activeTab.editor.moveCursorToPosition(activeTab.cursor);
+                activeTab.editor.session.setScrollTop(activeTab.scroll);
+                
+                // Restaurer les points d'arrêt
+                updateBreakpoints(activeTabId);
+            }
+            
+            updateWindowTitle();
+            // Assurer la mise à jour de la barre de statut
+            if (activeTab) updateStatusBar(activeTab.editor);
+        }
+
+        async function closeTab(tabId) {
+            const tabToClose = findTabById(tabId);
+            if (!tabToClose) return;
+
+            if (tabToClose.dirty) {
+                // Utiliser le type 'warning' pour la modale
+                const shouldSave = await showConfirmationModal(
+                    T('modal_unsaved_title'), 
+                    T('modal_unsaved_message', { title: tabToClose.title }),
+                    'warning' 
+                );
+                if (shouldSave === null) return;
+                if (shouldSave && !saveFile(tabId)) return;
+            }
+
+            // Suppression de la logique split
+
+            const index = tabs.findIndex(t => t.id === tabId);
+            
+            tabToClose.editor.destroy(); 
+            
+            tabs.splice(index, 1);
+            tabToClose.element.remove();
+            tabToClose.container.remove();
+            
+            autosaveTabs();
+
+            if (activeTabId === tabId) {
+                if (tabs.length > 0) {
+                    const newActiveIndex = Math.max(0, index - 1);
+                    switchTab(tabs[newActiveIndex].id);
+                } else {
+                    activeTabId = null;
+                    createNewTab();
+                }
+            }
+            updateWindowTitle();
+        }
+
+        function renameTab(tabId, newTitle) {
+            const tab = findTabById(tabId);
+            if(tab) {
+                // NOUVEAU: Validation et ajout de l'extension par défaut (si manquante)
+                let finalTitle = ensureExtension(newTitle, tab.filepath);
+                
+                tab.title = finalTitle;
+                tab.filepath = finalTitle; // Met à jour le filepath pour la prochaine sauvegarde
+                const newMode = getModeFromFilename(finalTitle);
+                tab.editor.session.setMode(newMode);
+                updateTabDisplay(tabId);
+                if (tabId === activeTabId) updateStatusBar(tab.editor);
+            }
+        }
+
+        function setEditorMode(tabId, modePath, modeDisplayName) {
+            const tab = findTabById(tabId);
+            if (tab) {
+                tab.editor.session.setMode(modePath);
+                updateTabDisplay(tabId);
+                updateStatusBar(tab.editor);
+                
+                // Suppression de la gestion split
+            }
+        }
+        
+        function markTabAsDirty(tabId) {
+            const tab = findTabById(tabId);
+            if (tab && !tab.dirty) {
+                tab.dirty = true;
+                updateTabDisplay(tabId);
+            }
+            autosaveTabs();
+        }
+
+        function markTabAsClean(tabId) {
+             const tab = findTabById(tabId);
+            if (tab && tab.dirty) {
+                tab.dirty = false;
+                updateTabDisplay(tabId);
+            }
+        }
+
+        function updateTabDisplay(tabId) {
+            const tab = findTabById(tabId);
+            if (!tab) return;
+            
+            const titleSpan = tab.element.querySelector('.tab-title');
+            const modeIndicator = tab.element.querySelector('.tab-mode-indicator');
+            
+            // Mise à jour du titre
+            const displayTitle = tab.dirty ? `${tab.title}*` : tab.title;
+            titleSpan.textContent = displayTitle;
+
+            // NOUVEAU: Mise à jour de l'attribut title pour l'info-bulle
+            tab.element.title = tab.filepath || tab.title;
+
+            // Mise à jour de l'indicateur de mode (Amélioration 1)
+            const modePath = tab.editor.session.getMode().$id;
+            const modeName = modePath.split('/').pop();
+            const modeAbbr = modeMap[modeName] ? modeMap[modeName].abbr : '???';
+            modeIndicator.textContent = modeAbbr;
+
+            updateWindowTitle();
+        }
+
+        function updateWindowTitle() {
+            const activeTab = findTabById(activeTabId);
+            // Utiliser T() pour le titre
+            document.title = activeTab ? `${activeTab.title}${activeTab.dirty ? '*' : ''} - ${T('app_title')}` : T('app_title');
+        }
+        
+        function findTabById(tabId) {
+            return tabs.find(t => t.id === tabId);
+        }
+
+        // --- Fonctions de Barre de Statut ---
+
+        function getModeDisplayName(modePath) {
+            if (!modePath) return 'PlainText';
+            const modeName = modePath.split('/').pop();
+            return modeMap[modeName] ? modeMap[modeName].display : modeName;
+        }
+
+        function updateStatusBar(editor) {
+            if (!editor) {
+                statusMode.textContent = T('status_mode') + '-';
+                statusCursor.textContent = T('status_cursor', { line: '-', col: '-' });
+                return;
+            }
+
+            // Mettre à jour la position du curseur
+            const cursor = editor.selection.getCursor();
+            statusCursor.textContent = T('status_cursor', { line: cursor.row + 1, col: cursor.column + 1 });
+
+            // Mettre à jour le mode (langage)
+            const mode = editor.session.getMode().$id;
+            statusMode.textContent = T('status_mode') + getModeDisplayName(mode);
+            
+            // S'assurer que l'onglet actif est aussi mis à jour
+            if (activeTabId) updateTabDisplay(activeTabId);
+        }
+
+        // NOUVEAU: Fonction de clignotement de la barre de statut
+        function flashSaveSuccess() {
+            statusBar.classList.remove('save-success-flash');
+            // Forcer le reflow du navigateur pour que l'animation redémarre
+            void statusBar.offsetWidth; 
+            statusBar.classList.add('save-success-flash');
+        }
+
+        // --- Fonctions de Vues Multiples (Split View) : Toutes retirées ---
+        
+        // --- Fonctions de Fichiers (omitted for brevity, remains as is) ---
+
+        // NOUVEAU: Fonction pour s'assurer qu'un nom de fichier a une extension (Amélioration 2)
+        function ensureExtension(filename, currentPath = '') {
+            if (!filename || filename.trim() === '') {
+                // Si vide, utilise le titre de l'onglet actuel s'il n'est pas "Sans titre-N"
+                const tab = findTabById(activeTabId);
+                if (tab && !tab.title.startsWith(T('untitled') + '-')) {
+                    filename = tab.title;
+                } else {
+                    return T('untitled') + `-${tabCounter}.txt`;
+                }
+            }
+
+            // Vérifie si l'extension est déjà présente (ex: .js, .html)
+            if (filename.match(/\.[0-9a-z]+$/i)) {
+                return filename;
+            }
+
+            // Si c'est un fichier "Sans titre", on ajoute .txt
+            if (filename.startsWith(T('untitled') + '-')) {
+                return filename + '.txt';
+            }
+            
+            // Tente de déduire l'extension du mode actuel, sinon utilise .txt
+            let defaultExtension = 'txt';
+            // Utiliser getModeFromFilename pour déduire l'extension par défaut à partir du nom actuel/vide
+            const mode = getModeFromFilename(filename).split('/').pop();
+            
+            const modeToExt = {
+                'javascript': 'js', 'typescript': 'ts', 'html': 'html', 'css': 'css', 
+                'json': 'json', 'markdown': 'md', 'python': 'py', 'java': 'java', 
+                'c_cpp': 'cpp', 'csharp': 'cs', 'php': 'php', 
+                'sql': 'sql', 'xml': 'xml', 'text': 'txt', 'ruby': 'rb', 'golang': 'go',
+                'r': 'r', 'sh': 'sh', 'yaml': 'yaml', 'yml': 'yaml'
+            };
+
+            defaultExtension = modeToExt[mode] || 'txt';
+            
+            return filename + '.' + defaultExtension;
+        }
+        
+        function openFile() {
+            const fileOpener = document.getElementById('file-opener');
+            fileOpener.onchange = e => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    // NOUVEAU: Réinitialiser scroll et cursor à 0/0 pour un nouveau fichier
+                    const newTab = createNewTab(file.name, event.target.result, file.name, 0, {row: 0, column: 0});
+                    markTabAsClean(newTab.id);
+                    
+                    // NOUVEAU: Ajouter le fichier à la liste des récents
+                    addRecentFile(file.name); 
+                };
+                reader.readAsText(file);
+                fileOpener.value = '';
+            };
+            fileOpener.click();
+        }
+
+        function saveFile(tabId) {
+            const tab = findTabById(tabId || activeTabId);
+            if (!tab) return false;
+            // Utiliser T() pour la vérification du titre
+            if (tab.filepath && !tab.title.startsWith(T('untitled') + '-')) {
+                downloadFile(tab.filepath, tab.editor.getValue());
+                markTabAsClean(tab.id);
+                autosaveTabs();
+                flashSaveSuccess(); // NOUVEAU: Clignotement après sauvegarde
+                return true;
+            } else {
+                return saveFileAs(tab.id);
+            }
+        }
+
+        function saveFileAs(tabId) {
+            const tab = findTabById(tabId || activeTabId);
+            if (!tab) return false;
+
+            // Utilisation de la modale d'input pour le nom
+            showInputDialog(
+                T('input_modal_title_save_as'), 
+                T('input_modal_label_save_as'), 
+                tab.title.replace(/\*|\.txt$|\.js$|\.html$/g, ''), 
+                T('input_modal_confirm_save_as')
+            ).then(inputFilename => {
+                if (inputFilename) {
+                    const filename = ensureExtension(inputFilename, tab.filepath);
+                    
+                    downloadFile(filename, tab.editor.getValue());
+                    tab.title = filename.split('/').pop().split('\\').pop();
+                    tab.filepath = filename;
+                    markTabAsClean(tab.id);
+                    autosaveTabs();
+                    const newMode = getModeFromFilename(filename);
+                    tab.editor.session.setMode(newMode);
+                    flashSaveSuccess(); // NOUVEAU: Clignotement après Enregistrer Sous
+                }
+            });
+            return true; // Assume le processus d'enregistrement démarre
+        }
+        
+        function downloadFile(filename, content) {
+            const element = document.createElement('a');
+            const file = new Blob([content], {type: 'text/plain'});
+            element.href = URL.createObjectURL(file);
+            element.download = filename;
+            document.body.appendChild(element);
+            element.click();
+            document.body.removeChild(element);
+        }
+        
+        // --- Fonctions de Session (omitted for brevity, remains as is) ---
+        
+        // NOUVEAU: Fonction pour générer le nom de fichier avec date et heure
+        function getFormattedDateTime() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            // Format: session-AAAAJJMM-HHmmss.cp
+            return `session-${year}${month}${day}-${hours}${minutes}${seconds}.cp`;
+        }
+
+
+        function saveSession() {
+            const sessionData = tabs.map(tab => ({
+                title: tab.title,
+                content: tab.editor.getValue(),
+                filepath: tab.filepath,
+                dirty: tab.dirty,
+                scroll: tab.editor.session.getScrollTop(), // NOUVEAU: Sauvegarde du scroll
+                cursor: tab.editor.getCursorPosition(), // NOUVEAU: Sauvegarde du curseur
+                breakpoints: tab.breakpoints // NOUVEAU: Sauvegarde des points d'arrêt
+            }));
+            
+            // MISE À JOUR: Utilisation du format de nom de fichier session-AAAAJJMM-HHmmss.cp
+            const filename = getFormattedDateTime(); 
+
+            downloadFile(filename, JSON.stringify(sessionData, null, 2));
+            flashSaveSuccess(); // NOUVEAU: Clignotement après sauvegarde de session
+        }
+
+        function loadSession() {
+            const fileOpener = document.getElementById('file-opener');
+            fileOpener.onchange = async e => {
+                if (tabs.some(t => t.dirty)) {
+                    const continueLoad = await showConfirmationModal(
+                        T('modal_unsaved_title'), 
+                        T('modal_load_unsaved_message'),
+                        'warning' // Utiliser le type 'warning' pour la modale
+                    );
+                    if (!continueLoad) return;
+                }
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const sessionData = JSON.parse(event.target.result);
+                        
+                        const tabIdsToClose = [...tabs].map(t => t.id);
+                        tabIdsToClose.forEach(tabId => closeTabWithoutPrompt(tabId));
+                        
+                        sessionData.forEach(savedTab => {
+                            // NOUVEAU: Passer les positions et breakpoints sauvegardés à createNewTab
+                            const newTab = createNewTab(
+                                savedTab.title, 
+                                savedTab.content, 
+                                savedTab.filepath, 
+                                savedTab.scroll || 0, 
+                                savedTab.cursor || {row: 0, column: 0}
+                            );
+                            newTab.breakpoints = savedTab.breakpoints || []; // Restaurer les breakpoints
+                            if (savedTab.dirty) markTabAsDirty(newTab.id);
+                            else markTabAsClean(newTab.id);
+                        });
+                        autosaveTabs();
+                        if (tabs.length === 0) createNewTab();
+                    } catch(err) {
+                        showNotificationModal(T('modal_session_error_title'), T('modal_session_error_message'), 'error');
+                        console.error("Erreur de chargement de session:", err);
+                    }
+                };
+                reader.readAsText(file);
+                fileOpener.value = '';
+            };
+            fileOpener.click();
+        }
+
+        // NOUVEAU: Fonction pour effacer la session locale (Amélioration 3)
+        async function clearSession() {
+            const confirm = await showConfirmationModal(
+                T('modal_clear_session_title'), 
+                T('modal_clear_session_message'),
+                'warning' // Utiliser le type 'warning' pour la modale
+            );
+            if (confirm) {
+                localStorage.removeItem('notepad-autosave');
+                showNotificationModal(T('modal_session_cleared_title'), T('modal_session_cleared_message'), 'success');
+                // Simuler un redémarrage en fermant tous les onglets et en créant un nouveau
+                const tabIdsToClose = [...tabs].map(t => t.id);
+                tabIdsToClose.forEach(tabId => closeTabWithoutPrompt(tabId));
+                createNewTab();
+            }
+        }
+
+
+        // Fonction pour fermer sans confirmation (utilisée par loadSession)
+        function closeTabWithoutPrompt(tabId) {
+            const tabToClose = findTabById(tabId);
+            if (!tabToClose) return;
+
+            const index = tabs.findIndex(t => t.id === tabId);
+            tabToClose.editor.destroy(); // Ace dispose
+            tabs.splice(index, 1);
+            tabToClose.element.remove();
+            tabToClose.container.remove();
+        }
+        
+        // --- Fonctions de Navigation et Breakpoints (NOUVEAU) ---
+
+        // NOUVEAU: Fonction pour afficher la modale GoToLine stylisée
+        async function triggerGotoLine() {
+            const activeTab = findTabById(activeTabId);
+            if (!activeTab) return;
+
+            const maxLines = activeTab.editor.session.getLength();
+            
+            // Mise à jour de la modale avec les valeurs courantes/traduites
+            const gotoLineModalOverlay = document.getElementById('goto-line-modal-overlay');
+            const gotoLineField = document.getElementById('goto-line-field');
+            const gotoLineConfirmBtn = document.getElementById('goto-line-confirm');
+            const gotoLineCancelBtn = document.getElementById('goto-line-cancel');
+
+            // Afficher le placeholder mis à jour
+            gotoLineField.placeholder = T('goto_line_placeholder') + ` (1-${maxLines})`;
+            
+            // Utiliser uniquement la ligne actuelle pour la valeur par défaut
+            const currentLine = activeTab.editor.getCursorPosition().row + 1;
+            gotoLineField.value = `${currentLine}`; 
+            
+            // Afficher la modale
+            gotoLineModalOverlay.classList.remove('hidden');
+            gotoLineField.focus();
+            gotoLineField.select();
+            
+            // Gestion de la promesse (Go/Cancel)
+            return new Promise(resolve => {
+                
+                const handleGo = () => {
+                    const value = gotoLineField.value.trim();
+                    gotoLineModalOverlay.classList.add('hidden');
+                    
+                    // Nettoyage des écouteurs
+                    gotoLineConfirmBtn.removeEventListener('click', handleGo);
+                    gotoLineCancelBtn.removeEventListener('click', handleCancel);
+                    document.removeEventListener('keydown', keyHandler);
+                    
+                    // Traiter l'entrée et naviguer
+                    if (value) {
+                        // SIMPLIFICATION: On extrait seulement le numéro de ligne (Ace le gère même s'il y a des :)
+                        const lineNumber = parseInt(value, 10);
+
+                        if (!isNaN(lineNumber)) {
+                            // Utiliser 0 pour la colonne pour aller au début de la ligne
+                            activeTab.editor.gotoLine(lineNumber, 0, true); 
+                        } else {
+                            console.warn("Invalid line number entered:", value);
+                        }
+                    }
+                    resolve(value);
+                };
+
+                const handleCancel = () => {
+                    gotoLineModalOverlay.classList.add('hidden');
+                    gotoLineConfirmBtn.removeEventListener('click', handleGo);
+                    gotoLineCancelBtn.removeEventListener('click', handleCancel);
+                    document.removeEventListener('keydown', keyHandler);
+                    resolve(null);
+                };
+
+                const keyHandler = (e) => {
+                    if (gotoLineModalOverlay.classList.contains('hidden')) {
+                        document.removeEventListener('keydown', keyHandler);
+                        return;
+                    }
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleGo();
+                    } else if (e.key === 'Escape') {
+                         e.preventDefault();
+                        handleCancel();
+                    }
+                };
+
+                gotoLineConfirmBtn.addEventListener('click', handleGo);
+                gotoLineCancelBtn.addEventListener('click', handleCancel);
+                document.addEventListener('keydown', keyHandler);
+            });
+        }
+        
+        function triggerGotoDefinition() {
+            const activeTab = findTabById(activeTabId);
+            if (activeTab) {
+                // Ace utilise souvent 'goTo' pour ces commandes avancées
+                activeTab.editor.execCommand("gotodefinition"); 
+            }
+        }
+
+        function toggleBreakpoint(row) {
+            const tab = findTabById(activeTabId);
+            if (!tab) return;
+
+            const breakpoints = tab.breakpoints;
+            const index = breakpoints.indexOf(row);
+            
+            if (index === -1) {
+                // Ajouter le point d'arrêt
+                breakpoints.push(row);
+            } else {
+                // Supprimer le point d'arrêt
+                breakpoints.splice(index, 1);
+            }
+            
+            // Mettre à jour l'affichage
+            updateBreakpoints(tab.id);
+            autosaveTabs();
+        }
+
+        function updateBreakpoints(tabId) {
+            const tab = findTabById(tabId);
+            if (!tab || tab.editor.session.getBreakpoints() === undefined) return;
+            
+            // S'assurer que les breakpoints de Ace correspondent à ceux de la session
+            const currentBreakpoints = tab.editor.session.getBreakpoints();
+            
+            // D'abord, supprimer tous les anciens
+            Object.keys(currentBreakpoints).forEach(row => {
+                 if (currentBreakpoints[row] === "ace_breakpoint" || currentBreakpoints[row] === "ace_error") {
+                    tab.editor.session.clearBreakpoint(parseInt(row));
+                 }
+            });
+            
+            // Ensuite, appliquer les nouveaux
+            tab.breakpoints.forEach(row => {
+                tab.editor.session.setBreakpoint(row, "ace_error"); // Utiliser ace_error pour le style personnalisé
+            });
+        }
+
+
+        // --- Fonctions de Configuration ---
+
+        function adjustFontSize(delta) {
+            currentFontSize = Math.max(8, currentFontSize + delta); // Limite minimale à 8
+            tabs.forEach(tab => {
+                tab.editor.setOptions({ fontSize: `${currentFontSize}pt` });
+                // Suppression de la gestion split
+            });
+            localStorage.setItem('ace-font-size', currentFontSize);
+        }
+
+        function toggleWordWrap() {
+            wordWrapEnabled = !wordWrapEnabled;
+            tabs.forEach(tab => {
+                tab.editor.session.setUseWrapMode(wordWrapEnabled);
+                // Suppression de la gestion split
+            });
+            localStorage.setItem('ace-word-wrap', wordWrapEnabled);
+        }
+
+        function toggleShowInvisibles() {
+            showInvisiblesEnabled = !showInvisiblesEnabled;
+            tabs.forEach(tab => {
+                tab.editor.setOptions({ showInvisibles: showInvisiblesEnabled });
+                // Suppression de la gestion split
+            });
+            localStorage.setItem('ace-show-invisibles', showInvisiblesEnabled);
+        }
+        
+        // --- Fonctions de Recherche et Remplacement (Mises à jour) ---
+
+        function triggerFindOnly() {
+            const activeTab = findTabById(activeTabId);
+            if (activeTab) {
+                activeTab.editor.execCommand("find");
+            }
+        }
+
+        function triggerReplace() {
+            const activeTab = findTabById(activeTabId);
+            if (activeTab) {
+                activeTab.editor.execCommand("replace");
+            }
+        }
+
+        // NOUVEAU: Fonction de navigation d'onglet (Amélioration 4)
+        function navigateTab(direction) {
+            if (tabs.length <= 1) return;
+            
+            const currentIndex = tabs.findIndex(tab => tab.id === activeTabId);
+            let newIndex = currentIndex + direction; // direction est +1 ou -1
+
+            if (newIndex >= tabs.length) {
+                newIndex = 0; // Boucle au début
+            } else if (newIndex < 0) {
+                newIndex = tabs.length - 1; // Boucle à la fin
+            }
+
+            switchTab(tabs[newIndex].id);
+        }
+        
+        // --- Fonctions utilitaires (omitted for brevity, remains as is) ---
+        
+        function getModeFromFilename(filename) {
+            const extension = (filename || '').split('.').pop().toLowerCase();
+            const extToMode = {
+                'js': 'javascript', 'ts': 'typescript', 'html': 'html', 'css': 'css', 
+                'json': 'json', 'md': 'markdown', 'py': 'python', 'java': 'java', 
+                'c': 'c_cpp', 'cpp': 'c_cpp', 'cs': 'csharp', 'php': 'php', 
+                'sql': 'sql', 'xml': 'xml', 'txt': 'text', 'rb': 'ruby', 'go': 'golang',
+                'r': 'r', 'sh': 'sh', 'yaml': 'yaml', 'yml': 'yaml'
+            };
+
+            const modeName = extToMode[extension] || 'text';
+            return `ace/mode/${modeName}`;
+        }
+        
+        function ensureExtension(filename, currentPath = '') {
+            if (!filename || filename.trim() === '') {
+                // Si vide, utilise le titre de l'onglet actuel s'il n'est pas "Sans titre-N"
+                const tab = findTabById(activeTabId);
+                if (tab && !tab.title.startsWith(T('untitled') + '-')) {
+                    filename = tab.title;
+                } else {
+                    return T('untitled') + `-${tabCounter}.txt`;
+                }
+            }
+
+            // Vérifie si l'extension est déjà présente (ex: .js, .html)
+            if (filename.match(/\.[0-9a-z]+$/i)) {
+                return filename;
+            }
+
+            // Si c'est un fichier "Sans titre", on ajoute .txt
+            if (filename.startsWith(T('untitled') + '-')) {
+                return filename + '.txt';
+            }
+            
+            // Tente de déduire l'extension du mode actuel, sinon utilise .txt
+            let defaultExtension = 'txt';
+            
+            // Récupérer le mode actuel de l'éditeur ou par défaut
+            const modePath = activeTabId ? findTabById(activeTabId).editor.session.getMode().$id : 'ace/mode/text';
+            const modeName = modePath.split('/').pop();
+            
+            const modeToExtMap = {
+                'javascript': 'js', 'typescript': 'ts', 'html': 'html', 'css': 'css', 
+                'json': 'json', 'markdown': 'md', 'python': 'py', 'java': 'java', 
+                'c_cpp': 'cpp', 'csharp': 'cs', 'php': 'php', 
+                'sql': 'sql', 'xml': 'xml', 'text': 'txt', 'ruby': 'rb', 'golang': 'go',
+                'r': 'r', 'sh': 'sh', 'yaml': 'yaml'
+            };
+
+            // Utiliser le mode actuel pour déterminer l'extension par défaut
+            defaultExtension = modeToExtMap[modeName] || 'txt';
+            
+            return filename + '.' + defaultExtension;
+        }
+
+
+        // --- Fonctions de gestion du thème (omitted for brevity, remains as is) ---
+
+        function setTheme(themeKey) { // ex: 'dark', 'monokai'
+            const themeConfig = themeMap[themeKey] || themeMap['dark'];
+            const aceTheme = themeConfig.ace;
+            currentTheme = aceTheme;
+
+            // Logique pour basculer la classe 'dark' sur le HTML
+            const darkThemes = ['dark', 'monokai', 'solarized_dark'];
+            if (darkThemes.includes(themeKey)) {
+                document.documentElement.classList.add('dark');
+            } else {
+                 document.documentElement.classList.remove('dark');
+            }
+            
+            // Mise à jour de tous les éditeurs Ace
+            tabs.forEach(tab => {
+                tab.editor.setTheme(aceTheme);
+                // Suppression de la gestion split
+                tab.editor.setOptions({ fontFamily: 'inherit' }); 
+            });
+
+            localStorage.setItem('notepad-theme', themeKey);
+            updateThemeMenuDisplay(themeKey);
+        }
+
+        function updateThemeMenuDisplay(activeThemeKey) {
+            document.querySelectorAll('.theme-option').forEach(el => {
+                if (el.dataset.themeName === activeThemeKey) {
+                     el.classList.add('bg-blue-600', 'text-white');
+                     el.classList.remove('hover:bg-gray-100', 'dark:hover:bg-gray-600', 'text-gray-800', 'dark:text-gray-200');
+                } else {
+                     el.classList.remove('bg-blue-600', 'text-white');
+                     el.classList.add('hover:bg-gray-100', 'dark:hover:bg-gray-600', 'text-gray-800', 'dark:text-gray-200');
+                }
+            });
+        }
+
+        // --- Fonctions de sauvegarde locale (LocalStorage) (omitted for brevity, remains as is) ---
+        function autosaveTabs() {
+            try {
+                const tabsToSave = tabs.map(tab => ({
+                    title: tab.title,
+                    content: tab.editor.getValue(),
+                    filepath: tab.filepath,
+                    dirty: tab.dirty,
+                    scroll: tab.editor.session.getScrollTop(),
+                    cursor: tab.editor.getCursorPosition(),
+                    breakpoints: tab.breakpoints // NOUVEAU: Sauvegarde
+                }));
+                if (tabs.length > 0) {
+                    localStorage.setItem('notepad-autosave', JSON.stringify(tabsToSave));
+                } else {
+                    localStorage.removeItem('notepad-autosave');
+                }
+            } catch (e) {
+                console.error("Sauvegarde locale échouée:", e);
+            }
+        }
+
+        function restoreAutosavedTabs() {
+            const savedData = localStorage.getItem('notepad-autosave');
+            if (!savedData) return false;
+            try {
+                const restoredTabs = JSON.parse(savedData);
+                if (!Array.isArray(restoredTabs) || restoredTabs.length === 0) return false;
+                restoredTabs.forEach(savedTab => {
+                    const newTab = createNewTab(
+                        savedTab.title, 
+                        savedTab.content, 
+                        savedTab.filepath,
+                        savedTab.scroll || 0,
+                        savedTab.cursor || {row: 0, column: 0}
+                    );
+                    newTab.breakpoints = savedTab.breakpoints || []; // Restaurer les breakpoints
+                    if (savedTab.dirty) markTabAsDirty(newTab.id);
+                    else markTabAsClean(newTab.id);
+                });
+                return true;
+            } catch (e) {
+                console.error("Restauration de la session locale échouée:", e);
+                localStorage.removeItem('notepad-autosave');
+                return false;
+            }
+        }
+
+
+        // --- Fonctions de la modale de Confirmation (Mises à jour) ---
+        const modal = {
+            overlay: document.getElementById('modal-overlay'),
+            dialog: document.getElementById('modal-dialog'),
+            title: document.getElementById('modal-title'),
+            message: document.getElementById('modal-message'),
+            // Retrait de modal.icon
+            confirmBtn: document.getElementById('modal-confirm'),
+            cancelBtn: document.getElementById('modal-cancel'),
+        };
+
+        // type peut être 'default', 'warning', 'error', 'success'
+        function showConfirmationModal(title, message, type = 'default') {
+            return new Promise(resolve => {
+                modal.title.textContent = title; // Afficher le titre directement
+                
+                // 1. Gérer les styles de couleur (sans icônes)
+                modal.dialog.classList.remove('border-red-500', 'border-green-500');
+                modal.confirmBtn.classList.remove('bg-red-600', 'hover:bg-red-500');
+                modal.confirmBtn.classList.add('bg-blue-600', 'hover:bg-blue-500');
+
+                if (type === 'warning' || type === 'error') {
+                    modal.dialog.classList.add('border-red-500');
+                    modal.confirmBtn.classList.add('bg-red-600', 'hover:bg-red-500');
+                    modal.confirmBtn.classList.remove('bg-blue-600', 'hover:bg-blue-500');
+                } else if (type === 'success') {
+                    modal.dialog.classList.add('border-green-500');
+                }
+                
+                // 2. Afficher le message
+                modal.message.textContent = message;
+                modal.confirmBtn.textContent = T('modal_confirm'); 
+                modal.cancelBtn.textContent = T('modal_cancel');   
+                
+                // 3. Afficher les boutons
+                modal.confirmBtn.classList.remove('hidden');
+                modal.cancelBtn.classList.remove('hidden');
+                modal.overlay.classList.remove('hidden');
+                
+                // Gestionnaires d'événements
+                const handleConfirm = () => { modal.overlay.classList.add('hidden'); resolve(true); };
+                const handleCancel = () => { modal.overlay.classList.add('hidden'); resolve(false); };
+
+                modal.confirmBtn.onclick = handleConfirm;
+                modal.cancelBtn.onclick = handleCancel;
+
+                const keyHandler = (e) => {
+                    if (e.key === 'Enter') { handleConfirm(); document.removeEventListener('keydown', keyHandler); }
+                    else if (e.key === 'Escape') { handleCancel(); document.removeEventListener('keydown', keyHandler); }
+                };
+                document.addEventListener('keydown', keyHandler);
+            });
+        }
+        
+        // type peut être 'default', 'warning', 'error', 'success'
+        function showNotificationModal(title, message, type = 'default') {
+            return new Promise(resolve => {
+                 // 1. Gérer les styles de couleur
+                modal.title.textContent = title;
+                modal.dialog.classList.remove('border-red-500', 'border-green-500');
+                modal.confirmBtn.classList.remove('bg-red-600', 'hover:bg-red-500');
+                modal.confirmBtn.classList.add('bg-blue-600', 'hover:bg-blue-500');
+
+                if (type === 'warning' || type === 'error') {
+                    modal.dialog.classList.add('border-red-500');
+                } else if (type === 'success') {
+                    modal.dialog.classList.add('border-green-500');
+                }
+
+                // 2. Afficher le message
+                modal.message.textContent = message;
+                modal.confirmBtn.textContent = T('modal_close'); // Utiliser le texte de fermeture ici
+                
+                // 3. Afficher les boutons (un seul)
+                modal.cancelBtn.classList.add('hidden'); // Cacher Annuler
+                modal.confirmBtn.classList.remove('hidden'); // Afficher Confirmer
+                modal.overlay.classList.remove('hidden');
+
+                const handleConfirm = () => { modal.overlay.classList.add('hidden'); resolve(); };
+                modal.confirmBtn.onclick = handleConfirm;
+
+                const keyHandler = (e) => {
+                    if (e.key === 'Enter' || e.key === 'Escape') { 
+                        handleConfirm(); 
+                        document.removeEventListener('keydown', keyHandler); 
+                    }
+                };
+                document.addEventListener('keydown', keyHandler);
+            });
+        }
+
+
+        // --- Fonctions de la modale d'Input (Mises à jour) ---
+        const inputModal = {
+            overlay: document.getElementById('input-modal-overlay'),
+            title: document.getElementById('input-modal-title'),
+            field: document.getElementById('input-modal-field'),
+            confirmBtn: document.getElementById('input-modal-confirm'),
+            cancelBtn: document.getElementById('input-modal-cancel'),
+        };
+        // Signature mise à jour pour inclure le texte du bouton de confirmation
+        function showInputDialog(title, label, defaultValue = '', confirmText = T('modal_confirm')) {
+            return new Promise(resolve => {
+                inputModal.title.textContent = title;
+                document.querySelector('label[for="input-modal-field"]').textContent = label;
+                inputModal.field.value = defaultValue;
+                inputModal.confirmBtn.textContent = confirmText; // Traduction du bouton de confirmation
+                inputModal.cancelBtn.textContent = T('modal_cancel');   // Traduction du bouton d'annulation
+                
+                inputModal.overlay.classList.remove('hidden');
+                inputModal.field.focus();
+                inputModal.field.select();
+
+                const onConfirm = () => {
+                    inputModal.overlay.classList.add('hidden');
+                    inputModal.confirmBtn.removeEventListener('click', onConfirm);
+                    inputModal.cancelBtn.removeEventListener('click', onCancel);
+                    document.removeEventListener('keydown', keyHandler); // Retirer le gestionnaire de clavier
+                    resolve(inputModal.field.value);
+                };
+
+                const onCancel = () => {
+                    inputModal.overlay.classList.add('hidden');
+                    inputModal.confirmBtn.removeEventListener('click', onConfirm);
+                    inputModal.cancelBtn.removeEventListener('click', onCancel);
+                    document.removeEventListener('keydown', keyHandler); // Retirer le gestionnaire de clavier
+                    resolve(null); // Retourne null si annulé
+                };
+
+                inputModal.confirmBtn.addEventListener('click', onConfirm);
+                inputModal.cancelBtn.addEventListener('click', onCancel);
+                
+                // Gérer la touche Entrée pour confirmer et Échap pour annuler
+                const keyHandler = (e) => {
+                    if (inputModal.overlay.classList.contains('hidden')) {
+                        // Empêcher l'exécution si la modale est masquée
+                        document.removeEventListener('keydown', keyHandler);
+                        return;
+                    }
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        onConfirm();
+                    } else if (e.key === 'Escape') {
+                         e.preventDefault();
+                        onCancel();
+                    }
+                };
+                document.addEventListener('keydown', keyHandler);
+            });
+        }
+
+        // --- NOUVEAU: Fonctions de la modale d'Aide ---
+        const helpModal = {
+            overlay: document.getElementById('help-modal-overlay'),
+            title: document.getElementById('help-title'),
+            body: document.getElementById('help-body'),
+            closeBtn: document.getElementById('help-close-btn'),
+        };
+
+        function showHelpModal() {
+            helpModal.title.textContent = T('help_title');
+            helpModal.body.innerHTML = T('help_content'); 
+            helpModal.closeBtn.textContent = T('modal_close'); 
+
+            helpModal.overlay.classList.remove('hidden');
+            helpModal.body.scrollTop = 0; // Remettre le scroll à zéro
+
+            const handleClose = () => {
+                helpModal.overlay.classList.add('hidden');
+                document.removeEventListener('keydown', keyHandler);
+            };
+            
+            const keyHandler = (e) => {
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    handleClose();
+                }
+            };
+
+            helpModal.closeBtn.onclick = handleClose;
+            document.addEventListener('keydown', keyHandler);
+        }
+        // --- FIN Fonctions de la modale d'Aide ---
+
+
+        // --- Écouteurs d'événements initiaux ---
+        addTabBtn.addEventListener('click', () => createNewTab());
+        document.getElementById('new-tab-btn').addEventListener('click', (e) => { e.preventDefault(); createNewTab(); });
+        document.getElementById('open-file-btn').addEventListener('click', (e) => { e.preventDefault(); openFile(); });
+        document.getElementById('save-btn').addEventListener('click', (e) => { e.preventDefault(); saveFile(activeTabId); });
+        document.getElementById('save-as-btn').addEventListener('click', (e) => { e.preventDefault(); saveFileAs(activeTabId); });
+        document.getElementById('save-session-btn').addEventListener('click', (e) => { e.preventDefault(); saveSession(); });
+        document.getElementById('load-session-btn').addEventListener('click', (e) => { e.preventDefault(); loadSession(); });
+        // NOUVEAU: Écouteur pour Effacer Session
+        document.getElementById('clear-session-btn').addEventListener('click', (e) => { e.preventDefault(); clearSession(); });
+        document.getElementById('close-tab-btn').addEventListener('click', (e) => { e.preventDefault(); if (activeTabId) closeTab(activeTabId); });
+        
+        document.getElementById('find-only-btn').addEventListener('click', (e) => { e.preventDefault(); triggerFindOnly(); });
+        document.getElementById('replace-menu-btn').addEventListener('click', (e) => { e.preventDefault(); triggerReplace(); });
+        
+        // NOUVEAU: Écouteurs du menu Naviguer
+        document.getElementById('goto-line-btn').addEventListener('click', (e) => { e.preventDefault(); triggerGotoLine(); });
+        document.getElementById('goto-definition-btn').addEventListener('click', (e) => { e.preventDefault(); triggerGotoDefinition(); });
+        document.getElementById('toggle-breakpoint-btn').addEventListener('click', (e) => { 
+            e.preventDefault(); 
+            const activeEditor = findTabById(activeTabId)?.editor;
+            if(activeEditor) {
+                toggleBreakpoint(activeEditor.getCursorPosition().row);
+            }
+        });
+        
+        // NOUVEAU: Écouteur pour le bouton Aide
+        document.getElementById('help-btn').addEventListener('click', showHelpModal);
+
+
+        // NOUVEAU: Écouteurs pour le changement de langue
+        document.querySelectorAll('.lang-option').forEach(el => {
+             el.addEventListener('click', (e) => { e.preventDefault(); updateUI(el.dataset.lang); });
+        });
+        
+        // Écouteurs pour le thème (utilisent le thème par nom de clé)
+        document.querySelectorAll('.theme-option').forEach(el => {
+             el.addEventListener('click', (e) => { e.preventDefault(); setTheme(el.dataset.themeName); });
+        });
+        
+        // Écouteurs pour la configuration de l'éditeur
+        document.getElementById('font-size-up-btn').addEventListener('click', (e) => { e.preventDefault(); adjustFontSize(1); });
+        document.getElementById('font-size-down-btn').addEventListener('click', (e) => { e.preventDefault(); adjustFontSize(-1); });
+        document.getElementById('word-wrap-btn').addEventListener('click', (e) => { e.preventDefault(); toggleWordWrap(); });
+        document.getElementById('show-invisibles-btn').addEventListener('click', (e) => { e.preventDefault(); toggleShowInvisibles(); });
+
+
+        // Raccourcis clavier
+        // NOTE: La gestion Ctrl+L par le gestionnaire DOM a été retirée ici car elle est maintenant gérée par `editor.commands`
+        document.addEventListener('keydown', e => {
+            const isCtrlOrMeta = e.ctrlKey || e.metaKey;
+
+            if (isCtrlOrMeta) {
+                // Gestion des raccourcis de navigation entre onglets (Ctrl+Tab)
+                if (e.key.toLowerCase() === 'tab') {
+                    e.preventDefault(); // C'EST LA CORRECTION CRITIQUE
+                    if (e.shiftKey) { // Ctrl+Shift+Tab
+                        navigateTab(-1);
+                    } else { // Ctrl+Tab
+                        navigateTab(1);
+                    }
+                    return; // Arrête le traitement ici
+                }
+
+                // Gestion des autres raccourcis Ctrl/Cmd
+                switch (e.key.toLowerCase()) {
+                    case 't': e.preventDefault(); createNewTab(); break;
+                    case 'o': e.preventDefault(); openFile(); break;
+                    case 's':
+                        e.preventDefault();
+                        if (e.shiftKey) saveFileAs(activeTabId);
+                            else saveFile(activeTabId);
+                        break;
+                    case 'w': e.preventDefault(); if (activeTabId) closeTab(activeTabId); break;
+                    case '+': e.preventDefault(); adjustFontSize(1); break;
+                    case '-': e.preventDefault(); adjustFontSize(-1); break;
+                    case 'h': e.preventDefault(); triggerReplace(); break;
+                    // case 'l': e.preventDefault(); triggerGotoLine(); break; // RETIRÉ: Géré par Ace Commands
+                    case 'pagedown': e.preventDefault(); navigateTab(1); break; // Ctrl+PageDown
+                    case 'pageup': e.preventDefault(); navigateTab(-1); break;   // Ctrl+PageUp
+                    // Ctrl+F, Ctrl+Shift+G (Go to def) sont gérés par Ace
+                }
+            }
+        });
+
+        // --- Initialisation ---
+        
+        // 1. Charger la configuration locale
+        const savedFontSize = localStorage.getItem('ace-font-size');
+        if (savedFontSize) currentFontSize = parseInt(savedFontSize, 10);
+        
+        const savedWordWrap = localStorage.getItem('ace-word-wrap');
+        if (savedWordWrap) wordWrapEnabled = savedWordWrap === 'true';
+
+        const savedShowInvisibles = localStorage.getItem('ace-show-invisibles');
+        if (savedShowInvisibles) showInvisiblesEnabled = savedShowInvisibles === 'true';
+
+        const savedThemeKey = localStorage.getItem('notepad-theme') || 'dark';
+
+        // 2. Mettre en place le thème et l'interface de langue
+        populateLanguageMenu();
+        setTheme(savedThemeKey); // Applique le thème et met à jour l'UI
+
+        // 3. Restaurer ou créer l'onglet initial
+        if (!restoreAutosavedTabs()) {
+            createNewTab();
+        }
+        
+        // 4. Gestion des événements de fenêtre
+        window.addEventListener('resize', () => {
+             tabs.forEach(tab => tab.editor.resize());
+        });
+        window.addEventListener('beforeunload', autosaveTabs);
+        
+        // 5. Initialiser la traduction de l'UI
+        updateUI(currentLang);
+        
+        // 6. Afficher les fichiers récents au démarrage
+        updateRecentFilesUI();
+    });
+    </script>
+</body>
+</html>
