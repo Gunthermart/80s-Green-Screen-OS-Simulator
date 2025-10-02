@@ -3,7 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bloc-notes Ace</title>
+    <title>CODEPAD - Éditeur de Code en Ligne Multi-onglets</title>
+    
+    <!-- FAVICON -->
+    <!-- Assurez-vous que le fichier favicon.ico est bien à la racine de l'URL indiquée -->
+    <link rel="icon" type="image/x-icon" href="https://leonce-equity.com/codepad/favicon.ico"> 
+
+    <!-- Meta Description (SEO) -->
+    <meta name="description" content="CODEPAD est un éditeur de code en ligne polyvalent avec gestion d'onglets, coloration syntaxique (Ace Editor), sauvegarde de session, et thèmes personnalisables. Développez et éditez votre code HTML, JS, CSS, Python directement dans votre navigateur.">
+
+    <!-- Meta pour le Partage Social (Open Graph - Facebook/LinkedIn) -->
+    <meta property="og:title" content="CODEPAD - Éditeur de Code en Ligne">
+    <meta property="og:description" content="Un éditeur de code complet avec gestion d'onglets, autocomplétion, thèmes clairs/sombres, et sauvegarde locale. Idéal pour coder rapidement en HTML, CSS, JavaScript, Python, et plus.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://leonce-equity.com/codepad/">
+    <!-- Image d'aperçu pour le partage (Screenshot ou logo) -->
+    <meta property="og:image" content="https://leonce-equity.com/codepad/cp.png"> 
+    
+    <!-- Meta pour le Partage Twitter/X (Twitter Cards) -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="CODEPAD - Éditeur de Code en Ligne">
+    <meta name="twitter:description" content="Un éditeur de code complet avec gestion d'onglets, autocomplétion, thèmes clairs/sombres, et sauvegarde locale.">
+    <!-- Image Twitter Card -->
+    <meta name="twitter:image" content="https://leonce-equity.com/codepad/cp.png">
+    
     <!-- Chargement de Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -14,6 +37,7 @@
             --scrollbar-thumb-hover-bg: #a8a8a8;
         }
 
+        /* Thème sombre appliqué à la racine HTML pour l'UI, si non forcé par JS */
         .dark {
             --scrollbar-track-bg: #2d3748;
             --scrollbar-thumb-bg: #718096;
@@ -150,150 +174,190 @@
             z-index: 60;
         }
         
+        /* --- Styles du Splash Screen (Écran de Démarrage) --- */
+        #splash-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #1f2937; /* gray-800, couleur sombre par défaut */
+            color: #f3f4f6; /* gray-100 */
+            font-family: 'Inter', sans-serif;
+            z-index: 9999;
+            opacity: 1;
+            transition: opacity 0.5s ease-out; /* Transition pour la disparition */
+        }
+        
+        /* Animation "Toast qui sort du grille-pain" */
+        @keyframes toastPop {
+            0% { transform: translateY(100vh); opacity: 0; }
+            50% { transform: translateY(0); opacity: 1; }
+            80% { transform: translateY(0); opacity: 1; }
+            100% { transform: translateY(-100vh); opacity: 0; }
+        }
+
+        .splash-exit {
+            animation: toastPop 1s ease-in-out forwards;
+        }
+
     </style>
 </head>
+<!-- NOTE: La classe 'dark' est laissée par défaut si le JS ne la change pas, pour un meilleur affichage initial sombre -->
 <body class="font-sans flex flex-col h-screen bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200">
 
+    <!-- Écran de Démarrage (Splash Screen) - Affiché uniquement si pas de session auto-sauvegardée -->
+    <div id="splash-screen" class="hidden">
+        <div class="text-center p-8 bg-gray-700/80 rounded-xl shadow-2xl backdrop-blur-sm border border-gray-600/50 transform transition-transform duration-500">
+            <h1 class="text-6xl font-extrabold tracking-tight text-blue-400 mb-2">CODEPAD</h1>
+            <p class="text-lg font-medium text-gray-300">Version 0.97 By Leonce Equity</p>
+            <p class="mt-4 text-sm text-gray-400">Chargement de l'éditeur...</p>
+        </div>
+    </div>
+    <!-- FIN Écran de Démarrage -->
+
+
     <!-- Conteneur principal de l'application -->
-    <div class="flex flex-col h-full p-4 gap-4">
+    <div class="flex flex-col h-full p-4 gap-4" role="application">
 
         <!-- Barre de Menu -->
-        <header class="flex-shrink-0 flex gap-2">
+        <header class="flex-shrink-0 flex gap-2" role="menubar">
             <!-- Menu Fichier -->
-            <div class="relative group">
-                <button id="file-menu-btn" class="bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 px-4 py-2 rounded-md text-sm font-medium">Fichier</button>
-                <div class="absolute left-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-gray-700 ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
-                    <div class="py-1" role="menu" aria-orientation="vertical">
-                        <a href="#" id="new-tab-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 flex justify-between items-center">
+            <div class="relative group" role="menuitem">
+                <button id="file-menu-btn" class="bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 px-4 py-2 rounded-md text-sm font-medium" aria-expanded="false" aria-controls="file-menu-dropdown">Fichier</button>
+                <div id="file-menu-dropdown" class="absolute left-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-gray-700 ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50" role="menu" aria-orientation="vertical">
+                    <div class="py-1">
+                        <a href="#" id="new-tab-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 flex justify-between items-center" role="menuitem">
                             <span id="new-tab-text">Nouvel Onglet</span> <span class="float-right text-gray-500 dark:text-gray-400 text-xs ml-4">Ctrl+T</span></a>
-                        <a href="#" id="open-file-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 flex justify-between items-center">
+                        <a href="#" id="open-file-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 flex justify-between items-center" role="menuitem">
                             <span id="open-file-text">Ouvrir un Fichier...</span> <span class="float-right text-gray-500 dark:text-gray-400 text-xs ml-4">Ctrl+O</span></a>
 
                         <!-- NOUVEAU: Menu Fichiers Récents -->
-                        <div class="relative group/recent">
-                             <span id="recent-files-span" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-default flex justify-between items-center">
+                        <div class="relative group/recent" role="menuitem">
+                             <span id="recent-files-span" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-default flex justify-between items-center" role="button" aria-expanded="false">
                                 Fichiers Récents <span class="text-gray-500 dark:text-gray-400">&rsaquo;</span>
                              </span>
-                             <div id="recent-files-submenu" class="absolute left-full top-0 ml-1 w-56 max-h-80 overflow-y-auto rounded-md shadow-lg bg-white dark:bg-gray-700 ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover/recent:opacity-100 group-hover/recent:visible transition-all duration-200 z-50">
+                             <div id="recent-files-submenu" class="absolute left-full top-0 ml-1 w-56 max-h-80 overflow-y-auto rounded-md shadow-lg bg-white dark:bg-gray-700 ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover/recent:opacity-100 group-hover/recent:visible transition-all duration-200 z-50" role="menu">
                                 <!-- Les fichiers récents seront insérés ici par JS -->
                              </div>
                         </div>
                         <!-- /NOUVEAU: Menu Fichiers Récents -->
                         
                         <div class="border-t border-gray-200 dark:border-gray-600 my-1"></div>
-                        <a href="#" id="save-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 flex justify-between items-center">
+                        <a href="#" id="save-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 flex justify-between items-center" role="menuitem">
                             <span id="save-text">Enregistrer</span> <span class="float-right text-gray-500 dark:text-gray-400 text-xs ml-4">Ctrl+S</span></a>
-                        <a href="#" id="save-as-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 flex justify-between items-center">
+                        <a href="#" id="save-as-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 flex justify-between items-center" role="menuitem">
                             <span id="save-as-text">Enregistrer Sous...</span> <span class="float-right text-gray-500 dark:text-gray-400 text-xs ml-4">Ctrl+Shift+S</span></a>
                          <div class="border-t border-gray-200 dark:border-gray-600 my-1"></div>
-                        <a href="#" id="save-session-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">
+                        <a href="#" id="save-session-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600" role="menuitem">
                             Enregistrer la Session...</a>
-                        <a href="#" id="load-session-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">
+                        <a href="#" id="load-session-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600" role="menuitem">
                             Charger la Session...</a>
                          <div class="border-t border-gray-200 dark:border-gray-600 my-1"></div>
                         <!-- NOUVEAU: Option Effacer Session -->
-                        <a href="#" id="clear-session-btn" class="block px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-800">
+                        <a href="#" id="clear-session-btn" class="block px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-800" role="menuitem">
                             Effacer la Session Locale</a>
                         <div class="border-t border-gray-200 dark:border-gray-600 my-1"></div>
-                        <a href="#" id="close-tab-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 flex justify-between items-center">
+                        <a href="#" id="close-tab-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 flex justify-between items-center" role="menuitem">
                             <span id="close-tab-text">Fermer l'Onglet</span> <span class="float-right text-gray-500 dark:text-gray-400 text-xs ml-4">Ctrl+W</span></a>
                     </div>
                 </div>
             </div>
              <!-- Menu Rechercher -->
-             <div class="relative group">
-                <button id="search-menu-btn" class="bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 px-4 py-2 rounded-md text-sm font-medium">Rechercher</button>
-                <div class="absolute left-0 mt-2 w-64 rounded-md shadow-lg bg-white dark:bg-gray-700 ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
-                    <div class="py-1" role="menu" aria-orientation="vertical">
+             <div class="relative group" role="menuitem">
+                <button id="search-menu-btn" class="bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 px-4 py-2 rounded-md text-sm font-medium" aria-expanded="false" aria-controls="search-menu-dropdown">Rechercher</button>
+                <div id="search-menu-dropdown" class="absolute left-0 mt-2 w-64 rounded-md shadow-lg bg-white dark:bg-gray-700 ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50" role="menu" aria-orientation="vertical">
+                    <div class="py-1">
                         <!-- Option Rechercher uniquement -->
-                        <a href="#" id="find-only-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 flex justify-between items-center">
+                        <a href="#" id="find-only-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 flex justify-between items-center" role="menuitem">
                             <span id="find-text">Rechercher</span> <span class="float-right text-gray-500 dark:text-gray-400 text-xs ml-4">Ctrl+F</span></a>
                          <!-- Option Remplacer (ouvre la boîte de dialogue complète) -->
-                        <a href="#" id="replace-menu-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 flex justify-between items-center">
+                        <a href="#" id="replace-menu-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 flex justify-between items-center" role="menuitem">
                             <span id="replace-text">Remplacer</span> <span class="float-right text-gray-500 dark:text-gray-400 text-xs ml-4">Ctrl+H</span></a>
                     </div>
                 </div>
             </div>
             
             <!-- Menu Naviguer (NEW) -->
-             <div class="relative group">
-                <button id="navigate-menu-btn" class="bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 px-4 py-2 rounded-md text-sm font-medium">Naviguer</button>
-                <div id="navigate-menu-dropdown" class="absolute left-0 mt-2 w-64 rounded-md shadow-lg bg-white dark:bg-gray-700 ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
-                    <div class="py-1" role="menu" aria-orientation="vertical">
-                        <a href="#" id="goto-line-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 flex justify-between items-center">
+             <div class="relative group" role="menuitem">
+                <button id="navigate-menu-btn" class="bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 px-4 py-2 rounded-md text-sm font-medium" aria-expanded="false" aria-controls="navigate-menu-dropdown">Naviguer</button>
+                <div id="navigate-menu-dropdown" class="absolute left-0 mt-2 w-64 rounded-md shadow-lg bg-white dark:bg-gray-700 ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50" role="menu" aria-orientation="vertical">
+                    <div class="py-1">
+                        <a href="#" id="goto-line-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 flex justify-between items-center" role="menuitem">
                             <span id="goto-line-text">Aller à la Ligne...</span> <span class="float-right text-gray-500 dark:text-gray-400 text-xs ml-4">Ctrl+L</span></a>
-                        <a href="#" id="goto-definition-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 flex justify-between items-center">
+                        <a href="#" id="goto-definition-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 flex justify-between items-center" role="menuitem">
                             <span id="goto-definition-text">Aller à la Définition...</span> <span class="float-right text-gray-500 dark:text-gray-400 text-xs ml-4">Ctrl+Shift+G</span></a>
                         <div class="border-t border-gray-200 dark:border-gray-600 my-1"></div>
-                        <a href="#" id="toggle-breakpoint-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">
+                        <a href="#" id="toggle-breakpoint-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600" role="menuitem">
                             Basculer Point d'Arrêt (Ligne)</a>
                     </div>
                 </div>
             </div>
             
             <!-- Menu Langue -->
-             <div class="relative group">
-                <button id="lang-menu-btn" class="bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 px-4 py-2 rounded-md text-sm font-medium">Langue</button>
-                <div id="lang-menu-dropdown" class="absolute left-0 mt-2 w-40 rounded-md shadow-lg bg-white dark:bg-gray-700 ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
-                    <div class="py-1" role="menu" aria-orientation="vertical">
-                        <a href="#" data-lang="fr" class="lang-option block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">Français</a>
-                        <a href="#" data-lang="en" class="lang-option block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">English</a>
-                        <a href="#" data-lang="es" class="lang-option block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">Español</a>
-                        <a href="#" data-lang="de" class="lang-option block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">Deutsch</a>
+             <div class="relative group" role="menuitem">
+                <button id="lang-menu-btn" class="bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 px-4 py-2 rounded-md text-sm font-medium" aria-expanded="false" aria-controls="lang-menu-dropdown">Langue</button>
+                <div id="lang-menu-dropdown" class="absolute left-0 mt-2 w-40 rounded-md shadow-lg bg-white dark:bg-gray-700 ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50" role="menu" aria-orientation="vertical">
+                    <div class="py-1">
+                        <a href="#" data-lang="fr" class="lang-option block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600" role="menuitem">Français</a>
+                        <a href="#" data-lang="en" class="lang-option block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600" role="menuitem">English</a>
+                        <a href="#" data-lang="es" class="lang-option block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600" role="menuitem">Español</a>
+                        <a href="#" data-lang="de" class="lang-option block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600" role="menuitem">Deutsch</a>
                     </div>
                 </div>
             </div>
 
             <!-- Menu Affichage -->
-             <div class="relative group">
-                <button id="view-menu-btn" class="bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 px-4 py-2 rounded-md text-sm font-medium">Affichage</button>
-                <div class="absolute left-0 mt-2 w-64 rounded-md shadow-lg bg-white dark:bg-gray-700 ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
-                    <div class="py-1" role="menu" aria-orientation="vertical">
+             <div class="relative group" role="menuitem">
+                <button id="view-menu-btn" class="bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 px-4 py-2 rounded-md text-sm font-medium" aria-expanded="false" aria-controls="view-menu-dropdown">Affichage</button>
+                <div id="view-menu-dropdown" class="absolute left-0 mt-2 w-64 rounded-md shadow-lg bg-white dark:bg-gray-700 ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50" role="menu" aria-orientation="vertical">
+                    <div class="py-1">
                         
                         <!-- NOUVEAU: Menu Thème -->
-                        <div class="relative group/theme">
-                             <span id="view-theme-span" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-default flex justify-between items-center">
+                        <div class="relative group/theme" role="menuitem">
+                             <span id="view-theme-span" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-default flex justify-between items-center" role="button" aria-expanded="false">
                                 Thème de l'Éditeur <span class="text-gray-500 dark:text-gray-400">&rsaquo;</span>
                             </span>
-                             <div id="theme-menu-submenu" class="absolute left-full top-0 ml-1 w-56 max-h-80 overflow-y-auto rounded-md shadow-lg bg-white dark:bg-gray-700 ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover/theme:opacity-100 group-hover/theme:visible transition-all duration-200 z-50">
+                             <div id="theme-menu-submenu" class="absolute left-full top-0 ml-1 w-56 max-h-80 overflow-y-auto rounded-md shadow-lg bg-white dark:bg-gray-700 ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover/theme:opacity-100 group-hover/theme:visible transition-all duration-200 z-50" role="menu">
                                 <!-- Les thèmes seront insérés ici par JS -->
-                                <a href="#" data-theme-name="light" class="theme-option block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">Clair (Chrome)</a>
-                                <a href="#" data-theme-name="dark" class="theme-option block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">Sombre (Tomorrow Night)</a>
-                                <a href="#" data-theme-name="monokai" class="theme-option block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">Monokai</a>
-                                <a href="#" data-theme-name="github" class="theme-option block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">GitHub</a>
-                                <a href="#" data-theme-name="solarized_dark" class="theme-option block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">Solarized Dark</a>
+                                <a href="#" data-theme-name="light" class="theme-option block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600" role="menuitem">Clair (Chrome)</a>
+                                <a href="#" data-theme-name="dark" class="theme-option block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600" role="menuitem">Sombre (Tomorrow Night)</a>
+                                <a href="#" data-theme-name="monokai" class="theme-option block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600" role="menuitem">Monokai</a>
+                                <a href="#" data-theme-name="github" class="theme-option block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600" role="menuitem">GitHub</a>
+                                <a href="#" data-theme-name="solarized_dark" class="theme-option block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600" role="menuitem">Solarized Dark</a>
                             </div>
                         </div>
 
                         <div class="border-t border-gray-200 dark:border-gray-600 my-1"></div>
 
                         <!-- NOUVEAU: Sélection de Langage -->
-                        <div class="relative group/lang">
-                             <span id="view-lang-span" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-default flex justify-between items-center">
+                        <div class="relative group/lang" role="menuitem">
+                             <span id="view-lang-span" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-default flex justify-between items-center" role="button" aria-expanded="false">
                                 Définir le Langage <span class="text-gray-500 dark:text-gray-400">&rsaquo;</span>
                             </span>
-                             <div id="language-menu-submenu" class="absolute left-full top-0 ml-1 w-56 max-h-80 overflow-y-auto rounded-md shadow-lg bg-white dark:bg-gray-700 ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover/lang:opacity-100 group-hover/lang:visible transition-all duration-200 z-50">
+                             <div id="language-menu-submenu" class="absolute left-full top-0 ml-1 w-56 max-h-80 overflow-y-auto rounded-md shadow-lg bg-white dark:bg-gray-700 ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover/lang:opacity-100 group-hover/lang:visible transition-all duration-200 z-50" role="menu">
                                 <!-- Les langues seront insérées ici par JS -->
                             </div>
                         </div>
 
                         <div class="border-t border-gray-200 dark:border-gray-600 my-1"></div>
                         
-                        <!-- L'option Division de Vue est retirée ici -->
-
                         <!-- Sous-menu Configuration de l'Éditeur -->
-                        <div class="relative group/config">
-                            <span id="view-config-span" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-default flex justify-between items-center">
+                        <div class="relative group/config" role="menuitem">
+                            <span id="view-config-span" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-default flex justify-between items-center" role="button" aria-expanded="false">
                                 Configuration de l'Éditeur <span class="text-gray-500 dark:text-gray-400">&rsaquo;</span>
                             </span>
-                             <div class="absolute left-full top-0 ml-1 w-64 rounded-md shadow-lg bg-white dark:bg-gray-700 ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover/config:opacity-100 group-hover/config:visible transition-all duration-200 z-50">
+                             <div class="absolute left-full top-0 ml-1 w-64 rounded-md shadow-lg bg-white dark:bg-gray-700 ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover/config:opacity-100 group-hover/config:visible transition-all duration-200 z-50" role="menu">
                                 <div class="py-1">
-                                    <a href="#" id="font-size-up-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">Taille de Police +</a>
-                                    <a href="#" id="font-size-down-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">Taille de Police -</a>
+                                    <a href="#" id="font-size-up-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600" role="menuitem">Taille de Police +</a>
+                                    <a href="#" id="font-size-down-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600" role="menuitem">Taille de Police -</a>
                                     <div class="border-t border-gray-200 dark:border-gray-600 my-1"></div>
-                                    <a href="#" id="word-wrap-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">Activer/Désactiver Word Wrap</a>
+                                    <a href="#" id="word-wrap-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600" role="menuitem">Activer/Désactiver Word Wrap</a>
                                     <!-- NOUVEAU: Option Caractères invisibles -->
-                                    <a href="#" id="show-invisibles-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">Afficher Caractères Invisibles</a>
+                                    <a href="#" id="show-invisibles-btn" class="block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600" role="menuitem">Afficher Caractères Invisibles</a>
                                 </div>
                             </div>
                         </div>
@@ -302,30 +366,30 @@
             </div>
             
             <!-- NOUVEAU: Bouton Aide -->
-            <button id="help-btn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium ml-auto">?</button>
+            <button id="help-btn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium ml-auto" aria-label="Aide et fonctionnalités">?</button>
 
         </header>
 
         <!-- Conteneur des onglets -->
-        <div id="tab-container" class="flex-shrink-0 flex items-end border-b border-gray-300 dark:border-gray-700">
+        <div id="tab-container" class="flex-shrink-0 flex items-end border-b border-gray-300 dark:border-gray-700" role="tablist">
             <!-- Les onglets seront ajoutés ici par JS -->
-            <button id="add-tab-btn" class="ml-2 mb-[-1px] text-gray-500 hover:text-black dark:text-gray-400 dark:hover:text-white bg-gray-200 hover:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 px-3 py-2 rounded-t-lg border border-b-0 border-transparent">+</button>
+            <button id="add-tab-btn" class="ml-2 mb-[-1px] text-gray-500 hover:text-black dark:text-gray-400 dark:hover:text-white bg-gray-200 hover:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 px-3 py-2 rounded-t-lg border border-b-0 border-transparent" aria-label="Ajouter un nouvel onglet">+</button>
         </div>
 
-        <!-- Conteneur du contenu des onglets -->
-        <main id="content-container" class="flex-grow rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-800 relative">
+        <!-- Conteneur du contenu des onglets et éditeur principal -->
+        <main id="content-container" class="flex-grow rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-800 relative" role="region" aria-label="Zone d'édition principale">
             <!-- Les éditeurs Ace seront ajoutés ici par JS -->
         </main>
 
         <!-- Barre de Statut -->
-        <footer id="status-bar" class="flex-shrink-0 flex justify-end items-center px-4 bg-gray-200 dark:bg-gray-700 text-sm rounded-lg">
-            <span id="status-mode" class="mr-4 font-mono text-gray-700 dark:text-gray-300">Mode: PlainText</span>
-            <span id="status-cursor" class="text-gray-700 dark:text-gray-300">L: 1, Col: 1</span>
+        <footer id="status-bar" class="flex-shrink-0 flex justify-end items-center px-4 bg-gray-200 dark:bg-gray-700 text-sm rounded-lg" role="contentinfo">
+            <span id="status-mode" class="mr-4 font-mono text-gray-700 dark:text-gray-300" aria-live="polite">Mode: PlainText</span>
+            <span id="status-cursor" class="text-gray-700 dark:text-gray-300" aria-live="polite">L: 1, Col: 1</span>
         </footer>
     </div>
 
-    <!-- Modale pour les confirmations -->
-    <div id="modal-overlay" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center hidden z-50">
+    <!-- Modale pour les confirmations (Accessibilité: role="alertdialog") -->
+    <div id="modal-overlay" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center hidden z-50" role="dialog" aria-modal="true" aria-labelledby="modal-title">
         <div id="modal-dialog" class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-sm border-2 border-transparent">
             <h3 id="modal-title" class="text-lg font-bold mb-4">
                 <!-- Icône retirée -->
@@ -339,7 +403,7 @@
     </div>
     
     <!-- Modale d'Input (Pour Renommer l'Onglet ou Enregistrer Sous) -->
-    <div id="input-modal-overlay" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+    <div id="input-modal-overlay" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50" role="dialog" aria-modal="true" aria-labelledby="input-modal-title">
         <div id="input-modal-content" class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-sm">
             <h3 id="input-modal-title" class="text-lg font-bold mb-4 text-gray-900 dark:text-gray-100">Renommer l'Onglet</h3>
             <label for="input-modal-field" class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Nouveau nom de fichier :</label>
@@ -352,7 +416,7 @@
     </div>
     
     <!-- Modale Aller à la Ligne (Go To Line) -->
-    <div id="goto-line-modal-overlay" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
+    <div id="goto-line-modal-overlay" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden" role="dialog" aria-modal="true" aria-labelledby="goto-line-title">
         <div id="goto-line-modal-content" class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-xs">
             <h3 id="goto-line-title" class="text-lg font-bold mb-4 text-gray-900 dark:text-gray-100">Aller à la Ligne</h3>
             <label for="goto-line-field" id="goto-line-label" class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Ligne cible (ex: 120) :</label>
@@ -365,7 +429,7 @@
     </div>
 
     <!-- NOUVEAU: Modale d'Aide (Help Modal) -->
-    <div id="help-modal-overlay" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center hidden z-50">
+    <div id="help-modal-overlay" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center hidden z-50" role="dialog" aria-modal="true" aria-labelledby="help-title">
         <div id="help-modal-content" class="bg-white dark:bg-gray-800 rounded-lg shadow-2xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
             <h3 id="help-title" class="text-2xl font-bold mb-4 border-b pb-2 text-gray-900 dark:text-gray-100">Aide - Utilisation du Bloc-notes Ace</h3>
             <div id="help-body" class="text-gray-700 dark:text-gray-300 space-y-4">
@@ -380,7 +444,7 @@
 
 
     <!-- Input de fichier caché -->
-    <input type="file" id="file-opener" class="hidden" />
+    <input type="file" id="file-opener" class="hidden" aria-hidden="true" tabindex="-1" />
 
     <!-- Chargement de l'éditeur Ace (Minifié) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/ace.js" type="text/javascript" charset="utf-8"></script>
@@ -409,11 +473,14 @@
         const statusCursor = document.getElementById('status-cursor');
         const statusMode = document.getElementById('status-mode');
         const languageMenuSubmenu = document.getElementById('language-menu-submenu');
+        const splashScreen = document.getElementById('splash-screen'); // NOUVEAU: Référence au splash screen
 
         let tabs = [];
         let tabCounter = 0;
         let activeTabId = null;
-        let currentTheme = 'ace/theme/tomorrow_night'; // Thème sombre par défaut pour Ace
+        // CHANGEMENT: Thème clair par défaut pour Ace, même si l'UI utilise 'dark' pour le fond si non configuré
+        let currentTheme = localStorage.getItem('notepad-theme-ace') || 'ace/theme/tomorrow_night'; 
+        let currentThemeKey = localStorage.getItem('notepad-theme') || 'dark'; // Garder la clé pour la logique UI/Tailwind
         let currentFontSize = 14;
         let wordWrapEnabled = false;
         let showInvisiblesEnabled = false;
@@ -424,7 +491,7 @@
         const i18n = {
             'fr': {
                 // App
-                'app_title': 'Bloc-notes Ace',
+                'app_title': 'CODEPAD', // Mise à jour du titre interne
                 'untitled': 'Sans titre',
                 'tab_placeholder': 'Nouveau fichier',
                 'status_mode': 'Mode: ',
@@ -444,14 +511,14 @@
                 'menu_recent_empty': 'Aucun fichier récent', // NOUVEAU
 
                 // File Submenu
-                'file_new_tab': 'Nouvel Onglet',
-                'file_open': 'Ouvrir un Fichier...',
-                'file_save': 'Enregistrer',
-                'file_save_as': 'Enregistrer Sous...',
-                'file_save_session': 'Enregistrer la Session...',
-                'file_load_session': 'Charger la Session...',
-                'file_clear_session': 'Effacer la Session Locale',
-                'file_close_tab': 'Fermer l\'Onglet',
+                'file_new_tab': "Nouvel Onglet",
+                'file_open': "Ouvrir un Fichier...",
+                'file_save': "Enregistrer",
+                'file_save_as': "Enregistrer Sous...",
+                'file_save_session': "Enregistrer la Session...",
+                'file_load_session': "Charger la Session...",
+                'file_clear_session': "Effacer la Session Locale",
+                'file_close_tab': "Fermer l'Onglet",
                 'shortcut_ctrl_t': 'Ctrl+T',
                 'shortcut_ctrl_o': 'Ctrl+O',
                 'shortcut_ctrl_s': 'Ctrl+S',
@@ -465,50 +532,50 @@
                 'shortcut_ctrl_h': 'Ctrl+H',
                 
                 // Navigate Submenu (NEW)
-                'navigate_goto_line': 'Aller à la Ligne...',
-                'navigate_goto_def': 'Aller à la Définition...',
-                'navigate_toggle_breakpoint': 'Basculer Point d\'Arrêt (Ligne)',
+                'navigate_goto_line': "Aller à la Ligne...",
+                'navigate_goto_def': "Aller à la Définition...",
+                'navigate_toggle_breakpoint': "Basculer Point d'Arrêt (Ligne)",
                 'shortcut_ctrl_l': 'Ctrl+L',
                 'shortcut_ctrl_shift_g': 'Ctrl+Shift+G',
 
                 // View Submenu
-                'view_editor_theme': 'Thème de l\'Éditeur',
+                'view_editor_theme': "Thème de l'Éditeur",
                 'view_set_language': 'Définir le Langage', // (Syntax highlighting)
-                'view_editor_config': 'Configuration de l\'Éditeur',
-                'config_font_up': 'Taille de Police +',
-                'config_font_down': 'Taille de Police -',
-                'config_word_wrap': 'Activer/Désactiver Word Wrap',
-                'config_show_invisibles': 'Afficher Caractères Invisibles',
+                'view_editor_config': "Configuration de l'Éditeur",
+                'config_font_up': "Taille de Police +",
+                'config_font_down': "Taille de Police -",
+                'config_word_wrap': "Activer/Désactiver Word Wrap",
+                'config_show_invisibles': "Afficher Caractères Invisibles",
 
                 // Modals
-                'modal_unsaved_title': 'Modifications non enregistrées',
-                'modal_unsaved_message': 'Voulez-vous enregistrer les modifications apportées à "{{title}}" ?',
-                'modal_load_unsaved_message': 'Certains onglets ont des modifications non enregistrées qui seront perdues. Continuer ?',
-                'modal_clear_session_title': 'Effacer la Session',
-                'modal_clear_session_message': 'Êtes-vous sûr de vouloir effacer toutes les données de session enregistrées localement ? Tous les onglets non enregistrés seront perdus.',
-                'modal_session_error_title': 'Erreur de Session',
-                'modal_session_error_message': 'Le fichier de session est invalide.',
-                'modal_session_cleared_title': 'Session Effacée',
-                'modal_session_cleared_message': 'Les données de session ont été effacées. L\'application va redémarrer.',
+                'modal_unsaved_title': "Modifications non enregistrées",
+                'modal_unsaved_message': "Voulez-vous enregistrer les modifications apportées à \"{{title}}\" ?",
+                'modal_load_unsaved_message': "Certains onglets ont des modifications non enregistrées qui seront perdues. Continuer ?",
+                'modal_clear_session_title': "Effacer la Session",
+                'modal_clear_session_message': "Êtes-vous sûr de vouloir effacer toutes les données de session enregistrées localement ? Tous les onglets non enregistrés seront perdus.",
+                'modal_session_error_title': "Erreur de Session",
+                'modal_session_error_message': "Le fichier de session est invalide.",
+                'modal_session_cleared_title': "Session Effacée",
+                'modal_session_cleared_message': "Les données de session ont été effacées. L'application va redémarrer.",
                 'modal_cancel': 'Annuler',
                 'modal_confirm': 'Confirmer',
                 'modal_close': 'Fermer',
-                'input_modal_title_rename': 'Renommer l\'Onglet',
-                'input_modal_label_filename': 'Nouveau nom de fichier :',
+                'input_modal_title_rename': "Renommer l'Onglet",
+                'input_modal_label_filename': "Nouveau nom de fichier :",
                 'input_modal_confirm_rename': 'Renommer',
                 'input_modal_title_save_as': 'Enregistrer Sous',
-                'input_modal_label_save_as': 'Nom du fichier :',
+                'input_modal_label_save_as': "Nom du fichier :",
                 'input_modal_confirm_save_as': 'Enregistrer',
-                'modal_recent_warning': 'Pour des raisons de sécurité du navigateur, vous devez réouvrir manuellement le fichier "{{filename}}" en utilisant "Ouvrir un Fichier...".', 
+                'modal_recent_warning': "Pour des raisons de sécurité du navigateur, vous devez réouvrir manuellement le fichier \"{{filename}}\" en utilisant \"Ouvrir un Fichier...\".", 
                 
                 // Go To Line Modal (NOUVEAU) - SIMPLIFIÉ
-                'goto_line_title': 'Aller à la Ligne',
-                'goto_line_label': 'Ligne cible (ex: 120) :',
-                'goto_line_placeholder': 'Numéro de ligne',
+                'goto_line_title': "Aller à la Ligne",
+                'goto_line_label': "Ligne cible (ex: 120) :",
+                'goto_line_placeholder': "Numéro de ligne",
                 'goto_line_confirm': 'Aller',
                 
                 // Help Modal (NOUVEAU)
-                'help_title': 'Aide - Utilisation Détaillée du Bloc-notes Ace',
+                'help_title': "Aide - Utilisation Détaillée du Bloc-notes Ace",
                 'help_content': `
                     <h4 class="text-xl font-semibold text-blue-600 dark:text-blue-400">Fonctionnalités de base (Fichier)</h4>
                     <ul class="list-disc list-inside ml-4 space-y-1">
@@ -545,7 +612,7 @@
             },
             'en': {
                 // App
-                'app_title': 'Ace Notepad',
+                'app_title': 'CODEPAD', // Mise à jour du titre interne
                 'untitled': 'Untitled',
                 'tab_placeholder': 'New File',
                 'status_mode': 'Mode: ',
@@ -666,7 +733,7 @@
             },
             'es': {
                 // App
-                'app_title': 'Bloc de notas Ace',
+                'app_title': 'CODEPAD', // Mise à jour du titre interne
                 'untitled': 'Sin título',
                 'tab_placeholder': 'Nuevo archivo',
                 'status_mode': 'Modo: ',
@@ -765,7 +832,7 @@
                         <li><strong>Guardar/Cargar Sesión</strong>: Guarda/Carga el estado completo de TODAS las pestañas (contenido, título, posición del cursor, puntos de interrupción) en un archivo <code>.cp</code>.</li>
                         <li><strong>Restauración Automática</strong>: El estado de su sesión se guarda localmente en el navegador antes de cerrar o recargar.</li>
                         <li><strong>Borrar Sesión Local</strong>: Elimina todos los datos de auto-guardado y sesión del navegador.</li>
-                        <li><strong>Archivos Recientes</strong>: Almacena los últimos 5 nombres de archivos abiertos localmente para una referencia rápida (requiere la reapertura manual por motivos de seguridad).</li>
+                        <li><strong>Archivos Recientes</strong>: Almacena los últimos 5 nombres de archivos abiertos localementepara una referencia rápida (requiert la reapertura manual por motivos de seguridad).</li>
                     </ul>
 
                     <h4 class="text-xl font-semibold text-blue-600 dark:text-blue-400 mt-6">Edición, Navegación y Atajos</h4>
@@ -787,7 +854,7 @@
             },
             'de': {
                 // App
-                'app_title': 'Ace Notizblock',
+                'app_title': 'CODEPAD', // Mise à jour du titre interne
                 'untitled': 'Unbenannt',
                 'tab_placeholder': 'Neue Datei',
                 'status_mode': 'Modus: ',
@@ -892,10 +959,10 @@
                     <h4 class="text-xl font-semibold text-blue-600 dark:text-blue-400 mt-6">Bearbeitung, Navigation und Tastenkürzel</h4>
                     <ul class="list-disc list-inside ml-4 space-y-1">
                         <li><strong>Themen und Sprachen</strong>: Das Menü *Ansicht* ermöglicht das Ändern des visuellen Themas (Hell/Dunkel) und das Festlegen des Syntax-Highlighting-Modus (JavaScript, HTML, Python usw.).</li>
-                        <li><strong>Emmet</strong>: Geben Sie im HTML/CSS-Modus eine Abkürzung ein (z. B. <code>div.container>p*2</code>) und drücken Sie <kbd>Tab</kbd>, um sie sofort zu erweitern.</li>
+                        <li><strong>Emmet</strong>: Geben Sie im HTML/CSS-Modus eine Abkürzung ein (z. B. <code>div.container>p*2</code>) und drücken Sie <kbd>Tab</kbd> zur sofortigen Erweiterung.</li>
                         <li><strong>Gehe zu Zeile...</strong> (Strg+L): Öffnet ein Modal, um schnell zu einer bestimmten Zeilennummer zu springen.</li>
                         <li><strong>Simulierte Haltepunkte</strong>: Klicken Sie auf den Zeilennummern-Bereich (Gutter), um einen roten Haltepunkt zu setzen oder zu entfernen. Diese Markierungen werden mit Ihrer Sitzung gespeichert.</li>
-                        <li><strong>Suchen/Ersetzen</strong> (Strg+F / Strg+H): Integrierte Such- und Ersetzungsdialoge von Ace Editor.</li>
+                        <li><strong>Suchen/Ersetzen</strong> (Ctrl+F / Ctrl+H): Integrierte Such- und Ersetzungsdialoge von Ace Editor.</li>
                     </ul>
 
                     <h4 class="text-xl font-semibold text-blue-600 dark:text-blue-400 mt-6">Konfiguration (Ansicht > Editor-Konfiguration)</h4>
@@ -911,6 +978,7 @@
         // Constantes pour les fichiers récents
         const MAX_RECENT_FILES = 5;
         const RECENT_STORAGE_KEY = 'notepad-recent-files';
+        const AUTOSAVE_STORAGE_KEY = 'notepad-autosave'; // Clé pour l'autosave
 
         // Fonction d'aide à la traduction (Translation Helper)
         function T(key, placeholders = {}) {
@@ -980,6 +1048,7 @@
                     link.className = 'block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 truncate';
                     link.title = file.filename;
                     link.textContent = `${index + 1}. ${file.filename}`;
+                    link.setAttribute('role', 'menuitem'); // Accessibilité
                     link.addEventListener('click', (e) => {
                         e.preventDefault();
                         // Informer l'utilisateur qu'il doit utiliser l'outil de sélection de fichier pour des raisons de sécurité
@@ -999,6 +1068,7 @@
                 clearLink.id = 'clear-recent-files-btn';
                 clearLink.className = 'block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600';
                 clearLink.textContent = T('menu_recent_clear');
+                clearLink.setAttribute('role', 'menuitem'); // Accessibilité
                 clearLink.addEventListener('click', (e) => {
                     e.preventDefault();
                     clearRecentFiles();
@@ -1159,6 +1229,7 @@
                 link.className = "block px-4 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600";
                 link.textContent = mode.display;
                 link.dataset.mode = mode.id;
+                link.setAttribute('role', 'menuitem'); // Accessibilité
                 link.addEventListener('click', (e) => {
                     e.preventDefault();
                     setEditorMode(activeTabId, mode.id, mode.display);
@@ -1175,7 +1246,7 @@
 
         // --- Fonctions de gestion des onglets ---
         
-        function createNewTab(title = null, content = '', filepath = null, scroll = 0, cursor = {row: 0, column: 0}) {
+        function createNewTab(title = null, content = '', filepath = null, scroll = 0, cursor = {row: 0, column: 0}, breakpoints = []) {
             tabCounter++;
             const tabId = `tab-${Date.now()}`;
             // Utiliser la traduction pour le titre par défaut
@@ -1183,22 +1254,28 @@
 
             // Créer l'élément de l'onglet
             const tabElement = document.createElement('div');
+            // Ajout de role="tab" et aria-selected pour l'accessibilité
             tabElement.className = 'flex items-center cursor-pointer px-4 py-2 text-sm font-medium border-t border-l border-r rounded-t-lg';
             tabElement.dataset.tabId = tabId;
+            tabElement.setAttribute('role', 'tab');
+            tabElement.setAttribute('aria-controls', `editor-${tabId}`);
             // Info-bulle
             tabElement.title = tabTitle; 
             tabElement.innerHTML = `
                 <span class="tab-title flex-grow">${tabTitle}</span>
                 <!-- NOUVEAU: Indicateur de mode/langue -->
                 <span class="tab-mode-indicator text-xs bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-200 px-1 ml-2 rounded opacity-70">TXT</span>
-                <button class="close-tab-btn ml-3 text-gray-600 dark:text-gray-500 hover:text-black dark:hover:text-white">${T('close_btn')}</button>
+                <button class="close-tab-btn ml-3 text-gray-600 dark:text-gray-500 hover:text-black dark:hover:text-white" aria-label="${T('file_close_tab')} : ${tabTitle}">${T('close_btn')}</button>
             `;
             tabContainer.insertBefore(tabElement, addTabBtn);
 
             // Créer le conteneur pour l'éditeur Ace
             const editorContainer = document.createElement('div');
             editorContainer.id = `editor-${tabId}`; // ID spécifique pour l'initialisation Ace
+            // Ajout de role="tabpanel" et aria-labelledby pour l'accessibilité
             editorContainer.className = 'editor-container';
+            editorContainer.setAttribute('role', 'tabpanel');
+            editorContainer.setAttribute('aria-labelledby', tabId);
             contentContainer.appendChild(editorContainer);
             
             const mode = getModeFromFilename(tabTitle);
@@ -1206,7 +1283,7 @@
             // Créer l'instance de l'éditeur Ace
             const editor = ace.edit(editorContainer.id);
             editor.setValue(content, -1);
-            editor.setTheme(currentTheme);
+            editor.setTheme(currentTheme); // Utiliser le thème Ace chargé en JS
             editor.session.setMode(mode);
             editor.setOptions({
                 enableBasicAutocompletion: true,
@@ -1266,7 +1343,7 @@
                 element: tabElement,
                 container: editorContainer,
                 editor: editor,
-                breakpoints: [] // NOUVEAU: pour les points d'arrêt
+                breakpoints: breakpoints // NOUVEAU: pour les points d'arrêt
             };
             
             // Écouteurs de changement de contenu et de curseur pour Ace
@@ -1306,7 +1383,8 @@
             
             // Écouteurs d'événements
             tabElement.addEventListener('click', (e) => {
-                if (e.target.tagName !== 'BUTTON') switchTab(tabId);
+                // S'assurer que le clic n'est pas sur le bouton de fermeture
+                if (!e.target.closest('.close-tab-btn')) switchTab(tabId);
             });
             tabElement.querySelector('.close-tab-btn').addEventListener('click', () => closeTab(tabId));
 
@@ -1332,6 +1410,8 @@
                 if (oldTab) {
                     oldTab.cursor = oldTab.editor.getCursorPosition();
                     oldTab.scroll = oldTab.editor.session.getScrollTop();
+                    oldTab.element.setAttribute('aria-selected', 'false'); // Accessibilité
+                    oldTab.container.setAttribute('aria-hidden', 'true'); // Accessibilité
                 }
             }
 
@@ -1341,7 +1421,7 @@
             tabs.forEach(tab => {
                 const isActive = tab.id === tabId;
                 
-                // Style des onglets (omitted for brevity, remains as is)
+                // Style des onglets
                 tab.element.classList.toggle('bg-gray-50', isActive);
                 tab.element.classList.toggle('dark:bg-gray-800', isActive);
                 tab.element.classList.toggle('border-gray-300', isActive);
@@ -1361,6 +1441,10 @@
 
                 // Affichage de l'éditeur
                 tab.container.classList.toggle('active', isActive);
+                
+                // Accessibilité
+                tab.element.setAttribute('aria-selected', isActive ? 'true' : 'false');
+                tab.container.setAttribute('aria-hidden', isActive ? 'false' : 'true');
             });
             
             // Gestion de la vue simple (plus de gestion split)
@@ -1469,10 +1553,13 @@
             
             const titleSpan = tab.element.querySelector('.tab-title');
             const modeIndicator = tab.element.querySelector('.tab-mode-indicator');
+            const closeBtn = tab.element.querySelector('.close-tab-btn');
             
             // Mise à jour du titre
             const displayTitle = tab.dirty ? `${tab.title}*` : tab.title;
             titleSpan.textContent = displayTitle;
+            // Accessibilité : Mise à jour de l'aria-label du bouton de fermeture
+            closeBtn.setAttribute('aria-label', `${T('file_close_tab')} : ${displayTitle}`);
 
             // NOUVEAU: Mise à jour de l'attribut title pour l'info-bulle
             tab.element.title = tab.filepath || tab.title;
@@ -1489,7 +1576,9 @@
         function updateWindowTitle() {
             const activeTab = findTabById(activeTabId);
             // Utiliser T() pour le titre
-            document.title = activeTab ? `${activeTab.title}${activeTab.dirty ? '*' : ''} - ${T('app_title')}` : T('app_title');
+            // Mise à jour pour inclure la description plus longue pour le SEO de la fenêtre
+            const baseTitle = "CODEPAD - Éditeur de Code en Ligne Multi-onglets"; 
+            document.title = activeTab ? `${activeTab.title}${activeTab.dirty ? '*' : ''} | ${baseTitle}` : baseTitle;
         }
         
         function findTabById(tabId) {
@@ -1531,8 +1620,6 @@
             statusBar.classList.add('save-success-flash');
         }
 
-        // --- Fonctions de Vues Multiples (Split View) : Toutes retirées ---
-        
         // --- Fonctions de Fichiers (omitted for brevity, remains as is) ---
 
         // NOUVEAU: Fonction pour s'assurer qu'un nom de fichier a une extension (Amélioration 2)
@@ -1566,7 +1653,7 @@
                 'javascript': 'js', 'typescript': 'ts', 'html': 'html', 'css': 'css', 
                 'json': 'json', 'markdown': 'md', 'python': 'py', 'java': 'java', 
                 'c_cpp': 'cpp', 'csharp': 'cs', 'php': 'php', 
-                'sql': 'sql', 'xml': 'xml', 'text': 'txt', 'ruby': 'rb', 'golang': 'go',
+                'sql': 'sql', 'xml': 'xml', 'text': 'txt', 'rb': 'ruby', 'go': 'golang',
                 'r': 'r', 'sh': 'sh', 'yaml': 'yaml', 'yml': 'yaml'
             };
 
@@ -1709,9 +1796,9 @@
                                 savedTab.content, 
                                 savedTab.filepath, 
                                 savedTab.scroll || 0, 
-                                savedTab.cursor || {row: 0, column: 0}
+                                savedTab.cursor || {row: 0, column: 0},
+                                savedTab.breakpoints || [] // Restaurer les breakpoints
                             );
-                            newTab.breakpoints = savedTab.breakpoints || []; // Restaurer les breakpoints
                             if (savedTab.dirty) markTabAsDirty(newTab.id);
                             else markTabAsClean(newTab.id);
                         });
@@ -1736,7 +1823,7 @@
                 'warning' // Utiliser le type 'warning' pour la modale
             );
             if (confirm) {
-                localStorage.removeItem('notepad-autosave');
+                localStorage.removeItem(AUTOSAVE_STORAGE_KEY);
                 showNotificationModal(T('modal_session_cleared_title'), T('modal_session_cleared_message'), 'success');
                 // Simuler un redémarrage en fermant tous les onglets et en créant un nouveau
                 const tabIdsToClose = [...tabs].map(t => t.id);
@@ -1830,7 +1917,7 @@
                         handleGo();
                     } else if (e.key === 'Escape') {
                          e.preventDefault();
-                        handleCancel();
+                        onCancel();
                     }
                 };
 
@@ -1851,7 +1938,8 @@
         function toggleBreakpoint(row) {
             const tab = findTabById(activeTabId);
             if (!tab) return;
-
+            const tabIdToToggle = tab.id; // Utiliser tabId au lieu de activeTabId pour être sûr
+            
             const breakpoints = tab.breakpoints;
             const index = breakpoints.indexOf(row);
             
@@ -1864,7 +1952,7 @@
             }
             
             // Mettre à jour l'affichage
-            updateBreakpoints(tab.id);
+            updateBreakpoints(tabIdToToggle);
             autosaveTabs();
         }
 
@@ -2015,6 +2103,7 @@
             const themeConfig = themeMap[themeKey] || themeMap['dark'];
             const aceTheme = themeConfig.ace;
             currentTheme = aceTheme;
+            currentThemeKey = themeKey; // Mettre à jour la clé du thème
 
             // Logique pour basculer la classe 'dark' sur le HTML
             const darkThemes = ['dark', 'monokai', 'solarized_dark'];
@@ -2031,7 +2120,10 @@
                 tab.editor.setOptions({ fontFamily: 'inherit' }); 
             });
 
+            // Sauvegarder les deux
             localStorage.setItem('notepad-theme', themeKey);
+            localStorage.setItem('notepad-theme-ace', aceTheme);
+
             updateThemeMenuDisplay(themeKey);
         }
 
@@ -2060,9 +2152,9 @@
                     breakpoints: tab.breakpoints // NOUVEAU: Sauvegarde
                 }));
                 if (tabs.length > 0) {
-                    localStorage.setItem('notepad-autosave', JSON.stringify(tabsToSave));
+                    localStorage.setItem(AUTOSAVE_STORAGE_KEY, JSON.stringify(tabsToSave));
                 } else {
-                    localStorage.removeItem('notepad-autosave');
+                    localStorage.removeItem(AUTOSAVE_STORAGE_KEY);
                 }
             } catch (e) {
                 console.error("Sauvegarde locale échouée:", e);
@@ -2070,7 +2162,7 @@
         }
 
         function restoreAutosavedTabs() {
-            const savedData = localStorage.getItem('notepad-autosave');
+            const savedData = localStorage.getItem(AUTOSAVE_STORAGE_KEY);
             if (!savedData) return false;
             try {
                 const restoredTabs = JSON.parse(savedData);
@@ -2081,16 +2173,16 @@
                         savedTab.content, 
                         savedTab.filepath,
                         savedTab.scroll || 0,
-                        savedTab.cursor || {row: 0, column: 0}
+                        savedTab.cursor || {row: 0, column: 0},
+                        savedTab.breakpoints || [] // Restaurer les breakpoints
                     );
-                    newTab.breakpoints = savedTab.breakpoints || []; // Restaurer les breakpoints
                     if (savedTab.dirty) markTabAsDirty(newTab.id);
                     else markTabAsClean(newTab.id);
                 });
                 return true;
             } catch (e) {
                 console.error("Restauration de la session locale échouée:", e);
-                localStorage.removeItem('notepad-autosave');
+                localStorage.removeItem(AUTOSAVE_STORAGE_KEY);
                 return false;
             }
         }
@@ -2135,6 +2227,9 @@
                 modal.cancelBtn.classList.remove('hidden');
                 modal.overlay.classList.remove('hidden');
                 
+                // Focus sur le bouton Annuler pour une meilleure expérience utilisateur
+                modal.cancelBtn.focus();
+
                 // Gestionnaires d'événements
                 const handleConfirm = () => { modal.overlay.classList.add('hidden'); resolve(true); };
                 const handleCancel = () => { modal.overlay.classList.add('hidden'); resolve(false); };
@@ -2176,6 +2271,7 @@
 
                 const handleConfirm = () => { modal.overlay.classList.add('hidden'); resolve(); };
                 modal.confirmBtn.onclick = handleConfirm;
+                modal.confirmBtn.focus(); // Focus sur le bouton de fermeture
 
                 const keyHandler = (e) => {
                     if (e.key === 'Enter' || e.key === 'Escape') { 
@@ -2262,6 +2358,7 @@
 
             helpModal.overlay.classList.remove('hidden');
             helpModal.body.scrollTop = 0; // Remettre le scroll à zéro
+            helpModal.closeBtn.focus(); // Focus sur le bouton de fermeture
 
             const handleClose = () => {
                 helpModal.overlay.classList.add('hidden');
@@ -2368,6 +2465,16 @@
 
         // --- Initialisation ---
         
+        // Fonction pour cacher le splash screen après l'animation
+        function hideSplashScreen() {
+             splashScreen.classList.add('splash-exit');
+             // S'assurer que le splash screen est complètement retiré après l'animation (1s)
+             setTimeout(() => {
+                splashScreen.classList.add('hidden');
+             }, 1000); 
+        }
+
+
         // 1. Charger la configuration locale
         const savedFontSize = localStorage.getItem('ace-font-size');
         if (savedFontSize) currentFontSize = parseInt(savedFontSize, 10);
@@ -2379,16 +2486,33 @@
         if (savedShowInvisibles) showInvisiblesEnabled = savedShowInvisibles === 'true';
 
         const savedThemeKey = localStorage.getItem('notepad-theme') || 'dark';
+        const savedAceTheme = localStorage.getItem('notepad-theme-ace') || 'ace/theme/tomorrow_night';
+        currentTheme = savedAceTheme;
+        currentThemeKey = savedThemeKey; // Assurer que la clé est synchronisée
 
         // 2. Mettre en place le thème et l'interface de langue
         populateLanguageMenu();
-        setTheme(savedThemeKey); // Applique le thème et met à jour l'UI
+        // Utiliser setTheme pour initialiser les classes dark/light correctement
+        setTheme(currentThemeKey); 
 
         // 3. Restaurer ou créer l'onglet initial
-        if (!restoreAutosavedTabs()) {
-            createNewTab();
-        }
+        const hasSavedSession = localStorage.getItem(AUTOSAVE_STORAGE_KEY) !== null;
         
+        // Si aucune session n'est enregistrée, afficher le splash screen.
+        if (!hasSavedSession) {
+             splashScreen.classList.remove('hidden');
+             // Afficher pendant 3 secondes, puis cacher avec l'animation
+             setTimeout(hideSplashScreen, 3000);
+
+             // Créer l'onglet après le délai si aucune session n'est chargée
+             setTimeout(() => {
+                 if (tabs.length === 0) createNewTab();
+             }, 3000);
+        } else {
+             // Si une session est trouvée, restaurer immédiatement et ne pas afficher le splash screen.
+             restoreAutosavedTabs();
+        }
+
         // 4. Gestion des événements de fenêtre
         window.addEventListener('resize', () => {
              tabs.forEach(tab => tab.editor.resize());
@@ -2400,6 +2524,15 @@
         
         // 6. Afficher les fichiers récents au démarrage
         updateRecentFilesUI();
+        
+        // Si des onglets ont été restaurés (ce qui se produit si hasSavedSession est vrai),
+        // on lance switchTab() pour s'assurer que le focus est correct
+        if (hasSavedSession && tabs.length > 0) {
+            switchTab(tabs[0].id);
+        } else if (hasSavedSession && tabs.length === 0) {
+             // Cas où localStorage existe mais est vide/invalide après parsing
+             createNewTab();
+        }
     });
     </script>
 </body>
