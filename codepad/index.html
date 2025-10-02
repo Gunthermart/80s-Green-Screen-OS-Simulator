@@ -436,7 +436,7 @@
         <div id="help-modal-content" class="bg-white dark:bg-gray-800 rounded-lg shadow-2xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
             <h3 id="help-title" class="text-2xl font-bold mb-4 border-b pb-2 text-gray-900 dark:text-gray-100">Aide - Utilisation du Bloc-notes Ace</h3>
             <div id="help-body" class="text-gray-700 dark:text-gray-300 space-y-4">
-                <!-- Content will be injected here by JS -->
+                <!-- Content will be injected here par JS -->
             </div>
             <div class="flex justify-end mt-6">
                 <button id="help-close-btn" class="bg-gray-500 hover:bg-gray-600 dark:bg-gray-600 dark:hover:bg-gray-500 text-white font-bold py-2 px-4 rounded">Fermer</button>
@@ -492,6 +492,7 @@
         // NOUVEAU: Gestion de la traduction (i18n)
         let currentLang = localStorage.getItem('app-language') || 'fr'; // Langue par défaut
         let splashTimeoutId = null; // ID pour le timer du splash screen
+        let isHiding = false; // Flag pour éviter le double déclenchement du masquage
         
         const i18n = {
             'fr': {
@@ -2472,8 +2473,9 @@
         
         // Fonction pour cacher le splash screen après l'animation
         function hideSplashScreen() {
-             // Vérifier si le splash screen est déjà caché
-             if(splashScreen.classList.contains('hidden') || splashScreen.classList.contains('splash-exit')) return;
+             // Utiliser le flag pour s'assurer que l'action n'est exécutée qu'une seule fois
+             if(isHiding) return;
+             isHiding = true;
 
              // Annuler le délai de 3 secondes s'il est encore actif
              if (splashTimeoutId) {
@@ -2487,10 +2489,16 @@
              // S'assurer que le splash screen est complètement retiré après l'animation (1s)
              setTimeout(() => {
                 splashScreen.classList.add('hidden');
-                // *** CORRECTION CLÉ: Créer l'onglet par défaut si aucun n'a été restauré ***
+                
+                // Si la restauration de session n'a rien donné, créer un onglet par défaut
                 if (tabs.length === 0) { 
                     createNewTab(); 
                 }
+                
+                // Le focus est perdu après la disparation du splash, on le restaure à l'éditeur actif
+                const activeEditor = findTabById(activeTabId)?.editor;
+                if (activeEditor) activeEditor.focus();
+
              }, 1000); 
         }
 
@@ -2532,13 +2540,18 @@
              
         } else {
              // Si une session est trouvée, restaurer immédiatement et ne pas afficher le splash screen.
-             restoreAutosavedTabs();
-             // S'assurer que l'onglet est créé et le focus est correct
+             const restored = restoreAutosavedTabs();
+             
+             // Si la restauration a eu lieu ou non, la création du nouvel onglet est gérée
+             // par la fonction hideSplashScreen() si tabs.length === 0, mais ici, on est
+             // certain qu'il y a des données ou on crée un nouvel onglet immédiatement.
+             if (!restored) {
+                 createNewTab();
+             }
+             
+             // S'assurer que le focus est correct
              if (tabs.length > 0) {
                  switchTab(tabs[0].id);
-             } else {
-                 // Si la session était vide/invalide
-                 createNewTab();
              }
         }
 
