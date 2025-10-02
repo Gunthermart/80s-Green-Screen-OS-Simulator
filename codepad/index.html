@@ -174,54 +174,10 @@
             z-index: 60;
         }
         
-        /* --- Styles du Splash Screen (Écran de Démarrage) --- */
-        #splash-screen {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background-color: #1f2937; /* gray-800, couleur sombre par défaut */
-            color: #f3f4f6; /* gray-100 */
-            font-family: 'Inter', sans-serif;
-            z-index: 9999;
-            opacity: 1;
-            transition: opacity 0.5s ease-out; /* Transition pour la disparition */
-        }
-        
-        /* Animation "Toast qui sort du grille-pain" */
-        @keyframes toastPop {
-            0% { transform: translateY(100vh); opacity: 0; }
-            50% { transform: translateY(0); opacity: 1; }
-            80% { transform: translateY(0); opacity: 1; }
-            100% { transform: translateY(-100vh); opacity: 0; }
-        }
-
-        .splash-exit {
-            animation: toastPop 1s ease-in-out forwards;
-        }
-
     </style>
 </head>
 <!-- NOTE: La classe 'dark' est laissée par défaut si le JS ne la change pas, pour un meilleur affichage initial sombre -->
 <body class="font-sans flex flex-col h-screen bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200">
-
-    <!-- Écran de Démarrage (Splash Screen) - Affiché uniquement si pas de session auto-sauvegardée -->
-    <div id="splash-screen" class="hidden">
-        <div class="text-center p-8 bg-gray-700/80 rounded-xl shadow-2xl backdrop-blur-sm border border-gray-600/50 transform transition-transform duration-500">
-            <h1 class="text-6xl font-extrabold tracking-tight text-blue-400 mb-2">CODEPAD</h1>
-            <p class="text-lg font-medium text-gray-300">Version 0.97 By Leonce Equity</p>
-            <p class="mt-4 text-sm text-gray-400">Chargement de l'éditeur...</p>
-            <button id="splash-ok-btn" class="mt-6 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition duration-150 ease-in-out">
-                OK, J'ai Compris
-            </button>
-        </div>
-    </div>
-    <!-- FIN Écran de Démarrage -->
-
 
     <!-- Conteneur principal de l'application -->
     <div class="flex flex-col h-full p-4 gap-4" role="application">
@@ -368,6 +324,11 @@
                 </div>
             </div>
             
+            <!-- NOUVEAU: Informations de Version (Déplacé du Splash Screen) -->
+            <div class="flex items-center text-sm font-medium text-gray-500 dark:text-gray-400 ml-4">
+                 CODEPAD Version 0.97 By Leonce Equity
+            </div>
+            
             <!-- NOUVEAU: Bouton Aide -->
             <button id="help-btn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium ml-auto" aria-label="Aide et fonctionnalités">?</button>
 
@@ -476,8 +437,6 @@
         const statusCursor = document.getElementById('status-cursor');
         const statusMode = document.getElementById('status-mode');
         const languageMenuSubmenu = document.getElementById('language-menu-submenu');
-        const splashScreen = document.getElementById('splash-screen'); // NOUVEAU: Référence au splash screen
-        const splashOkBtn = document.getElementById('splash-ok-btn'); // NOUVEAU: Référence au bouton OK
 
         let tabs = [];
         let tabCounter = 0;
@@ -491,8 +450,6 @@
         
         // NOUVEAU: Gestion de la traduction (i18n)
         let currentLang = localStorage.getItem('app-language') || 'fr'; // Langue par défaut
-        let splashTimeoutId = null; // ID pour le timer du splash screen
-        let isHiding = false; // Flag pour éviter le double déclenchement du masquage
         
         const i18n = {
             'fr': {
@@ -2471,37 +2428,6 @@
 
         // --- Initialisation ---
         
-        // Fonction pour cacher le splash screen après l'animation
-        function hideSplashScreen() {
-             // Utiliser le flag pour s'assurer que l'action n'est exécutée qu'une seule fois
-             if(isHiding) return;
-             isHiding = true;
-
-             // Annuler le délai de 3 secondes s'il est encore actif
-             if (splashTimeoutId) {
-                clearTimeout(splashTimeoutId);
-                splashTimeoutId = null;
-             }
-             
-             // Lancer l'animation de sortie
-             splashScreen.classList.add('splash-exit');
-             
-             // S'assurer que le splash screen est complètement retiré après l'animation (1s)
-             setTimeout(() => {
-                splashScreen.classList.add('hidden');
-                
-                // Si la restauration de session n'a rien donné, créer un onglet par défaut
-                if (tabs.length === 0) { 
-                    createNewTab(); 
-                }
-                
-                // Le focus est perdu après la disparation du splash, on le restaure à l'éditeur actif
-                const activeEditor = findTabById(activeTabId)?.editor;
-                if (activeEditor) activeEditor.focus();
-
-             }, 1000); 
-        }
-
         // 1. Charger la configuration locale
         const savedFontSize = localStorage.getItem('ace-font-size');
         if (savedFontSize) currentFontSize = parseInt(savedFontSize, 10);
@@ -2522,37 +2448,17 @@
         // Utiliser setTheme pour initialiser les classes dark/light correctement
         setTheme(currentThemeKey); 
 
-        // 3. Restaurer ou créer l'onglet initial
-        const hasSavedSession = localStorage.getItem(AUTOSAVE_STORAGE_KEY) !== null;
+        // 3. Restaurer ou créer l'onglet initial (Pas de Splash Screen)
+        const restored = restoreAutosavedTabs();
         
-        // Si aucune session n'est enregistrée, afficher le splash screen.
-        if (!hasSavedSession) {
-             splashScreen.classList.remove('hidden');
-             
-             // Attacher l'écouteur du bouton OK
-             splashOkBtn.addEventListener('click', hideSplashScreen); 
-             
-             // Focus sur le bouton OK pour permettre la validation avec Enter
-             splashOkBtn.focus();
-             
-             // Afficher pendant 3 secondes, puis cacher avec l'animation (automatique)
-             splashTimeoutId = setTimeout(hideSplashScreen, 3000);
-             
-        } else {
-             // Si une session est trouvée, restaurer immédiatement et ne pas afficher le splash screen.
-             const restored = restoreAutosavedTabs();
-             
-             // Si la restauration a eu lieu ou non, la création du nouvel onglet est gérée
-             // par la fonction hideSplashScreen() si tabs.length === 0, mais ici, on est
-             // certain qu'il y a des données ou on crée un nouvel onglet immédiatement.
-             if (!restored) {
-                 createNewTab();
-             }
-             
-             // S'assurer que le focus est correct
-             if (tabs.length > 0) {
-                 switchTab(tabs[0].id);
-             }
+        if (tabs.length === 0) {
+             // Si aucun onglet n'a été restauré (session vide ou inexistante)
+             createNewTab();
+        } 
+        
+        // S'assurer que le focus est correct
+        if (tabs.length > 0) {
+            switchTab(tabs[0].id);
         }
 
         // 4. Gestion des événements de fenêtre
