@@ -215,6 +215,9 @@
             <h1 class="text-6xl font-extrabold tracking-tight text-blue-400 mb-2">CODEPAD</h1>
             <p class="text-lg font-medium text-gray-300">Version 0.97 By Leonce Equity</p>
             <p class="mt-4 text-sm text-gray-400">Chargement de l'éditeur...</p>
+            <button id="splash-ok-btn" class="mt-6 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition duration-150 ease-in-out">
+                OK, J'ai Compris
+            </button>
         </div>
     </div>
     <!-- FIN Écran de Démarrage -->
@@ -474,6 +477,7 @@
         const statusMode = document.getElementById('status-mode');
         const languageMenuSubmenu = document.getElementById('language-menu-submenu');
         const splashScreen = document.getElementById('splash-screen'); // NOUVEAU: Référence au splash screen
+        const splashOkBtn = document.getElementById('splash-ok-btn'); // NOUVEAU: Référence au bouton OK
 
         let tabs = [];
         let tabCounter = 0;
@@ -487,6 +491,7 @@
         
         // NOUVEAU: Gestion de la traduction (i18n)
         let currentLang = localStorage.getItem('app-language') || 'fr'; // Langue par défaut
+        let splashTimeoutId = null; // ID pour le timer du splash screen
         
         const i18n = {
             'fr': {
@@ -829,26 +834,26 @@
 
                     <h4 class="text-xl font-semibold text-blue-600 dark:text-blue-400 mt-6">Gestión de Sesiones y Recientes</h4>
                     <ul class="list-disc list-inside ml-4 space-y-1">
-                        <li><strong>Guardar/Cargar Sesión</strong>: Guarda/Carga el estado completo de TODAS las pestañas (contenido, título, posición del cursor, puntos de interrupción) en un archivo <code>.cp</code>.</li>
-                        <li><strong>Restauración Automática</strong>: El estado de su sesión se guarda localmente en el navegador antes de cerrar o recargar.</li>
-                        <li><strong>Borrar Sesión Local</strong>: Elimina todos los datos de auto-guardado y sesión del navegador.</li>
-                        <li><strong>Archivos Recientes</strong>: Almacena los últimos 5 nombres de archivos abiertos localementepara una referencia rápida (requiert la reapertura manual por motivos de seguridad).</li>
+                        <li><strong>Save/Load Session</strong>: Saves/Loads the complete state of ALL tabs (content, title, cursor position, breakpoints) to a <code>.cp</code> file.</li>
+                        <li><strong>Auto-Restore</strong>: Your session state is saved locally in the browser before closing or reloading.</li>
+                        <li><strong>Clear Local Session</strong>: Deletes all auto-save and session data from the browser.</li>
+                        <li><strong>Recent Files</strong>: Stores the last 5 file names opened locally for quick reference (requires manual re-opening for security reasons).</li>
                     </ul>
 
                     <h4 class="text-xl font-semibold text-blue-600 dark:text-blue-400 mt-6">Edición, Navegación y Atajos</h4>
                     <ul class="list-disc list-inside ml-4 space-y-1">
-                        <li><strong>Temas e Idiomas</strong>: El menú *Ver* le permite cambiar el tema visual (Claro/Oscuro) y establecer el modo de resaltado de sintaxis (JavaScript, HTML, Python, etc.).</li>
-                        <li><strong>Emmet</strong>: En los modos HTML/CSS, escriba una abreviatura (ej: <code>div.contenedor>p*2</code>) y presione <kbd>Tab</kbd> para expandirla al instante.</li>
-                        <li><strong>Ir a la Línea...</strong> (Ctrl+L): Abre un modal para moverse rápidamente al número de línea especificado.</li>
-                        <li><strong>Puntos de Interrupción Simulados</strong>: Haga clic en el área del número de línea (margen) para marcar o eliminar un punto de interrupción rojo. Estas marcas se guardan con su sesión.</li>
-                        <li><strong>Buscar/Reemplazar</strong> (Ctrl+F / Ctrl+H): Diálogos de búsqueda y reemplazo integrados de Ace Editor.</li>
+                        <li><strong>Themes and Languages</strong>: The *View* menu allows you to change the visual theme (Light/Dark) and set the syntax highlighting mode (JavaScript, HTML, Python, etc.).</li>
+                        <li><strong>Emmet</strong>: In HTML/CSS modes, write an abbreviation (e.g., <code>div.contenedor>p*2</code>) and press <kbd>Tab</kbd> to expand it instantly.</li>
+                        <li><strong>Go to Line...</strong> (Ctrl+L): Opens a modal to quickly move to a specific line number.</li>
+                        <li><strong>Simulated Breakpoints</strong>: Click the line number area (gutter) to mark or remove a red breakpoint. These marks are saved with your session.</li>
+                        <li><strong>Find/Replace</strong> (Ctrl+F / Ctrl+H): Integrated search and replace dialogs from Ace Editor.</li>
                     </ul>
 
                     <h4 class="text-xl font-semibold text-blue-600 dark:text-blue-400 mt-6">Configuración (Ver > Configuración del Editor)</h4>
                     <ul class="list-disc list-inside ml-4 space-y-1">
-                        <li><strong>Tamaño de Fuente +/-</strong>: Ajusta el tamaño del texto del editor.</li>
-                        <li><strong>Ajuste de Línea</strong>: Activa/Desactiva el ajuste de línea automático.</li>
-                        <li><strong>Caracteres Invisibles</strong>: Muestra espacios, tabulaciones y retornos de carro.</li>
+                        <li><strong>Font Size +/-</strong>: Adjusts the editor text size.</li>
+                        <li><strong>Word Wrap</strong>: Toggles automatic line wrapping on/off.</li>
+                        <li><strong>Invisible Characters</strong>: Displays spaces, tabs, and carriage returns.</li>
                     </ul>
                 `,
             },
@@ -2467,13 +2472,25 @@
         
         // Fonction pour cacher le splash screen après l'animation
         function hideSplashScreen() {
+             // Vérifier si le splash screen est déjà caché
+             if(splashScreen.classList.contains('hidden') || splashScreen.classList.contains('splash-exit')) return;
+
+             // Annuler le délai de 3 secondes s'il est encore actif
+             if (splashTimeoutId) {
+                clearTimeout(splashTimeoutId);
+                splashTimeoutId = null;
+             }
+             
+             // Lancer l'animation de sortie
              splashScreen.classList.add('splash-exit');
+             
              // S'assurer que le splash screen est complètement retiré après l'animation (1s)
              setTimeout(() => {
                 splashScreen.classList.add('hidden');
+                // S'assurer qu'un onglet est créé ou que le focus est correct après la disparation
+                if (tabs.length === 0) createNewTab();
              }, 1000); 
         }
-
 
         // 1. Charger la configuration locale
         const savedFontSize = localStorage.getItem('ace-font-size');
@@ -2501,16 +2518,27 @@
         // Si aucune session n'est enregistrée, afficher le splash screen.
         if (!hasSavedSession) {
              splashScreen.classList.remove('hidden');
-             // Afficher pendant 3 secondes, puis cacher avec l'animation
-             setTimeout(hideSplashScreen, 3000);
+             // En cas de clic sur le bouton OK
+             splashOkBtn.addEventListener('click', hideSplashScreen); 
+             
+             // Gérer la touche Entrée sur le bouton OK
+             splashOkBtn.focus();
+             
+             // Afficher pendant 3 secondes, puis cacher avec l'animation (automatique)
+             splashTimeoutId = setTimeout(hideSplashScreen, 3000);
 
-             // Créer l'onglet après le délai si aucune session n'est chargée
-             setTimeout(() => {
-                 if (tabs.length === 0) createNewTab();
-             }, 3000);
+             // IMPORTANT: Si l'utilisateur clique sur OK, hideSplashScreen s'occupera
+             // d'annuler ce timer et de créer l'onglet si nécessaire.
+             
         } else {
              // Si une session est trouvée, restaurer immédiatement et ne pas afficher le splash screen.
              restoreAutosavedTabs();
+             // S'assurer que l'onglet est créé et le focus est correct
+             if (tabs.length > 0) {
+                 switchTab(tabs[0].id);
+             } else {
+                 createNewTab();
+             }
         }
 
         // 4. Gestion des événements de fenêtre
@@ -2524,15 +2552,6 @@
         
         // 6. Afficher les fichiers récents au démarrage
         updateRecentFilesUI();
-        
-        // Si des onglets ont été restaurés (ce qui se produit si hasSavedSession est vrai),
-        // on lance switchTab() pour s'assurer que le focus est correct
-        if (hasSavedSession && tabs.length > 0) {
-            switchTab(tabs[0].id);
-        } else if (hasSavedSession && tabs.length === 0) {
-             // Cas où localStorage existe mais est vide/invalide après parsing
-             createNewTab();
-        }
     });
     </script>
 </body>
