@@ -24,6 +24,7 @@
             width: 100%;
             height: calc(100% - 88px); /* Hauteur moins la barre d'outils et de formule */
             overflow: auto;
+            position: relative; /* Pour le positionnement de la surbrillance */
         }
         table {
             border-collapse: collapse;
@@ -59,16 +60,27 @@
             cursor: pointer;
         }
         
-        /* Cellule sélectionnée */
+        /* Cellule sélectionnée (active) */
         .selected {
             border: 2px solid #1a73e8 !important;
-            caret-color: #1a73e8;
+            z-index: 2; /* S'assurer qu'elle est au-dessus de la surbrillance */
         }
 
-        /* Plage de sélection */
+        /* Plage de sélection (arrière-plan) */
         .selection-range {
             background-color: rgba(26, 115, 232, 0.1);
         }
+
+        /* Surbrillance de la sélection (bordure extérieure) */
+        #selection-overlay {
+            position: absolute;
+            display: none;
+            pointer-events: none;
+            border: 2px solid #0d47a1; /* Bleu foncé */
+            z-index: 1;
+            box-sizing: border-box;
+        }
+
 
         .toolbar-button, .toolbar-item {
             @apply p-2 rounded hover:bg-gray-200;
@@ -294,10 +306,10 @@
             <button id="pivot-table-btn" class="toolbar-button w-8 h-8 flex items-center justify-center" title="Tableau croisé dynamique"><i class="fas fa-table"></i></button>
             <button id="macro-btn" class="toolbar-button w-8 h-8 flex items-center justify-center" title="Macros"><i class="fas fa-robot text-red-500"></i></button>
             <div class="text-gray-300">|</div>
-            <button id="freeze-panes-btn" class="toolbar-button w-8 h-8 flex items-center justify-center" title="Figer les volets"><i class="fas fa-snowflake"></i></button>
             <button id="cond-format-btn" class="toolbar-button w-8 h-8 flex items-center justify-center" title="Mise en forme conditionnelle"><i class="fas fa-palette"></i></button>
             <button id="data-validation-btn" class="toolbar-button w-8 h-8 flex items-center justify-center" title="Validation des données"><i class="fas fa-check"></i></button>
              <button id="lock-cells-btn" class="toolbar-button w-8 h-8 flex items-center justify-center" title="Verrouiller/Déverrouiller la sélection"><i class="fas fa-lock"></i></button>
+            <button id="merge-btn" class="toolbar-button w-8 h-8 flex items-center justify-center" title="Fusionner la sélection"><i class="fas fa-compress-arrows-alt"></i></button>
             <div class="text-gray-300">|</div>
             <button id="bold-btn" class="toolbar-button w-8 h-8 flex items-center justify-center"><i class="fas fa-bold"></i></button>
             <button id="italic-btn" class="toolbar-button w-8 h-8 flex items-center justify-center"><i class="fas fa-italic"></i></button>
@@ -345,6 +357,7 @@
             <table id="spreadsheet">
                 <!-- Le contenu sera généré par JavaScript -->
             </table>
+             <div id="selection-overlay"></div>
         </div>
         
         <!-- Conteneur des graphiques -->
@@ -536,6 +549,27 @@
         </div>
     </div>
     
+    <!-- Modale de redimensionnement -->
+    <div id="resize-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-200">
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div class="mt-3 text-center">
+                <h3 id="resize-modal-title" class="text-lg leading-6 font-medium text-gray-900">Ajuster la taille</h3>
+                <div class="mt-2 px-7 py-3">
+                    <label id="resize-modal-label" for="resize-modal-input" class="block text-sm font-medium text-gray-700 text-left">Nouvelle taille (en pixels)</label>
+                    <input type="number" id="resize-modal-input" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                </div>
+                <div class="items-center px-4 py-3 sm:flex sm:flex-row-reverse">
+                    <button id="ok-resize-btn" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm">
+                        OK
+                    </button>
+                     <button id="cancel-resize-btn" type="button" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:mt-0 sm:w-auto sm:text-sm">
+                        Annuler
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Barre des feuilles -->
     <div class="sheets-bar">
         <div id="sheet-tabs" class="flex-grow flex items-center gap-1"></div>
@@ -612,24 +646,37 @@
         <div class="context-menu-item" id="insert-row-above"><i class="fas fa-arrow-up fa-fw mr-2"></i>Insérer une ligne au-dessus</div>
         <div class="context-menu-item" id="insert-row-below"><i class="fas fa-arrow-down fa-fw mr-2"></i>Insérer une ligne en dessous</div>
         <div class="context-menu-item" id="delete-row"><i class="fas fa-trash-alt fa-fw mr-2"></i>Supprimer la ligne</div>
+        <div class="context-menu-item" id="hide-row"><i class="fas fa-eye-slash fa-fw mr-2"></i>Masquer la ligne</div>
+        <div class="context-menu-item" id="unhide-row"><i class="fas fa-eye fa-fw mr-2"></i>Afficher la/les ligne(s)</div>
+        <div class="context-menu-item" id="resize-row"><i class="fas fa-arrows-alt-v fa-fw mr-2"></i>Ajuster la hauteur...</div>
         <div class="context-menu-separator"></div>
         <div class="context-menu-item" id="insert-col-left"><i class="fas fa-arrow-left fa-fw mr-2"></i>Insérer une colonne à gauche</div>
         <div class="context-menu-item" id="insert-col-right"><i class="fas fa-arrow-right fa-fw mr-2"></i>Insérer une colonne à droite</div>
         <div class="context-menu-item" id="delete-col"><i class="fas fa-trash-alt fa-fw mr-2"></i>Supprimer la colonne</div>
+        <div class="context-menu-item" id="hide-col"><i class="fas fa-eye-slash fa-fw mr-2"></i>Masquer la colonne</div>
+        <div class="context-menu-item" id="unhide-col"><i class="fas fa-eye fa-fw mr-2"></i>Afficher la/les colonne(s)</div>
+        <div class="context-menu-item" id="resize-col"><i class="fas fa-arrows-alt-h fa-fw mr-2"></i>Ajuster la largeur...</div>
         <div class="context-menu-separator"></div>
         <div class="context-menu-item" id="cut-context"><i class="fas fa-cut fa-fw mr-2"></i>Couper</div>
         <div class="context-menu-item" id="copy-context"><i class="fas fa-copy fa-fw mr-2"></i>Copier</div>
         <div class="context-menu-item" id="paste-context"><i class="fas fa-paste fa-fw mr-2"></i>Coller</div>
+        <div class="context-menu-item" id="clear-content-context"><i class="fas fa-eraser fa-fw mr-2"></i>Effacer le contenu</div>
+        <div class="context-menu-separator"></div>
+        <div class="context-menu-item" id="merge-context"><i class="fas fa-compress-arrows-alt fa-fw mr-2"></i>Fusionner les cellules</div>
+        <div class="context-menu-item" id="unmerge-context"><i class="fas fa-expand-arrows-alt fa-fw mr-2"></i>Annuler la fusion</div>
         <div class="context-menu-separator"></div>
         <div class="context-menu-item" id="lock-cells-context"><i class="fas fa-lock fa-fw mr-2"></i>Verrouiller la sélection</div>
         <div class="context-menu-item" id="unlock-cells-context"><i class="fas fa-lock-open fa-fw mr-2"></i>Déverrouiller la sélection</div>
         <div class="context-menu-separator"></div>
         <div class="context-menu-item" id="sort-asc"><i class="fas fa-sort-alpha-down fa-fw mr-2"></i>Trier A → Z</div>
         <div class="context-menu-item" id="sort-desc"><i class="fas fa-sort-alpha-up fa-fw mr-2"></i>Trier Z → A</div>
+        <div class="context-menu-separator"></div>
+        <div class="context-menu-item" id="unhide-all"><i class="fas fa-eye fa-fw mr-2"></i>Afficher tout</div>
     </div>
 
     <!-- Menu contextuel Feuille -->
     <div id="sheet-context-menu">
+        <div class="context-menu-item" id="duplicate-sheet-context"><i class="fas fa-copy fa-fw mr-2"></i>Dupliquer la feuille</div>
         <div class="context-menu-item" id="delete-sheet-context"><i class="fas fa-trash-alt fa-fw mr-2 text-red-500"></i>Supprimer la feuille</div>
     </div>
 
@@ -654,7 +701,6 @@
         const redoBtn = document.getElementById('redo-btn');
         const chartBtn = document.getElementById('chart-btn');
         const findBtn = document.getElementById('find-btn');
-        const freezePanesBtn = document.getElementById('freeze-panes-btn');
         const chartModal = document.getElementById('chart-modal');
         const contextMenu = document.getElementById('context-menu');
         const tableContainer = document.getElementById('table-container');
@@ -669,17 +715,37 @@
         const pivotTableBtn = document.getElementById('pivot-table-btn');
         const macroBtn = document.getElementById('macro-btn');
         const lockCellsBtn = document.getElementById('lock-cells-btn');
+        const selectionOverlay = document.getElementById('selection-overlay');
+        const mergeBtn = document.getElementById('merge-btn');
+        const resizeModal = document.getElementById('resize-modal');
+        const resizeModalTitle = document.getElementById('resize-modal-title');
+        const resizeModalInput = document.getElementById('resize-modal-input');
+        let resizeTarget = { type: null, index: -1 };
 
         // --- GESTION DES DONNÉES PAR FEUILLE ---
         
+        function getCleanWorkbookState() {
+            // This function creates a new object representing the workbook state,
+            // but without the undo/redo history, to prevent infinite nesting when saving states.
+            const state = { ...workbook, sheets: {} };
+            for (const sheetName in workbook.sheets) {
+                const { undoStack, redoStack, ...sheetData } = workbook.sheets[sheetName];
+                state.sheets[sheetName] = sheetData;
+            }
+            // Use stringify/parse to create a true deep copy of the clean state.
+            return JSON.parse(JSON.stringify(state));
+        }
+
         function createNewSheet(type = 'grid') {
             return {
                 sheetType: type,
                 cellData: {},
+                merges: {}, // Pour stocker les fusions { 'A1': 'C2' }
+                hiddenRows: [],
+                hiddenColumns: [],
                 dataValidations: {},
                 undoStack: [],
                 redoStack: [],
-                frozenPanes: false,
                 conditionalFormats: [],
             };
         }
@@ -798,6 +864,7 @@
 
         function clearSelectionRange() {
             document.querySelectorAll('.selection-range').forEach(c => c.classList.remove('selection-range'));
+            selectionOverlay.style.display = 'none';
         }
 
         function updateSelectionRange(startId, endId) {
@@ -819,18 +886,51 @@
                     if (cell) cell.classList.add('selection-range');
                 }
             }
+
+            // Positionner la surbrillance
+            const firstCell = getCellFromId(getCoordsId({col: minCol, row: minRow}));
+            const lastCell = getCellFromId(getCoordsId({col: maxCol, row: maxRow}));
+            if (firstCell && lastCell) {
+                const containerRect = tableContainer.getBoundingClientRect();
+                const firstRect = firstCell.getBoundingClientRect();
+                const lastRect = lastCell.getBoundingClientRect();
+
+                const top = firstRect.top - containerRect.top + tableContainer.scrollTop;
+                const left = firstRect.left - containerRect.left + tableContainer.scrollLeft;
+                const width = lastRect.right - firstRect.left;
+                const height = lastRect.bottom - firstRect.top;
+
+                selectionOverlay.style.top = `${top - 1}px`; // -1 pour aligner parfaitement avec les bordures de la grille
+                selectionOverlay.style.left = `${left - 1}px`;
+                selectionOverlay.style.width = `${width}px`;
+                selectionOverlay.style.height = `${height}px`;
+                selectionOverlay.style.display = 'block';
+            }
+
             if (startId === endId) {
                  cellAddress.textContent = startId;
+                 mergeBtn.disabled = true;
             } else {
                  const startIdOrdered = getCoordsId({col: minCol, row: minRow});
                  const endIdOrdered = getCoordsId({col: maxCol, row: maxRow});
                  cellAddress.textContent = `${startIdOrdered}:${endIdOrdered}`;
+                 mergeBtn.disabled = false;
             }
         }
 
 
         function updateAllFormulas(fullRender = false) {
             const currentSheet = workbook.sheets[workbook.activeSheet];
+            
+            // Mettre à jour les cellules fusionnées d'abord pour éviter les recalculs inutiles
+            for (const startCell in currentSheet.merges) {
+                const endCell = currentSheet.merges[startCell];
+                const primaryCellData = currentSheet.cellData[startCell];
+                if (primaryCellData && primaryCellData.formula) {
+                    applyActionState(primaryCellData, false);
+                }
+            }
+            
             for (const id in currentSheet.cellData) {
                 const cellState = currentSheet.cellData[id];
                 if (cellState && cellState.formula) {
@@ -1090,9 +1190,12 @@
             if (action.type === 'macro') {
                 workbook = JSON.parse(JSON.stringify(action.before));
             } else if (action.type === 'gridChange' || action.type === 'sort') {
-                targetSheet.cellData = action.before;
-            } else if (action.type === 'freeze') {
-                targetSheet.frozenPanes = action.before;
+                if (action.before.merges) targetSheet.merges = action.before.merges;
+                if (action.before.cellData) targetSheet.cellData = action.before.cellData;
+                else targetSheet.cellData = action.before; // compatibilité ascendante
+            } else if (action.type === 'hideUnhide') {
+                targetSheet.hiddenRows = action.before.hiddenRows || [];
+                targetSheet.hiddenColumns = action.before.hiddenColumns || [];
             } else if (action.type === 'condFormat') {
                 targetSheet.conditionalFormats = action.before;
             } else if (action.type === 'validation') {
@@ -1127,9 +1230,14 @@
             if (action.type === 'macro') {
                 workbook = JSON.parse(JSON.stringify(action.after));
             } else if (action.type === 'gridChange' || action.type === 'sort') {
-                targetSheet.cellData = action.after;
-            } else if (action.type === 'freeze') {
-                targetSheet.frozenPanes = action.after;
+                 if (action.after.merges) targetSheet.merges = action.after.merges;
+                if (action.after.cellData) targetSheet.cellData = action.after.cellData;
+                else targetSheet.cellData = action.after; // compatibilité ascendante
+                 if (action.after.cellData) targetSheet.cellData = action.after.cellData;
+                else targetSheet.cellData = action.after; // compatibilité ascendante
+            } else if (action.type === 'hideUnhide') {
+                targetSheet.hiddenRows = action.after.hiddenRows || [];
+                targetSheet.hiddenColumns = action.after.hiddenColumns || [];
             } else if (action.type === 'condFormat') {
                 targetSheet.conditionalFormats = action.after;
             } else if (action.type === 'validation') {
@@ -1298,10 +1406,12 @@
                 const tab = document.createElement('div');
                 tab.textContent = name;
                 tab.className = 'sheet-tab';
+                tab.dataset.sheetName = name;
+
                 if (name === workbook.activeSheet) {
                     tab.classList.add('active');
                 }
-                tab.dataset.sheetName = name;
+                
                 sheetTabsContainer.appendChild(tab);
             });
         }
@@ -1310,8 +1420,17 @@
             const sheet = workbook.sheets[sheetName];
             const isPivot = sheet.sheetType === 'pivot';
             
-            applyFreezeState(sheet.frozenPanes, false); // Appliquer l'état sans enregistrer
-            
+            // Réinitialiser tous les colspans/rowspans et la visibilité
+            document.querySelectorAll('#spreadsheet td[id]').forEach(cell => {
+                cell.style.display = '';
+                cell.removeAttribute('colspan');
+                cell.removeAttribute('rowspan');
+            });
+            // Réinitialiser la visibilité des lignes/colonnes
+            spreadsheet.querySelectorAll('tbody tr').forEach(tr => tr.style.display = '');
+            spreadsheet.querySelectorAll('col, thead th').forEach(el => el.style.display = '');
+
+
             const sheetData = sheet.cellData;
             document.querySelectorAll('#spreadsheet td[id]').forEach(cell => {
                 const cellId = cell.id;
@@ -1330,6 +1449,48 @@
                      cell.textContent = '';
                 }
             });
+
+             // Appliquer les lignes masquées
+            sheet.hiddenRows.forEach(rowIndex => {
+                const row = spreadsheet.querySelector(`tbody tr:nth-child(${rowIndex + 1})`);
+                if (row) row.style.display = 'none';
+            });
+
+            // Appliquer les colonnes masquées
+            sheet.hiddenColumns.forEach(colIndex => {
+                const col = spreadsheet.querySelector(`colgroup col:nth-child(${colIndex + 2})`);
+                if (col) col.style.display = 'none';
+                const th = spreadsheet.querySelector(`thead th:nth-child(${colIndex + 2})`);
+                if (th) th.style.display = 'none';
+                spreadsheet.querySelectorAll('tbody tr').forEach(tr => {
+                    const td = tr.querySelector(`td:nth-child(${colIndex + 2})`);
+                    if (td) td.style.display = 'none';
+                });
+            });
+            
+            // Appliquer les fusions
+            for (const startCellId in sheet.merges) {
+                const endCellId = sheet.merges[startCellId];
+                const startCoords = getCellCoords(startCellId);
+                const endCoords = getCellCoords(endCellId);
+
+                const primaryCell = getCellFromId(startCellId);
+                if (primaryCell) {
+                    const colspan = endCoords.col - startCoords.col + 1;
+                    const rowspan = endCoords.row - startCoords.row + 1;
+                    if (colspan > 1) primaryCell.setAttribute('colspan', colspan);
+                    if (rowspan > 1) primaryCell.setAttribute('rowspan', rowspan);
+
+                    // Masquer les autres cellules de la fusion
+                    for (let r = startCoords.row; r <= endCoords.row; r++) {
+                        for (let c = startCoords.col; c <= endCoords.col; c++) {
+                            if (r === startCoords.row && c === startCoords.col) continue;
+                            const cellToHide = getCellFromId(getCoordsId({row: r, col: c}));
+                            if(cellToHide) cellToHide.style.display = 'none';
+                        }
+                    }
+                }
+            }
             
             applyConditionalFormattingToSheet();
             
@@ -1471,13 +1632,45 @@
                 initResizing(event);
             } 
             else {
-                const target = event.target;
+                let target = event.target;
                 if (target.tagName === 'TD' && target.id) {
-                    isSelecting = true;
-                    selectionStartCell = target.id;
-                    selectionEndCell = target.id;
-                    selectCell(target);
+                    // Vérifier si la cellule cliquée fait partie d'une fusion
+                    const mergeInfo = findMergeForCell(target.id);
+                    if (mergeInfo) {
+                        isSelecting = true;
+                        selectionStartCell = mergeInfo.start;
+                        selectionEndCell = mergeInfo.end;
+                        target = getCellFromId(mergeInfo.start); // La cellule active est la cellule primaire
+                        selectCell(target);
+                        updateSelectionRange(mergeInfo.start, mergeInfo.end);
+                    } else {
+                        isSelecting = true;
+                        selectionStartCell = target.id;
+                        selectionEndCell = target.id;
+                        selectCell(target);
+                    }
                 }
+            }
+        });
+
+        spreadsheet.addEventListener('click', (event) => {
+            const colHeader = event.target.closest('th[data-col-index]');
+            const rowHeader = event.target.closest('td[data-row-index]');
+
+            if (colHeader) {
+                const colIndex = parseInt(colHeader.dataset.colIndex, 10);
+                selectionStartCell = getCoordsId({ col: colIndex, row: 0 });
+                selectionEndCell = getCoordsId({ col: colIndex, row: ROWS - 1 });
+                const startCell = getCellFromId(selectionStartCell);
+                if (startCell) selectCell(startCell);
+                updateSelectionRange(selectionStartCell, selectionEndCell);
+            } else if (rowHeader) {
+                const rowIndex = parseInt(rowHeader.dataset.rowIndex, 10);
+                selectionStartCell = getCoordsId({ col: 0, row: rowIndex });
+                selectionEndCell = getCoordsId({ col: COLS - 1, row: rowIndex });
+                const startCell = getCellFromId(selectionStartCell);
+                if(startCell) selectCell(startCell);
+                updateSelectionRange(selectionStartCell, selectionEndCell);
             }
         });
 
@@ -1910,6 +2103,41 @@
         
         // --- GESTION DU TRI ET MENU CONTEXTUEL ---
         let contextMenuIndex = { row: -1, col: -1 };
+        let contextMenuCellId = null;
+
+        function openContextMenu(menu, event) {
+            // Make menu visible but hidden to get dimensions
+            menu.style.visibility = 'hidden';
+            menu.style.display = 'block';
+
+            const menuWidth = menu.offsetWidth;
+            const menuHeight = menu.offsetHeight;
+            const windowWidth = window.innerWidth;
+            const windowHeight = window.innerHeight;
+            const { clientX, clientY } = event;
+
+            let top = clientY;
+            let left = clientX;
+
+            // Adjust vertical position if it overflows the bottom
+            if (clientY + menuHeight > windowHeight) {
+                top = clientY - menuHeight;
+                // Handle case where it might overflow the top if the menu is very tall
+                if (top < 0) {
+                    top = 5; // some padding from top
+                }
+            }
+
+            // Adjust horizontal position if it overflows the right
+            if (clientX + menuWidth > windowWidth) {
+                left = clientX - menuWidth;
+            }
+            
+            // Apply position and make it visible
+            menu.style.top = `${top}px`;
+            menu.style.left = `${left}px`;
+            menu.style.visibility = 'visible';
+        }
 
         spreadsheet.addEventListener('contextmenu', e => {
             const th = e.target.closest('th');
@@ -1920,51 +2148,92 @@
             let menuShouldOpen = false;
 
             const separators = contextMenu.querySelectorAll('.context-menu-separator');
+            const cornerHeader = e.target.closest('thead th:first-child');
+            const sheet = workbook.sheets[workbook.activeSheet];
 
-            if (th && th.dataset.colIndex) { // Clic sur en-tête de colonne
-                e.preventDefault();
+            if (cornerHeader) {
                 menuShouldOpen = true;
-                contextMenuIndex = { col: parseInt(th.dataset.colIndex, 10), row: -1 };
+                if (sheet.hiddenRows.length > 0 || sheet.hiddenColumns.length > 0) {
+                    document.getElementById('unhide-all').style.display = 'block';
+                }
+            } else if (th && th.dataset.colIndex) { // Clic sur en-tête de colonne
+                menuShouldOpen = true;
+                const colIndex = parseInt(th.dataset.colIndex, 10);
+                contextMenuIndex = { col: colIndex, row: -1 };
+                
+                const hasHiddenAdjacentCol = sheet.hiddenColumns.includes(colIndex - 1) || sheet.hiddenColumns.includes(colIndex + 1);
+
                 document.getElementById('insert-col-left').style.display = 'block';
                 document.getElementById('insert-col-right').style.display = 'block';
                 document.getElementById('delete-col').style.display = 'block';
-                separators[3].style.display = 'block'; // Séparateur avant le tri
+                document.getElementById('hide-col').style.display = 'block';
+                if (hasHiddenAdjacentCol) {
+                    document.getElementById('unhide-col').style.display = 'block';
+                }
+                document.getElementById('resize-col').style.display = 'block';
+                separators[4].style.display = 'block'; // Séparateur avant le tri
                 document.getElementById('sort-asc').style.display = 'block';
                 document.getElementById('sort-desc').style.display = 'block';
                 
             } else if (td && td.dataset.rowIndex) { // Clic sur en-tête de ligne
-                e.preventDefault();
                 menuShouldOpen = true;
-                contextMenuIndex = { row: parseInt(td.dataset.rowIndex, 10), col: -1 };
+                const rowIndex = parseInt(td.dataset.rowIndex, 10);
+                contextMenuIndex = { row: rowIndex, col: -1 };
+                
+                const hasHiddenAdjacentRow = sheet.hiddenRows.includes(rowIndex - 1) || sheet.hiddenRows.includes(rowIndex + 1);
+
                 document.getElementById('insert-row-above').style.display = 'block';
                 document.getElementById('insert-row-below').style.display = 'block';
                 document.getElementById('delete-row').style.display = 'block';
+                document.getElementById('hide-row').style.display = 'block';
+                 if (hasHiddenAdjacentRow) {
+                    document.getElementById('unhide-row').style.display = 'block';
+                }
+                document.getElementById('resize-row').style.display = 'block';
             } else if (td && td.id) { // Clic sur une cellule de données
-                e.preventDefault();
                 menuShouldOpen = true;
+                contextMenuCellId = td.id;
+                const mergeInfo = findMergeForCell(td.id);
+
                 // Si on clique à l'intérieur d'une sélection existante
-                if (td.classList.contains('selection-range')) {
+                if (td.classList.contains('selection-range') && !mergeInfo) {
                     selectCell(td, false, true); // Sélectionne la cellule comme active, mais préserve la plage de sélection
                 } 
-                // Si on clique sur une nouvelle cellule (en dehors d'une sélection)
+                // Si on clique sur une nouvelle cellule ou une cellule fusionnée
                 else {
-                    selectCell(td, false, false); // Efface l'ancienne sélection et sélectionne la nouvelle cellule
-                    selectionStartCell = td.id;
-                    selectionEndCell = td.id;
-                    updateSelectionRange(td.id, td.id);
+                    if (mergeInfo) {
+                        selectionStartCell = mergeInfo.start;
+                        selectionEndCell = mergeInfo.end;
+                        const primaryCell = getCellFromId(mergeInfo.start);
+                        selectCell(primaryCell, false, false);
+                        updateSelectionRange(mergeInfo.start, mergeInfo.end);
+                    } else {
+                        selectCell(td, false, false); // Efface l'ancienne sélection et sélectionne la nouvelle cellule
+                        selectionStartCell = td.id;
+                        selectionEndCell = td.id;
+                        updateSelectionRange(td.id, td.id);
+                    }
                 }
                 document.getElementById('cut-context').style.display = 'block';
                 document.getElementById('copy-context').style.display = 'block';
                 document.getElementById('paste-context').style.display = 'block';
-                separators[2].style.display = 'block'; // Séparateur avant le verrouillage
+                document.getElementById('clear-content-context').style.display = 'block';
+                
+                separators[2].style.display = 'block'; // Séparateur avant la fusion
+                if(mergeInfo) {
+                    document.getElementById('unmerge-context').style.display = 'block';
+                } else if (selectionStartCell !== selectionEndCell) {
+                    document.getElementById('merge-context').style.display = 'block';
+                }
+
+                separators[3].style.display = 'block'; // Séparateur avant le verrouillage
                 document.getElementById('lock-cells-context').style.display = 'block';
                 document.getElementById('unlock-cells-context').style.display = 'block';
             } 
 
             if(menuShouldOpen) {
-                contextMenu.style.top = `${e.clientY}px`;
-                contextMenu.style.left = `${e.clientX}px`;
-                contextMenu.style.display = 'block';
+                e.preventDefault();
+                openContextMenu(contextMenu, e);
             }
         });
 
@@ -2034,6 +2303,103 @@
 
         document.getElementById('sort-asc').addEventListener('click', () => handleSort('asc'));
         document.getElementById('sort-desc').addEventListener('click', () => handleSort('desc'));
+
+        function handleClearContent() {
+            const targetCellIds = parseRange(`${selectionStartCell}:${selectionEndCell}`);
+            if (targetCellIds.length === 0) return;
+
+            const currentSheetData = workbook.sheets[workbook.activeSheet].cellData;
+            const changes = [];
+
+            targetCellIds.forEach(id => {
+                if (currentSheetData[id] && currentSheetData[id].locked) {
+                    console.warn(`La cellule ${id} est verrouillée. Contenu non effacé.`);
+                    return; // Ignorer cette cellule
+                }
+
+                const beforeState = { ...(currentSheetData[id] || { cellId: id, value: '', formula: null, style: '', format: 'standard', locked: false }) };
+
+                // Si la cellule est déjà vide, pas besoin de l'effacer
+                if (beforeState.value === '' && !beforeState.formula) return;
+
+                // Après l'effacement, on ne modifie que la valeur/formule
+                const afterState = { ...beforeState, value: '', formula: null };
+                changes.push({ before: beforeState, after: afterState });
+            });
+
+            if (changes.length > 0) {
+                changes.forEach(change => {
+                    const cellId = change.after.cellId;
+                    if (currentSheetData[cellId]) {
+                        currentSheetData[cellId].value = '';
+                        currentSheetData[cellId].formula = null;
+                    }
+                });
+                recordAction({ type: 'clearContent', changes });
+                loadSheet(workbook.activeSheet); // Re-rendre pour afficher les cellules vidées
+            }
+        }
+
+        // --- GESTION FUSION ---
+        function findMergeForCell(cellId) {
+            const sheet = workbook.sheets[workbook.activeSheet];
+            for (const startCell in sheet.merges) {
+                const endCell = sheet.merges[startCell];
+                const range = parseRange(`${startCell}:${endCell}`);
+                if (range.includes(cellId)) {
+                    return { start: startCell, end: endCell };
+                }
+            }
+            return null;
+        }
+
+        function handleMergeCells() {
+            const rangeStr = cellAddress.textContent;
+            if (rangeStr.indexOf(':') === -1) return; // Ne pas fusionner une seule cellule
+
+            const sheet = workbook.sheets[workbook.activeSheet];
+            const beforeState = { merges: { ...sheet.merges }, cellData: JSON.parse(JSON.stringify(sheet.cellData)) };
+
+            const cellIds = parseRange(rangeStr);
+            const primaryCellId = cellIds[0];
+            const endCellId = cellIds[cellIds.length - 1];
+
+            const primaryCellData = sheet.cellData[primaryCellId] || {};
+            let combinedValue = primaryCellData.value || '';
+            let combinedFormula = primaryCellData.formula || null;
+
+            // Pour simplifier, on ne garde que la valeur/formule de la première cellule.
+            // On pourrait aussi choisir de concaténer les valeurs si besoin.
+            
+            // Supprimer les données des autres cellules de la fusion
+            for (let i = 1; i < cellIds.length; i++) {
+                delete sheet.cellData[cellIds[i]];
+            }
+
+            sheet.merges[primaryCellId] = endCellId;
+            const afterState = { merges: { ...sheet.merges }, cellData: JSON.parse(JSON.stringify(sheet.cellData)) };
+            recordAction({ type: 'gridChange', before: beforeState, after: afterState }); // Utiliser gridChange pour sauvegarder merges+cellData
+            loadSheet(workbook.activeSheet);
+        }
+
+        function handleUnmergeCells() {
+            const mergeInfo = findMergeForCell(contextMenuCellId || selectedCell.id);
+            if (!mergeInfo) return;
+
+            const sheet = workbook.sheets[workbook.activeSheet];
+            const beforeState = { merges: { ...sheet.merges } };
+
+            delete sheet.merges[mergeInfo.start];
+            
+            const afterState = { merges: { ...sheet.merges } };
+            recordAction({ type: 'gridChange', before: beforeState, after: afterState });
+            loadSheet(workbook.activeSheet);
+        }
+
+        mergeBtn.addEventListener('click', handleMergeCells);
+        document.getElementById('merge-context').addEventListener('click', handleMergeCells);
+        document.getElementById('unmerge-context').addEventListener('click', handleUnmergeCells);
+
 
         function toggleLockCells(shouldLock) {
             const rangeStr = cellAddress.textContent;
@@ -2241,67 +2607,83 @@
         document.getElementById('insert-col-right').addEventListener('click', () => insertCol(contextMenuIndex.col + 1));
         document.getElementById('delete-col').addEventListener('click', () => deleteCol(contextMenuIndex.col));
 
-
-        // --- GESTION DES VOLETS ---
-        function handleFreezeScroll() {
+        function handleHideRow() {
+            if (contextMenuIndex.row === -1) return;
             const sheet = workbook.sheets[workbook.activeSheet];
-            if (!sheet || !sheet.frozenPanes) return;
-        
-            const { scrollTop, scrollLeft } = tableContainer;
-        
-            const topHeaders = spreadsheet.querySelectorAll('thead th');
-            const rowHeaders = spreadsheet.querySelectorAll('tbody td:first-child, thead th:first-child');
-        
-            topHeaders.forEach(th => {
-                th.style.transform = `translateY(${scrollTop}px)`;
-            });
-        
-            rowHeaders.forEach(td => {
-                td.style.transform = `translateX(${scrollLeft}px)`;
-            });
-        
-            const cornerHeader = spreadsheet.querySelector('thead th:first-child');
-            if (cornerHeader) {
-                cornerHeader.style.transform = `translate(${scrollLeft}px, ${scrollTop}px)`;
+
+            if (sheet.hiddenRows.includes(contextMenuIndex.row)) return; // Already hidden
+
+            const beforeState = { hiddenRows: [...sheet.hiddenRows], hiddenColumns: [...sheet.hiddenColumns] };
+            
+            sheet.hiddenRows.push(contextMenuIndex.row);
+            sheet.hiddenRows.sort((a, b) => a - b);
+            
+            const afterState = { hiddenRows: [...sheet.hiddenRows], hiddenColumns: [...sheet.hiddenColumns] };
+            recordAction({ type: 'hideUnhide', before: beforeState, after: afterState });
+            loadSheet(workbook.activeSheet);
+        }
+
+        function handleHideColumn() {
+            if (contextMenuIndex.col === -1) return;
+            const sheet = workbook.sheets[workbook.activeSheet];
+            
+            if (sheet.hiddenColumns.includes(contextMenuIndex.col)) return; // Already hidden
+
+            const beforeState = { hiddenRows: [...sheet.hiddenRows], hiddenColumns: [...sheet.hiddenColumns] };
+            
+            sheet.hiddenColumns.push(contextMenuIndex.col);
+            sheet.hiddenColumns.sort((a, b) => a - b);
+            
+            const afterState = { hiddenRows: [...sheet.hiddenRows], hiddenColumns: [...sheet.hiddenColumns] };
+            recordAction({ type: 'hideUnhide', before: beforeState, after: afterState });
+            loadSheet(workbook.activeSheet);
+        }
+
+        function handleUnhideAdjacent(type) {
+            const sheet = workbook.sheets[workbook.activeSheet];
+            const list = (type === 'row') ? sheet.hiddenRows : sheet.hiddenColumns;
+            const index = (type === 'row') ? contextMenuIndex.row : contextMenuIndex.col;
+
+            if (index === -1) return;
+
+            const itemsToUnhide = list.filter(hiddenIndex => hiddenIndex === index - 1 || hiddenIndex === index + 1);
+
+            if (itemsToUnhide.length > 0) {
+                const beforeState = { hiddenRows: [...sheet.hiddenRows], hiddenColumns: [...sheet.hiddenColumns] };
+                
+                if (type === 'row') {
+                    sheet.hiddenRows = sheet.hiddenRows.filter(r => !itemsToUnhide.includes(r));
+                } else {
+                    sheet.hiddenColumns = sheet.hiddenColumns.filter(c => !itemsToUnhide.includes(c));
+                }
+                
+                const afterState = { hiddenRows: [...sheet.hiddenRows], hiddenColumns: [...sheet.hiddenColumns] };
+                recordAction({ type: 'hideUnhide', before: beforeState, after: afterState });
+                loadSheet(workbook.activeSheet);
             }
         }
 
-        function applyFreezeState(isFrozen, record = true) {
-            const sheet = workbook.sheets[workbook.activeSheet];
-            if (record) {
-                const beforeState = sheet.frozenPanes;
-                if (beforeState === isFrozen) return; // Pas de changement
-                sheet.frozenPanes = isFrozen;
-                recordAction({ type: 'freeze', before: beforeState, after: isFrozen });
-            } else {
-                 sheet.frozenPanes = isFrozen;
-            }
-            
-            freezePanesBtn.classList.toggle('active', isFrozen);
-            
-            if (isFrozen) {
-                // S'assurer que les z-index sont corrects
-                spreadsheet.querySelectorAll('thead th').forEach(th => th.style.zIndex = '2');
-                spreadsheet.querySelectorAll('tbody td:first-child').forEach(td => td.style.zIndex = '1');
-                const corner = spreadsheet.querySelector('thead th:first-child');
-                if(corner) corner.style.zIndex = '3';
-                handleFreezeScroll(); // Appliquer la position initiale
-            } else {
-                // Réinitialiser les transformations et z-index
-                const allHeaders = spreadsheet.querySelectorAll('thead th, tbody td:first-child');
-                allHeaders.forEach(cell => {
-                    cell.style.transform = '';
-                    cell.style.zIndex = '';
-                });
-            }
-        }
-        
-        freezePanesBtn.addEventListener('click', () => {
-            const sheet = workbook.sheets[workbook.activeSheet];
-            applyFreezeState(!sheet.frozenPanes);
-        });
 
-        tableContainer.addEventListener('scroll', handleFreezeScroll);
+        function handleUnhideAll() {
+            const sheet = workbook.sheets[workbook.activeSheet];
+            if (sheet.hiddenRows.length === 0 && sheet.hiddenColumns.length === 0) return;
+
+            const beforeState = { hiddenRows: [...sheet.hiddenRows], hiddenColumns: [...sheet.hiddenColumns] };
+            sheet.hiddenRows = [];
+            sheet.hiddenColumns = [];
+            const afterState = { hiddenRows: [], hiddenColumns: [] };
+            recordAction({ type: 'hideUnhide', before: beforeState, after: afterState });
+            loadSheet(workbook.activeSheet);
+        }
+
+        document.getElementById('hide-row').addEventListener('click', handleHideRow);
+        document.getElementById('hide-col').addEventListener('click', handleHideColumn);
+        document.getElementById('unhide-row').addEventListener('click', () => handleUnhideAdjacent('row'));
+        document.getElementById('unhide-col').addEventListener('click', () => handleUnhideAdjacent('col'));
+        document.getElementById('unhide-all').addEventListener('click', handleUnhideAll);
+        document.getElementById('resize-row').addEventListener('click', () => openResizeModal('row', contextMenuIndex.row));
+        document.getElementById('resize-col').addEventListener('click', () => openResizeModal('col', contextMenuIndex.col));
+
 
         // --- MISE EN FORME CONDITIONNELLE ---
         const stylePresets = {
@@ -3066,8 +3448,6 @@
 
             if (action.type === 'gridChange' || action.type === 'sort') {
                 targetSheet.cellData = action.after;
-            } else if (action.type === 'freeze') {
-                targetSheet.frozenPanes = action.after;
             } else if (action.type === 'condFormat') {
                 targetSheet.conditionalFormats = action.after;
             } else if (action.type === 'validation') {
@@ -3083,13 +3463,13 @@
             const actions = workbook.macros[name];
             if (!actions) return;
             
-            const beforeWorkbook = JSON.parse(JSON.stringify(workbook));
+            const beforeWorkbook = getCleanWorkbookState();
 
             actions.forEach(action => {
                 applyRecordedAction(action, workbook);
             });
 
-            const afterWorkbook = JSON.parse(JSON.stringify(workbook));
+            const afterWorkbook = getCleanWorkbookState();
 
             const macroAction = {
                 type: 'macro',
@@ -3117,9 +3497,7 @@
             if (tab) {
                 e.preventDefault();
                 contextMenuSheetName = tab.dataset.sheetName;
-                sheetContextMenu.style.top = `${e.clientY}px`;
-                sheetContextMenu.style.left = `${e.clientX}px`;
-                sheetContextMenu.style.display = 'block';
+                openContextMenu(sheetContextMenu, e);
             }
         });
 
@@ -3130,7 +3508,7 @@
             }
             if (!contextMenuSheetName) return;
 
-            const beforeWorkbook = JSON.parse(JSON.stringify(workbook));
+            const beforeWorkbook = getCleanWorkbookState();
             
             const sheetToDelete = contextMenuSheetName;
             delete workbook.sheets[sheetToDelete];
@@ -3139,7 +3517,7 @@
                 workbook.activeSheet = Object.keys(workbook.sheets)[0];
             }
             
-            const afterWorkbook = JSON.parse(JSON.stringify(workbook));
+            const afterWorkbook = getCleanWorkbookState();
             
             const activeSheetData = workbook.sheets[workbook.activeSheet];
             activeSheetData.undoStack.push({
@@ -3153,12 +3531,98 @@
             loadSheet(workbook.activeSheet);
             updateUndoRedoButtons();
         });
+        
+        document.getElementById('duplicate-sheet-context').addEventListener('click', () => {
+            if (!contextMenuSheetName) return;
+            
+            const beforeWorkbook = getCleanWorkbookState();
+
+            const originalSheet = workbook.sheets[contextMenuSheetName];
+            let newName = `${contextMenuSheetName} (2)`;
+            let i = 2;
+            while (workbook.sheets[newName]) {
+                i++;
+                newName = `${contextMenuSheetName} (${i})`;
+            }
+
+            // Deep copy the sheet data
+            workbook.sheets[newName] = JSON.parse(JSON.stringify(originalSheet));
+            
+            // Reset undo/redo stacks for the new sheet
+            workbook.sheets[newName].undoStack = [];
+            workbook.sheets[newName].redoStack = [];
+
+            workbook.activeSheet = newName;
+
+            const afterWorkbook = getCleanWorkbookState();
+            
+            const newSheetData = workbook.sheets[workbook.activeSheet];
+            newSheetData.undoStack.push({
+                type: 'macro',
+                before: beforeWorkbook,
+                after: afterWorkbook
+            });
+            newSheetData.redoStack = [];
+
+            renderSheetTabs();
+            loadSheet(workbook.activeSheet);
+            updateUndoRedoButtons();
+        });
+        
+        // --- GESTION REDIMENSIONNEMENT LIGNE/COLONNE ---
+        function openResizeModal(type, index) {
+            resizeTarget = { type, index };
+            let targetElement;
+            let currentValue;
+
+            if (type === 'row') {
+                targetElement = spreadsheet.querySelector(`tbody tr:nth-child(${index + 1})`);
+                currentValue = targetElement ? targetElement.offsetHeight : 24; // Default height
+                resizeModalTitle.textContent = `Ajuster la hauteur de la ligne ${index + 1}`;
+            } else { // col
+                targetElement = spreadsheet.querySelector(`colgroup col:nth-child(${index + 2})`);
+                currentValue = targetElement ? parseInt(targetElement.style.width, 10) : 80; // Default width
+                resizeModalTitle.textContent = `Ajuster la largeur de la colonne ${String.fromCharCode(65 + index)}`;
+            }
+
+            resizeModalInput.value = currentValue;
+            resizeModal.classList.remove('hidden');
+            resizeModalInput.focus();
+        }
+
+        document.getElementById('cancel-resize-btn').addEventListener('click', () => {
+            resizeModal.classList.add('hidden');
+        });
+
+        document.getElementById('ok-resize-btn').addEventListener('click', () => {
+            const newValue = parseInt(resizeModalInput.value, 10);
+            if (isNaN(newValue) || newValue <= 0) {
+                console.warn("Valeur invalide.");
+                return;
+            }
+
+            if (resizeTarget.type === 'row') {
+                const targetRow = spreadsheet.querySelector(`tbody tr:nth-child(${resizeTarget.index + 1})`);
+                if (targetRow) {
+                    targetRow.style.height = `${newValue}px`;
+                }
+            } else if (resizeTarget.type === 'col') {
+                const targetCol = spreadsheet.querySelector(`colgroup col:nth-child(${resizeTarget.index + 2})`);
+                if (targetCol) {
+                    targetCol.style.width = `${newValue}px`;
+                }
+            }
+            
+            resizeModal.classList.add('hidden');
+        });
+
 
 
         // --- INITIALISATION ---
         document.getElementById('copy-context').addEventListener('click', handleCopy);
         document.getElementById('cut-context').addEventListener('click', handleCut);
         document.getElementById('paste-context').addEventListener('click', handlePaste);
+        document.getElementById('clear-content-context').addEventListener('click', handleClearContent);
 
         createGrid();
         renderSheetTabs();
@@ -3167,7 +3631,4 @@
     </script>
 </body>
 </html>
-
-
-
 
