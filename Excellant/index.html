@@ -80,6 +80,17 @@
             z-index: 1;
             box-sizing: border-box;
         }
+        
+        /* NOUVEAU : Surbrillance pour la sélection de formule */
+        #formula-selection-overlay {
+            position: absolute;
+            display: none;
+            pointer-events: none;
+            border: 2px dashed #f59e0b; /* Orange */
+            z-index: 4; /* Au-dessus de tout */
+            box-sizing: border-box;
+        }
+
 
         /* Poignée de remplissage (Fill Handle) */
         #fill-handle {
@@ -295,12 +306,31 @@
         .recording-dot {
             animation: blink 1s linear infinite;
         }
+
+        /* NOUVEAU : Styles pour le dropdown des fonctions */
+        #functions-dropdown .function-item {
+            padding: 8px 12px;
+            cursor: pointer;
+        }
+        #functions-dropdown .function-item:hover {
+            background-color: #f0f0f0;
+        }
+        #functions-dropdown .function-item .function-syntax {
+            font-family: monospace;
+            font-weight: bold;
+            display: block;
+            color: #333;
+        }
+        #functions-dropdown .function-item .function-desc {
+            font-size: 12px;
+            color: #666;
+        }
     </style>
 </head>
 <body class="bg-gray-100 flex flex-col h-screen">
     
     <div class="bg-gray-700 text-white font-bold p-2 text-center text-lg shadow-md">
-        Excellance V0.90
+        Excellance V0.93
     </div>
 
     <div class="main-container flex flex-col">
@@ -361,7 +391,14 @@
         <!-- Barre de formule -->
         <div class="bg-white p-2 border-b flex items-center shadow-sm">
              <div id="cell-address" class="px-3 py-1 border rounded font-mono text-gray-600 bg-gray-50 w-24 text-center">A1</div>
-            <div class="px-3 text-lg font-italic text-gray-500">fx</div>
+            
+            <div class="relative">
+                <button id="functions-btn" class="px-3 py-1 text-lg font-italic text-gray-500 hover:bg-gray-200 rounded" title="Liste des fonctions">ƒx</button>
+                <div id="functions-dropdown" class="hidden absolute top-full left-0 mt-1 w-80 bg-white border border-gray-300 rounded shadow-lg z-[210] max-h-60 overflow-y-auto">
+                    <!-- La liste des fonctions sera injectée ici par JS -->
+                </div>
+            </div>
+
             <input type="text" id="formula-input" class="w-full p-1 border-none focus:ring-2 focus:ring-blue-500 rounded-sm">
         </div>
 
@@ -371,6 +408,7 @@
                 <!-- Le contenu sera généré par JavaScript -->
             </table>
              <div id="selection-overlay"></div>
+             <div id="formula-selection-overlay"></div>
              <div id="fill-handle"></div>
         </div>
         
@@ -735,6 +773,9 @@
         const resizeModal = document.getElementById('resize-modal');
         const resizeModalTitle = document.getElementById('resize-modal-title');
         const resizeModalInput = document.getElementById('resize-modal-input');
+        const functionsBtn = document.getElementById('functions-btn');
+        const functionsDropdown = document.getElementById('functions-dropdown');
+        const formulaSelectionOverlay = document.getElementById('formula-selection-overlay');
         let resizeTarget = { type: null, index: -1 };
 
         // --- GESTION DES DONNÉES PAR FEUILLE ---
@@ -775,6 +816,16 @@
             activeSheet: 'Feuille 1'
         };
 
+        const functionList = {
+            SUM: { syntax: 'SUM(plage)', description: 'Calcule la somme d\'une plage de cellules.' },
+            AVERAGE: { syntax: 'AVERAGE(plage)', description: 'Calcule la moyenne d\'une plage de cellules.' },
+            COUNT: { syntax: 'COUNT(plage)', description: 'Compte le nombre de cellules numériques dans une plage.' },
+            CONCAT: { syntax: 'CONCAT(texte1; texte2; ...)', description: 'Concatène plusieurs chaînes de texte.' },
+            UPPER: { syntax: 'UPPER(texte)', description: 'Met une chaîne de texte en majuscules.' },
+            IF: { syntax: 'IF(condition; valeur_si_vrai; [valeur_si_faux])', description: 'Renvoie une valeur si une condition est vraie, et une autre si elle est fausse.' },
+            VLOOKUP: { syntax: 'VLOOKUP(valeur_cherchée; plage_tableau; no_index_col; [valeur_proche])', description: 'Recherche une valeur dans la première colonne d\'un tableau.' }
+        };
+
         const functions = {
             SUM: (args) => args.flat().reduce((a, b) => a + Number(b), 0),
             AVERAGE: (args) => {
@@ -784,7 +835,7 @@
             COUNT: (args) => args.flat().length,
             CONCAT: (args) => args.flat().join(''),
             UPPER: (args) => args.flat().length > 0 ? String(args.flat()[0]).toUpperCase() : '',
-            IF: (args, evaluate) => { // Handler spécial pour SI
+            IF: (args, evaluate) => {
                 if (args.length < 2 || args.length > 3) return '#N/A';
                 const condition = evaluate(args[0]);
                 if (condition) {
@@ -792,6 +843,36 @@
                 } else {
                     return args.length === 3 ? evaluate(args[2]) : false;
                 }
+            },
+            VLOOKUP: (args, evaluate) => {
+                if (args.length < 3) return '#N/A';
+                
+                const lookupValue = evaluate(args[0]);
+                const tableRangeStr = args[1];
+                const colIndexNum = evaluate(args[2]);
+                const rangeLookup = args.length > 3 ? evaluate(args[3]) : true;
+
+                const cellIds = parseRange(tableRangeStr.toUpperCase());
+                if (cellIds.length === 0) return '#REF!';
+
+                const startCoords = getCellCoords(cellIds[0]);
+                const endCoords = getCellCoords(cellIds[cellIds.length - 1]);
+                const colCount = endCoords.col - startCoords.col + 1;
+
+                const colIndex = Number(colIndexNum) - 1;
+                if (colIndex < 0 || colIndex >= colCount) return '#REF!';
+
+                for (let r = startCoords.row; r <= endCoords.row; r++) {
+                    const firstColCellId = getCoordsId({ row: r, col: startCoords.col });
+                    const firstColValue = evaluate(firstColCellId); 
+
+                    if (String(firstColValue).toLowerCase() === String(lookupValue).toLowerCase()) {
+                        const resultCellId = getCoordsId({ row: r, col: startCoords.col + colIndex });
+                        return evaluate(resultCellId);
+                    }
+                }
+                
+                return '#N/A';
             }
         };
         const functionMap = {
@@ -800,11 +881,12 @@
             'COUNT': 'COUNT', 'NB': 'COUNT',
             'CONCAT': 'CONCAT', 'CONCATENER': 'CONCAT',
             'UPPER': 'UPPER', 'MAJUSCULE': 'UPPER',
-            'IF': 'IF', 'SI': 'IF'
+            'IF': 'IF', 'SI': 'IF',
+            'VLOOKUP': 'VLOOKUP', 'RECHERCHEV': 'VLOOKUP'
         };
 
         function createGrid() {
-            spreadsheet.innerHTML = ''; // Vider la grille existante
+            spreadsheet.innerHTML = '';
             const colgroup = document.createElement('colgroup');
             const thead = document.createElement('thead');
             const tbody = document.createElement('tbody');
@@ -821,13 +903,13 @@
 
             const headerRow = document.createElement('tr');
             const cornerTh = document.createElement('th');
-            cornerTh.dataset.rowIndex = -1; // Pour référence
+            cornerTh.dataset.rowIndex = -1;
             headerRow.appendChild(cornerTh);
             
             for (let i = 0; i < COLS; i++) {
                 const th = document.createElement('th');
                 th.textContent = String.fromCharCode(65 + i);
-                th.dataset.colIndex = i; // Ajouter l'index de colonne pour le tri
+                th.dataset.colIndex = i;
                 const resizer = document.createElement('div');
                 resizer.className = 'col-resizer';
                 th.appendChild(resizer);
@@ -862,7 +944,9 @@
         let isSelecting = false;
         let selectionStartCell = null;
         let selectionEndCell = null;
-        let isAutoFilling = false; // Nouvel état pour la poignée de remplissage
+        let isAutoFilling = false;
+        let isEditingFormula = false; // NOUVEAU : État pour la sélection de formule
+        let formulaSelectionStart = null; // NOUVEAU : Pour garder le début de la sélection de plage de formule
 
         function getCellId(cell) { return cell.id; }
         function getCellFromId(id) { return document.getElementById(id); }
@@ -882,7 +966,7 @@
         function clearSelectionRange() {
             document.querySelectorAll('.selection-range').forEach(c => c.classList.remove('selection-range'));
             selectionOverlay.style.display = 'none';
-            fillHandle.style.display = 'none'; // Cacher la poignée
+            fillHandle.style.display = 'none';
         }
 
         function updateSelectionRange(startId, endId) {
@@ -905,7 +989,6 @@
                 }
             }
 
-            // Positionner la surbrillance
             const firstCell = getCellFromId(getCoordsId({col: minCol, row: minRow}));
             const lastCell = getCellFromId(getCoordsId({col: maxCol, row: maxRow}));
             if (firstCell && lastCell) {
@@ -918,13 +1001,12 @@
                 const width = lastRect.right - firstRect.left;
                 const height = lastRect.bottom - firstRect.top;
 
-                selectionOverlay.style.top = `${top - 1}px`; // -1 pour aligner parfaitement avec les bordures de la grille
+                selectionOverlay.style.top = `${top - 1}px`;
                 selectionOverlay.style.left = `${left - 1}px`;
                 selectionOverlay.style.width = `${width}px`;
                 selectionOverlay.style.height = `${height}px`;
                 selectionOverlay.style.display = 'block';
 
-                // Positionner la poignée de remplissage dans le coin inférieur droit de la sélection
                 fillHandle.style.top = `${top + height - fillHandle.offsetHeight / 2}px`;
                 fillHandle.style.left = `${left + width - fillHandle.offsetWidth / 2}px`;
                 fillHandle.style.display = 'block';
@@ -940,12 +1022,47 @@
                  mergeBtn.disabled = false;
             }
         }
+        
+        // NOUVELLE FONCTION : Met à jour la surbrillance pour la sélection de formule
+        function updateFormulaSelectionOverlay(startId, endId) {
+            if (!startId || !endId) {
+                formulaSelectionOverlay.style.display = 'none';
+                return;
+            }
+
+            const startCoords = getCellCoords(startId);
+            const endCoords = getCellCoords(endId);
+
+            const minCol = Math.min(startCoords.col, endCoords.col);
+            const maxCol = Math.max(startCoords.col, endCoords.col);
+            const minRow = Math.min(startCoords.row, endCoords.row);
+            const maxRow = Math.max(startCoords.row, endCoords.row);
+            
+            const firstCell = getCellFromId(getCoordsId({col: minCol, row: minRow}));
+            const lastCell = getCellFromId(getCoordsId({col: maxCol, row: maxRow}));
+
+            if (firstCell && lastCell) {
+                const containerRect = tableContainer.getBoundingClientRect();
+                const firstRect = firstCell.getBoundingClientRect();
+                const lastRect = lastCell.getBoundingClientRect();
+
+                const top = firstRect.top - containerRect.top + tableContainer.scrollTop;
+                const left = firstRect.left - containerRect.left + tableContainer.scrollLeft;
+                const width = lastRect.right - firstRect.left;
+                const height = lastRect.bottom - firstRect.top;
+
+                formulaSelectionOverlay.style.top = `${top - 1}px`;
+                formulaSelectionOverlay.style.left = `${left - 1}px`;
+                formulaSelectionOverlay.style.width = `${width}px`;
+                formulaSelectionOverlay.style.height = `${height}px`;
+                formulaSelectionOverlay.style.display = 'block';
+            }
+        }
 
 
         function updateAllFormulas(fullRender = false) {
             const currentSheet = workbook.sheets[workbook.activeSheet];
             
-            // Mettre à jour les cellules fusionnées d'abord pour éviter les recalculs inutiles
             for (const startCell in currentSheet.merges) {
                 const endCell = currentSheet.merges[startCell];
                 const primaryCellData = currentSheet.cellData[startCell];
@@ -966,7 +1083,7 @@
         }
         
         function rgbToHex(rgb) {
-            if (!rgb || !rgb.startsWith('rgb')) return '#ffffff'; // default
+            if (!rgb || !rgb.startsWith('rgb')) return '#ffffff';
             let sep = rgb.indexOf(",") > -1 ? "," : " ";
             rgb = rgb.substr(4).split(")")[0].split(sep);
             let r = (+rgb[0]).toString(16),
@@ -997,7 +1114,7 @@
             }
             if (!preserveSelection) {
                 clearSelectionRange();
-                selectionStartCell = cell.id; // Mise à jour de la sélection
+                selectionStartCell = cell.id;
                 selectionEndCell = cell.id;
                 cellAddress.textContent = cell.id;
             }
@@ -1010,12 +1127,6 @@
             formulaInput.disabled = !!(cellData && cellData.locked);
             updateToolbar(cell);
             updateValidationUI(selectedCell);
-            if (focus && !isSelecting) {
-                const currentSheet = workbook.sheets[workbook.activeSheet];
-                if (currentSheet.sheetType === 'grid') { // Seulement si c'est une grille standard
-                    // On ne donne plus le focus à la barre de formule par défaut pour l'édition directe
-                }
-            }
         }
 
         function parseRange(rangeStr) {
@@ -1026,10 +1137,9 @@
             const startCoords = getCellCoords(startCell);
             const endCoords = getCellCoords(endCell);
 
-            if (!startCoords || !endCoords) return []; // Gère les entrées invalides
+            if (!startCoords || !endCoords) return [];
 
             const cells = [];
-            // S'assure que les coordonnées sont ordonnées
             const minRow = Math.min(startCoords.row, endCoords.row);
             const maxRow = Math.max(startCoords.row, endCoords.row);
             const minCol = Math.min(startCoords.col, endCoords.col);
@@ -1063,16 +1173,12 @@
         }
 
         function splitArguments(argsStr) {
-            // REMARQUE : Ce parseur d'arguments est simple et peut échouer avec des cas complexes,
-            // comme des chaînes de caractères contenant des virgules ou des fonctions imbriquées.
-            // Une amélioration future pourrait utiliser un parseur plus robuste.
             const args = [];
             let depth = 0;
             let currentArg = '';
             for (let i = 0; i < argsStr.length; i++) {
                 const char = argsStr[i];
                 if (char === '"') {
-                    // Inverser l'état de la chaîne
                     const inString = !currentArg.endsWith('"');
                 }
                 if (char === '(') depth++;
@@ -1132,7 +1238,7 @@
                 const argsStr = match[2];
                 const args = splitArguments(argsStr);
 
-                if (funcName === 'IF') {
+                if (funcName === 'IF' || funcName === 'VLOOKUP') {
                     return func(args, evaluateFormula);
                 } else {
                     const evaluatedArgs = args.map(arg => evaluateFormula(arg));
@@ -1167,7 +1273,6 @@
             updateUndoRedoButtons();
 
             if (isRecording) {
-                // On ajoute le nom de la feuille à l'action pour savoir où la rejouer
                 currentMacro.push({sheet: workbook.activeSheet, ...action});
             }
         }
@@ -1196,13 +1301,11 @@
             let displayValue = state.value;
             if (state.formula) {
                  const result = evaluateFormula(state.formula);
-                 // Mettre à jour la valeur réelle dans les données
                  currentSheet.cellData[state.cellId].value = result;
                  displayValue = result;
             }
             
             cell.textContent = formatValue(displayValue, state.format || 'standard');
-            // La mise en forme est gérée par applyConditionalFormattingToSheet
         }
 
         function handleUndo() {
@@ -1218,7 +1321,7 @@
             } else if (action.type === 'gridChange' || action.type === 'sort') {
                 if (action.before.merges) targetSheet.merges = action.before.merges;
                 if (action.before.cellData) targetSheet.cellData = action.before.cellData;
-                else targetSheet.cellData = action.before; // compatibilité ascendante
+                else targetSheet.cellData = action.before;
             } else if (action.type === 'hideUnhide') {
                 targetSheet.hiddenRows = action.before.hiddenRows || [];
                 targetSheet.hiddenColumns = action.before.hiddenColumns || [];
@@ -1229,7 +1332,6 @@
             } else if (action.changes) {
                 action.changes.forEach(change => {
                     const cellId = change.before.cellId;
-                    // Si l'état "before" est plus qu'un simple ID, on le restaure. Sinon, on supprime la cellule.
                     if (Object.keys(change.before).length > 1) { 
                         targetSheet.cellData[cellId] = change.before;
                     } else {
@@ -1240,7 +1342,7 @@
 
             sheet.redoStack.push(action);
             
-            renderSheetTabs(); // Au cas où une macro a changé de feuille
+            renderSheetTabs();
             loadSheet(workbook.activeSheet);
             updateUndoRedoButtons();
         }
@@ -1257,9 +1359,8 @@
                 workbook = JSON.parse(JSON.stringify(action.after));
             } else if (action.type === 'gridChange' || action.type === 'sort') {
                  if (action.after.merges) targetSheet.merges = action.after.merges;
-                // CORRECTION : Suppression d'une répétition de code inutile.
                 if (action.after.cellData) targetSheet.cellData = action.after.cellData;
-                else targetSheet.cellData = action.after; // compatibilité ascendante
+                else targetSheet.cellData = action.after;
             } else if (action.type === 'hideUnhide') {
                 targetSheet.hiddenRows = action.after.hiddenRows || [];
                 targetSheet.hiddenColumns = action.after.hiddenColumns || [];
@@ -1298,9 +1399,9 @@
             
             clipboard.rows = maxRow - minRow + 1;
             clipboard.cols = maxCol - minCol + 1;
-            clipboard.startCoords = { row: minRow, col: minCol }; // Sauvegarder le coin supérieur gauche
+            clipboard.startCoords = { row: minRow, col: minCol };
 
-            let textToCopy = ''; // Pour le presse-papier système
+            let textToCopy = '';
 
             for (let row = minRow; row <= maxRow; row++) {
                 const rowData = [];
@@ -1308,7 +1409,6 @@
                 for (let col = minCol; col <= maxCol; col++) {
                     const cellId = getCoordsId({col, row});
                     const cellData = currentSheetData[cellId] || {};
-                    // Presse-papier interne
                     const data = {
                         value: cellData.value,
                         formula: cellData.formula || null,
@@ -1316,15 +1416,12 @@
                         format: cellData.format || 'standard'
                     };
                     rowData.push(data);
-                    // Texte pour le presse-papier système
                     textRow.push(cellData.formula || cellData.value || '');
                 }
                 clipboard.data.push(rowData);
                 textToCopy += textRow.join('\t') + '\n';
             }
 
-            // CORRECTION : Remplacement de navigator.clipboard.writeText par une méthode plus compatible
-            // pour éviter les erreurs de politique de permissions.
             try {
                 const textArea = document.createElement('textarea');
                 textArea.value = textToCopy;
@@ -1347,7 +1444,6 @@
             const currentSheet = workbook.sheets[workbook.activeSheet];
             const currentSheetData = currentSheet.cellData;
             
-            // Vérification du verrouillage AVANT de préparer les changements
             for(let r = 0; r < clipboard.rows; r++) {
                 for(let c = 0; c < clipboard.cols; c++) {
                     const targetCoords = { col: startPasteCoords.col + c, row: startPasteCoords.row + r };
@@ -1355,7 +1451,7 @@
                     const targetId = getCoordsId(targetCoords);
                     if (currentSheetData[targetId] && currentSheetData[targetId].locked) {
                         console.warn("Impossible de coller sur des cellules verrouillées.");
-                        return; // Annule le collage
+                        return;
                     }
                 }
             }
@@ -1391,9 +1487,8 @@
         }
 
         function handleCut() {
-            handleCopy(); // Copie la sélection actuelle en se basant sur selectionStartCell/EndCell
+            handleCopy();
 
-            // Détermine la plage à effacer en se basant sur les mêmes variables pour plus de robustesse
             const targetCellIds = parseRange(`${selectionStartCell}:${selectionEndCell}`);
             if (targetCellIds.length === 0) return;
 
@@ -1403,15 +1498,13 @@
             targetCellIds.forEach(id => {
                  if (currentSheetData[id] && currentSheetData[id].locked) {
                     console.warn(`La cellule ${id} est verrouillée. Opération Couper ignorée pour cette cellule.`);
-                    return; // Ignorer cette cellule
+                    return;
                  }
 
                  const beforeState = { ...(currentSheetData[id] || { cellId: id, value: '', formula: null, style: '', format: 'standard', locked: false }) };
 
-                 // N'effacer que si la cellule contient quelque chose
                  if (beforeState.value === '' && !beforeState.formula) return; 
 
-                 // Après avoir coupé, la cellule est vidée de sa valeur/formule mais conserve son style
                  const afterState = { ...beforeState, value: '', formula: null };
                  changes.push({ before: beforeState, after: afterState });
             });
@@ -1425,7 +1518,7 @@
                     }
                  });
                 recordAction({ type: 'cut', changes });
-                loadSheet(workbook.activeSheet); // Re-rendre pour afficher les cellules vidées
+                loadSheet(workbook.activeSheet);
             }
         }
 
@@ -1439,7 +1532,6 @@
                 const newColCharCode = colCharCode + colOffset;
                 const newRow = row + rowOffset;
 
-                // Ajout d'une vérification de borne pour éviter les références #REF! erronées
                 if (newColCharCode >= 65 && newColCharCode < 65 + COLS && newRow > 0 && newRow <= ROWS) {
                     return `${String.fromCharCode(newColCharCode)}${newRow}`;
                 }
@@ -1466,22 +1558,16 @@
         }
 
         function loadSheet(sheetName) {
-            // REMARQUE : Cette fonction redessine toute la grille à chaque changement.
-            // Pour des feuilles de calcul très volumineuses, une approche de "rendu partiel"
-            // (ne mettre à jour que les cellules modifiées) serait plus performante.
             const sheet = workbook.sheets[sheetName];
             const isPivot = sheet.sheetType === 'pivot';
             
-            // Réinitialiser tous les colspans/rowspans et la visibilité
             document.querySelectorAll('#spreadsheet td[id]').forEach(cell => {
                 cell.style.display = '';
                 cell.removeAttribute('colspan');
                 cell.removeAttribute('rowspan');
             });
-            // Réinitialiser la visibilité des lignes/colonnes
             spreadsheet.querySelectorAll('tbody tr').forEach(tr => tr.style.display = '');
             spreadsheet.querySelectorAll('col, thead th').forEach(el => el.style.display = '');
-
 
             const sheetData = sheet.cellData;
             document.querySelectorAll('#spreadsheet td[id]').forEach(cell => {
@@ -1502,13 +1588,11 @@
                 }
             });
 
-             // Appliquer les lignes masquées
             sheet.hiddenRows.forEach(rowIndex => {
                 const row = spreadsheet.querySelector(`tbody tr:nth-child(${rowIndex + 1})`);
                 if (row) row.style.display = 'none';
             });
 
-            // Appliquer les colonnes masquées
             sheet.hiddenColumns.forEach(colIndex => {
                 const col = spreadsheet.querySelector(`colgroup col:nth-child(${colIndex + 2})`);
                 if (col) col.style.display = 'none';
@@ -1520,7 +1604,6 @@
                 });
             });
             
-            // Appliquer les fusions
             for (const startCellId in sheet.merges) {
                 const endCellId = sheet.merges[startCellId];
                 const startCoords = getCellCoords(startCellId);
@@ -1533,7 +1616,6 @@
                     if (colspan > 1) primaryCell.setAttribute('colspan', colspan);
                     if (rowspan > 1) primaryCell.setAttribute('rowspan', rowspan);
 
-                    // Masquer les autres cellules de la fusion
                     for (let r = startCoords.row; r <= endCoords.row; r++) {
                         for (let c = startCoords.col; c <= endCoords.col; c++) {
                             if (r === startCoords.row && c === startCoords.col) continue;
@@ -1626,7 +1708,6 @@
 
         // --- GESTION DES ÉVÉNEMENTS ---
 
-        // Logique de redimensionnement
         let resizerElement = null;
         let startX, startY;
         let startWidth, startHeight;
@@ -1673,8 +1754,32 @@
         }
 
         spreadsheet.addEventListener('mousedown', (event) => {
-            // Ne déclencher la logique de sélection que pour le clic gauche
             if (event.button !== 0) return;
+            
+            // NOUVEAU : Logique de sélection pour les formules
+            if (isEditingFormula) {
+                let target = event.target.closest('td[id]');
+                if (target) {
+                    event.preventDefault();
+                    
+                    formulaSelectionStart = target.id;
+                    isSelecting = true;
+                    updateFormulaSelectionOverlay(target.id, target.id); // Affiche l'overlay
+                    
+                    const cursorPos = formulaInput.selectionStart || formulaInput.value.length;
+                    const textBefore = formulaInput.value.substring(0, cursorPos);
+                    const textAfter = formulaInput.value.substring(cursorPos);
+                    formulaInput.value = textBefore + target.id + textAfter;
+
+                    const newCursorPos = textBefore.length + target.id.length;
+                    formulaInput.focus();
+                    formulaInput.setSelectionRange(newCursorPos, newCursorPos);
+
+                    formulaInput.dataset.selectionStart = textBefore.length;
+                    formulaInput.dataset.selectionEnd = newCursorPos;
+                    return;
+                }
+            }
 
             const currentSheet = workbook.sheets[workbook.activeSheet];
             if (currentSheet.sheetType === 'pivot') return;
@@ -1684,15 +1789,14 @@
                 initResizing(event);
             } 
             else {
-                let target = event.target;
-                if (target.tagName === 'TD' && target.id) {
-                    // Vérifier si la cellule cliquée fait partie d'une fusion
+                let target = event.target.closest('td[id]');
+                if (target) {
                     const mergeInfo = findMergeForCell(target.id);
                     if (mergeInfo) {
                         isSelecting = true;
                         selectionStartCell = mergeInfo.start;
                         selectionEndCell = mergeInfo.end;
-                        target = getCellFromId(mergeInfo.start); // La cellule active est la cellule primaire
+                        target = getCellFromId(mergeInfo.start);
                         selectCell(target);
                         updateSelectionRange(mergeInfo.start, mergeInfo.end);
                     } else {
@@ -1705,23 +1809,19 @@
             }
         });
         
-        // Nouvelle écouteur pour la poignée de remplissage
         fillHandle.addEventListener('mousedown', (event) => {
-            // Empêcher la sélection de texte lors du glisser-déposer de la poignée
             event.preventDefault();
             event.stopPropagation();
             isAutoFilling = true;
             fillHandle.style.backgroundColor = '#0d67a1';
             document.body.style.cursor = 'crosshair';
             
-            // Attacher les écouteurs de mouvement et de relâchement à `document`
             document.addEventListener('mousemove', handleAutoFillMove);
             document.addEventListener('mouseup', handleAutoFillRelease);
         });
 
         function handleAutoFillMove(event) {
             if (isAutoFilling) {
-                // Trouver la cellule la plus proche
                 const target = event.target.closest('td[id]');
                 
                 if (target) {
@@ -1731,7 +1831,6 @@
                     const startCoords = getCellCoords(selectionStartCell);
                     const endCoords = getCellCoords(selectionEndCell);
                     
-                    // Déterminer la plage englobante pour l'affichage (source + zone de drag)
                     const minRow = Math.min(startCoords.row, endCoords.row);
                     const maxRow = Math.max(startCoords.row, endCoords.row);
                     const minCol = Math.min(startCoords.col, endCoords.col);
@@ -1745,7 +1844,6 @@
                     const newRangeStart = getCoordsId({col: finalMinCol, row: finalMinRow});
                     const newRangeEnd = getCoordsId({col: finalMaxCol, row: finalMaxRow});
 
-                    // Mise à jour de la surbrillance temporaire
                     updateSelectionRange(newRangeStart, newRangeEnd);
                 }
             }
@@ -1770,12 +1868,11 @@
         spreadsheet.addEventListener('dblclick', (event) => {
              const cell = event.target;
              if (cell.tagName === 'TD' && cell.id && cell.getAttribute('contenteditable') === 'true') {
-                 // S'assurer que le contenu visible est le contenu réel pour l'édition
                  const cellData = workbook.sheets[workbook.activeSheet].cellData[cell.id];
                  cell.textContent = (cellData && cellData.formula) ? cellData.formula : (cellData && cellData.value) || '';
 
                  cell.focus();
-                 event.preventDefault(); // Empêche l'édition en double-clic standard du navigateur
+                 event.preventDefault();
              }
         });
 
@@ -1804,18 +1901,51 @@
         let autoFillEndCell = null;
 
         spreadsheet.addEventListener('mouseover', (event) => {
-            const target = event.target;
+            const target = event.target.closest('td[id]');
 
-            if (isSelecting && target.tagName === 'TD' && target.id) {
+            if (isEditingFormula && isSelecting && target && formulaSelectionStart) {
+                const startId = formulaSelectionStart;
+                const endId = target.id;
+                updateFormulaSelectionOverlay(startId, endId);
+                
+                const startCoords = getCellCoords(startId);
+                const endCoords = getCellCoords(endId);
+                const minCol = Math.min(startCoords.col, endCoords.col);
+                const maxCol = Math.max(startCoords.col, endCoords.col);
+                const minRow = Math.min(startCoords.row, endCoords.row);
+                const maxRow = Math.max(startCoords.row, endCoords.row);
+                const rangeStartId = getCoordsId({col: minCol, row: minRow});
+                const rangeEndId = getCoordsId({col: maxCol, row: maxRow});
+                
+                let rangeText = rangeStartId;
+                if (rangeStartId !== rangeEndId) {
+                    rangeText += `:${rangeEndId}`;
+                }
+                
+                const textStart = parseInt(formulaInput.dataset.selectionStart, 10);
+                const textEnd = parseInt(formulaInput.dataset.selectionEnd, 10);
+                
+                const textBefore = formulaInput.value.substring(0, textStart);
+                const textAfter = formulaInput.value.substring(textEnd);
+                
+                formulaInput.value = textBefore + rangeText + textAfter;
+                
+                const newTextEnd = textStart + rangeText.length;
+                formulaInput.dataset.selectionEnd = newTextEnd;
+                
+                formulaInput.focus();
+                formulaInput.setSelectionRange(newTextEnd, newTextEnd);
+            } 
+            else if (isSelecting && target) {
                 selectionEndCell = target.id;
                 updateSelectionRange(selectionStartCell, selectionEndCell);
             }
-
-            // Suppression de la logique isAutoFilling ici, elle est gérée par handleAutoFillMove sur le document
         });
 
         document.addEventListener('mouseup', () => {
-            // Suppression de la logique de fin de sélection/autofill ici, elle est gérée par des écouteurs dédiés
+            if (isEditingFormula) {
+                formulaSelectionStart = null;
+            }
             isSelecting = false;
         });
 
@@ -1828,7 +1958,7 @@
             const endCoords = getCellCoords(selectionEndCell);
             const targetCoords = getCellCoords(targetId);
             
-            if (!targetCoords) return; // Si hors limites
+            if (!targetCoords) return;
 
             const sourceRect = { 
                 minRow: Math.min(startCoords.row, endCoords.row),
@@ -1837,7 +1967,6 @@
                 maxCol: Math.max(startCoords.col, endCoords.col)
             };
             
-            // Déterminer la plage de destination finale (union de la source et de la zone de drag)
             const fillRange = {
                 minRow: Math.min(sourceRect.minRow, targetCoords.row),
                 maxRow: Math.max(sourceRect.maxRow, targetCoords.row),
@@ -1845,20 +1974,17 @@
                 maxCol: Math.max(sourceRect.maxCol, targetCoords.col)
             };
 
-            // Dimensions de la plage source
             const sourceRows = sourceRect.maxRow - sourceRect.minRow + 1;
             const sourceCols = sourceRect.maxCol - sourceRect.minCol + 1;
 
             const changes = [];
 
-            // 1. Collecter les données source (pour les cycles)
             const initialData = [];
              for (let r = sourceRect.minRow; r <= sourceRect.maxRow; r++) {
                 const row = [];
                 for (let c = sourceRect.minCol; c <= sourceRect.maxCol; c++) {
                     const id = getCoordsId({ row: r, col: c });
                     row.push({ 
-                        // Récupérer les données brutes (valeur + formule)
                         ...(sheet.cellData[id] || { value: '', formula: null, style: '', format: 'standard', locked: false }),
                         baseRow: r, 
                         baseCol: c 
@@ -1867,7 +1993,6 @@
                 initialData.push(row);
             }
 
-            // 2. Appliquer les données à la plage de destination (fillRange)
             for (let r = fillRange.minRow; r <= fillRange.maxRow; r++) {
                 for (let c = fillRange.minCol; c <= fillRange.maxCol; c++) {
                     const currentId = getCoordsId({ row: r, col: c });
@@ -1875,41 +2000,33 @@
                     
                     const beforeState = { cellId: currentId, ...(sheet.cellData[currentId] || { value: '', formula: null, style: '', format: 'standard', locked: false }) };
                     
-                    if (beforeState.locked) continue; // Ignorer les cellules verrouillées
+                    if (beforeState.locked) continue;
 
-                    // Calcul des index cycliques (pour répéter le motif source)
                     const srcRowIndex = (r - sourceRect.minRow) % sourceRows;
                     const srcColIndex = (c - sourceRect.minCol) % sourceCols;
                     
-                    // La cellule source pour cette itération de remplissage
                     const sourceData = initialData[srcRowIndex][srcColIndex];
                     
                     let newValue = sourceData.value;
                     let newFormula = sourceData.formula;
 
-                    // Décalage (offset) du coin supérieur gauche de la source par rapport à la cellule courante
                     const rowOffset = r - sourceData.baseRow;
                     const colOffset = c - sourceData.baseCol;
                     
                     if (newFormula) {
-                        // --- Logique Formule ---
                         newFormula = updateFormulaReferences(sourceData.formula, rowOffset, colOffset);
-                        newValue = ''; // La valeur sera recalculée par updateAllFormulas
+                        newValue = '';
                     } else {
-                        // --- Logique Valeur (Copie ou Incrémentation) ---
                         const numValue = parseFloat(sourceData.value);
                         
                         if (!isNaN(numValue) && sourceData.value !== '') {
                             
                             let increment = 0;
                             
-                            // Déterminer la direction principale de l'extension
                             const isExtendingRow = r > sourceRect.maxRow || r < sourceRect.minRow;
                             const isExtendingCol = c > sourceRect.maxCol || c < sourceRect.minCol;
 
-                            // Cas : Source simple (une seule cellule)
                             if (sourceRows === 1 && sourceCols === 1) {
-                                // Si extension verticale ET horizontale, choisir le plus grand offset
                                 if (isExtendingRow && isExtendingCol) {
                                      increment = (Math.abs(rowOffset) > Math.abs(colOffset)) ? rowOffset : colOffset;
                                 } else if (isExtendingRow) {
@@ -1917,23 +2034,17 @@
                                 } else if (isExtendingCol) {
                                      increment = colOffset;
                                 } else {
-                                    // Dans la cellule source elle-même, on ne change rien (copie)
                                     increment = 0;
                                 }
                             } else {
-                                // Cas : Source est un motif (on copie le motif, pas d'incrémentation automatique par défaut)
                                 increment = 0;
                             }
                             
                             newValue = numValue + increment;
                         } else {
-                            // C'est du texte ou une chaîne. On copie la valeur source (cyclique)
                             newValue = sourceData.value;
                         }
                     }
-                    
-                    // On ne modifie pas la valeur dans la plage source, sauf si on tire par-dessus
-                    // Simplification : On applique toujours la valeur calculée à la plage finale pour la cohérence
                     
                     const afterState = {
                         cellId: currentId,
@@ -1945,7 +2056,7 @@
                     };
 
                     changes.push({ before: beforeState, after: afterState });
-                    sheet.cellData[currentId] = afterState; // Mise à jour de la structure de données
+                    sheet.cellData[currentId] = afterState;
                 }
             }
 
@@ -1953,7 +2064,6 @@
                 recordAction({ type: 'autofill', changes });
                 loadSheet(workbook.activeSheet);
                 
-                // Mettre à jour la sélection visuelle pour englober la zone de remplissage finale
                 selectionStartCell = getCoordsId({ row: fillRange.minRow, col: fillRange.minCol });
                 selectionEndCell = getCoordsId({ row: fillRange.maxRow, col: fillRange.maxCol });
                 updateSelectionRange(selectionStartCell, selectionEndCell);
@@ -1971,7 +2081,7 @@
             switch (e.key) {
                 case 'Enter':
                     e.preventDefault();
-                    selectedCell.blur(); // Déclenche focusout pour sauvegarder
+                    selectedCell.blur();
                     if (e.shiftKey) {
                         if (nextCoords.row > 0) nextCoords.row--;
                     } else {
@@ -1981,13 +2091,13 @@
                     break;
                 case 'Tab':
                     e.preventDefault();
-                    if (e.shiftKey) { // Shift + Tab
+                    if (e.shiftKey) {
                         if (nextCoords.col > 0) nextCoords.col--;
                         else if (nextCoords.row > 0) {
                             nextCoords.row--;
                             nextCoords.col = COLS - 1;
                         }
-                    } else { // Tab
+                    } else {
                         if (nextCoords.col < COLS - 1) nextCoords.col++;
                         else if (nextCoords.row < ROWS - 1) {
                             nextCoords.row++;
@@ -1996,37 +2106,17 @@
                     }
                     moved = true;
                     break;
-                case 'ArrowUp':
-                    if (nextCoords.row > 0) {
-                        nextCoords.row--;
-                        moved = true;
-                    }
-                    break;
-                case 'ArrowDown':
-                    if (nextCoords.row < ROWS - 1) {
-                        nextCoords.row++;
-                        moved = true;
-                    }
-                    break;
-                case 'ArrowLeft':
-                    if (nextCoords.col > 0) {
-                        nextCoords.col--;
-                        moved = true;
-                    }
-                    break;
-                case 'ArrowRight':
-                    if (nextCoords.col < COLS - 1) {
-                        nextCoords.col++;
-                        moved = true;
-                    }
-                    break;
+                case 'ArrowUp': if (nextCoords.row > 0) { nextCoords.row--; moved = true; } break;
+                case 'ArrowDown': if (nextCoords.row < ROWS - 1) { nextCoords.row++; moved = true; } break;
+                case 'ArrowLeft': if (nextCoords.col > 0) { nextCoords.col--; moved = true; } break;
+                case 'ArrowRight': if (nextCoords.col < COLS - 1) { nextCoords.col++; moved = true; } break;
             }
 
             if (moved) {
                 const nextCellId = getCoordsId(nextCoords);
                 const nextCell = getCellFromId(nextCellId);
                 if (nextCell) {
-                    setTimeout(() => { // Timeout pour s'assurer que blur est terminé
+                    setTimeout(() => {
                          selectCell(nextCell);
                          nextCell.focus();
                     }, 0);
@@ -2045,18 +2135,24 @@
                     cellId: id,
                     ...(currentSheetData[id] || { value: '', format: 'standard', style: '', formula: null})
                 };
+                const cellData = currentSheetData[id];
+                if (cellData && cellData.formula) {
+                    isEditingFormula = true;
+                    formulaInput.value = cellData.formula;
+                    cell.textContent = cellData.formula;
+                } else if(cell.textContent.startsWith('=')){
+                     isEditingFormula = true;
+                     formulaInput.value = cell.textContent;
+                }
             }
         });
 
         spreadsheet.addEventListener('focusout', (event) => {
             const cell = event.target;
-            // Si l'élément a perdu le focus au profit d'un autre TD, on ignore pour laisser le `selectCell` gérer
-            if (event.relatedTarget && event.relatedTarget.tagName === 'TD') return;
-
+            
             if (cell.tagName === 'TD' && cell.id && beforeCellState && beforeCellState.cellId === cell.id) {
                 const text = cell.textContent;
 
-                // Validation
                 const validationRule = workbook.sheets[workbook.activeSheet].dataValidations[cell.id];
                 if (validationRule && !validateCell(text, validationRule)) {
                     cell.textContent = beforeCellState.value || '';
@@ -2070,62 +2166,108 @@
                 
                 if (text.startsWith('=')) {
                     newFormula = text;
-                    newValue = ''; // La valeur sera calculée
-                    cell.setAttribute('contenteditable', 'false'); // Empêcher l'édition du résultat
+                    newValue = '';
                 } else {
                     let parsed = parseFloat(text.replace(/[^\d,.-]/g, '').replace(',', '.'));
                     newValue = isNaN(parsed) ? text : parsed;
-                    cell.setAttribute('contenteditable', 'true');
                 }
                 
                 const afterState = {
                     cellId: beforeCellState.cellId,
                     value: newValue,
-                    style: beforeCellState.style, // Le style de base ne change pas ici
+                    style: beforeCellState.style,
                     formula: newFormula,
                     format: beforeCellState.format || 'standard',
                     locked: beforeCellState.locked || false,
                 };
 
                 if (JSON.stringify(beforeCellState) !== JSON.stringify(afterState)) {
-                     recordAction({
-                        type: 'cellEdit',
-                        changes: [{ before: beforeCellState, after: afterState }]
-                    });
-                     // On applique l'état sans enregistrer une nouvelle action (le record a été fait au-dessus)
-                     // Cela met à jour le DOM avec le résultat de la formule/valeur formatée
+                     recordAction({ type: 'cellEdit', changes: [{ before: beforeCellState, after: afterState }] });
                      applyActionState(afterState, false); 
                 } else {
-                    // Si rien n'a changé, on restaure l'affichage formatté
                     const cellData = workbook.sheets[workbook.activeSheet].cellData[cell.id] || {};
                     const displayValue = cellData.formula ? evaluateFormula(cellData.formula) : cellData.value;
                     cell.textContent = formatValue(displayValue, cellData.format || 'standard');
                 }
 
-                // S'assurer que la barre de formule est mise à jour après l'édition directe
                 if (selectedCell && selectedCell.id === cell.id) {
-                    formulaInput.value = (afterState.formula) ? afterState.formula : cell.textContent;
+                    formulaInput.value = newFormula ? newFormula : (afterState.value || '').toString();
                 }
 
                 updateAllFormulas(true);
             }
+            
             beforeCellState = null;
+            if (isEditingFormula) {
+                isEditingFormula = false;
+                formulaSelectionOverlay.style.display = 'none';
+            }
+        });
+        
+        // NOUVEAU : Gestion de l'état d'édition de formule depuis la barre de formule
+        formulaInput.addEventListener('focus', () => {
+            if (formulaInput.value.startsWith('=')) {
+                isEditingFormula = true;
+            }
+        });
+        formulaInput.addEventListener('input', () => {
+            isEditingFormula = formulaInput.value.startsWith('=');
+        });
+        formulaInput.addEventListener('blur', () => {
+            setTimeout(() => {
+                if (document.activeElement !== spreadsheet && !spreadsheet.contains(document.activeElement)) {
+                    isEditingFormula = false;
+                    formulaSelectionOverlay.style.display = 'none'; // Cache l'overlay
+                }
+            }, 100);
         });
 
         formulaInput.addEventListener('keydown', (event) => {
             if (event.key === 'Enter' && selectedCell) {
                 event.preventDefault();
-                // Simuler la perte de focus de la cellule active pour déclencher la sauvegarde
-                selectedCell.textContent = formulaInput.value;
-                selectedCell.dispatchEvent(new Event('focusout', { bubbles: true }));
+                isEditingFormula = false;
+                formulaSelectionOverlay.style.display = 'none';
                 
-                // Déplacer la sélection vers le bas après la saisie
+                const text = formulaInput.value;
+                const id = selectedCell.id;
+                const beforeState = {
+                    cellId: id,
+                    ...(workbook.sheets[workbook.activeSheet].cellData[id] || { value: '', format: 'standard', style: '', formula: null})
+                };
+
+                let newValue;
+                let newFormula = null;
+
+                if (text.startsWith('=')) {
+                    newFormula = text;
+                    newValue = '';
+                } else {
+                    let parsed = parseFloat(text.replace(/[^\d,.-]/g, '').replace(',', '.'));
+                    newValue = isNaN(parsed) ? text : parsed;
+                }
+
+                const afterState = {
+                    cellId: id,
+                    value: newValue,
+                    style: beforeState.style,
+                    formula: newFormula,
+                    format: beforeState.format || 'standard',
+                    locked: beforeState.locked || false,
+                };
+
+                if (JSON.stringify(beforeState) !== JSON.stringify(afterState)) {
+                     recordAction({
+                        type: 'cellEdit',
+                        changes: [{ before: beforeState, after: afterState }]
+                    });
+                     applyActionState(afterState, false); 
+                }
+
+                updateAllFormulas(true);
+                
                 const currentCoords = getCellCoords(selectedCell.id);
-                let nextCoords = { ...currentCoords };
-                if (nextCoords.row < ROWS - 1) {
-                    nextCoords.row++;
-                    const nextCellId = getCoordsId(nextCoords);
-                    const nextCell = getCellFromId(nextCellId);
+                if (currentCoords.row < ROWS - 1) {
+                    const nextCell = getCellFromId(getCoordsId({ ...currentCoords, row: currentCoords.row + 1}));
                     if (nextCell) {
                         selectCell(nextCell);
                         nextCell.focus();
@@ -2144,8 +2286,7 @@
                 if (event.key.toLowerCase() === 'c') {
                     event.preventDefault(); handleCopy();
                 } else if (event.key.toLowerCase() === 'v') {
-                    // Laisser l'événement 'paste' natif se déclencher.
-                    // Il sera intercepté par notre `document.addEventListener('paste', ...)`
+                    // Handled by the 'paste' event listener
                 } else if (event.key.toLowerCase() === 'z') {
                     event.preventDefault(); handleUndo();
                 } else if (event.key.toLowerCase() === 'y') {
@@ -2154,10 +2295,7 @@
             }
         });
         
-        // CORRECTION : Remplacement de l'ancienne fonction handleSystemPaste par un écouteur d'événement 'paste'
-        // C'est la méthode correcte pour gérer le collage depuis le presse-papier système sans erreur de permission.
         document.addEventListener('paste', (event) => {
-            // Si le focus n'est pas sur une cellule, on ne fait rien.
             if (!selectedCell) return;
             
             event.preventDefault();
@@ -2169,16 +2307,14 @@
                     return;
                 }
                 
-                // Parser le texte du presse-papier (lignes séparées par \n, colonnes par \t)
                 const rows = text.trim().split(/\r?\n/).map(row => row.split('\t'));
                 if (rows.length === 0) return;
 
-                // Convertir le texte parsé au format du presse-papier interne pour réutiliser la logique existante
                 clipboard.data = rows.map(row => 
                     row.map(cellValue => ({
                         value: cellValue.startsWith('=') ? '' : (isNaN(parseFloat(cellValue)) ? cellValue : parseFloat(cellValue)),
                         formula: cellValue.startsWith('=') ? cellValue : null,
-                        style: '', // Le style n'est pas conservé lors du collage externe
+                        style: '',
                         format: 'standard'
                     }))
                 );
@@ -2186,12 +2322,10 @@
                 clipboard.cols = rows[0].length;
                 clipboard.startCoords = getCellCoords(selectedCell.id);
 
-                // Utiliser la logique de collage interne, maintenant que les données sont prêtes
                 handlePaste();
 
             } catch (err) {
                 console.error('Erreur lors du collage : ', err);
-                // En cas d'erreur, se rabattre sur le presse-papier interne (pour la fonction couper/coller)
                 if (clipboard.data.length > 0) handlePaste();
             }
         });
@@ -2223,12 +2357,11 @@
                         const after = { ...before, style: tempDiv.style.cssText };
                         changes.push({before, after});
                         
-                        // Appliquer directement les données
                         currentSheetData[id] = after;
                     }
                 });
                 recordAction({type:'style', changes});
-                applyConditionalFormattingToSheet(); // Mettre à jour l'affichage
+                applyConditionalFormattingToSheet();
             }
         }
 
@@ -2293,13 +2426,11 @@
             const cellIds = parseRange(rangeStr);
             if(cellIds.length === 0) return;
 
-            // --- NOUVELLE LOGIQUE DE PARSING ---
             const startCoords = getCellCoords(cellIds[0]);
             const endCoords = getCellCoords(cellIds[cellIds.length - 1]);
             const rowCount = endCoords.row - startCoords.row + 1;
             const colCount = endCoords.col - startCoords.col + 1;
 
-            // 1. Extraire toutes les données dans une grille 2D
             const dataGrid = [];
             for (let r = 0; r < rowCount; r++) {
                 const rowData = [];
@@ -2313,39 +2444,38 @@
             let labels = [];
             let datasets = [];
             
-            // 2. Interpréter la grille en fonction du type de graphique
             if (type === 'scatter') {
                 if (colCount < 2) { console.warn("Pour un nuage de points, veuillez sélectionner au moins 2 colonnes (X et Y)."); return; }
                 const data = dataGrid.map(row => ({ x: parseFloat(row[0]) || 0, y: parseFloat(row[1]) || 0 }));
                 datasets.push({ label: dataGrid[0][0] || 'Données X vs Y', data });
 
             } else if (type === 'pie' || type === 'doughnut') {
-                if (colCount >= 2) { // Colonne 1 = labels, Colonne 2 = données
+                if (colCount >= 2) {
                     labels = dataGrid.map(row => row[0]);
                     const data = dataGrid.map(row => parseFloat(row[1]) || 0);
                     datasets.push({ data });
-                } else { // Une seule colonne
+                } else {
                     labels = dataGrid.map((row, i) => `Élément ${i + 1}`);
                     const data = dataGrid.map(row => parseFloat(row[0]) || 0);
                     datasets.push({ data });
                 }
 
-            } else { // Bar, Line, Radar
-                if (rowCount > 1 && colCount > 1) { // Format tableau
-                    labels = dataGrid.slice(1).map(row => row[0]); // Première colonne (sans en-tête)
+            } else {
+                if (rowCount > 1 && colCount > 1) {
+                    labels = dataGrid.slice(1).map(row => row[0]);
                     for (let c = 1; c < colCount; c++) {
                         datasets.push({
                             label: dataGrid[0][c] || `Série ${c}`,
                             data: dataGrid.slice(1).map(row => parseFloat(row[c]) || 0)
                         });
                     }
-                } else if (rowCount === 1 && colCount > 0) { // Une seule ligne
+                } else if (rowCount === 1 && colCount > 0) {
                     labels = dataGrid[0].map((_, c) => getCoordsId({row: startCoords.row, col: startCoords.col + c}).match(/[A-Z]+/)[0]);
                     datasets.push({
                         label: `Ligne ${startCoords.row + 1}`,
                         data: dataGrid[0].map(val => parseFloat(val) || 0)
                     });
-                } else if (colCount === 1 && rowCount > 0) { // Une seule colonne
+                } else if (colCount === 1 && rowCount > 0) {
                      labels = dataGrid.map((_, r) => `Ligne ${startCoords.row + r + 1}`);
                      datasets.push({
                         label: dataGrid[0][0] || `Colonne ${String.fromCharCode(65 + startCoords.col)}`,
@@ -2363,7 +2493,6 @@
             const wrapper = document.createElement('div');
             wrapper.className = 'chart-wrapper';
             
-            // ... (header and close button creation)
             const header = document.createElement('div');
             header.className = 'chart-header';
             const titleEl = document.createElement('h3');
@@ -2428,7 +2557,6 @@
                 options: chartOptions
             });
 
-            // Make chart draggable
             let isDragging = false;
             let offsetX, offsetY;
             header.addEventListener('mousedown', (e) => {
@@ -2454,7 +2582,6 @@
         let contextMenuCellId = null;
 
         function openContextMenu(menu, event) {
-            // Make menu visible but hidden to get dimensions
             menu.style.visibility = 'hidden';
             menu.style.display = 'block';
 
@@ -2467,21 +2594,15 @@
             let top = clientY;
             let left = clientX;
 
-            // Adjust vertical position if it overflows the bottom
             if (clientY + menuHeight > windowHeight) {
                 top = clientY - menuHeight;
-                // Handle case where it might overflow the top if the menu is very tall
-                if (top < 0) {
-                    top = 5; // some padding from top
-                }
+                if (top < 0) top = 5;
             }
 
-            // Adjust horizontal position if it overflows the right
             if (clientX + menuWidth > windowWidth) {
                 left = clientX - menuWidth;
             }
             
-            // Apply position and make it visible
             menu.style.top = `${top}px`;
             menu.style.left = `${left}px`;
             menu.style.visibility = 'visible';
@@ -2504,7 +2625,7 @@
                 if (sheet.hiddenRows.length > 0 || sheet.hiddenColumns.length > 0) {
                     document.getElementById('unhide-all').style.display = 'block';
                 }
-            } else if (th && th.dataset.colIndex) { // Clic sur en-tête de colonne
+            } else if (th && th.dataset.colIndex) {
                 menuShouldOpen = true;
                 const colIndex = parseInt(th.dataset.colIndex, 10);
                 contextMenuIndex = { col: colIndex, row: -1 };
@@ -2519,11 +2640,11 @@
                     document.getElementById('unhide-col').style.display = 'block';
                 }
                 document.getElementById('resize-col').style.display = 'block';
-                separators[4].style.display = 'block'; // Séparateur avant le tri
+                separators[4].style.display = 'block';
                 document.getElementById('sort-asc').style.display = 'block';
                 document.getElementById('sort-desc').style.display = 'block';
                 
-            } else if (td && td.dataset.rowIndex) { // Clic sur en-tête de ligne
+            } else if (td && td.dataset.rowIndex) {
                 menuShouldOpen = true;
                 const rowIndex = parseInt(td.dataset.rowIndex, 10);
                 contextMenuIndex = { row: rowIndex, col: -1 };
@@ -2538,14 +2659,11 @@
                     document.getElementById('unhide-row').style.display = 'block';
                 }
                 document.getElementById('resize-row').style.display = 'block';
-            } else if (td && td.id) { // Clic sur une cellule de données
+            } else if (td && td.id) {
                 menuShouldOpen = true;
                 contextMenuCellId = td.id;
                 const mergeInfo = findMergeForCell(td.id);
 
-                // --- LOGIQUE DE SÉLECTION CORRIGÉE POUR LE CLIC DROIT ---
-                // Si la cellule cliquée n'est pas dans la plage sélectionnée (ou si aucune sélection n'existe),
-                // on sélectionne la cellule cliquée comme nouvelle plage (une seule cellule).
                 if (!td.classList.contains('selection-range')) {
                     if (mergeInfo) {
                         selectionStartCell = mergeInfo.start;
@@ -2560,37 +2678,34 @@
                          updateSelectionRange(td.id, td.id);
                     }
                 } 
-                // Si la cellule cliquée fait déjà partie de la plage sélectionnée, on ne touche à rien.
                 
                 document.getElementById('cut-context').style.display = 'block';
                 document.getElementById('copy-context').style.display = 'block';
                 document.getElementById('paste-context').style.display = 'block';
                 document.getElementById('clear-content-context').style.display = 'block';
                 
-                separators[2].style.display = 'block'; // Séparateur avant la fusion
-                // La fusion/défusion est basée sur la plage de sélection existante
+                separators[2].style.display = 'block';
                 if(mergeInfo) {
                     document.getElementById('unmerge-context').style.display = 'block';
                 } else if (selectionStartCell !== selectionEndCell) {
                     document.getElementById('merge-context').style.display = 'block';
                 }
 
-                // Afficher toujours les options de verrouillage si on est sur une cellule de données.
                 separators[3].style.display = 'block'; 
                 document.getElementById('lock-cells-context').style.display = 'block';
                 document.getElementById('unlock-cells-context').style.display = 'block';
             } 
             
-            // Le menu doit s'ouvrir si on est sur une entête ou sur une cellule de données.
             if(menuShouldOpen) {
                 e.preventDefault();
                 openContextMenu(contextMenu, e);
             }
         });
 
-        document.addEventListener('click', () => {
+        document.addEventListener('click', (e) => {
             contextMenu.style.display = 'none';
             validationDropdown.style.display = 'none';
+            functionsDropdown.classList.add('hidden');
             const sheetContextMenu = document.getElementById('sheet-context-menu');
             if (sheetContextMenu) sheetContextMenu.style.display = 'none';
         });
@@ -2616,7 +2731,7 @@
 
         function handleSort(direction) {
             const sheet = workbook.sheets[workbook.activeSheet];
-            const originalCellData = JSON.parse(JSON.stringify(sheet.cellData)); // Deep copy for undo
+            const originalCellData = JSON.parse(JSON.stringify(sheet.cellData));
 
             let maxRow = -1;
             for (const cellId in sheet.cellData) {
@@ -2665,15 +2780,13 @@
             targetCellIds.forEach(id => {
                 if (currentSheetData[id] && currentSheetData[id].locked) {
                     console.warn(`La cellule ${id} est verrouillée. Contenu non effacé.`);
-                    return; // Ignorer cette cellule
+                    return;
                 }
 
                 const beforeState = { ...(currentSheetData[id] || { cellId: id, value: '', formula: null, style: '', format: 'standard', locked: false }) };
 
-                // Si la cellule est déjà vide, pas besoin de l'effacer
                 if (beforeState.value === '' && !beforeState.formula) return;
 
-                // Après l'effacement, on ne modifie que la valeur/formule
                 const afterState = { ...beforeState, value: '', formula: null };
                 changes.push({ before: beforeState, after: afterState });
             });
@@ -2687,7 +2800,7 @@
                     }
                 });
                 recordAction({ type: 'clearContent', changes });
-                loadSheet(workbook.activeSheet); // Re-rendre pour afficher les cellules vidées
+                loadSheet(workbook.activeSheet);
             }
         }
 
@@ -2706,7 +2819,7 @@
 
         function handleMergeCells() {
             const rangeStr = cellAddress.textContent;
-            if (rangeStr.indexOf(':') === -1) return; // Ne pas fusionner une seule cellule
+            if (rangeStr.indexOf(':') === -1) return;
 
             const sheet = workbook.sheets[workbook.activeSheet];
             const beforeState = { merges: { ...sheet.merges }, cellData: JSON.parse(JSON.stringify(sheet.cellData)) };
@@ -2716,20 +2829,14 @@
             const endCellId = cellIds[cellIds.length - 1];
 
             const primaryCellData = sheet.cellData[primaryCellId] || {};
-            let combinedValue = primaryCellData.value || '';
-            let combinedFormula = primaryCellData.formula || null;
-
-            // Pour simplifier, on ne garde que la valeur/formule de la première cellule.
-            // On pourrait aussi choisir de concaténer les valeurs si besoin.
             
-            // Supprimer les données des autres cellules de la fusion
             for (let i = 1; i < cellIds.length; i++) {
                 delete sheet.cellData[cellIds[i]];
             }
 
             sheet.merges[primaryCellId] = endCellId;
             const afterState = { merges: { ...sheet.merges }, cellData: JSON.parse(JSON.stringify(sheet.cellData)) };
-            recordAction({ type: 'gridChange', before: beforeState, after: afterState }); // Utiliser gridChange pour sauvegarder merges+cellData
+            recordAction({ type: 'gridChange', before: beforeState, after: afterState });
             loadSheet(workbook.activeSheet);
         }
 
@@ -2757,7 +2864,6 @@
             const sheet = workbook.sheets[workbook.activeSheet];
             if (sheet.sheetType === 'pivot') return;
 
-            // Déterminer la plage d'action. Utiliser la plage sélectionnée si définie, sinon la cellule active.
             let rangeStart = selectionStartCell;
             let rangeEnd = selectionEndCell;
 
@@ -2778,21 +2884,17 @@
             cellIds.forEach(id => {
                 const before = { cellId: id, ...(sheet.cellData[id] || { value: '', formula: null, style: '', format: 'standard', locked: false }) };
                 
-                // Si l'état est déjà correct, on ne fait rien pour cette cellule
                 if (before.locked === shouldLock) return;
 
                 const after = { ...before, locked: shouldLock };
                 changes.push({before, after});
                 
-                // Appliquer les changements aux données
                 if (!sheet.cellData[id]) sheet.cellData[id] = { cellId: id, value: '', formula: null, style: '', format: 'standard' };
                 sheet.cellData[id].locked = shouldLock;
 
-                // Mettre à jour le DOM et la barre de formule
                 const cell = getCellFromId(id);
                 if (cell) {
                     cell.classList.toggle('locked-cell', shouldLock);
-                    // Rendre le contenu éditable si non verrouillé (et non pivot)
                     cell.setAttribute('contenteditable', !shouldLock && sheet.sheetType !== 'pivot');
                     
                     if (selectedCell && selectedCell.id === id) {
@@ -2807,7 +2909,6 @@
         }
         
         lockCellsBtn.addEventListener('click', () => {
-            // Le bouton de la barre d'outils fait un "toggle" basé sur la première cellule.
             const rangeStr = cellAddress.textContent;
             if (!rangeStr) return;
 
@@ -2815,21 +2916,16 @@
             const sheet = workbook.sheets[workbook.activeSheet];
             const firstCellData = sheet.cellData[firstCellId];
 
-            // On verrouille si la première cellule n'est pas verrouillée, sinon on déverrouille tout.
             const shouldLock = !(firstCellData && firstCellData.locked);
             toggleLockCells(shouldLock);
         });
 
         document.getElementById('lock-cells-context').addEventListener('click', () => {
-            // Utilise la plage définie par la sélection globale
             if(selectionStartCell) toggleLockCells(true);
         });
         document.getElementById('unlock-cells-context').addEventListener('click', () => {
-            // Utilise la plage définie par la sélection globale
             if(selectionStartCell) toggleLockCells(false);
         });
-        // --- FIN LOGIQUE DE VERROUILLAGE/DÉVERROUILLAGE ---
-
 
         // --- GESTION LIGNES/COLONNES ---
         function adjustFormula(formula, opType, opAxis, opIndex) {
@@ -2844,13 +2940,13 @@
                         if (coords.row === opIndex && opType === 'delete') return '#REF!';
                         if (coords.row >= opIndex && opType === 'insert') coords.row++;
                         if (coords.row > opIndex && opType === 'delete') coords.row--;
-                    } else { // col
+                    } else {
                         if (coords.col === opIndex && opType === 'delete') return '#REF!';
                         if (coords.col >= opIndex && opType === 'insert') coords.col++;
                         if (coords.col > opIndex && opType === 'delete') coords.col--;
                     }
                     return getCoordsId(coords);
-                } else { // It's a range (start:end)
+                } else {
                     let startCoords = getCellCoords(start);
                     let endCoords = getCellCoords(end);
                     let refError = false;
@@ -2862,7 +2958,7 @@
                             }
                             if (coords.row >= opIndex && opType === 'insert') coords.row++;
                             if (coords.row > opIndex && opType === 'delete') coords.row--;
-                        } else { // col
+                        } else {
                              if (opType === 'delete' && opIndex >= startCoords.col && opIndex <= endCoords.col) {
                                 if (startCoords.col === endCoords.col) refError = true;
                             }
@@ -2909,7 +3005,7 @@
                 const cellData = sheet.cellData[cellId];
                 const coords = getCellCoords(cellId);
 
-                if (coords.row === rowIndex) continue; // Skip deleted row
+                if (coords.row === rowIndex) continue;
 
                 let newRow = coords.row < rowIndex ? coords.row : coords.row - 1;
                 const newId = getCoordsId({ row: newRow, col: coords.col });
@@ -2956,10 +3052,9 @@
                 const cellData = sheet.cellData[cellId];
                 const coords = getCellCoords(cellId);
 
-                if (coords.col === colIndex) continue; // Skip deleted column
+                if (coords.col === colIndex) continue;
 
                 let newCol = coords.col < colIndex ? coords.col : coords.col - 1;
-                // CORRECTION : Erreur de copier-coller. On utilisait newRow au lieu de coords.row.
                 const newId = getCoordsId({ row: coords.row, col: newCol });
                 newCellData[newId] = { ...cellData, cellId: newId };
             }
@@ -2984,7 +3079,7 @@
             if (contextMenuIndex.row === -1) return;
             const sheet = workbook.sheets[workbook.activeSheet];
 
-            if (sheet.hiddenRows.includes(contextMenuIndex.row)) return; // Already hidden
+            if (sheet.hiddenRows.includes(contextMenuIndex.row)) return;
 
             const beforeState = { hiddenRows: [...sheet.hiddenRows], hiddenColumns: [...sheet.hiddenColumns] };
             
@@ -3000,7 +3095,7 @@
             if (contextMenuIndex.col === -1) return;
             const sheet = workbook.sheets[workbook.activeSheet];
             
-            if (sheet.hiddenColumns.includes(contextMenuIndex.col)) return; // Already hidden
+            if (sheet.hiddenColumns.includes(contextMenuIndex.col)) return;
 
             const beforeState = { hiddenRows: [...sheet.hiddenRows], hiddenColumns: [...sheet.hiddenColumns] };
             
@@ -3094,10 +3189,8 @@
                 const cellId = cell.id;
                 const cellData = sheet.cellData[cellId] || {};
                 
-                // 1. Appliquer le style de base
                 cell.style.cssText = cellData.style || '';
 
-                // 2. Vérifier les règles conditionnelles
                 const cellValue = cellData.formula ? evaluateFormula(cellData.formula) : cellData.value;
                 if (cellValue === null || cellValue === undefined) return;
 
@@ -3164,7 +3257,6 @@
                 style: stylePresets[document.getElementById('cf-style').value]
             };
 
-            // Validation simple
             if (!newRule.range || !newRule.value) {
                 console.warn("Veuillez remplir la plage et la valeur.");
                 return;
@@ -3183,30 +3275,23 @@
         // --- GESTION DE LA SAUVEGARDE ET DU CHARGEMENT ---
         function handleSave() {
             try {
-                // CORRECTION : Utilisation de getCleanWorkbookState() pour ne pas sauvegarder
-                // l'historique undo/redo, ce qui rendait les fichiers inutilement volumineux.
                 const workbookData = JSON.stringify(getCleanWorkbookState());
                 const blob = new Blob([workbookData], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
 
-                // --- NOUVELLE LOGIQUE POUR LE NOM DU FICHIER ---
                 const now = new Date();
                 const pad = (num) => num.toString().padStart(2, '0');
-
                 const day = pad(now.getDate());
-                const month = pad(now.getMonth() + 1); // getMonth() est 0-indexé
+                const month = pad(now.getMonth() + 1);
                 const year = now.getFullYear().toString().slice(-2);
                 const hours = pad(now.getHours());
                 const minutes = pad(now.getMinutes());
                 const seconds = pad(now.getSeconds());
-                
                 const firstSheetName = Object.keys(workbook.sheets)[0] || 'classeur';
                 const formattedDate = `${day}-${month}-${year}-${hours}-${minutes}-${seconds}`;
-
                 a.download = `${firstSheetName}-${formattedDate}.json`;
-                // --- FIN DE LA NOUVELLE LOGIQUE ---
                 
                 document.body.appendChild(a);
                 a.click();
@@ -3271,7 +3356,6 @@
                         const loadedData = JSON.parse(e.target.result);
                         if (loadedData && loadedData.sheets && loadedData.activeSheet) {
                             workbook = loadedData;
-                            // S'assurer que chaque feuille a un historique vide après chargement
                             Object.values(workbook.sheets).forEach(sheet => {
                                 sheet.undoStack = [];
                                 sheet.redoStack = [];
@@ -3283,13 +3367,12 @@
                     } catch (error) { console.error("Erreur chargement JSON:", error); }
                 };
                 reader.readAsText(file);
-            } else { // Handle XLSX/XLS/CSV
+            } else {
                 reader.onload = function(e) {
                     try {
                         const data = new Uint8Array(e.target.result);
                         const loadedWb = XLSX.read(data, { type: 'array' });
                         
-                        // --- NOUVELLE LOGIQUE D'ADAPTATION DE LA GRILLE ---
                         let maxRowsNeeded = 0;
                         let maxColsNeeded = 0;
 
@@ -3297,26 +3380,19 @@
                             const ws = loadedWb.Sheets[sheetName];
                             if (ws['!ref']) {
                                 const range = XLSX.utils.decode_range(ws['!ref']);
-                                if (range.e.r > maxRowsNeeded) {
-                                    maxRowsNeeded = range.e.r;
-                                }
-                                if (range.e.c > maxColsNeeded) {
-                                    maxColsNeeded = range.e.c;
-                                }
+                                if (range.e.r > maxRowsNeeded) maxRowsNeeded = range.e.r;
+                                if (range.e.c > maxColsNeeded) maxColsNeeded = range.e.c;
                             }
                         });
 
-                        // +1 car les index sont 0-based
                         const newRows = Math.max(ROWS, maxRowsNeeded + 1);
                         const newCols = Math.max(COLS, maxColsNeeded + 1);
 
-                        // Si la grille doit être agrandie, on la redessine
                         if (newRows > ROWS || newCols > COLS) {
                             ROWS = newRows;
                             COLS = newCols;
                             createGrid(); 
                         }
-                        // --- FIN DE LA NOUVELLE LOGIQUE ---
                         
                         const newWorkbook = { macros: {}, sheets: {}, activeSheet: '' };
 
@@ -3391,9 +3467,7 @@
             let startIndex = 0;
             if (startCellId) {
                 const idx = allCellIds.indexOf(startCellId);
-                if (idx !== -1) {
-                    startIndex = idx + 1;
-                }
+                if (idx !== -1) startIndex = idx + 1;
             }
 
             for (let i = 0; i < allCellIds.length; i++) {
@@ -3455,7 +3529,7 @@
                     const beforeState = { ...cellData };
                     const afterState = { ...cellData, value: replaceText, formula: null };
                     changes.push({ before: beforeState, after: afterState });
-                    sheet.cellData[cellId] = afterState; // Mettre à jour directement
+                    sheet.cellData[cellId] = afterState;
                     replacementsCount++;
                 }
             }
@@ -3470,7 +3544,6 @@
              setTimeout(() => findMessage.textContent = '', 2000);
         });
 
-        // Rendre la fenêtre de recherche déplaçable
         let isDraggingDialog = false;
         let dialogOffsetX, dialogOffsetY;
         findHeader.addEventListener('mousedown', (e) => {
@@ -3526,7 +3599,7 @@
                 return allowedValues.includes(value.toString());
                 
             }
-            return true; // No rule or 'any'
+            return true;
         }
 
         validationArrow.addEventListener('click', (e) => {
@@ -3558,10 +3631,6 @@
             }
         });
         
-        document.addEventListener('click', () => {
-            validationDropdown.style.display = 'none';
-        });
-
         dataValidationBtn.addEventListener('click', () => {
             validationModal.classList.remove('hidden');
             document.getElementById('validation-range').value = cellAddress.textContent;
@@ -3693,14 +3762,12 @@
             const startCoords = getCellCoords(cellIds[0]);
             const endCoords = getCellCoords(cellIds[cellIds.length - 1]);
 
-            // 1. Lire les en-têtes
             const headers = [];
             for(let c = startCoords.col; c <= endCoords.col; c++) {
                 const headerId = getCoordsId({row: startCoords.row, col: c});
                 headers.push(sourceSheet.cellData[headerId]?.value || `Colonne ${c+1}`);
             }
 
-            // 2. Transformer les données sources en tableau d'objets
             const sourceData = [];
             for(let r = startCoords.row + 1; r <= endCoords.row; r++) {
                 const rowObj = {};
@@ -3711,7 +3778,6 @@
                 sourceData.push(rowObj);
             }
             
-            // 3. Logique du TCD
             const pivotData = {};
             const colHeaders = new Set();
 
@@ -3738,17 +3804,14 @@
                 }
             });
 
-            // 4. Créer une nouvelle feuille et y insérer les données
             const pivotSheetName = addSheet('pivot');
             const newSheet = workbook.sheets[pivotSheetName];
             const sortedColHeaders = Array.from(colHeaders).sort();
 
-            // En-têtes de colonne
             sortedColHeaders.forEach((header, i) => {
                 newSheet.cellData[getCoordsId({row: 0, col: i + 1})] = { value: header };
             });
 
-            // En-têtes de ligne et valeurs
             Object.keys(pivotData).sort().forEach((rowKey, r) => {
                 newSheet.cellData[getCoordsId({row: r + 1, col: 0})] = { value: rowKey };
                 
@@ -3788,10 +3851,10 @@
         });
         
         recordMacroBtn.addEventListener('click', () => {
-            if(isRecording) { // Stop recording
+            if(isRecording) {
                 document.getElementById('macro-name-modal').classList.remove('hidden');
                 document.getElementById('macro-name-input').focus();
-            } else { // Start recording
+            } else {
                 isRecording = true;
                 currentMacro = [];
                 recordMacroBtn.classList.remove('bg-red-500', 'hover:bg-red-600');
@@ -3813,7 +3876,7 @@
                 } else {
                     macroNameError.textContent = 'Nom invalide ou déjà utilisé.';
                     setTimeout(() => macroNameError.textContent = '', 2000);
-                    return; // Ne pas fermer la modale si erreur
+                    return;
                 }
             }
 
@@ -3945,7 +4008,7 @@
             
             const activeSheetData = workbook.sheets[workbook.activeSheet];
             activeSheetData.undoStack.push({
-                type: 'macro', // Réutilise le type 'macro' qui restaure l'état complet du classeur
+                type: 'macro',
                 before: beforeWorkbook,
                 after: afterWorkbook
             });
@@ -3969,10 +4032,8 @@
                 newName = `${contextMenuSheetName} (${i})`;
             }
 
-            // Deep copy the sheet data
             workbook.sheets[newName] = JSON.parse(JSON.stringify(originalSheet));
             
-            // Reset undo/redo stacks for the new sheet
             workbook.sheets[newName].undoStack = [];
             workbook.sheets[newName].redoStack = [];
 
@@ -4001,11 +4062,11 @@
 
             if (type === 'row') {
                 targetElement = spreadsheet.querySelector(`tbody tr:nth-child(${index + 1})`);
-                currentValue = targetElement ? targetElement.offsetHeight : 24; // Default height
+                currentValue = targetElement ? targetElement.offsetHeight : 24;
                 resizeModalTitle.textContent = `Ajuster la hauteur de la ligne ${index + 1}`;
-            } else { // col
+            } else {
                 targetElement = spreadsheet.querySelector(`colgroup col:nth-child(${index + 2})`);
-                currentValue = targetElement ? parseInt(targetElement.style.width, 10) : 80; // Default width
+                currentValue = targetElement ? parseInt(targetElement.style.width, 10) : 80;
                 resizeModalTitle.textContent = `Ajuster la largeur de la colonne ${String.fromCharCode(65 + index)}`;
             }
 
@@ -4027,20 +4088,48 @@
 
             if (resizeTarget.type === 'row') {
                 const targetRow = spreadsheet.querySelector(`tbody tr:nth-child(${resizeTarget.index + 1})`);
-                if (targetRow) {
-                    targetRow.style.height = `${newValue}px`;
-                }
+                if (targetRow) targetRow.style.height = `${newValue}px`;
             } else if (resizeTarget.type === 'col') {
                 const targetCol = spreadsheet.querySelector(`colgroup col:nth-child(${resizeTarget.index + 2})`);
-                if (targetCol) {
-                    targetCol.style.width = `${newValue}px`;
-                }
+                if (targetCol) targetCol.style.width = `${newValue}px`;
             }
             
             resizeModal.classList.add('hidden');
         });
 
+        // --- GESTION DE LA LISTE DES FONCTIONS ---
+        function initFunctionsDropdown() {
+            functionsDropdown.innerHTML = '';
+            for (const funcName in functionList) {
+                const itemData = functionList[funcName];
+                const itemEl = document.createElement('div');
+                itemEl.className = 'function-item';
 
+                itemEl.innerHTML = `
+                    <span class="function-syntax">${itemData.syntax}</span>
+                    <span class="function-desc">${itemData.description}</span>
+                `;
+
+                itemEl.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    const functionTemplate = `=${funcName}()`;
+                    formulaInput.value = functionTemplate;
+                    isEditingFormula = true;
+                    
+                    formulaInput.focus();
+                    const cursorPos = functionTemplate.length - 1;
+                    formulaInput.setSelectionRange(cursorPos, cursorPos);
+                    functionsDropdown.classList.add('hidden');
+                });
+
+                functionsDropdown.appendChild(itemEl);
+            }
+
+            functionsBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                functionsDropdown.classList.toggle('hidden');
+            });
+        }
 
         // --- INITIALISATION ---
         document.getElementById('copy-context').addEventListener('click', handleCopy);
@@ -4048,6 +4137,7 @@
         document.getElementById('paste-context').addEventListener('click', handlePaste);
         document.getElementById('clear-content-context').addEventListener('click', handleClearContent);
 
+        initFunctionsDropdown();
         createGrid();
         renderSheetTabs();
         loadSheet(workbook.activeSheet);
