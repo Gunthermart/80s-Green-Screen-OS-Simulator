@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Protocol Amarinage v12.11 - Nucleus</title>
+    <style>
+        :root {
+            --bg-dark: #050505;
+            --ui-panel: rgba(12, 12, 12, 0.96);
+            --border: #333;
+            --accent: #ff3333;
+            --accent-dim: #661111;
+            --text-main: #e0e0e0;
+            --text-muted: #777;
+            --success: #00ff44;
+            --xp-color: #00aaff;
+            
+            /* Night Mode Vars */
+            --night-bg: #020000;
+            --night-ui: rgba(10, 0, 0, 0.98);
+            --night-text: #aa0000;
+            --night-accent: #ff0000;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: var(--bg-dark);
+            font-family: 'Courier New', monospace;
+            color: var(--text-main);
+            user-select: none;
+            -webkit-font-smoothing: none;
+            cursor: none;
+        }
+
+        /* --- CANVAS --- */
+        canvas { display: block; width: 100vw; height: 100vh; }
+        
+        /* RETICLE (Fixed Center) */
+        #reticle {
+            position: fixed;
+            top: 50%; left: 50%;
+            width: 20px; height: 20px;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 5000;
+        }
+        #reticle::before, #reticle::after {
+            content: ''; position: absolute; background: var(--success);
+        }
+        #reticle::before { top: 9px; left: 0; width: 20px; height: 2px; }
+        #reticle::after { top: 0; left: 9px; width: 2px; height: 20px; }
+
+        /* --- LAYOUT UTILS --- */
+        .hidden { opacity: 0 !important; pointer-events: none !important; }
+        .flex-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+        .flex-col { display: flex; flex-direction: column; gap: 8px; }
+
+        /* --- UI PANEL --- */
+        #ui-layer {
+            position: absolute;
+            top: 20px; left: 20px;
+            width: 320px;
+            padding: 20px;
+            background: var(--ui-panel);
+            border: 1px solid var(--border);
+            border-left: 4px solid var(--accent);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+            z-index: 1000;
+            transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s;
+            transform: translateX(0);
+            backdrop-filter: blur(5px);
+            max-height: 95vh;
+            overflow-y: auto;
+            cursor: default;
+        }
+
+        #ui-layer::-webkit-scrollbar { width: 4px; }
+        #ui-layer::-webkit-scrollbar-track { background: #000; }
+        #ui-layer::-webkit-scrollbar-thumb { background: #333; }
+
+        #ui-layer.retracted {
+            transform: translateX(calc(-100% + 15px));
+            opacity: 0.6;
+            border-left-color: var(--text-muted);
+        }
+
+        #ui-layer.retracted:hover {
+            transform: translateX(0);
+            opacity: 1;
+            border-left-color: var(--accent);
+        }
+
+        h1 {
+            font-size: 16px; margin: 0 0 15px 0;
+            letter-spacing: 3px; color: var(--accent);
+            border-bottom: 1px solid var(--border); padding-bottom: 8px;
+            text-transform: uppercase;
+        }
+
+        .section-label {
+            font-size: 10px; font-weight: 800; color: var(--text-muted);
+            text-transform: uppercase; margin: 15px 0 5px 0; letter-spacing: 1px;
+        }
+
+        /* --- CONTROLS --- */
+        button {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            color: #888;
+            padding: 8px 12px;
+            font-family: inherit; font-size: 11px; font-weight: 600;
+            cursor: pointer; text-transform: uppercase;
+            transition: all 0.15s ease;
+        }
+        button:hover { background: #333; color: #fff; border-color: #555; }
+        button:active { transform: translateY(1px); }
+        
+        button.active {
+            background: var(--accent);
+            color: #000;
+            border-color: var(--accent);
+            box-shadow: 0 0 10px var(--accent-dim);
+        }
+
+        .btn-large { width: 100%; padding: 12px; font-size: 13px; margin-top: 10px; }
+        .preset-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; }
+
+        input[type="range"] {
+            -webkit-appearance: none; width: 100%; height: 4px;
+            background: #333; border-radius: 2px; outline: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 14px; height: 14px;
+            background: var(--accent); border-radius: 50%; cursor: pointer;
+            transition: transform 0.1s;
+        }
+        input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
+
+        /* --- MODULES --- */
+        #progression-mod {
+            background: #000; border: 1px solid #222; padding: 10px;
+        }
+        .xp-bar { height: 4px; background: #222; width: 100%; margin-top: 5px; position: relative; overflow: hidden; }
+        .xp-fill { height: 100%; background: var(--xp-color); width: 0%; transition: width 0.5s ease-out; }
+
+        #stats-mod {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+            text-align: center; margin-top: 10px;
+        }
+        .stat-box { background: #111; border: 1px solid #222; padding: 5px; }
+        .stat-val { font-size: 14px; font-weight: bold; color: var(--text-main); }
+        .stat-lbl { font-size: 9px; color: #555; text-transform: uppercase; }
+
+        #tracking-bar { height: 2px; width: 0%; background: var(--success); transition: width 0.2s, background-color 0.2s; margin-top: 2px; }
+
+        /* --- MODALS --- */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.92); z-index: 9999;
+            display: flex; justify-content: center; align-items: center;
+            opacity: 1; transition: opacity 0.5s;
+            cursor: default;
+        }
+        .modal-box {
+            width: 500px; padding: 40px;
+            background: #0a0a0a; border: 1px solid #333;
+            text-align: center; position: relative;
+        }
+        .warning-box {
+            border: 1px solid var(--accent); background: rgba(50, 0, 0, 0.2);
+            color: var(--accent); padding: 15px; font-size: 11px; margin: 20px 0;
+        }
+
+        #vr-message {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px; font-weight: bold; color: white;
+            text-shadow: 0 0 20px black;
+            pointer-events: none; opacity: 0;
+            transition: opacity 0.5s; z-index: 6000;
+            text-align: center; width: 100%;
+        }
+
+        #scaling-notif, #coriolis-notif {
+            position: absolute;
+            left: 50%; transform: translateX(-50%);
+            font-weight: bold; font-size: 14px;
+            text-shadow: 0 2px 4px #000;
+            pointer-events: none; opacity: 0; transition: opacity 0.5s;
+            z-index: 4000;
+            background: rgba(0,0,0,0.7); padding: 5px 10px; border: 1px solid #333;
+        }
+        #scaling-notif { top: 20%; color: var(--xp-color); }
+        #coriolis-notif { top: 60%; color: var(--accent); border-color: var(--accent); font-size: 18px; letter-spacing: 2px; }
+
+        #audio-panner-vis {
+            height: 4px; width: 100%; background: #222; margin-top: 4px; position: relative;
+        }
+        #audio-panner-dot {
+            width: 8px; height: 8px; background: #555; border-radius: 50%;
+            position: absolute; top: -2px; left: 50%; transform: translateX(-50%);
+            transition: left 0.1s linear;
+        }
+
+        /* --- NIGHT MODE --- */
+        body.night-mode { background: #000; }
+        body.night-mode #ui-layer { background: var(--night-ui); border-color: var(--night-accent); border-left-color: var(--night-accent); }
+        body.night-mode h1, body.night-mode .stat-val { color: var(--night-accent); }
+        body.night-mode button.active { background: var(--night-accent); color: #000; }
+        body.night-mode #reticle::before, body.night-mode #reticle::after { background: var(--night-accent); }
+        body.night-mode .xp-fill { background: var(--night-accent); }
+        body.night-mode #scaling-notif { color: var(--night-accent); border-color: var(--night-accent); }
+        body.night-mode #audio-panner-dot { background: var(--night-accent); }
+
+    </style>
+</head>
+<body>
+
+<!-- SPLASH -->
+<div id="splash" class="modal-overlay">
+    <div class="modal-box" style="border-top: 4px solid var(--accent);">
+        <h1 style="font-size: 24px; border:none;">PROTOCOLE NUCLEUS</h1>
+        <p style="font-size: 13px; color: #bbb; line-height: 1.6; text-align: justify;">
+            Système de désensibilisation vestibulaire.
+            <br><br>
+            <strong>MÉCANISME :</strong> Génère un conflit sensoriel entre la vision périphérique (chaos optocinétique) et l'oreille interne (statique), forçant le cervelet à recalibrer ses modèles prédictifs.
+        </p>
+        <div class="warning-box">
+            <strong>⚠ EFFETS SECONDAIRES</strong><br>
+            Nausées, sueurs froides, désorientation. Arrêtez immédiatement en cas de prodromes vagaux.
+        </div>
+        <button id="btn-init" class="btn-large">INITIALISER LE SYSTÈME</button>
+    </div>
+</div>
+
+<!-- BORG SCALE -->
+<div id="borg-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+        <h1>RAPPORT PHYSIOLOGIQUE</h1>
+        <div class="section-label">Échelle de Borg (RPE 6-20)</div>
+        <div id="borg-display" style="font-size: 48px; font-weight: bold; color: var(--accent); margin: 20px 0;">13</div>
+        <input type="range" id="borg-input" min="6" max="20" value="13" step="1">
+        <div id="borg-text" style="color: #888; margin-top: 10px; height: 20px;">Effort un peu dur</div>
+        <button id="btn-save" class="btn-large">ENREGISTRER LA SESSION</button>
+    </div>
+</div>
+
+<!-- GAME UI -->
+<div id="reticle"></div>
+<div id="vr-message">APPUYEZ SUR 'V' POUR QUITTER VR</div>
+<div id="scaling-notif">DIFFICULTÉ ADAPTÉE</div>
+<div id="coriolis-notif">CORIOLIS EFFECT</div>
+<canvas id="canvas"></canvas>
+
+<div id="ui-layer">
+    <div class="flex-row">
+        <h1>AMARINAGE v12.11</h1>
+        <div id="audio-dot" style="width:8px; height:8px; background:#333; border-radius:50%;" title="Status Audio"></div>
+    </div>
+    <div id="audio-panner-vis" title="Balance Audio Gauche/Droite">
+        <div id="audio-panner-dot"></div>
+    </div>
+
+    <!-- PROGRESSION -->
+    <div id="progression-mod" style="margin-top: 10px;">
+        <div class="flex-row" style="margin-bottom: 5px;">
+            <span id="rank-lbl" style="font-size:11px; font-weight:bold; color:var(--xp-color);">NOVICE</span>
+            <span id="level-lbl" style="font-size:11px; color:#666;">LVL 1</span>
+        </div>
+        <div class="xp-bar"><div id="xp-bar" class="xp-fill"></div></div>
+    </div>
+
+    <!-- PRESETS -->
+    <div class="section-label">ÉTAT DE MER</div>
+    <div class="preset-grid">
+        <button data-p="calm" class="preset-btn active">Calme</button>
+        <button data-p="choppy" class="preset-btn">Hachée</button>
+        <button data-p="swell" class="preset-btn">Houle</button>
+        <button data-p="storm" class="preset-btn">Tempête</button>
+    </div>
+
+    <!-- CALIBRATION -->
+    <div class="section-label">CALIBRATION FOV</div>
+    <div class="flex-row">
+        <span style="font-size:10px;">DIST. ÉCRAN</span>
+        <span id="val-dist" style="font-size:10px; font-weight:bold;">50cm</span>
+    </div>
+    <input type="range" id="rng-dist" min="20" max="100" value="50">
+
+    <!-- CONTROLS -->
+    <div class="section-label">CONFIGURATION</div>
+    <div class="flex-col">
+        <button id="btn-taskmode" class="toggle-btn" style="border-left: 3px solid transparent;">CIBLE : HORIZON</button>
+        <button id="btn-drift" class="toggle-btn" style="border-left: 3px solid transparent;">LEURRE [OFF]</button>
+        <button id="btn-autoscale" class="toggle-btn" style="border-left: 3px solid transparent;">AUTO-SCALE [OFF]</button>
+        <button id="btn-night" class="toggle-btn">MODE NUIT (ROUGE)</button>
+        <button id="btn-vr" class="toggle-btn">MODE VR (STÉRÉO)</button>
+    </div>
+
+    <div class="section-label">PARAMÈTRES STRESS</div>
+    <div class="flex-row">
+        <span style="font-size:10px;">VISIBILITÉ</span>
+        <span id="val-vis" style="font-size:10px; font-weight:bold;">100%</span>
+    </div>
+    <input type="range" id="rng-vis" min="0" max="100" value="100">
+
+    <div class="flex-row">
+        <span style="font-size:10px;">CHAOS (JERK)</span>
+        <span id="val-jerk" style="font-size:10px; font-weight:bold;">0%</span>
+    </div>
+    <input type="range" id="rng-jerk" min="0" max="100" value="0">
+
+    <!-- COGNITIVE & TIMER -->
+    <div id="stats-mod">
+        <div class="stat-box">
+            <div id="score-val" class="stat-val">0</div>
+            <div class="stat-lbl">Score Cognitif</div>
+        </div>
+        <div class="stat-box">
+            <div id="timer-val" class="stat-val">00:00</div>
+            <div class="stat-lbl">Temps Survie</div>
+        </div>
+    </div>
+    <div id="tracking-bar"></div>
+    <div style="font-size:9px; text-align:center; color:#555; margin-top:2px;">
+        UTILISER LA SOURIS POUR STABILISER L'HORIZON
+    </div>
+
+    <button id="btn-main" class="btn-large">DÉMARRER PROTOCOLE</button>
+</div>
+
+<script>
+/**
+ * ARCHITECTURE "NUCLEUS"
+ */
+
+(function() {
+    "use strict";
+
+    const CFG = {
+        presets: {
+            calm:   { amp: 0.1, freq: 0.10, chaos: 0.1, jerk: 0.0, xpMult: 1.0 },
+            choppy: { amp: 0.3, freq: 0.50, chaos: 0.6, jerk: 0.3, xpMult: 1.5 },
+            swell:  { amp: 0.8, freq: 0.08, chaos: 0.2, jerk: 0.1, xpMult: 1.2 },
+            storm:  { amp: 1.0, freq: 0.35, chaos: 1.0, jerk: 0.8, xpMult: 2.0 }
+        },
+        colors: {
+            day: { sky: ['#001133', '#4FA8C6'], sea: ['#00425A', '#001525'], horizon: '#00FF00', text: '#FFF' },
+            night: { sky: ['#000000', '#200000'], sea: ['#280000', '#050000'], horizon: '#FF0000', text: '#F00' }
+        },
+        ranks: ["NOVICE", "MATELOT", "QUARTIER-MAÎTRE", "OFFICIER", "COMMANDANT", "AMIRAL"],
+        borg: {
+            6: "Repos total", 7: "Extrêmement léger", 9: "Très léger", 11: "Léger", 
+            13: "Un peu dur", 15: "Dur", 17: "Très dur", 19: "Extrêmement dur", 20: "Épuisement maximal"
+        }
+    };
+
+    const STORE_KEY = "amarinage_save_v1";
+
+    const STATE = {
+        active: false,
+        paused: false,
+        night: false,
+        vr: false,
+        autoScale: false,
+        drift: false,
+        params: { ...CFG.presets.calm, vis: 1.0 },
+        calibration: { dist: 50 },
+        phys: { r:0, p:0, h:0, y:0, s:0, time:0, driftVal: 0, vertigo: 0 },
+        head: { pitch: 0, targetPitch: 0, lastPitch: 0 },
+        game: { 
+            score: 0, 
+            time: 0, 
+            tracking: 0,
+            taskMode: 'HORIZON', 
+            task: { val: null, color: null, timer: 0 }, 
+            vignette: 0,
+            perf: { timer: 0, accum: 0, count: 0 }
+        },
+        user: { xp: 0, lvl: 1, totalTime: 0 },
+        input: { x: 0, y: 0 } 
+    };
+
+    try {
+        const saved = localStorage.getItem(STORE_KEY);
+        if(saved) STATE.user = JSON.parse(saved);
+    } catch(e) { console.warn("Save load failed"); }
+
+    // --- 2. AUDIO SYSTEM ---
+    const AUDIO = {
+        ctx: null, drone: null, noise: null, filter: null, gainMaster: null, noiseGain: null, panner: null,
+        init() {
+            if(this.ctx) return;
+            const AC = window.AudioContext || window.webkitAudioContext;
+            this.ctx = new AC();
+            this.gainMaster = this.ctx.createGain();
+            this.panner = this.ctx.createStereoPanner();
+            this.gainMaster.connect(this.panner);
+            this.panner.connect(this.ctx.destination);
+            this.drone = this.ctx.createOscillator();
+            this.drone.type = 'sawtooth';
+            this.drone.frequency.value = 60;
+            const droneGain = this.ctx.createGain();
+            droneGain.gain.value = 0.05;
+            this.drone.connect(droneGain);
+            droneGain.connect(this.gainMaster);
+            this.drone.start();
+            const bufSize = 2 * this.ctx.sampleRate;
+            const buffer = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufSize; i++) { data[i] = (Math.random() * 2 - 1) * 0.5; }
+            this.noise = this.ctx.createBufferSource();
+            this.noise.buffer = buffer;
+            this.noise.loop = true;
+            this.filter = this.ctx.createBiquadFilter();
+            this.filter.type = 'lowpass';
+            this.filter.frequency.value = 400;
+            this.noiseGain = this.ctx.createGain();
+            this.noiseGain.gain.value = 0; 
+            this.noise.connect(this.filter);
+            this.filter.connect(this.noiseGain);
+            this.noiseGain.connect(this.gainMaster);
+            this.noise.start();
+            document.getElementById('audio-dot').style.background = '#0f0';
+        },
+        resume() { if(this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); },
+        stop() { if (this.ctx && this.gainMaster) this.gainMaster.gain.setTargetAtTime(0, this.ctx.currentTime, 0.05); },
+        update(heave, jerkIntensity, roll) {
+            if(!this.ctx) return;
+            if(!STATE.active) { this.gainMaster.gain.setTargetAtTime(0, this.ctx.currentTime, 0.1); return; }
+            this.gainMaster.gain.setTargetAtTime(1, this.ctx.currentTime, 0.1);
+            const engineFreq = 60 + (Math.abs(heave) * 0.1); 
+            this.drone.frequency.setTargetAtTime(engineFreq, this.ctx.currentTime, 0.1);
+            const noiseVol = 0.1 + (STATE.params.amp * 0.3) + (jerkIntensity * 0.2);
+            const cutoff = 300 + (Math.abs(heave) * 400);
+            this.noiseGain.gain.setTargetAtTime(noiseVol, this.ctx.currentTime, 0.1);
+            this.filter.frequency.setTargetAtTime(cutoff, this.ctx.currentTime, 0.1);
+            const panVal = Math.max(-1, Math.min(1, roll * 2.0)); 
+            this.panner.pan.setTargetAtTime(panVal, this.ctx.currentTime, 0.1);
+            const panPct = 50 + (panVal * 50);
+            document.getElementById('audio-panner-dot').style.left = panPct + '%';
+        }
+    };
+
+    // --- 3. PHYSICS SYSTEM ---
+    const PHYS = {
+        offsets: { r:0, p:0, y:0, h:0 }, 
+        update(dt) {
+            STATE.phys.time += dt;
+            const t = STATE.phys.time;
+            const p = STATE.params;
+            const wave = (mult, phase) => {
+                let v = 0;
+                v += Math.sin(t * p.freq * mult + phase);
+                v += Math.sin(t * p.freq * 0.5 * mult + phase + 1.3) * 0.5;
+                if(p.chaos > 0) {
+                    v += Math.sin(t * p.freq * 2.1 * mult) * p.chaos * 0.3;
+                    v += Math.cos(t * p.freq * 3.7 * mult) * p.chaos * 0.1;
+                }
+                return v;
+            };
+            if(Math.random() < 0.01 * p.jerk) {
+                this.offsets.p += (Math.random()-0.5) * 60 * p.jerk; 
+                this.offsets.r += (Math.random()-0.5) * 30 * p.jerk; 
+            }
+            this.offsets.p *= 0.9;
+            this.offsets.r *= 0.9;
+            STATE.phys.r = wave(1.0, 0) * p.amp * 0.3 + this.offsets.r * 0.01;
+            STATE.phys.p = wave(1.3, 2) * p.amp * 200 + this.offsets.p;
+            STATE.phys.h = wave(1.7, 4) * p.amp * 150;
+            STATE.phys.y = wave(0.4, 1) * p.amp * 200 * 0.2;
+            STATE.phys.s = wave(0.9, 3) * p.amp * 100 * 0.2; 
+            const pitchSpeed = 5.0;
+            STATE.head.pitch += (STATE.head.targetPitch - STATE.head.pitch) * pitchSpeed * dt;
+            const dHead = (STATE.head.pitch - STATE.head.lastPitch) / dt;
+            STATE.head.lastPitch = STATE.head.pitch;
+            const crossProduct = Math.abs(dHead * STATE.phys.r); 
+            if(crossProduct > 10.0 && Math.abs(STATE.head.pitch) > 100) { 
+                STATE.phys.vertigo += crossProduct * 0.005;
+                if(crossProduct > 50) {
+                    const el = document.getElementById('coriolis-notif');
+                    el.style.opacity = 1;
+                    setTimeout(() => el.style.opacity = 0, 1000);
+                }
+            }
+            STATE.phys.vertigo *= 0.96;
+            if(STATE.drift) { STATE.phys.driftVal = Math.sin(t * 0.2) * 0.08; } else { STATE.phys.driftVal *= 0.95; }
+        }
+    };
+
+    // --- 4. RENDER SYSTEM ---
+    const GFX = {
+        canvas: document.getElementById('canvas'),
+        ctx: document.getElementById('canvas').getContext('2d', { alpha: false }),
+        width: 0, height: 0,
+        particles: [],
+        init() {
+            window.addEventListener('resize', () => this.resize());
+            this.resize();
+            for(let i=0; i<400; i++) {
+                this.particles.push({
+                    x: (Math.random()-0.5)*5000, 
+                    y: (Math.random()-0.5)*3000, 
+                    z: Math.random()*2, 
+                    type: Math.random() > 0.8 ? 'wave' : 'star'
+                });
+            }
+        },
+        resize() {
+            this.width = window.innerWidth;
+            this.height = window.innerHeight;
+            this.canvas.width = this.width;
+            this.canvas.height = this.height;
+        },
+        drawEye(x, y, w, h, offset) {
+            const ctx = this.ctx;
+            const ph = STATE.phys;
+            const head = STATE.head;
+            const theme = STATE.night ? CFG.colors.night : CFG.colors.day;
+            const fog = 1 - STATE.params.vis;
+            const scale = STATE.calibration.dist / 50.0;
+            ctx.save();
+            ctx.beginPath(); ctx.rect(x,y,w,h); ctx.clip();
+            ctx.fillStyle = '#000'; ctx.fillRect(x,y,w,h);
+            const cx = x + w/2; 
+            const cy = y + h/2;
+            ctx.translate(cx, cy);
+            const vRot = Math.sin(ph.time * 20) * ph.vertigo * 0.2;
+            ctx.rotate(vRot);
+            ctx.translate(0, -head.pitch * scale);
+            ctx.scale(scale, scale);
+            ctx.rotate(-ph.r); 
+            ctx.translate(-ph.y - ph.s, -ph.p - ph.h); 
+            const bigDiag = 5000;
+            const gradSky = ctx.createLinearGradient(0, -bigDiag, 0, 0);
+            gradSky.addColorStop(0, theme.sky[0]);
+            gradSky.addColorStop(1, theme.sky[1]);
+            ctx.fillStyle = gradSky;
+            ctx.fillRect(-bigDiag, -bigDiag, bigDiag*2, bigDiag);
+            const gradSea = ctx.createLinearGradient(0, 0, 0, bigDiag);
+            gradSea.addColorStop(0, theme.sea[0]);
+            gradSea.addColorStop(1, theme.sea[1]);
+            ctx.fillStyle = gradSea;
+            ctx.fillRect(-bigDiag, 0, bigDiag*2, bigDiag);
+            ctx.strokeStyle = theme.horizon;
+            ctx.lineWidth = 2;
+            ctx.globalAlpha = 0.5 * STATE.params.vis;
+            ctx.beginPath(); ctx.moveTo(-bigDiag, 0); ctx.lineTo(bigDiag, 0); ctx.stroke();
+            this.particles.forEach(p => {
+                if(p.type === 'star' && STATE.params.vis < 0.2) return;
+                ctx.fillStyle = (p.type === 'wave') ? 'rgba(255,255,255,0.1)' : '#FFF';
+                if (p.type === 'star') { ctx.fillRect(p.x, p.y, p.z, p.z); } else { ctx.fillRect(p.x, p.y, p.z*20, 2); }
+            });
+            if(STATE.game.taskMode === 'HORIZON' && STATE.game.task.val !== null) {
+                ctx.font = "bold 60px monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+                ctx.fillStyle = STATE.game.task.color; ctx.globalAlpha = 1.0;
+                ctx.fillText(STATE.game.task.val, 0, -100);
+            }
+            ctx.restore();
+            ctx.save();
+            ctx.translate(cx - offset, cy); 
+            ctx.translate(0, -head.pitch * scale);
+            ctx.rotate(ph.driftVal);
+            const shakeX = (Math.random()-0.5) * STATE.params.jerk * 10;
+            const shakeY = (Math.random()-0.5) * STATE.params.jerk * 10;
+            ctx.translate(shakeX, shakeY);
+            ctx.strokeStyle = STATE.night ? '#500' : '#444';
+            ctx.lineWidth = 20;
+            const m = 50; 
+            ctx.strokeRect(-w/2 + m, -h/2 + m, w - m*2, h - m*2);
+            ctx.lineWidth = 2; ctx.strokeStyle = theme.horizon; ctx.globalAlpha = 0.3;
+            ctx.beginPath(); ctx.moveTo(-20, 0); ctx.lineTo(20, 0); ctx.moveTo(0, -20); ctx.lineTo(0, 20); ctx.stroke();
+            const dashW = 120; const dashH = 80; const dashY = h/2 - m - dashH + 150;
+            ctx.fillStyle = '#111'; ctx.fillRect(-dashW/2, dashY, dashW, dashH);
+            ctx.strokeStyle = '#333'; ctx.lineWidth = 3; ctx.strokeRect(-dashW/2, dashY, dashW, dashH);
+            if(STATE.game.taskMode === 'INSTRUMENT') {
+                if (STATE.game.task.val !== null) {
+                    ctx.font = "bold 40px monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+                    ctx.fillStyle = STATE.game.task.color; ctx.globalAlpha = 1.0; ctx.fillText(STATE.game.task.val, 0, dashY + dashH/2);
+                } else { ctx.fillStyle = '#002'; ctx.font = "10px monospace"; ctx.fillText("WAIT", 0, dashY + dashH/2); }
+            } else { ctx.fillStyle = '#222'; ctx.font = "10px monospace"; ctx.fillText("---", 0, dashY + dashH/2); }
+            if(fog > 0.1) { ctx.fillStyle = STATE.night ? `rgba(20,0,0,${fog*0.3})` : `rgba(200,200,200,${fog*0.1})`; ctx.fillRect(-w, -h, w*2, h*2); }
+            const v = STATE.game.vignette;
+            if(v > 0.05) {
+                const r = Math.min(w,h) * 0.6; const g = ctx.createRadialGradient(0,0, r * (1-v), 0,0, Math.max(w,h));
+                g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.95)');
+                ctx.fillStyle = g; ctx.fillRect(-w, -h, w*2, h*2);
+            }
+            ctx.restore();
+        },
+        render() {
+            this.ctx.fillStyle = '#000'; this.ctx.fillRect(0, 0, this.width, this.height);
+            if(STATE.vr) {
+                const sep = 15; 
+                this.drawEye(0, 0, this.width/2, this.height, -sep);
+                this.drawEye(this.width/2, 0, this.width/2, this.height, sep);
+                this.ctx.fillStyle = '#000'; this.ctx.fillRect(this.width/2 - 2, 0, 4, this.height);
+            } else { this.drawEye(0, 0, this.width, this.height, 0); }
+        }
+    };
+
+    // --- 5. GAME LOGIC ---
+    const GAME = {
+        lastFrame: 0,
+        loop(now) {
+            if(!STATE.active) return;
+            const dt = (now - this.lastFrame) / 1000;
+            this.lastFrame = now;
+            PHYS.update(dt); GFX.render(); AUDIO.update(STATE.phys.h, STATE.params.jerk, STATE.phys.r);
+            this.logic(dt); requestAnimationFrame((t) => this.loop(t));
+        },
+        logic(dt) {
+            STATE.game.time += dt;
+            const scale = STATE.calibration.dist / 50.0;
+            const horizonY = (-STATE.phys.p - STATE.phys.h - STATE.head.pitch) * scale;
+            const dist = Math.abs(horizonY); 
+            const normDist = dist / scale;
+            const trackPct = Math.max(0, 100 - (normDist * 0.5));
+            STATE.game.tracking = trackPct;
+            if(STATE.autoScale) {
+                STATE.game.perf.timer += dt; STATE.game.perf.accum += trackPct; STATE.game.perf.count++;
+                if(STATE.game.perf.timer > 5.0) { 
+                    const avg = STATE.game.perf.accum / STATE.game.perf.count; this.adjustDifficulty(avg);
+                    STATE.game.perf.timer = 0; STATE.game.perf.accum = 0; STATE.game.perf.count = 0;
+                }
+            }
+            const targetVignette = (normDist > 100) ? Math.min(0.9, (normDist-100)/300) : 0;
+            STATE.game.vignette += (targetVignette - STATE.game.vignette) * 2 * dt;
+            STATE.game.task.timer -= dt;
+            if(STATE.game.task.val !== null && STATE.game.task.timer < 0) { STATE.game.task.val = null; }
+            if(STATE.game.task.timer < -2.0) { this.newTask(); }
+            this.updateUI();
+        },
+        adjustDifficulty(avgTracking) {
+            let msg = null; let change = false;
+            if(avgTracking > 80) {
+                if(STATE.params.jerk < 1.0) {
+                    STATE.params.jerk = Math.min(1.0, STATE.params.jerk + 0.05);
+                    STATE.params.amp = Math.min(1.2, STATE.params.amp + 0.02);
+                    msg = "DIFFICULTÉ +"; change = true;
+                }
+            } else if(avgTracking < 40) {
+                if(STATE.params.jerk > 0.0) {
+                    STATE.params.jerk = Math.max(0.0, STATE.params.jerk - 0.05);
+                    STATE.params.amp = Math.max(0.1, STATE.params.amp - 0.05);
+                    msg = "DIFFICULTÉ -"; change = true;
+                }
+            }
+            if(change) {
+                document.getElementById('rng-jerk').value = STATE.params.jerk * 100;
+                document.getElementById('val-jerk').textContent = (STATE.params.jerk*100).toFixed(0)+'%';
+                this.showNotif(msg);
+            }
+        },
+        showNotif(text) {
+            const el = document.getElementById('scaling-notif');
+            el.textContent = text; el.style.opacity = 1;
+            setTimeout(() => el.style.opacity = 0, 2000);
+        },
+        newTask() {
+            const isRed = Math.random() > 0.7; const num = Math.floor(Math.random() * 9) + 1;
+            STATE.game.task.val = num; STATE.game.task.color = isRed ? '#FF0000' : (STATE.night ? '#00FFFF' : '#00FF00'); 
+            STATE.game.task.timer = 2.0; 
+        },
+        handleInput(key) {
+            if(key === ' ' && STATE.game.task.val !== null) {
+                const num = STATE.game.task.val; const col = STATE.game.task.color;
+                const isEven = num % 2 === 0; const isRed = col === '#FF0000';
+                if (isEven && !isRed) { STATE.game.score += 50; this.feedback(true); } else { STATE.game.score -= 20; this.feedback(false); }
+                STATE.game.task.val = null; 
+            }
+        },
+        feedback(success) {
+            const r = document.getElementById('reticle');
+            r.style.transform = "translate(-50%, -50%) scale(2)";
+            setTimeout(() => r.style.transform = "translate(-50%, -50%) scale(1)", 100);
+        },
+        updateUI() {
+            const bar = document.getElementById('tracking-bar');
+            bar.style.width = STATE.game.tracking + '%';
+            bar.style.background = STATE.game.tracking > 50 ? (STATE.night ? '#900' : '#0f0') : '#f00';
+            const s = Math.floor(STATE.game.time);
+            const mins = Math.floor(s/60).toString().padStart(2,'0');
+            const secs = (s%60).toString().padStart(2,'0');
+            document.getElementById('timer-val').textContent = `${mins}:${secs}`;
+            document.getElementById('score-val').textContent = STATE.game.score;
+        },
+        endSession(borgScale) {
+            const presetXP = STATE.params.xpMult; const borgFactor = 1 + ((borgScale - 10) / 10); 
+            const sessionXP = Math.floor(STATE.game.time * presetXP * borgFactor) + Math.max(0, STATE.game.score);
+            STATE.user.xp += sessionXP; STATE.user.totalTime += STATE.game.time;
+            const xpReq = STATE.user.lvl * 500;
+            if(STATE.user.xp >= xpReq) { STATE.user.xp -= xpReq; STATE.user.lvl++; }
+            localStorage.setItem(STORE_KEY, JSON.stringify(STATE.user));
+            STATE.game.time = 0; STATE.game.score = 0; STATE.game.tracking = 0;
+            UI.renderProgression();
+        }
+    };
+
+    // --- 6. UI MANAGER ---
+    const UI = {
+        init() {
+            window.addEventListener('mousemove', e => {
+                const normY = (e.clientY / window.innerHeight) * 2 - 1;
+                STATE.head.targetPitch = normY * 400;
+                STATE.input.x = e.clientX; STATE.input.y = e.clientY;
+                if (e.clientX < 340 && e.clientY > 20) { document.getElementById('ui-layer').classList.remove('retracted'); } else if (STATE.active) { document.getElementById('ui-layer').classList.add('retracted'); }
+            });
+            window.addEventListener('keydown', e => {
+                if (e.code === 'Space') { e.preventDefault(); GAME.handleInput(' '); }
+                if (e.key.toLowerCase() === 'n') this.toggleNight();
+                if (e.key.toLowerCase() === 'v') this.toggleVR();
+            });
+            document.getElementById('btn-init').onclick = () => { document.getElementById('splash').classList.add('hidden'); AUDIO.init(); };
+            document.getElementById('btn-main').onclick = () => this.toggleRun();
+            document.getElementById('btn-save').onclick = () => { const b = parseInt(document.getElementById('borg-input').value); GAME.endSession(b); document.getElementById('borg-modal').classList.add('hidden'); };
+            document.getElementById('btn-night').onclick = () => this.toggleNight();
+            document.getElementById('btn-vr').onclick = () => this.toggleVR();
+            document.getElementById('btn-autoscale').onclick = (e) => {
+                STATE.autoScale = !STATE.autoScale;
+                e.target.textContent = STATE.autoScale ? "AUTO-SCALE [ON]" : "AUTO-SCALE [OFF]";
+                e.target.classList.toggle('active');
+                if(STATE.autoScale) e.target.style.borderLeftColor = "var(--success)"; else e.target.style.borderLeftColor = "transparent";
+            };
+            document.getElementById('btn-drift').onclick = (e) => {
+                STATE.drift = !STATE.drift;
+                e.target.textContent = STATE.drift ? "LEURRE [ON]" : "LEURRE [OFF]";
+                e.target.classList.toggle('active');
+                if(STATE.drift) e.target.style.borderLeftColor = "var(--accent)"; else e.target.style.borderLeftColor = "transparent";
+            };
+            document.getElementById('btn-taskmode').onclick = (e) => {
+                STATE.game.taskMode = STATE.game.taskMode === 'HORIZON' ? 'INSTRUMENT' : 'HORIZON';
+                e.target.textContent = `CIBLE : ${STATE.game.taskMode}`;
+                e.target.classList.toggle('active');
+                if(STATE.game.taskMode === 'INSTRUMENT') e.target.style.borderLeftColor = "var(--accent)"; else e.target.style.borderLeftColor = "transparent";
+            };
+            const presets = document.querySelectorAll('.preset-btn');
+            presets.forEach(btn => {
+                btn.onclick = () => {
+                    presets.forEach(p => p.classList.remove('active')); btn.classList.add('active');
+                    const key = btn.dataset.p; STATE.params = { ...CFG.presets[key], vis: STATE.params.vis };
+                    document.getElementById('rng-jerk').value = STATE.params.jerk * 100;
+                    document.getElementById('val-jerk').textContent = (STATE.params.jerk*100).toFixed(0)+'%';
+                };
+            });
+            document.getElementById('rng-vis').oninput = e => { const v = e.target.value / 100; STATE.params.vis = v; document.getElementById('val-vis').textContent = e.target.value + '%'; };
+            document.getElementById('rng-jerk').oninput = e => { const v = e.target.value / 100; STATE.params.jerk = v; document.getElementById('val-jerk').textContent = e.target.value + '%'; };
+            document.getElementById('rng-dist').oninput = e => { const val = parseInt(e.target.value); STATE.calibration.dist = val; document.getElementById('val-dist').textContent = val + 'cm'; GFX.render(); };
+            document.getElementById('borg-input').oninput = e => { const v = e.target.value; document.getElementById('borg-display').textContent = v; document.getElementById('borg-text').textContent = CFG.borg[v] || ""; };
+            this.renderProgression();
+        },
+        toggleRun() {
+            const btn = document.getElementById('btn-main'); btn.blur(); 
+            if(STATE.active) {
+                STATE.active = false; STATE.paused = true; AUDIO.stop();
+                btn.textContent = "DÉMARRER PROTOCOLE"; document.getElementById('ui-layer').classList.remove('retracted');
+                document.getElementById('borg-modal').classList.remove('hidden'); document.body.style.cursor = "default";
+            } else {
+                AUDIO.resume(); STATE.active = true; STATE.paused = false;
+                btn.textContent = "ARRÊTER (BORG)"; document.getElementById('ui-layer').classList.add('retracted');
+                document.body.style.cursor = "none"; GAME.lastFrame = performance.now(); GAME.loop(GAME.lastFrame);
+            }
+        },
+        toggleVR() {
+            STATE.vr = !STATE.vr;
+            const btn = document.getElementById('btn-vr'); const layer = document.getElementById('ui-layer'); const msg = document.getElementById('vr-message');
+            btn.classList.toggle('active'); layer.classList.toggle('hidden');
+            if(STATE.vr) { msg.classList.remove('hidden'); msg.style.opacity = 1; setTimeout(() => msg.style.opacity = 0, 3000); if(!STATE.active) this.toggleRun(); } else { msg.classList.add('hidden'); }
+            GFX.resize(); GFX.render(); 
+        },
+        toggleNight() { STATE.night = !STATE.night; document.body.classList.toggle('night-mode'); document.getElementById('btn-night').classList.toggle('active'); },
+        renderProgression() {
+            const u = STATE.user; document.getElementById('level-lbl').textContent = `LVL ${u.lvl}`;
+            const rIdx = Math.min(Math.floor(u.lvl / 5), CFG.ranks.length - 1); document.getElementById('rank-lbl').textContent = CFG.ranks[rIdx];
+            const xpReq = u.lvl * 500; const pct = (u.xp / xpReq) * 100; document.getElementById('xp-bar').style.width = pct + '%';
+        }
+    };
+
+    GFX.init(); UI.init(); GFX.render();
+})();
+</script>
+</body>
+</html>
