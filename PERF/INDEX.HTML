@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analyse Brutale de Portefeuille</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <!-- PDF Generation Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
+    
+    <style>
+        body { background-color: #0f172a; color: #e2e8f0; font-family: 'Inter', sans-serif; }
+        .card { background-color: #1e293b; border: 1px solid #334155; border-radius: 0.5rem; padding: 1.5rem; }
+        .negative { color: #ef4444; }
+        .positive { color: #22c55e; }
+        .drop-zone { border: 2px dashed #475569; transition: all 0.3s; position: relative; }
+        .drop-zone.dragover { border-color: #38bdf8; background-color: #1e293b; }
+        .drop-zone.loaded { border-color: #22c55e; border-style: solid; }
+        select { background-color: #334155; color: white; border: 1px solid #475569; padding: 0.5rem; border-radius: 0.25rem; width: 100%; }
+        .btn-primary { background-color: #3b82f6; color: white; padding: 0.5rem 1rem; border-radius: 0.25rem; font-weight: 600; transition: background 0.2s; }
+        .btn-primary:hover { background-color: #2563eb; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-7xl mx-auto space-y-6">
+        <!-- Header -->
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+                <h1 class="text-3xl font-bold text-white tracking-tight">Analyse de Performance</h1>
+                <p class="text-slate-400 text-sm mt-1">La vérité sur ton allocation et tes coûts.</p>
+            </div>
+            <button onclick="generateYearlyPDF()" id="pdf-btn" class="btn-primary hidden flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Générer Rapport Annuel (PDF)
+            </button>
+        </div>
+
+        <!-- Input Section -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Zone Positions -->
+            <div id="drop-zone-pos" class="drop-zone rounded-lg p-6 text-center cursor-pointer hover:bg-slate-800">
+                <input type="file" id="csvInputPos" accept=".csv" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                <div class="text-sm font-medium text-slate-300 pointer-events-none">
+                    <span class="block text-lg mb-1 text-white">1. Positions Actuelles</span>
+                    <span id="label-pos" class="text-slate-400">Glisse 'portefeuille.csv' ici</span>
+                </div>
+            </div>
+
+            <!-- Zone Historique -->
+            <div id="drop-zone-hist" class="drop-zone rounded-lg p-6 text-center cursor-pointer hover:bg-slate-800">
+                <input type="file" id="csvInputHist" accept=".csv" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                <div class="text-sm font-medium text-slate-300 pointer-events-none">
+                    <span class="block text-lg mb-1 text-white">2. Historique</span>
+                    <span id="label-hist" class="text-slate-400">Glisse 'historique-portefeuille.csv' ici</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- KPI Cards (Portfolio) -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4" id="kpi-pos-container" style="display:none;">
+            <div class="card">
+                <div class="text-slate-400 text-xs uppercase font-bold tracking-wider">Valeur Totale</div>
+                <div class="text-2xl font-bold mt-2 text-white" id="total-valeur">--</div>
+            </div>
+            <div class="card">
+                <div class="text-slate-400 text-xs uppercase font-bold tracking-wider">P&L Latent (€)</div>
+                <div class="text-2xl font-bold mt-2" id="total-pnl">--</div>
+            </div>
+            <div class="card">
+                <div class="text-slate-400 text-xs uppercase font-bold tracking-wider">Top Performer</div>
+                <div class="text-xl font-bold mt-2 text-emerald-400" id="best-performer">--</div>
+                <div class="text-xs text-slate-500" id="best-performer-val">--</div>
+            </div>
+            <div class="card">
+                <div class="text-slate-400 text-xs uppercase font-bold tracking-wider">Le Boulet</div>
+                <div class="text-xl font-bold mt-2 text-red-500" id="worst-loser">--</div>
+                <div class="text-xs text-slate-500" id="worst-loser-val">--</div>
+            </div>
+        </div>
+
+        <!-- KPI Cards (History) -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4" id="kpi-hist-container" style="display:none;">
+            <div class="card">
+                <div class="text-slate-400 text-xs uppercase font-bold tracking-wider">Dividendes Reçus</div>
+                <div class="text-2xl font-bold mt-2 text-emerald-400" id="total-divs">--</div>
+            </div>
+            <div class="card">
+                <div class="text-slate-400 text-xs uppercase font-bold tracking-wider">Frais Payés</div>
+                <div class="text-2xl font-bold mt-2 text-red-400" id="total-fees">--</div>
+            </div>
+            <div class="card">
+                <div class="text-slate-400 text-xs uppercase font-bold tracking-wider">Ratio Efficacité</div>
+                <div class="text-xl font-bold mt-2 text-white" id="efficiency-ratio">--</div>
+                <div class="text-xs text-slate-500">Dividendes / Frais</div>
+            </div>
+            <div class="card">
+                <div class="text-slate-400 text-xs uppercase font-bold tracking-wider">Volume Transactions</div>
+                <div class="text-xl font-bold mt-2 text-white" id="total-tx">--</div>
+                <div class="text-xs text-slate-500">Ordres exécutés</div>
+            </div>
+        </div>
+
+        <!-- Global Charts Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6" id="charts-container" style="display:none;">
+            <!-- Treemap (Positions) -->
+            <div class="card min-h-[450px] flex flex-col lg:col-span-2" id="chart-treemap-box">
+                <h3 class="text-lg font-semibold mb-4 text-white">Carte Thermique d'Allocation</h3>
+                <div id="treemap" class="flex-grow w-full h-full"></div>
+            </div>
+        </div>
+
+        <!-- DETAILED ANALYSIS SECTION -->
+        <div id="detail-section" style="display:none;" class="space-y-6 mt-8 pt-8 border-t border-slate-700">
+            <div class="flex flex-col md:flex-row justify-between items-center">
+                <h2 class="text-2xl font-bold text-white">Autopsie par Titre</h2>
+                <div class="w-full md:w-64 mt-4 md:mt-0">
+                    <select id="stock-selector">
+                        <option value="">-- Choisir une valeur --</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Detail KPIs -->
+                <div class="card lg:col-span-1 space-y-6">
+                    <div>
+                        <div class="text-slate-400 text-xs uppercase font-bold">Total Gain/Perte Réalisé</div>
+                        <div class="text-xl font-bold" id="detail-total-pnl">--</div>
+                        <div class="text-xs text-slate-500">Inclut plus-values, dividendes et frais</div>
+                    </div>
+                    <hr class="border-slate-700">
+                    <div>
+                        <div class="text-slate-400 text-xs uppercase font-bold">Dividendes Cumulés</div>
+                        <div class="text-lg font-semibold text-emerald-400" id="detail-divs">--</div>
+                    </div>
+                    <div>
+                        <div class="text-slate-400 text-xs uppercase font-bold">Plus-Values Cessions</div>
+                        <div class="text-lg font-semibold" id="detail-realized">--</div>
+                    </div>
+                    <div>
+                        <div class="text-slate-400 text-xs uppercase font-bold">Frais Totaux</div>
+                        <div class="text-lg font-semibold text-red-400" id="detail-fees">--</div>
+                    </div>
+                    <hr class="border-slate-700">
+                     <div>
+                        <div class="text-slate-400 text-xs uppercase font-bold">Prix Moyen (PMP)</div>
+                        <div class="text-lg font-semibold text-white" id="detail-pru">--</div>
+                    </div>
+                </div>
+
+                <!-- Charts Column -->
+                <div class="lg:col-span-2 space-y-4">
+                    <!-- Execution Chart -->
+                    <div class="card min-h-[350px] flex flex-col">
+                        <h3 class="text-lg font-semibold mb-2 text-white">1. Historique d'Exécution</h3>
+                        <div id="execution-chart" class="flex-grow w-full h-full"></div>
+                    </div>
+                    
+                    <!-- Cumulative PnL Chart -->
+                    <div class="card min-h-[300px] flex flex-col">
+                        <h3 class="text-lg font-semibold mb-2 text-white">2. Évolution Gains/Pertes Cumulés</h3>
+                        <p class="text-xs text-slate-400">Cash net généré (Dividendes + Gains Cessions - Frais)</p>
+                        <div id="pnl-chart" class="flex-grow w-full h-full"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="empty-state" class="text-center py-10 text-slate-500">
+            <p>Charge tes fichiers CSV pour générer le rapport.</p>
+        </div>
+    </div>
+
+    <script>
+        // --- Globals ---
+        let globalPortfolio = [];
+        let globalHistory = [];
+
+        // --- Utils ---
+        const parseFrenchNumber = (str) => {
+            if (!str) return 0;
+            let cleanStr = str.toString().replace(/\s/g, '').replace('€', '').replace(',', '.');
+            let num = parseFloat(cleanStr);
+            return isNaN(num) ? 0 : num;
+        };
+
+        const parseFrenchDate = (str) => {
+            if (!str) return null;
+            const parts = str.split('/');
+            if (parts.length === 3) {
+                return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+            }
+            return null;
+        }
+
+        const formatCurrency = (num) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(num);
+        const formatPercent = (num) => new Intl.NumberFormat('fr-FR', { style: 'percent', minimumFractionDigits: 2 }).format(num / 100);
+
+        // --- Core Logic ---
+        function updateDashboard() {
+            const hasPos = globalPortfolio.length > 0;
+            const hasHist = globalHistory.length > 0;
+
+            if (hasPos || hasHist) {
+                document.getElementById('empty-state').style.display = 'none';
+            }
+
+            if (hasPos) renderPortfolio(globalPortfolio);
+            if (hasHist) renderHistory(globalHistory);
+            
+            if (hasHist) {
+                populateStockSelector();
+                document.getElementById('detail-section').style.display = 'block';
+                document.getElementById('pdf-btn').classList.remove('hidden');
+            }
+        }
+
+        function renderPortfolio(data) {
+            document.getElementById('kpi-pos-container').style.display = 'grid';
+            document.getElementById('charts-container').style.display = 'grid';
+            
+            // Clean Data
+            let portfolio = data.map(row => {
+                if (!row['Titre'] || !row['valeur actuelle']) return null;
+                return {
+                    name: row['Titre'],
+                    currentVal: parseFrenchNumber(row['valeur actuelle']),
+                    pnlEuro: parseFrenchNumber(row['gain ou perte en euros']),
+                    pnlPercent: parseFrenchNumber(row['gain ou perte en pourcentage']),
+                    pru: parseFrenchNumber(row['prix de revient']),
+                    price: parseFrenchNumber(row['cours actuel'])
+                };
+            }).filter(item => item !== null && item.currentVal > 0);
+
+            if (portfolio.length === 0) return;
+
+            // KPIs
+            const totalValue = portfolio.reduce((sum, item) => sum + item.currentVal, 0);
+            const totalPnL = portfolio.reduce((sum, item) => sum + item.pnlEuro, 0);
+            const sortedByPerf = [...portfolio].sort((a, b) => b.pnlPercent - a.pnlPercent);
+            const sortedByPnL = [...portfolio].sort((a, b) => a.pnlEuro - b.pnlEuro);
+            const best = sortedByPerf[0];
+            const worstEuro = sortedByPnL[0];
+
+            document.getElementById('total-valeur').textContent = formatCurrency(totalValue);
+            const pnlEl = document.getElementById('total-pnl');
+            pnlEl.textContent = formatCurrency(totalPnL);
+            pnlEl.className = `text-2xl font-bold mt-2 ${totalPnL >= 0 ? 'positive' : 'negative'}`;
+            document.getElementById('best-performer').textContent = best.name;
+            document.getElementById('best-performer-val').textContent = `${formatPercent(best.pnlPercent)} (${formatCurrency(best.pnlEuro)})`;
+            document.getElementById('worst-loser').textContent = worstEuro.name;
+            document.getElementById('worst-loser-val').textContent = `${formatCurrency(worstEuro.pnlEuro)} (${formatPercent(worstEuro.pnlPercent)})`;
+
+            renderTreemap(portfolio);
+        }
+
+        function renderHistory(data) {
+            document.getElementById('kpi-hist-container').style.display = 'grid';
+
+            let txs = parseHistory(data);
+            
+            const totalFees = txs.reduce((sum, t) => sum + t.fees, 0);
+            const totalDivs = txs.filter(t => t.type === 'Dividende').reduce((sum, t) => sum + t.amount, 0);
+            const txCount = txs.filter(t => t.type === 'Achat' || t.type === 'Vente').length;
+
+            document.getElementById('total-divs').textContent = formatCurrency(totalDivs);
+            document.getElementById('total-fees').textContent = formatCurrency(totalFees);
+            document.getElementById('total-tx').textContent = txCount;
+            
+            const ratio = totalFees > 0 ? (totalDivs / totalFees) : 0;
+            const ratioEl = document.getElementById('efficiency-ratio');
+            ratioEl.textContent = ratio.toFixed(2) + "x";
+            ratioEl.className = `text-xl font-bold mt-2 ${ratio < 1 ? 'negative' : 'positive'}`;
+        }
+
+        function parseHistory(data) {
+             return data.map(row => {
+                const date = parseFrenchDate(row['Date']);
+                if (!date) return null;
+                return {
+                    date: date,
+                    type: row['Opération'], // Achat, Vente, Dividende
+                    stock: row['Valeur'], // Stock Name
+                    price: parseFrenchNumber(row['Prix']),
+                    qty: parseFrenchNumber(row['Quantité']),
+                    fees: parseFrenchNumber(row['Frais']),
+                    amount: parseFrenchNumber(row['Prix']) * parseFrenchNumber(row['Quantité'])
+                };
+            }).filter(d => d !== null && d.date !== null).sort((a, b) => a.date - b.date);
+        }
+
+        // --- Chart Functions ---
+        function renderTreemap(data) {
+            const labels = data.map(d => `<b>${d.name}</b><br>${formatPercent(d.pnlPercent)}`);
+            const parents = data.map(() => "Portfolio");
+            const values = data.map(d => d.currentVal);
+            const text = data.map(d => `Val: ${formatCurrency(d.currentVal)}<br>P&L: ${formatCurrency(d.pnlEuro)}`);
+            const colors = data.map(d => d.pnlPercent);
+
+            const trace = {
+                type: "treemap",
+                labels: labels,
+                parents: parents,
+                values: values,
+                text: text,
+                textinfo: "label+text",
+                hoverinfo: "label+text+value",
+                marker: {
+                    colors: colors,
+                    colorscale: [[0, '#ef4444'], [0.5, '#334155'], [1, '#22c55e']],
+                    cmid: 0,
+                    showscale: true
+                },
+                textfont: { color: '#ffffff' }
+            };
+
+            Plotly.newPlot('treemap', [trace], {
+                margin: { t: 0, l: 0, r: 0, b: 0 },
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                font: { family: 'Inter' }
+            }, {displayModeBar: false, responsive: true});
+        }
+
+        // --- Detail View Logic ---
+
+        function populateStockSelector() {
+            const selector = document.getElementById('stock-selector');
+            const stocks = [...new Set(globalHistory.map(row => row['Valeur']).filter(n => n))].sort();
+            
+            selector.innerHTML = '<option value="">-- Choisir une valeur --</option>';
+            stocks.forEach(stock => {
+                const option = document.createElement('option');
+                option.value = stock;
+                option.text = stock;
+                selector.appendChild(option);
+            });
+
+            selector.onchange = (e) => {
+                if (e.target.value) analyzeStock(e.target.value);
+            };
+        }
+
+        function analyzeStock(stockName) {
+            const histTxs = parseHistory(globalHistory).filter(t => t.stock === stockName);
+            
+            let currentData = null;
+            if (globalPortfolio.length > 0) {
+                 const rawRow = globalPortfolio.find(row => row['Titre'] === stockName);
+                 if (rawRow) {
+                     currentData = {
+                         pru: parseFrenchNumber(rawRow['prix de revient']),
+                         price: parseFrenchNumber(rawRow['cours actuel']),
+                         qty: parseFrenchNumber(rawRow['quantite'])
+                     };
+                 }
+            }
+
+            // --- Advanced FIFO/PMP Calculation ---
+            let totalDivs = 0;
+            let realizedPnL = 0;
+            let totalFees = 0;
+            let cumulativeNetPnL = 0; // The curve data
+
+            let heldQty = 0;
+            let totalCost = 0; // For PMP calc
+            let pmp = 0;
+
+            const buys = { x: [], y: [], text: [], size: [] };
+            const sells = { x: [], y: [], text: [], size: [] };
+            const pnlCurve = { x: [], y: [] };
+
+            // Initial Point
+            if (histTxs.length > 0) {
+                pnlCurve.x.push(new Date(histTxs[0].date.getTime() - 86400000)); // Day before first tx
+                pnlCurve.y.push(0);
+            }
+
+            histTxs.forEach(t => {
+                totalFees += t.fees;
+                
+                // Impact of Fees on Net PnL is immediate
+                cumulativeNetPnL -= t.fees;
+
+                if (t.type === 'Dividende') {
+                    totalDivs += t.amount;
+                    cumulativeNetPnL += t.amount;
+                } 
+                else if (t.type === 'Achat') {
+                    // Update PMP
+                    totalCost += (t.price * t.qty);
+                    heldQty += t.qty;
+                    pmp = heldQty > 0 ? totalCost / heldQty : 0;
+
+                    buys.x.push(t.date);
+                    buys.y.push(t.price);
+                    buys.text.push(`Achat: ${t.qty} @ ${formatCurrency(t.price)}`);
+                    buys.size.push(Math.sqrt(t.qty) * 2 + 5);
+                } 
+                else if (t.type === 'Vente') {
+                    // Realized Gain based on current PMP
+                    const gainOnSale = (t.price - pmp) * t.qty;
+                    realizedPnL += gainOnSale;
+                    cumulativeNetPnL += gainOnSale;
+
+                    // Reduce position
+                    heldQty -= t.qty;
+                    totalCost -= (pmp * t.qty); // Remove cost proportional to qty sold
+                    if (heldQty <= 0) { heldQty = 0; totalCost = 0; pmp = 0; }
+
+                    sells.x.push(t.date);
+                    sells.y.push(t.price);
+                    sells.text.push(`Vente: ${t.qty} @ ${formatCurrency(t.price)}<br>P&L: ${formatCurrency(gainOnSale)}`);
+                    sells.size.push(Math.sqrt(t.qty) * 2 + 5);
+                }
+
+                // Push point to curve
+                pnlCurve.x.push(t.date);
+                pnlCurve.y.push(cumulativeNetPnL);
+            });
+
+            // Add current day projection for PnL curve
+            pnlCurve.x.push(new Date());
+            pnlCurve.y.push(cumulativeNetPnL);
+
+            // Update DOM metrics
+            document.getElementById('detail-divs').textContent = formatCurrency(totalDivs);
+            document.getElementById('detail-fees').textContent = formatCurrency(totalFees);
+            
+            const pnlEl = document.getElementById('detail-realized');
+            pnlEl.textContent = formatCurrency(realizedPnL);
+            pnlEl.className = `text-lg font-semibold ${realizedPnL >= 0 ? 'positive' : 'negative'}`;
+
+            const totalNetEl = document.getElementById('detail-total-pnl');
+            totalNetEl.textContent = formatCurrency(cumulativeNetPnL);
+            totalNetEl.className = `text-xl font-bold ${cumulativeNetPnL >= 0 ? 'positive' : 'negative'}`;
+            
+            if (currentData) {
+                document.getElementById('detail-pru').textContent = formatCurrency(currentData.pru);
+            } else {
+                document.getElementById('detail-pru').textContent = pmp > 0 ? formatCurrency(pmp) + " (Calc)" : "--";
+            }
+
+            renderExecutionChart(stockName, buys, sells, currentData);
+            renderPnLCurve(stockName, pnlCurve);
+        }
+
+        function renderExecutionChart(stockName, buys, sells, currentData) {
+            const traces = [];
+
+            if (buys.x.length > 0) {
+                traces.push({
+                    x: buys.x, y: buys.y, mode: 'markers', name: 'Achats',
+                    marker: { symbol: 'triangle-up', size: 12, color: '#22c55e', line: {color: 'white', width: 1} },
+                    text: buys.text, hoverinfo: 'text+x'
+                });
+            }
+
+            if (sells.x.length > 0) {
+                traces.push({
+                    x: sells.x, y: sells.y, mode: 'markers', name: 'Ventes',
+                    marker: { symbol: 'triangle-down', size: 12, color: '#ef4444', line: {color: 'white', width: 1} },
+                    text: sells.text, hoverinfo: 'text+x'
+                });
+            }
+
+            if (currentData && currentData.price > 0) {
+                const minDate = buys.x[0] ? new Date(Math.min(buys.x[0], sells.x[0] || Infinity)) : new Date();
+                
+                traces.push({
+                    x: [minDate, new Date()],
+                    y: [currentData.price, currentData.price],
+                    mode: 'lines', name: 'Cours Actuel',
+                    line: { color: '#38bdf8', dash: 'dash', width: 2 }
+                });
+                
+                 if (currentData.pru > 0) {
+                    traces.push({
+                        x: [minDate, new Date()],
+                        y: [currentData.pru, currentData.pru],
+                        mode: 'lines', name: 'PRU',
+                        line: { color: '#facc15', dash: 'dot', width: 2 }
+                    });
+                }
+            }
+
+            const layout = {
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                margin: { t: 20, l: 40, r: 20, b: 40 },
+                xaxis: { gridcolor: '#334155', tickfont: { color: '#94a3b8' } },
+                yaxis: { title: 'Prix (€)', gridcolor: '#334155', tickfont: { color: '#e2e8f0' } },
+                legend: { orientation: 'h', y: 1.1, font: { color: 'white' } },
+                font: { family: 'Inter' }
+            };
+
+            Plotly.newPlot('execution-chart', traces, layout, {displayModeBar: false, responsive: true});
+        }
+
+        function renderPnLCurve(stockName, data) {
+            const trace = {
+                x: data.x,
+                y: data.y,
+                mode: 'lines+markers',
+                name: 'P&L Cumulé',
+                line: { color: '#fbbf24', width: 3 }, // Amber-400
+                marker: { size: 4 },
+                fill: 'tozeroy',
+                fillcolor: 'rgba(251, 191, 36, 0.1)'
+            };
+
+            const layout = {
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                margin: { t: 20, l: 40, r: 20, b: 40 },
+                xaxis: { gridcolor: '#334155', tickfont: { color: '#94a3b8' } },
+                yaxis: { 
+                    title: 'Gain/Perte (€)', 
+                    gridcolor: '#334155', 
+                    tickfont: { color: '#e2e8f0' },
+                    zeroline: true,
+                    zerolinecolor: '#94a3b8'
+                },
+                font: { family: 'Inter' }
+            };
+
+            Plotly.newPlot('pnl-chart', [trace], layout, {displayModeBar: false, responsive: true});
+        }
+
+        // --- PDF Generation Logic ---
+        function generateYearlyPDF() {
+            if (globalHistory.length === 0) {
+                alert("Charger l'historique d'abord.");
+                return;
+            }
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            const txs = parseHistory(globalHistory);
+
+            // 1. Process Data Matrix (Year x Stock)
+            const stats = {}; // stock -> year -> value
+            const allYears = new Set();
+            const allStocks = new Set();
+            
+            // Reconstruct PMP state for each stock to calc realized gains
+            const stockState = {}; // name -> { qty, totalCost }
+
+            txs.forEach(t => {
+                const year = t.date.getFullYear();
+                const stock = t.stock;
+                
+                allYears.add(year);
+                allStocks.add(stock);
+
+                if (!stats[stock]) stats[stock] = {};
+                if (!stats[stock][year]) stats[stock][year] = 0;
+                if (!stockState[stock]) stockState[stock] = { qty: 0, totalCost: 0 };
+
+                // Apply Fees (Immediate loss in that year)
+                stats[stock][year] -= t.fees;
+
+                if (t.type === 'Dividende') {
+                    stats[stock][year] += t.amount;
+                }
+                else if (t.type === 'Achat') {
+                    // Update PMP
+                    stockState[stock].totalCost += (t.price * t.qty);
+                    stockState[stock].qty += t.qty;
+                }
+                else if (t.type === 'Vente') {
+                    const pmp = stockState[stock].qty > 0 ? (stockState[stock].totalCost / stockState[stock].qty) : 0;
+                    const gain = (t.price - pmp) * t.qty;
+                    
+                    stats[stock][year] += gain;
+
+                    // Reduce State
+                    stockState[stock].qty -= t.qty;
+                    stockState[stock].totalCost -= (pmp * t.qty);
+                    if (stockState[stock].qty <= 0) {
+                        stockState[stock].qty = 0;
+                        stockState[stock].totalCost = 0;
+                    }
+                }
+            });
+
+            const sortedYears = Array.from(allYears).sort();
+            const sortedStocks = Array.from(allStocks).sort();
+
+            // 2. Build Table Body
+            const tableBody = [];
+            
+            sortedStocks.forEach(stock => {
+                const row = [stock];
+                let stockTotal = 0;
+                sortedYears.forEach(year => {
+                    const val = stats[stock][year] || 0;
+                    stockTotal += val;
+                    row.push(val); // Raw value for formatting later
+                });
+                row.push(stockTotal);
+                tableBody.push(row);
+            });
+
+            // Footer (Totals per year)
+            const footerRow = ['TOTAL (Titres + Liquidité générée)'];
+            const yearTotals = [];
+            let grandTotal = 0;
+
+            sortedYears.forEach(year => {
+                let yearSum = 0;
+                sortedStocks.forEach(stock => {
+                    yearSum += (stats[stock][year] || 0);
+                });
+                footerRow.push(yearSum);
+                yearTotals.push(yearSum);
+                grandTotal += yearSum;
+            });
+            footerRow.push(grandTotal);
+
+            // Progression Row (Year over Year %) on TOTAL
+            const progressionRow = ['Progression N vs N-1 (%)'];
+            for (let i = 0; i < sortedYears.length; i++) {
+                if (i === 0) {
+                    progressionRow.push("-");
+                } else {
+                    const prev = yearTotals[i - 1];
+                    const curr = yearTotals[i];
+                    
+                    // Simple growth: (Curr - Prev) / |Prev| ? 
+                    // Or change in absolute terms? 
+                    // Let's use standard % growth.
+                    if (Math.abs(prev) < 0.01) { 
+                        progressionRow.push("-");
+                    } else {
+                        const growth = ((curr - prev) / Math.abs(prev)) * 100;
+                        progressionRow.push(growth); 
+                    }
+                }
+            }
+            progressionRow.push("-");
+
+            // Cumulative Total Row (Wealth View)
+            const cumRow = ['CUMUL Historique'];
+            let runningSum = 0;
+            for (let i = 0; i < sortedYears.length; i++) {
+                runningSum += yearTotals[i];
+                cumRow.push(runningSum);
+            }
+            cumRow.push(runningSum); // Grand total is same as running sum at end
+
+            // 3. Draw PDF
+            doc.setFontSize(18);
+            doc.text("Rapport de Performance Réalisée", 14, 20);
+            doc.setFontSize(10);
+            doc.text("Total inclut: Gains Cessions + Dividendes - Frais", 14, 28);
+            doc.text(`Généré le: ${new Date().toLocaleDateString('fr-FR')}`, 14, 34);
+
+            doc.autoTable({
+                startY: 40,
+                head: [['Valeur', ...sortedYears, 'TOTAL']],
+                body: tableBody,
+                foot: [footerRow, progressionRow, cumRow],
+                theme: 'grid',
+                styles: { fontSize: 8, cellPadding: 2 },
+                headStyles: { fillColor: [15, 23, 42], textColor: 255, halign: 'center' }, 
+                footStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold' },
+                columnStyles: { 0: { halign: 'left' } },
+                didParseCell: function(data) {
+                    if (data.section === 'body' || data.section === 'foot') {
+                        // Align numeric columns
+                        if (data.column.index > 0) {
+                            data.cell.styles.halign = 'right';
+                        }
+
+                        // Specific row checks (row index depends on section)
+                        const isProgression = (data.section === 'foot' && data.row.index === 1);
+                        const isCumul = (data.section === 'foot' && data.row.index === 2);
+
+                        if (typeof data.cell.raw === 'number') {
+                            const val = data.cell.raw;
+                            
+                            if (isProgression) {
+                                // Percent formatting
+                                data.cell.text = (val > 0 ? "+" : "") + val.toFixed(1) + "%";
+                                // Colors for progression
+                                if (val < 0) data.cell.styles.textColor = [220, 38, 38]; 
+                                if (val > 0) data.cell.styles.textColor = [22, 163, 74]; 
+                            } else {
+                                // Currency formatting
+                                data.cell.text = val.toFixed(2) + " €"; 
+                                // Colors for currency values
+                                if (data.column.index > 0) { 
+                                    if (val < 0) data.cell.styles.textColor = [220, 38, 38];
+                                    if (val > 0) data.cell.styles.textColor = [22, 163, 74];
+                                    if (isCumul) data.cell.styles.textColor = [255, 255, 255]; // Keep cumulative white/neutral to distinguish
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            doc.save('rapport_performance_annuel.pdf');
+        }
+
+
+        // --- Event Listeners ---
+        function setupDropZone(zoneId, inputId, labelId, isHistory) {
+            const zone = document.getElementById(zoneId);
+            const input = document.getElementById(inputId);
+            const label = document.getElementById(labelId);
+
+            input.addEventListener('change', (e) => handleFile(e.target.files[0], zone, label, isHistory));
+            
+            zone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                zone.classList.add('dragover');
+            });
+            zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+            zone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                zone.classList.remove('dragover');
+                if (e.dataTransfer.files[0]) {
+                    input.files = e.dataTransfer.files;
+                    handleFile(e.dataTransfer.files[0], zone, label, isHistory);
+                }
+            });
+        }
+
+        function handleFile(file, zoneElement, labelElement, isHistory) {
+            if (!file) return;
+            labelElement.textContent = file.name;
+            zoneElement.classList.add('loaded');
+
+            Papa.parse(file, {
+                header: true,
+                delimiter: ";",
+                skipEmptyLines: true,
+                complete: function(results) {
+                    if (isHistory) {
+                        globalHistory = results.data;
+                    } else {
+                        globalPortfolio = results.data;
+                    }
+                    updateDashboard();
+                }
+            });
+        }
+
+        setupDropZone('drop-zone-pos', 'csvInputPos', 'label-pos', false);
+        setupDropZone('drop-zone-hist', 'csvInputHist', 'label-hist', true);
+
+    </script>
+</body>
+</html>
