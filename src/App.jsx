@@ -121,21 +121,16 @@ const SpectacularGlobe = ({ isStressed, opacity = 0.4 }) => {
         script.onload = () => {
           const THREE = window.THREE;
           if (!mountRef.current) return;
-
           const width = mountRef.current.clientWidth;
           const height = mountRef.current.clientHeight;
-
           scene = new THREE.Scene();
           camera = new THREE.PerspectiveCamera(60, width / height, 1, 1000);
           camera.position.set(0, 0, 180);
-
           rendererRef.current = new THREE.WebGLRenderer({ antialias: true, alpha: true });
           rendererRef.current.setSize(width, height);
           mountRef.current.appendChild(rendererRef.current.domElement);
-
           globe = new THREE.Group();
           scene.add(globe);
-
           const pointCount = 700;
           const pointGeom = new THREE.BufferGeometry();
           const positions = new Float32Array(pointCount * 3);
@@ -148,15 +143,9 @@ const SpectacularGlobe = ({ isStressed, opacity = 0.4 }) => {
               positions[i * 3 + 2] = r * Math.cos(phi);
           }
           pointGeom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-          const pointMat = new THREE.PointsMaterial({ 
-              color: isStressed ? 0xffffff : 0x10b981, 
-              size: 1.2, 
-              transparent: true, 
-              opacity: 0.5 
-          });
+          const pointMat = new THREE.PointsMaterial({ color: isStressed ? 0xffffff : 0x10b981, size: 1.2, transparent: true, opacity: 0.5 });
           points = new THREE.Points(pointGeom, pointMat);
           globe.add(points);
-
           const lineMat = new THREE.LineBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.08 });
           for (let i = 0; i < 45; i++) {
               const curve = new THREE.EllipseCurve(0, 0, 85, 85, 0, 2 * Math.PI, false, Math.random() * Math.PI);
@@ -167,7 +156,6 @@ const SpectacularGlobe = ({ isStressed, opacity = 0.4 }) => {
               line.rotation.y = Math.random() * Math.PI;
               globe.add(line);
           }
-
           const animate = () => {
               if (!rendererRef.current) return;
               const factor = isStressed ? 5 : 1;
@@ -179,19 +167,7 @@ const SpectacularGlobe = ({ isStressed, opacity = 0.4 }) => {
           animate();
         };
         document.head.appendChild(script);
-
-        const handleResize = () => {
-            if (!mountRef.current || !rendererRef.current) return;
-            camera.aspect = mountRef.current.clientWidth / mountRef.current.clientHeight;
-            camera.updateProjectionMatrix();
-            rendererRef.current.setSize(mountRef.current.clientWidth, mountRef.current.clientHeight);
-        };
-        window.addEventListener('resize', handleResize);
-
-        return () => {
-            window.removeEventListener('resize', handleResize);
-            if (rendererRef.current) mountRef.current?.removeChild(rendererRef.current.domElement);
-        };
+        return () => { if (rendererRef.current) mountRef.current?.removeChild(rendererRef.current.domElement); };
     }, [isStressed]);
 
     return <div ref={mountRef} className="absolute inset-0 w-full h-full pointer-events-none" style={{ opacity }} />;
@@ -269,33 +245,34 @@ export default function App() {
     const cmd = input.trim().toUpperCase();
     setInput("");
     addLog(`> ${cmd}`);
+
+    // Dictionnaire des lancements de sous-répertoires
+    const launchTargets = {
+      'SEA': 'SEA/index.html',
+      'PACMAN': 'Pacman/index.html',
+      'DOOM': 'Doom/index.html',
+      'INDEX': 'index.html',
+      'OS': 'os.html'
+    };
+
+    if (launchTargets[cmd]) {
+      setIsStressed(true);
+      addLog(`SYNCHRONIZING_UPLINK: /${launchTargets[cmd]}...`);
+      setTimeout(() => {
+        setIsStressed(false);
+        addLog(`ACCESS_GRANTED: REDIRECTING_TO_${cmd}`);
+        window.open(launchTargets[cmd], '_blank');
+      }, 800);
+      return;
+    }
+
     switch(cmd) {
       case 'LIQUIDATE': setIsLiquidating(true); setOrders([]); addLog("CRITICAL: POSITIONS_PURGED"); setTimeout(() => setIsLiquidating(false), 500); break;
       case 'STEALTH': setIsStealth(!isStealth); addLog(isStealth ? "STEALTH_OFF" : "STEALTH_ON"); break;
       case 'NEURAL_SCAN': setIsScanning(true); addLog("RUNNING_NEURAL_SCAN..."); setTimeout(() => { setIsScanning(false); addLog("SENTIMENT: BULLISH_84%"); }, 2000); break;
       case 'RISK_FLUSH': setIsStressed(true); addLog("SCALING_EXPOSURE_-50%"); setOrders(prev => prev.map(o => ({...o, amount: (o.amount / 2).toFixed(4)}))); setTimeout(() => setIsStressed(false), 1000); break;
       case 'DATA_BURST': setBurstMode(true); addLog("DATA_BURST_ENGAGED"); setTimeout(() => setBurstMode(false), 3000); break;
-      case 'OS': 
-      case 'LAUNCH_OS':
-        setIsStressed(true);
-        addLog("DECRYPTING_OS_HANDSHAKE...");
-        setTimeout(() => {
-          setIsStressed(false);
-          addLog("UPLINK_REDIRECT: OS.HTML");
-          window.open('os.html', '_blank');
-        }, 800);
-        break;
-      case 'INDEX':
-      case 'LAUNCH_INDEX':
-        setIsStressed(true);
-        addLog("SYNCHRONIZING_INDEX_UPLINK...");
-        setTimeout(() => {
-          setIsStressed(false);
-          addLog("ACCESS_GRANTED: INDEX.HTML");
-          window.open('index.html', '_blank');
-        }, 800);
-        break;
-      case 'HELP': addLog("ACTIONS: OS, INDEX, LIQUIDATE, STEALTH, NEURAL_SCAN, RISK_FLUSH, DATA_BURST"); break;
+      case 'HELP': addLog("MODULES: SEA, PACMAN, DOOM, OS, INDEX /// ACTIONS: LIQUIDATE, STEALTH, NEURAL_SCAN, RISK_FLUSH, DATA_BURST"); break;
       default: addLog("ERR: UNKNOWN_CMD");
     }
   };
@@ -320,7 +297,7 @@ export default function App() {
           </div>
           <div className="text-center space-y-3">
             <h1 className="text-white text-xl tracking-[1.5em] md:tracking-[2.5em] uppercase font-black ml-[1.5em] md:ml-[2.5em] glow-text">Leonce_Equity</h1>
-            <p className="text-emerald-900 text-[10px] font-bold tracking-[0.8em] uppercase">Sovereign_Omni_Deck_V5.6</p>
+            <p className="text-emerald-900 text-[10px] font-bold tracking-[0.8em] uppercase">Sovereign_Omni_Deck_V5.7</p>
           </div>
           <button onClick={() => setIsLive(true)} className="group relative px-16 py-4 border border-emerald-500/20 text-emerald-500 uppercase tracking-[1em] overflow-hidden transition-all hover:border-emerald-500 bg-black/40 backdrop-blur-sm">
             <span className="relative z-10 group-hover:text-black transition-colors">Start_Uplink</span>
