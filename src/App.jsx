@@ -51,7 +51,6 @@ const GlobalCinemaStyles = () => (
    1. MOTEURS 3D (THREE.JS)
    ========================================= */
 
-// --- TERRAIN DE LIQUIDITÉ ---
 const LOB3DTerrain = ({ isStressed, burstMode }) => {
   const mountRef = useRef(null);
   const rendererRef = useRef(null);
@@ -111,7 +110,6 @@ const LOB3DTerrain = ({ isStressed, burstMode }) => {
   return <div ref={mountRef} className="w-full h-full min-h-[250px]" />;
 };
 
-// --- GLOBE SPECTACULAIRE ---
 const SpectacularGlobe = ({ isStressed, opacity = 0.4 }) => {
     const mountRef = useRef(null);
     const rendererRef = useRef(null);
@@ -287,7 +285,17 @@ export default function App() {
           window.open('os.html', '_blank');
         }, 800);
         break;
-      case 'HELP': addLog("ACTIONS: OS, LIQUIDATE, STEALTH, NEURAL_SCAN, RISK_FLUSH, DATA_BURST"); break;
+      case 'INDEX':
+      case 'LAUNCH_INDEX':
+        setIsStressed(true);
+        addLog("SYNCHRONIZING_INDEX_UPLINK...");
+        setTimeout(() => {
+          setIsStressed(false);
+          addLog("ACCESS_GRANTED: INDEX.HTML");
+          window.open('index.html', '_blank');
+        }, 800);
+        break;
+      case 'HELP': addLog("ACTIONS: OS, INDEX, LIQUIDATE, STEALTH, NEURAL_SCAN, RISK_FLUSH, DATA_BURST"); break;
       default: addLog("ERR: UNKNOWN_CMD");
     }
   };
