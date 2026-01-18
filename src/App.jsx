@@ -1,897 +1,780 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { 
-  Terminal, Shield, X, Activity, BarChart3, 
-  Radar, Globe, Radio, Share2, 
-  Bell, CheckCircle, AlertOctagon, Layers,
-  Volume2, VolumeX, Move
+  Terminal, Shield, Activity, BarChart3, 
+  Radar, Radio, Share2, 
+  Layers, Volume2, VolumeX, 
+  Database, Zap, ArrowUpRight, ArrowDownRight,
+  Maximize2, ChevronRight, Cpu, Globe,
+  Calendar, Clock, AlertTriangle, TrendingUp,
+  Lock, Wifi, HardDrive, Fingerprint, Newspaper, Calculator, Grid3X3
 } from 'lucide-react';
 
 /* =========================================
-   0. CORE STYLES & SHADERS
+   0. CONFIGURATION ET STYLES
    ========================================= */
+const THEME = {
+  bg: 'bg-[#0a0a0c]',
+  surface: 'bg-[#121214]',
+  border: 'border-[#242427]',
+  text: 'text-zinc-400',
+  accent: 'text-emerald-500',
+  up: 'text-emerald-400',
+  down: 'text-red-400',
+  font: 'font-mono'
+};
+
 const GlobalStyles = () => (
   <style>{`
-    :root {
-      --color-primary: #10b981;
-      --color-alert: #ef4444;
-      --color-ghost: #6b7280;
-    }
-
-    @keyframes glitch {
-      0% { text-shadow: 2px 0 rgba(255,0,0,0.5), -2px 0 rgba(0,255,0,0.5); transform: skew(0deg); }
-      20% { text-shadow: -2px 0 rgba(255,0,0,0.5), 2px 0 rgba(0,255,0,0.5); transform: skew(10deg); }
-      40% { text-shadow: 2px 0 rgba(255,0,0,0.5), -2px 0 rgba(0,255,0,0.5); transform: skew(-5deg); }
-      60% { text-shadow: -2px 0 rgba(255,0,0,0.5), 2px 0 rgba(0,255,0,0.5); transform: skew(0deg); }
-      80% { text-shadow: 2px 0 rgba(255,0,0,0.5), -2px 0 rgba(0,255,0,0.5); transform: skew(5deg); }
-      100% { text-shadow: -2px 0 rgba(255,0,0,0.5), 2px 0 rgba(0,255,0,0.5); transform: skew(0deg); }
-    }
-    .glitch-text { animation: glitch 0.3s cubic-bezier(.25, .46, .45, .94) both infinite; }
-    
-    @keyframes scanline {
-      0% { transform: translateY(-100%); }
-      100% { transform: translateY(100%); }
-    }
-    .scanline {
-      width: 100%; height: 100px; z-index: 10;
-      background: linear-gradient(0deg, rgba(0,0,0,0) 0%, rgba(16, 185, 129, 0.1) 50%, rgba(0,0,0,0) 100%);
-      opacity: 0.1; position: absolute; bottom: 100%;
-      animation: scanline 8s linear infinite; pointer-events: none;
-    }
-
-    @keyframes shake {
-      0% { transform: translate(1px, 1px) rotate(0deg); }
-      10% { transform: translate(-1px, -2px) rotate(-1deg); }
-      20% { transform: translate(-3px, 0px) rotate(1deg); }
-      30% { transform: translate(3px, 2px) rotate(0deg); }
-      40% { transform: translate(1px, -1px) rotate(1deg); }
-      50% { transform: translate(-1px, 2px) rotate(-1deg); }
-      60% { transform: translate(-3px, 1px) rotate(0deg); }
-      70% { transform: translate(3px, 1px) rotate(-1deg); }
-      80% { transform: translate(-1px, -1px) rotate(1deg); }
-      90% { transform: translate(1px, 2px) rotate(0deg); }
-      100% { transform: translate(1px, -2px) rotate(-1deg); }
-    }
-    .shake-screen { animation: shake 0.5s infinite; }
-    
-    @keyframes ticker { 
-      0% { transform: translate(100%, -50%); } 
-      100% { transform: translate(-100%, -50%); } 
-    }
-    .animate-ticker { 
-      animation: ticker 60s linear infinite; 
-      will-change: transform;
-    }
-    .animate-ticker:hover { animation-play-state: paused; }
-
-    .ghost-mode { filter: grayscale(100%) brightness(0.2); }
-    
-    @media (pointer: fine) { body { cursor: none; } }
-    @media (pointer: coarse) { body { cursor: auto; } }
-    
+    @keyframes pulse-subtle { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+    .animate-pulse-subtle { animation: pulse-subtle 3s infinite ease-in-out; }
+    .data-grid { background-image: radial-gradient(#242427 1px, transparent 1px); background-size: 20px 20px; }
     .no-scrollbar::-webkit-scrollbar { display: none; }
-    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    input::selection { background: #10b981; color: #000; }
+    @keyframes ticker { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+    .animate-ticker { display: flex; width: fit-content; animation: ticker 30s linear infinite; }
+    @keyframes scanline { 0% { bottom: 100%; } 100% { bottom: -100px; } }
+    .scanline { width: 100%; height: 100px; z-index: 10; background: linear-gradient(0deg, rgba(0,0,0,0) 0%, rgba(16, 185, 129, 0.05) 50%, rgba(0,0,0,0) 100%); opacity: 0.1; position: absolute; bottom: 100%; animation: scanline 8s linear infinite; pointer-events: none; }
+    @keyframes fast-log { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .animate-log { animation: fast-log 0.1s ease-out forwards; }
+    @keyframes glitch-flash { 0% { background: transparent; } 1% { background: rgba(16, 185, 129, 0.1); } 2% { background: transparent; } }
+    .animate-glitch-flash { animation: glitch-flash 4s infinite; }
   `}</style>
 );
 
+// --- CALCULATRICE FINANCIÈRE ---
+const CALC_TERMINAL_CONTENT = `
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+      :root { --bg: #121214; --border: #242427; --accent: #10b981; --text: #e8eaed; }
+      body { background: #0a0a0c; color: var(--text); font-family: ui-monospace, monospace; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+      .calc { display: flex; flex-direction: column; height: 100%; padding: 10px; box-sizing: border-box; }
+      .display { background: var(--bg); border: 1px solid var(--border); padding: 15px; text-align: right; margin-bottom: 10px; min-height: 80px; display: flex; flex-direction: column; justify-content: flex-end; }
+      #history { font-size: 12px; color: #5f6368; min-height: 1.2em; word-break: break-all; }
+      #current { font-size: 22px; font-weight: bold; overflow: hidden; }
+      .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; flex: 1; }
+      button { background: #1e1e21; border: 1px solid var(--border); color: var(--text); font-family: inherit; font-size: 16px; cursor: pointer; transition: 0.1s; }
+      button:hover { border-color: var(--accent); color: var(--accent); background: #242427; }
+      button.op { color: var(--accent); }
+      button.eq { background: rgba(16, 185, 129, 0.1); color: var(--accent); grid-column: span 4; }
+      button.ac { color: #ef4444; }
+    </style>
+  </head>
+  <body>
+    <div class="calc">
+      <div class="display"><div id="history"></div><div id="current">0</div></div>
+      <div class="grid">
+        <button class="ac" onclick="press('AC')">AC</button><button onclick="press('(')">(</button><button onclick="press(')')">)</button><button class="op" onclick="press('/')">/</button>
+        <button onclick="press('7')">7</button><button onclick="press('8')">8</button><button onclick="press('9')">9</button><button class="op" onclick="press('*')">*</button>
+        <button onclick="press('4')">4</button><button onclick="press('5')">5</button><button onclick="press('6')">6</button><button class="op" onclick="press('-')">-</button>
+        <button onclick="press('1')">1</button><button onclick="press('2')">2</button><button onclick="press('3')">3</button><button class="op" onclick="press('+')">+</button>
+        <button onclick="press('0')">0</button><button onclick="press('.')">.</button><button onclick="press('%')">%</button><button class="op" onclick="press('DEL')">←</button>
+        <button class="eq" onclick="calculate()">EXE</button>
+      </div>
+    </div>
+    <script>
+      let expression = ""; const currentEl = document.getElementById('current'); const historyEl = document.getElementById('history');
+      function press(val) { if (val === 'AC') expression = ""; else if (val === 'DEL') expression = expression.slice(0, -1); else expression += val; update(); }
+      function update() { currentEl.innerText = expression || "0"; }
+      function calculate() {
+        try {
+          let sanitized = expression.replace(/(\\d+\\.?\\d*)\\s*([+-])\\s*(\\d+\\.?\\d*)%/g, (match, base, op, perc) => \`\${base} \${op} (\${base} * \${perc} / 100)\`).replace(/%/g, '/100');
+          const result = new Function('return ' + sanitized)();
+          historyEl.innerText = expression + " ="; expression = String(Math.round(result * 1000000) / 1000000); update();
+        } catch (e) { currentEl.innerText = "SYNTAX_ERR"; setTimeout(() => update(), 1000); }
+      }
+    </script>
+  </body>
+</html>
+`;
+
+// --- SUDOKU TERMINAL CONTENT (INTÉGRALE DU CODE FOURNI) ---
+const SUDOKU_TERMINAL_CONTENT = `
+<!DOCTYPE html>
+<html lang="en" class="antialiased">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sudoku Pro - Sovereign Edition</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: { slate: { 850: '#151f2e' } },
+                    fontFamily: { mono: ['ui-monospace', 'monospace'] },
+                    animation: {
+                        'penalty': 'penalty-flash 0.5s ease-in-out',
+                        'shake': 'shake 0.4s both',
+                        'pop-in': 'popIn 0.3s forwards',
+                    },
+                    keyframes: {
+                        'penalty-flash': { '0%, 100%': { backgroundColor: 'transparent' }, '50%': { backgroundColor: 'rgba(239, 68, 68, 0.2)' } },
+                        'shake': { '10%, 90%': { transform: 'translate3d(-1px, 0, 0)' }, '20%, 80%': { transform: 'translate3d(2px, 0, 0)' } },
+                        'popIn': { '0%': { transform: 'scale(0.8)', opacity: '0' }, '100%': { transform: 'scale(1)', opacity: '1' } }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background: #000; color: #00ff41; font-family: 'ui-monospace', monospace; }
+        .grid-container { aspect-ratio: 1/1; max-width: 450px; margin: 0 auto; }
+        .cell { aspect-ratio: 1/1; position: relative; cursor: pointer; transition: all 0.15s; }
+        .cell-input { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; z-index: 10; }
+        .notes-grid { display: grid; grid-template-columns: repeat(3, 1fr); height: 100%; width: 100%; font-size: 0.6rem; color: #008f11; pointer-events: none; }
+        .cell-active { background: rgba(0, 255, 65, 0.2); box-shadow: inset 0 0 0 2px #00ff41; }
+        .cell-highlight { background: rgba(0, 255, 65, 0.05); }
+        .cell-error { color: #ff4141; background: rgba(255, 65, 65, 0.1); }
+        .cell-fixed { color: #008f11; font-weight: 900; }
+        .cell-filled { color: #00ff41; }
+        .border-thick-r { border-right: 2px solid #00ff41; }
+        .border-thick-b { border-bottom: 2px solid #00ff41; }
+        .btn { transition: all 0.2s; text-transform: uppercase; font-weight: bold; border: 1px solid #008f11; padding: 4px 8px; }
+        .btn:hover { background: rgba(0, 255, 65, 0.1); box-shadow: 0 0 10px rgba(0, 255, 65, 0.3); }
+    </style>
+</head>
+<body class="p-4 flex flex-col h-screen overflow-hidden">
+    <div class="max-w-md mx-auto w-full flex flex-col h-full">
+        <div class="flex justify-between items-center mb-4 border-b border-[#004d00] pb-2">
+            <div>
+                <h1 class="text-xl font-bold tracking-tighter">SUDOKU_KERNEL</h1>
+                <div id="difficulty-badge" class="text-[10px] bg-[#004d00] px-1 inline-block uppercase">MODE: EASY</div>
+            </div>
+            <div class="text-right">
+                <div id="timer" class="text-lg">00:00</div>
+                <div id="penalty-counter" class="text-[10px] text-red-500">PENALTY: 0/3</div>
+            </div>
+        </div>
+
+        <div id="board-container" class="relative bg-black border-2 border-[#00ff41] grid-container grid grid-cols-9 overflow-hidden">
+        </div>
+
+        <div class="mt-4 flex flex-col gap-3">
+            <div class="grid grid-cols-9 gap-1">
+                <button class="num-btn btn text-sm" data-val="1">1</button>
+                <button class="num-btn btn text-sm" data-val="2">2</button>
+                <button class="num-btn btn text-sm" data-val="3">3</button>
+                <button class="num-btn btn text-sm" data-val="4">4</button>
+                <button class="num-btn btn text-sm" data-val="5">5</button>
+                <button class="num-btn btn text-sm" data-val="6">6</button>
+                <button class="num-btn btn text-sm" data-val="7">7</button>
+                <button class="num-btn btn text-sm" data-val="8">8</button>
+                <button class="num-btn btn text-sm" data-val="9">9</button>
+            </div>
+            
+            <div class="grid grid-cols-4 gap-2">
+                <button id="undo-btn" class="btn text-[10px]">UNDO</button>
+                <button id="note-btn" class="btn text-[10px]">NOTE: OFF</button>
+                <button id="hint-btn" class="btn text-[10px]">HINT</button>
+                <button id="erase-btn" class="btn text-[10px] text-red-500">ERASE</button>
+            </div>
+
+            <div class="flex gap-2">
+                <select id="level-select" class="bg-black border border-[#008f11] text-[10px] px-2 flex-1 outline-none">
+                    <option value="easy">EASY</option>
+                    <option value="medium">MEDIUM</option>
+                    <option value="hard">HARD</option>
+                    <option value="expert">EXPERT</option>
+                </select>
+                <button id="new-game-btn" class="btn bg-[#008f11] text-black px-4 py-1 text-[10px] font-bold">NEW_SESSION</button>
+                <button id="pdf-btn" class="btn text-[10px] px-2 opacity-50">PDF</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class SudokuController {
+            constructor() {
+                this.board = Array(81).fill(0);
+                this.solution = Array(81).fill(0);
+                this.initialBoard = Array(81).fill(0);
+                this.notes = Array(81).fill().map(() => new Set());
+                this.selected = -1;
+                this.isNoteMode = false;
+                this.penalties = 0;
+                this.timer = 0;
+                this.timerId = null;
+                this.init();
+            }
+
+            init() {
+                this.renderBoard();
+                this.attachEvents();
+                this.newGame('easy');
+            }
+
+            renderBoard() {
+                const container = document.getElementById('board-container');
+                container.innerHTML = '';
+                for(let i=0; i<81; i++) {
+                    const cell = document.createElement('div');
+                    cell.className = \`cell border border-[#004d00] \${(i%9===2 || i%9===5) ? 'border-thick-r' : ''} \${(Math.floor(i/9)===2 || Math.floor(i/9)===5) ? 'border-thick-b' : ''}\`;
+                    cell.dataset.index = i;
+                    cell.innerHTML = '<div class="notes-grid"></div><div class="cell-input"></div>';
+                    container.appendChild(cell);
+                }
+            }
+
+            attachEvents() {
+                document.getElementById('board-container').onclick = (e) => {
+                    const cell = e.target.closest('.cell');
+                    if(cell) this.selectCell(parseInt(cell.dataset.index));
+                };
+                document.querySelectorAll('.num-btn').forEach(b => b.onclick = () => this.inputValue(parseInt(b.dataset.val)));
+                document.getElementById('new-game-btn').onclick = () => this.newGame(document.getElementById('level-select').value);
+                document.getElementById('note-btn').onclick = () => this.toggleNote();
+                document.getElementById('erase-btn').onclick = () => this.inputValue(0);
+                document.getElementById('hint-btn').onclick = () => this.giveHint();
+                document.getElementById('pdf-btn').onclick = () => window.print();
+                
+                window.onkeydown = (e) => {
+                    if(e.key >= 1 && e.key <= 9) this.inputValue(parseInt(e.key));
+                    if(e.key === 'Backspace' || e.key === 'Delete') this.inputValue(0);
+                    if(e.key.toLowerCase() === 'n') this.toggleNote();
+                };
+            }
+
+            newGame(level) {
+                // Algorithme de génération simplifié (base fixe mélangée pour démo)
+                const base = [
+                    5,3,4,6,7,8,9,1,2,6,7,2,1,9,5,3,4,8,1,9,8,3,4,2,5,6,7,
+                    8,5,9,7,6,1,4,2,3,4,2,6,8,5,3,7,9,1,7,1,3,9,2,4,8,5,6,
+                    9,6,1,5,3,7,2,8,4,2,8,7,4,1,9,6,3,5,3,4,5,2,8,6,1,7,9
+                ];
+                this.solution = [...base];
+                this.board = [...base];
+                this.initialBoard = [...base];
+                
+                let holes = {easy: 35, medium: 45, hard: 55, expert: 62}[level] || 35;
+                while(holes > 0) {
+                    let idx = Math.floor(Math.random()*81);
+                    if(this.board[idx] !== 0) { this.board[idx] = 0; this.initialBoard[idx] = 0; holes--; }
+                }
+
+                this.penalties = 0;
+                this.timer = 0;
+                this.selected = -1;
+                this.notes = Array(81).fill().map(() => new Set());
+                this.updateUI();
+                this.startTimer();
+                document.getElementById('difficulty-badge').innerText = \`MODE: \${level.toUpperCase()}\`;
+            }
+
+            selectCell(idx) {
+                this.selected = idx;
+                this.updateUI();
+            }
+
+            inputValue(val) {
+                if(this.selected === -1 || this.initialBoard[this.selected] !== 0) return;
+                
+                if(this.isNoteMode && val !== 0) {
+                    if(this.notes[this.selected].has(val)) this.notes[this.selected].delete(val);
+                    else this.notes[this.selected].add(val);
+                } else {
+                    if(val !== 0 && val !== this.solution[this.selected]) {
+                        this.penalties++;
+                        document.getElementById('board-container').classList.add('animate-penalty');
+                        setTimeout(() => document.getElementById('board-container').classList.remove('animate-penalty'), 500);
+                        if(this.penalties >= 3) {
+                            alert('SYSTEM_HALT: MAXIMUM_PENALTIES_REACHED');
+                            this.newGame('easy');
+                        }
+                    } else {
+                        this.board[this.selected] = val;
+                        this.notes[this.selected].clear();
+                    }
+                }
+                this.updateUI();
+                if(!this.board.includes(0)) {
+                    clearInterval(this.timerId);
+                    alert('ACCESS_GRANTED: SODOKU_RESOLVED');
+                }
+            }
+
+            toggleNote() {
+                this.isNoteMode = !this.isNoteMode;
+                const btn = document.getElementById('note-btn');
+                btn.innerText = \`NOTE: \${this.isNoteMode ? 'ON' : 'OFF'}\`;
+                btn.style.borderColor = this.isNoteMode ? '#00ff41' : '#008f11';
+                btn.style.color = this.isNoteMode ? '#00ff41' : '#008f11';
+            }
+
+            updateUI() {
+                const cells = document.querySelectorAll('.cell');
+                cells.forEach((cell, i) => {
+                    const input = cell.querySelector('.cell-input');
+                    const notesGrid = cell.querySelector('.notes-grid');
+                    
+                    input.innerText = this.board[i] || '';
+                    cell.className = cell.className.split(' ').filter(c => !['cell-active', 'cell-highlight', 'cell-fixed', 'cell-filled'].includes(c)).join(' ');
+                    
+                    if(this.initialBoard[i] !== 0) cell.classList.add('cell-fixed');
+                    else if(this.board[i] !== 0) cell.classList.add('cell-filled');
+                    
+                    if(this.selected !== -1) {
+                        const selR = Math.floor(this.selected/9), selC = this.selected%9;
+                        const iR = Math.floor(i/9), iC = i%9;
+                        if(i === this.selected) cell.classList.add('cell-active');
+                        else if(selR === iR || selC === iC) cell.classList.add('cell-highlight');
+                    }
+
+                    notesGrid.innerHTML = '';
+                    if(this.board[i] === 0) {
+                        for(let n=1; n<=9; n++) {
+                            const note = document.createElement('div');
+                            note.className = 'flex items-center justify-center';
+                            note.innerText = this.notes[i].has(n) ? n : '';
+                            notesGrid.appendChild(note);
+                        }
+                    }
+                });
+                document.getElementById('penalty-counter').innerText = \`PENALTY: \${this.penalties}/3\`;
+            }
+
+            startTimer() {
+                if(this.timerId) clearInterval(this.timerId);
+                this.timerId = setInterval(() => {
+                    this.timer++;
+                    const m = Math.floor(this.timer/60).toString().padStart(2,'0');
+                    const s = (this.timer%60).toString().padStart(2,'0');
+                    document.getElementById('timer').innerText = \`\${m}:\${s}\`;
+                }, 1000);
+            }
+
+            giveHint() {
+                if(this.selected === -1 || this.board[this.selected] !== 0) return;
+                this.board[this.selected] = this.solution[this.selected];
+                this.notes[this.selected].clear();
+                this.updateUI();
+            }
+        }
+        document.addEventListener('DOMContentLoaded', () => new SudokuController());
+    </script>
+</body>
+</html>
+`;
+
+// --- NEWS TERMINAL CONTENT ---
+const NEWS_TERMINAL_CONTENT = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEWS TERMINAL</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+        :root { --main-color: #00ff41; --dim-color: #008f11; --border-color: #004d00; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'VT323', monospace; background-color: #000; color: var(--main-color); font-size: 16px; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+        .header { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 2px solid var(--border-color); }
+        .feed-container { flex: 1; overflow-y: auto; padding: 1rem; }
+        .article-card { margin-bottom: 15px; padding: 10px; border-left: 3px solid var(--border-color); background: rgba(0, 20, 0, 0.3); transition: all 0.2s; }
+        .article-card:hover { border-left-color: var(--main-color); background: rgba(0, 40, 0, 0.5); }
+        .meta { font-size: 0.8rem; color: var(--dim-color); margin-bottom: 5px; }
+        .title { font-size: 1.2rem; text-decoration: none; color: var(--main-color); display: block; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div style="font-weight: bold;">LIVE_INTEL_STREAM</div>
+        <div id="sync">SYNC: READY</div>
+    </div>
+    <div id="results" class="feed-container">SYNCING_NEURAL_NETWORK...</div>
+    <script>
+        async function fetchFeeds() {
+            const results = document.getElementById('results');
+            const sync = document.getElementById('sync');
+            sync.innerText = "SYNC: FETCHING...";
+            try {
+                const res = await fetch('https://api.rss2json.com/v1/api.json?rss_url=https://cointelegraph.com/rss');
+                const data = await res.json();
+                if(data.status === 'ok') {
+                    results.innerHTML = data.items.map(a => \`
+                        <div class="article-card">
+                            <div class="meta">[\${new Date(a.pubDate).toLocaleTimeString()}] WIRE_SERVICE</div>
+                            <a href="\${a.link}" target="_blank" class="title">\${a.title}</a>
+                        </div>\`).join('');
+                }
+                sync.innerText = "SYNC: LIVE";
+            } catch(e) { sync.innerText = "SYNC: ERROR"; }
+        }
+        fetchFeeds(); setInterval(fetchFeeds, 300000);
+    </script>
+</body>
+</html>
+`;
+
 /* =========================================
-   1. SYSTEM HOOKS (AUDIO, LOGIC, RSS)
+   1. SYSTEMES AUDIO ET SFX
    ========================================= */
 
 const useSoundSystem = (muted) => {
   const audioCtxRef = useRef(null);
-
   const playTone = useCallback((freq, type, duration, vol = 0.1) => {
     if (muted) return;
-    if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
-    
-    const ctx = audioCtxRef.current;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    
-    osc.type = type;
-    osc.frequency.setValueAtTime(freq, ctx.currentTime);
-    gain.gain.setValueAtTime(vol, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
-    
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + duration);
+    try {
+      if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      const ctx = audioCtxRef.current;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+      gain.gain.setValueAtTime(vol, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(); osc.stop(ctx.currentTime + duration);
+    } catch (e) {}
   }, [muted]);
 
-  const sfx = useMemo(() => ({
-    boot: () => {
-      if(muted) return;
-      playTone(100, 'square', 0.1);
-      setTimeout(() => playTone(200, 'square', 0.1), 100);
-      setTimeout(() => playTone(400, 'square', 0.2), 200);
-    },
+  return useMemo(() => ({
+    boot: () => { playTone(100, 'square', 0.1); setTimeout(() => playTone(400, 'square', 0.2), 150); },
     keyPress: () => playTone(800 + Math.random()*200, 'sine', 0.05, 0.02),
-    alert: () => {
-      if(muted) return;
-      playTone(400, 'sawtooth', 0.5, 0.1);
-      setTimeout(() => playTone(300, 'sawtooth', 0.5, 0.1), 400);
-    },
-    success: () => {
-      playTone(600, 'sine', 0.1);
-      setTimeout(() => playTone(1200, 'sine', 0.3), 100);
-    },
-    error: () => playTone(150, 'sawtooth', 0.4, 0.1),
-    hover: () => playTone(2000, 'sine', 0.01, 0.005),
-    news: () => playTone(1200, 'square', 0.05, 0.05),
-    drag: () => playTone(150, 'triangle', 0.1, 0.05)
-  }), [playTone, muted]);
-
-  return sfx;
+    success: () => { playTone(600, 'sine', 0.1); setTimeout(() => playTone(1200, 'sine', 0.3), 100); },
+    processing: () => playTone(200 + Math.random() * 50, 'triangle', 0.05, 0.01),
+    hover: () => playTone(2000, 'sine', 0.01, 0.005)
+  }), [playTone]);
 };
 
-const useNewsFeed = () => {
-    const [news, setNews] = useState([]);
-    const [loading, setLoading] = useState(true);
+/* =========================================
+   2. MODULE : INITIALISATION (BOOT)
+   ========================================= */
 
-    const fetchFeed = async () => {
-        try {
-            const res = await fetch('https://api.rss2json.com/v1/api.json?rss_url=https://cointelegraph.com/rss');
-            const data = await res.json();
-            
-            if (data.status === 'ok') {
-                const items = data.items.map(item => ({
-                    title: item.title,
-                    link: item.link,
-                    pubDate: item.pubDate,
-                    source: 'COINTELEGRAPH'
-                }));
-                setNews(items);
-                setLoading(false);
+const BootSequence = ({ onComplete, sfx }) => {
+    const [logs, setLogs] = useState([]);
+    const [stage, setStage] = useState('POST');
+    const [progress, setProgress] = useState(0);
+    const completeCalled = useRef(false);
+
+    const postLines = useMemo(() => [
+        "CPU_INIT: ARMV9.2-A SVE2 ... OK",
+        "MEM_CHECK: 131072MB ECC LPDDR5 ... OK",
+        "KERNEL: SOVEREIGN_CORE_V5.1.4_STABLE",
+        "NETWORK: SATELLITE_UPLINK_STABLE",
+        "DISK_CRYPT: AES-256-GCM_MOUNTED"
+    ], []);
+
+    useEffect(() => {
+        if (stage !== 'POST') return;
+        let i = 0;
+        const interval = setInterval(() => {
+            if (i < postLines.length) {
+                setLogs(prev => [...prev, postLines[i]]);
+                sfx.keyPress(); i++;
+            } else {
+                clearInterval(interval);
+                setTimeout(() => setStage('AUTH'), 500);
             }
-        } catch (e) {
-            setNews([
-                { title: "CONNECTION ERROR: USING CACHED DATA", source: "SYSTEM", pubDate: new Date().toISOString() },
-                { title: "Whale Alert: 10,000 BTC moved to Binance", source: "ON-CHAIN", pubDate: new Date().toISOString() },
-                { title: "SEC Delaying ETF Decision Again", source: "REUTERS", pubDate: new Date().toISOString() }
-            ]);
-        }
-    };
-
-    useEffect(() => {
-        fetchFeed();
-        const interval = setInterval(fetchFeed, 60000);
+        }, 120);
         return () => clearInterval(interval);
-    }, []);
+    }, [stage, sfx, postLines]);
 
-    return { news, loading };
-};
-
-const useIsMobile = () => {
-  const [isMobile, setIsMobile] = useState(false);
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 768);
-    check();
-    window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
-  }, []);
-  return isMobile;
-};
-
-/* =========================================
-   2. VISUAL LAYERS
-   ========================================= */
-
-const CRTOverlay = () => (
-  <div className="pointer-events-none fixed inset-0 z-[9999] overflow-hidden rounded-lg">
-    <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_50%,rgba(0,0,0,0.6)_100%)]" />
-    <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_2px,3px_100%] opacity-20" />
-  </div>
-);
-
-const TacticalCursor = ({ isAlert }) => {
-  const isMobile = useIsMobile();
-  const [pos, setPos] = useState({ x: -100, y: -100 });
-  const [hovered, setHovered] = useState(false);
-  const [clicked, setClicked] = useState(false);
-
-  useEffect(() => {
-    if (isMobile) return;
-    const move = (e) => setPos({ x: e.clientX, y: e.clientY });
-    const down = () => setClicked(true);
-    const up = () => setClicked(false);
-    const hoverCheck = (e) => {
-      const t = e.target;
-      setHovered(t.tagName === 'BUTTON' || t.tagName === 'INPUT' || t.tagName === 'A' || t.closest('button') || t.classList.contains('cursor-move'));
-    };
-
-    window.addEventListener('mousemove', move);
-    window.addEventListener('mousedown', down);
-    window.addEventListener('mouseup', up);
-    window.addEventListener('mouseover', hoverCheck);
-    return () => {
-      window.removeEventListener('mousemove', move);
-      window.removeEventListener('mousedown', down);
-      window.removeEventListener('mouseup', up);
-      window.removeEventListener('mouseover', hoverCheck);
-    };
-  }, [isMobile]);
-
-  if (isMobile) return null;
-
-  const color = isAlert ? 'border-red-500' : 'border-emerald-500';
-  const size = clicked ? 'scale-75' : (hovered ? 'scale-150' : 'scale-100');
-
-  return (
-    <div className="fixed z-[10000] pointer-events-none transition-transform duration-75 ease-out flex items-center justify-center" 
-         style={{ left: pos.x, top: pos.y, transform: 'translate(-50%, -50%)' }}>
-      <div className={`w-1 h-1 rounded-full ${isAlert ? 'bg-red-500' : 'bg-emerald-500'}`} />
-      <div className={`absolute w-8 h-8 border border-dashed rounded-full animate-[spin_4s_linear_infinite] opacity-50 ${color} ${size} transition-all duration-300`} />
-      <div className={`absolute w-12 h-12 border border-t-0 border-b-0 opacity-30 ${color} ${hovered ? 'scale-100 rotate-0' : 'scale-0 rotate-45'} transition-all duration-300`} />
-    </div>
-  );
-};
-
-/* =========================================
-   3. DATA VISUALIZATION
-   ========================================= */
-
-const SpectacularGlobe = React.memo(({ isAlert }) => {
-    const canvasRef = useRef(null);
     useEffect(() => {
-        const cvs = canvasRef.current;
-        const ctx = cvs?.getContext('2d');
-        if (!ctx) return;
-        
-        let w, h, fid, rot = 0;
-        const resize = () => { 
-            w = cvs.width = cvs.parentElement.clientWidth; 
-            h = cvs.height = cvs.parentElement.clientHeight; 
-        };
-        window.addEventListener('resize', resize); resize();
-        
-        const dots = Array.from({length: 800}, () => ({ 
-            theta: Math.random()*2*Math.PI, 
-            phi: Math.acos(Math.random()*2-1), 
-            size: Math.random()*2 + 0.5 
-        }));
-
-        const draw = () => {
-            ctx.clearRect(0, 0, w, h);
-            rot += isAlert ? 0.005 : 0.0008;
-            
-            const cx = w/2, cy = h/2;
-            const color = isAlert ? '239,68,68' : '16,185,129';
-            const R = Math.min(w, h) * 0.75; 
-
-            const grad = ctx.createRadialGradient(cx, cy, R*0.6, cx, cy, R*1.2);
-            grad.addColorStop(0, `rgba(${color}, 0.2)`);
-            grad.addColorStop(1, 'transparent');
-            ctx.fillStyle = grad;
-            ctx.fillRect(0,0,w,h);
-
-            ctx.strokeStyle = `rgba(${color}, 0.1)`;
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.ellipse(cx, cy, R*1.2, R*0.4, rot*0.2, 0, Math.PI*2);
-            ctx.stroke();
-            
-            ctx.strokeStyle = `rgba(${color}, 0.05)`;
-            ctx.beginPath();
-            ctx.ellipse(cx, cy, R*1.4, R*1.4, 0, 0, Math.PI*2);
-            ctx.stroke();
-
-            dots.forEach(d => {
-                const x = R * Math.sin(d.phi) * Math.cos(d.theta);
-                const y = R * Math.sin(d.phi) * Math.sin(d.theta);
-                const z = R * Math.cos(d.phi);
-                
-                const rx = x*Math.cos(rot) - z*Math.sin(rot);
-                const rz = z*Math.cos(rot) + x*Math.sin(rot);
-                
-                const perspective = 1000;
-                const scale = perspective/(perspective+rz);
-                const projX = rx*scale + cx;
-                const projY = y*scale + cy;
-                const alpha = ((rz + R) / (2 * R));
-                
-                if (scale > 0) {
-                    if (Math.random() > 0.99) {
-                         ctx.beginPath();
-                         ctx.moveTo(cx, cy);
-                         ctx.lineTo(projX, projY);
-                         ctx.strokeStyle = `rgba(${color}, 0.05)`;
-                         ctx.stroke();
-                    }
-                    ctx.fillStyle = `rgba(${color}, ${Math.max(0.1, alpha)})`;
-                    ctx.beginPath(); 
-                    ctx.arc(projX, projY, d.size*scale, 0, Math.PI*2); 
-                    ctx.fill();
+        if (stage === 'AUTH') {
+            let p = 0;
+            const interval = setInterval(() => {
+                p += 5; setProgress(p); sfx.processing();
+                if (p >= 100) {
+                    clearInterval(interval);
+                    setTimeout(() => { setStage('DECRYPT'); sfx.success(); }, 400);
                 }
-            });
-            fid = requestAnimationFrame(draw);
-        };
-        draw();
-        return () => { window.removeEventListener('resize', resize); cancelAnimationFrame(fid); };
-    }, [isAlert]);
-    return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none opacity-60 transition-opacity duration-1000" />;
-});
-
-const ForensicsViewer = React.memo(({ isAlert }) => {
-    const canvasRef = useRef(null);
-    
-    const nodes = useMemo(() => {
-        const center = { id: 'TARGET', type: 'WALLET', x: 0.5, y: 0.5, r: 8 };
-        const cluster = [center];
-        for(let i=0; i<8; i++) {
-            cluster.push({
-                id: `0x${Math.floor(Math.random()*16777215).toString(16)}`,
-                type: Math.random() > 0.7 ? 'EXCHANGE' : 'WALLET',
-                x: 0.5 + (Math.random()-0.5)*0.6,
-                y: 0.5 + (Math.random()-0.5)*0.6,
-                r: Math.random() > 0.7 ? 6 : 3
-            });
+            }, 60);
+            return () => clearInterval(interval);
         }
-        return cluster;
-    }, []);
-
-    const links = useMemo(() => {
-        return nodes.slice(1).map(n => ({ source: 0, target: nodes.indexOf(n) }));
-    }, [nodes]);
+    }, [stage, sfx]);
 
     useEffect(() => {
-        const cvs = canvasRef.current;
-        const ctx = cvs?.getContext('2d');
-        if (!ctx) return;
-        let w, h, fid, time = 0;
-        const resize = () => { w = cvs.width = cvs.parentElement.clientWidth; h = cvs.height = cvs.parentElement.clientHeight; };
-        window.addEventListener('resize', resize); resize();
-
-        const draw = () => {
-            ctx.clearRect(0,0,w,h); 
-            time += isAlert ? 0.1 : 0.02;
-            const primary = isAlert ? '239, 68, 68' : '16, 185, 129';
-            
-            links.forEach((link, i) => {
-                const s = nodes[link.source];
-                const t = nodes[link.target];
-                const sx = s.x * w; const sy = s.y * h;
-                const tx = t.x * w; const ty = t.y * h;
-
-                ctx.beginPath();
-                ctx.moveTo(sx, sy);
-                ctx.lineTo(tx, ty);
-                ctx.strokeStyle = `rgba(${primary}, 0.2)`;
-                ctx.stroke();
-
-                const packetPos = (time + i*0.5) % 1;
-                const px = sx + (tx - sx) * packetPos;
-                const py = sy + (ty - sy) * packetPos;
-                ctx.fillStyle = '#fff';
-                ctx.beginPath(); ctx.arc(px, py, 1.5, 0, Math.PI*2); ctx.fill();
-            });
-
-            nodes.forEach(n => {
-                const nx = n.x * w;
-                const ny = n.y * h;
-                
-                if (n.id === 'TARGET') {
-                    const pulse = Math.sin(time*2) * 5;
-                    ctx.beginPath();
-                    ctx.arc(nx, ny, n.r + 5 + pulse, 0, Math.PI*2);
-                    ctx.strokeStyle = `rgba(${primary}, 0.3)`;
-                    ctx.stroke();
-                }
-
-                ctx.beginPath();
-                ctx.arc(nx, ny, n.r, 0, Math.PI*2);
-                ctx.fillStyle = n.type === 'EXCHANGE' ? '#fbbf24' : `rgb(${primary})`; 
-                ctx.fill();
-                
-                ctx.fillStyle = `rgba(${primary}, 0.8)`;
-                ctx.font = '9px monospace';
-                ctx.fillText(n.id.substring(0, 6), nx + 10, ny + 3);
-            });
-            fid = requestAnimationFrame(draw);
-        };
-        draw();
-        return () => { window.removeEventListener('resize', resize); cancelAnimationFrame(fid); };
-    }, [isAlert, nodes, links]);
+        if (stage === 'DECRYPT' && !completeCalled.current) {
+            const timer = setTimeout(() => { 
+                completeCalled.current = true; 
+                onComplete(); 
+            }, 1200);
+            return () => clearTimeout(timer);
+        }
+    }, [stage, onComplete]);
 
     return (
-        <div className="w-full h-full relative group bg-black/50">
-             <div className="absolute top-2 left-2 text-[10px] font-bold z-10 text-emerald-500 group-hover:text-white transition-colors flex items-center gap-2">
-                 <Share2 size={12}/> NEXUS_FORENSICS
-            </div>
-             <div className="absolute bottom-2 right-2 text-[8px] font-mono text-gray-500 text-right">
-                CLUSTERS: {nodes.length}<br/>
-                FLOW: TRACKING
-            </div>
-            <canvas ref={canvasRef} className="w-full h-full" />
+        <div className="h-screen w-screen bg-black flex flex-col font-mono text-emerald-500/80 p-8 overflow-hidden">
+            {stage === 'POST' && (
+                <div className="space-y-1">
+                    <div className="text-emerald-500 font-bold mb-4 flex items-center gap-2"><Cpu size={16} /> SYSTEM_SELF_TEST</div>
+                    {logs.map((line, idx) => (<div key={idx} className="text-[10px] animate-log"><span className="opacity-40 mr-2">[{idx}]</span>{line}</div>))}
+                </div>
+            )}
+            {stage === 'AUTH' && (
+                <div className="flex-1 flex flex-col items-center justify-center space-y-8">
+                    <Fingerprint size={80} className="text-emerald-500 animate-pulse" />
+                    <div className="w-64 space-y-2">
+                        <div className="flex justify-between text-[10px] font-bold"><span>VÉRIFICATION_IDENTITÉ</span><span>{progress}%</span></div>
+                        <div className="h-1 bg-zinc-900"><div className="h-full bg-emerald-500 transition-all duration-100" style={{ width: `${progress}%` }} /></div>
+                    </div>
+                </div>
+            )}
+            {stage === 'DECRYPT' && (
+                <div className="flex-1 flex flex-col items-center justify-center space-y-4 text-white">
+                    <Lock size={40} className="animate-bounce" />
+                    <div className="text-sm font-bold tracking-[0.5em]">DÉCHIFFREMENT_INTERFACE</div>
+                </div>
+            )}
         </div>
     );
+};
+
+/* =========================================
+   3. MODULE : GLOBE TOPOLOGIE (SPECTACULAR FIBONACCI)
+   ========================================= */
+
+const NetworkGlobe = React.memo(() => {
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    let width, height, animationFrameId;
+
+    const DOT_COUNT = 500; const DOT_SIZE = 1.8; const CONNECTION_DISTANCE = 45;
+    const ROTATION_SPEED = 0.003; const COLOR_BASE = '16, 185, 129';
+
+    let rotation = 0; const dots = []; const phi = Math.PI * (3 - Math.sqrt(5));
+    for (let i = 0; i < DOT_COUNT; i++) {
+        const y = 1 - (i / (DOT_COUNT - 1)) * 2; const radius = Math.sqrt(1 - y * y); const theta = phi * i;
+        dots.push({ 
+            x: Math.cos(theta) * radius, y, z: Math.sin(theta) * radius, 
+            active: Math.random() > 0.93, pulsePhase: Math.random() * Math.PI * 2 
+        });
+    }
+
+    const resize = () => { 
+        if (!canvas.parentElement) return;
+        width = canvas.width = canvas.parentElement.clientWidth; 
+        height = canvas.height = canvas.parentElement.clientHeight; 
+    };
+    resize(); window.addEventListener('resize', resize);
+
+    const project = (x, y, z, r) => {
+        const scale = 380 / (380 + z); const px = x * scale * r + width / 2; const py = y * scale * r + height / 2;
+        return { x: px, y: py, scale, z };
+    };
+
+    const draw = () => {
+        ctx.clearRect(0, 0, width, height); rotation += ROTATION_SPEED;
+        const radius = Math.min(width, height) * 0.4; const time = Date.now() * 0.002;
+
+        const projected = dots.map(dot => {
+            const xRot = dot.x * Math.cos(rotation) - dot.z * Math.sin(rotation);
+            const zRot = dot.z * Math.cos(rotation) + dot.x * Math.sin(rotation);
+            return { ...project(xRot, dot.y, zRot * 1.1, radius), original: dot };
+        });
+
+        // Lignes de connexion
+        ctx.lineWidth = 0.5;
+        for (let i = 0; i < projected.length; i++) {
+            const dA = projected[i]; if (dA.z < 0) continue;
+            for (let j = i + 1; j < projected.length; j++) {
+                const dB = projected[j]; if (dB.z < 0) continue;
+                const dist = Math.hypot(dA.x - dB.x, dA.y - dB.y);
+                if (dist < CONNECTION_DISTANCE * dA.scale) {
+                    const alpha = (1 - dist / (CONNECTION_DISTANCE * dA.scale)) * 0.4 * dA.scale;
+                    ctx.strokeStyle = `rgba(${COLOR_BASE}, ${alpha})`;
+                    ctx.beginPath(); ctx.moveTo(dA.x, dA.y); ctx.lineTo(dB.x, dB.y); ctx.stroke();
+                }
+            }
+        }
+
+        // Points
+        projected.forEach(dot => {
+            const alpha = Math.max(0.05, (dot.z + radius) / (2 * radius));
+            const size = DOT_SIZE * dot.scale;
+            ctx.fillStyle = dot.original.active && Math.sin(time + dot.original.pulsePhase) > 0.8 ? '#fff' : `rgba(${COLOR_BASE}, ${alpha})`;
+            ctx.beginPath(); ctx.arc(dot.x, dot.y, size, 0, Math.PI * 2); ctx.fill();
+        });
+
+        animationFrameId = requestAnimationFrame(draw);
+    };
+    draw(); return () => { window.removeEventListener('resize', resize); cancelAnimationFrame(animationFrameId); };
+  }, []);
+  return <canvas ref={canvasRef} className="w-full h-full" />;
 });
 
 /* =========================================
-   4. UI SHELL & WINDOWS
+   4. CONTRÔLEUR PRINCIPAL (WINDOWS & DRAG)
    ========================================= */
 
-const NotificationToast = ({ notifications }) => (
-  <div className="fixed top-14 md:top-16 right-2 md:right-4 z-[100] flex flex-col gap-2 pointer-events-none max-w-[90vw]">
-    {notifications.map((n) => (
-      <div key={n.id} className={`animate-flicker bg-gray-900/95 border-l-4 p-3 text-xs w-64 shadow-[0_0_15px_rgba(0,0,0,0.5)] backdrop-blur
-        ${n.type === 'alert' ? 'border-red-500 text-red-100 bg-red-900/20' : 'border-emerald-500 text-emerald-100 bg-emerald-900/20'}
-      `}>
-        <div className="flex items-center gap-2 mb-1">
-            {n.type === 'alert' ? <AlertOctagon size={14} className="text-red-500 animate-pulse"/> : <CheckCircle size={14} className="text-emerald-500"/>}
-            <span className="font-bold uppercase tracking-wider">{n.title}</span>
-        </div>
-        <div className="opacity-80 font-mono pl-6">{n.message}</div>
-      </div>
-    ))}
-  </div>
-);
+const useMarketEngine = () => {
+  const [data, setData] = useState([{ id: 'BTC', price: 92451.20, change: 1.2 }, { id: 'ETH', price: 2645.15, change: -0.4 }, { id: 'SOL', price: 198.42, change: 4.7 }]);
+  useEffect(() => {
+    const interval = setInterval(() => { setData(prev => prev.map(a => ({ ...a, price: a.price * (1 + (Math.random()-0.5)*0.002), change: a.change + (Math.random()-0.5)*0.1 }))); }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+  return data;
+};
 
-const Window = ({ id, title, icon: Icon, children, onClose, isOpen, zIndex, onFocus, isAlert, isGhost, position, onMouseDown }) => {
-  const isMobile = useIsMobile();
-  if (!isOpen) return null;
+const Window = ({ title, icon: Icon, children, className = "", onClose, id, initialPos }) => {
+  const [pos, setPos] = useState(initialPos || null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragOffset = useRef({ x: 0, y: 0 });
 
-  const color = isAlert ? '#ef4444' : (isGhost ? '#6b7280' : '#10b981');
-  const textColor = isAlert ? 'text-red-400' : (isGhost ? 'text-gray-500' : 'text-emerald-400');
-  const bgClass = isGhost ? 'bg-black' : 'bg-gray-950/90';
-  
-  // Mobile: Fixed Layout
-  const mobileClasses = `inset-0 top-12 bottom-8 w-full h-auto m-0 rounded-none border-x-0`;
-  
-  // Desktop: Dynamic Position via Props (Styles)
-  // We use specific widths/heights based on window type for initial sizing, but position is absolute
-  const sizeClasses = {
-      terminal: 'w-1/3 h-1/2',
-      market: 'w-1/4 h-1/3',
-      news: 'w-1/3 h-1/3',
-      forensics: 'w-1/3 h-1/3'
+  const handleMouseDown = (e) => {
+    if (!pos) return; setIsDragging(true);
+    dragOffset.current = { x: e.clientX - pos.x, y: e.clientY - pos.y };
   };
 
-  return (
-    <div 
-      onMouseDown={() => onFocus(id)}
-      style={{ 
-        zIndex, 
-        ...(isMobile ? {} : { left: position.x, top: position.y }) 
-      }}
-      className={`absolute flex flex-col ${bgClass} backdrop-blur-md shadow-2xl transition-shadow duration-300
-        ${isMobile ? mobileClasses : `${sizeClasses[id]} border`}
-        ${isAlert ? 'border-red-500/60' : 'border-emerald-500/30'}
-      `}
-    >
-      {/* Background Grid SVG */}
-      <div className="absolute inset-0 pointer-events-none z-50 opacity-50">
-         <svg className="w-full h-full" preserveAspectRatio="none">
-            <rect x="0.5" y="0.5" width="99.5%" height="99.5%" fill="none" stroke={color} strokeWidth="1" strokeOpacity="0.3" />
-            {!isMobile && (
-              <>
-                <path d="M0 10 V0 H10" fill="none" stroke={color} strokeWidth="2" />
-                <path d="M0 calc(100% - 10px) V100% H10" fill="none" stroke={color} strokeWidth="2" />
-                <path d="Mcalc(100% - 10px) 0 H100% V10" fill="none" stroke={color} strokeWidth="2" />
-                <path d="M100% calc(100% - 10px) V100% Hcalc(100% - 10px)" fill="none" stroke={color} strokeWidth="2" />
-              </>
-            )}
-         </svg>
-      </div>
+  useEffect(() => {
+    const handleMouseMove = (e) => { 
+        if (isDragging) setPos({ x: e.clientX - dragOffset.current.x, y: e.clientY - dragOffset.current.y }); 
+    };
+    const handleMouseUp = () => setIsDragging(false);
+    if (isDragging) { 
+        document.addEventListener('mousemove', handleMouseMove); 
+        document.addEventListener('mouseup', handleMouseUp); 
+    }
+    return () => { 
+        document.removeEventListener('mousemove', handleMouseMove); 
+        document.removeEventListener('mouseup', handleMouseUp); 
+    };
+  }, [isDragging]);
 
-      {/* Header Bar - Draggable Area */}
-      <div 
-        onMouseDown={(e) => !isMobile && onMouseDown(e, id)}
-        className={`relative flex justify-between items-center p-2 border-b select-none z-10 
-        ${isGhost ? 'border-gray-800' : (isAlert ? 'border-red-500/30 bg-red-900/10' : 'border-emerald-500/20 bg-emerald-900/10')}
-        ${!isMobile ? 'cursor-move' : ''}
-      `}>
-        <div className={`flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest ${textColor}`}>
-          <div className={`w-1.5 h-1.5 rounded-full ${isAlert ? 'bg-red-500' : 'bg-emerald-500'} animate-pulse`}/>
-          {Icon && <Icon size={12} />} {title}
+  const style = pos ? { left: `${pos.x}px`, top: `${pos.y}px`, position: 'absolute', zIndex: isDragging ? 100 : 50 } : {};
+
+  return (
+    <div style={style} className={`flex flex-col ${THEME.surface} border ${THEME.border} rounded overflow-hidden shadow-2xl ${className}`}>
+      <div onMouseDown={handleMouseDown} className={`px-3 py-1.5 border-b ${THEME.border} flex items-center justify-between bg-zinc-900/50 ${pos ? 'cursor-move select-none active:bg-zinc-800' : ''}`}>
+        <div className="flex items-center gap-2 pointer-events-none">
+          {Icon && <Icon size={12} className="text-zinc-500" />}
+          <span className="text-[10px] font-bold tracking-widest text-zinc-500 uppercase">{title}</span>
         </div>
-        {!isGhost && !isMobile && (
-          <div className="flex gap-2">
-            <button onClick={(e) => { e.stopPropagation(); onClose(id); }} className={`${textColor} hover:text-white transition-colors`}>
-                <X size={14} />
-            </button>
-          </div>
-        )}
+        {onClose && <button onClick={() => onClose(id)} className="text-zinc-600 hover:text-red-500 transition-colors pointer-events-auto">✕</button>}
       </div>
-      
-      {/* Content Area */}
-      <div className={`flex-1 overflow-auto p-4 font-mono text-xs scrollbar-thin relative z-10 ${textColor}`}>
+      <div className="flex-1 overflow-hidden relative">
+        {isDragging && <div className="absolute inset-0 z-[200] bg-transparent" />}
         {children}
       </div>
     </div>
   );
 };
 
-/* =========================================
-   5. BOOT SEQUENCE
-   ========================================= */
-
-const BootSequence = ({ onComplete, sfx }) => {
-    const [lines, setLines] = useState([]);
-    useEffect(() => {
-        const txt = ["BIOS_CHECK...OK", "KERNEL_LOAD...OK", "ORBITAL_LINK...OK", "RSS_FEED_PROXY...CONNECTED", "GUI_INIT..."];
-        let d = 0;
-        sfx.boot();
-        txt.forEach((t, i) => { 
-            d += Math.random()*300+100; 
-            setTimeout(() => { 
-                setLines(p=>[...p,t]); 
-                sfx.keyPress();
-                if(i===txt.length-1) setTimeout(onComplete, 800); 
-            }, d); 
-        });
-    }, [onComplete, sfx]);
-    
-    return (
-        <div className="h-screen bg-black text-emerald-500 font-mono p-10 flex flex-col justify-end text-sm">
-            {lines.map((l,i)=><div key={i} className="animate-flicker">{l}</div>)}
-            <div className="animate-pulse mt-2">_</div>
-        </div>
-    );
-};
-
-/* =========================================
-   6. MAIN CONTROLLER
-   ========================================= */
-
 export default function App() {
-  const isMobile = useIsMobile();
   const [booted, setBooted] = useState(false);
-  const [alertMode, setAlertMode] = useState(false);
-  const [ghostMode, setGhostMode] = useState(false);
-  const [muted, setMuted] = useState(false);
-  
-  const sfx = useSoundSystem(muted);
-  const { news, loading: newsLoading } = useNewsFeed();
-
-  // Window Management
-  const [windowOrder, setWindowOrder] = useState(['terminal', 'market', 'news', 'forensics']);
-  const [openWindows, setOpenWindows] = useState({ 
-    terminal: true, market: true, news: true, forensics: true 
-  });
-
-  // Window Positioning System
-  const [positions, setPositions] = useState({
-      terminal: { x: 40, y: 80 },
-      market: { x: window.innerWidth - 400, y: 80 },
-      news: { x: 40, y: window.innerHeight - 300 },
-      forensics: { x: window.innerWidth/2 - 200, y: window.innerHeight/2 - 150 }
-  });
-
-  // Dragging State
-  const [dragging, setDragging] = useState(null); // { id: string, offsetX: number, offsetY: number }
-
-  // Drag Handlers
-  const handleDragStart = (e, id) => {
-      sfx.drag();
-      bringToFront(id);
-      // Calculate offset so window doesn't snap to mouse position
-      // Using e.target.closest to ensure we get the window div rect
-      const winEl = e.target.closest('.absolute.flex.flex-col');
-      if (winEl) {
-          const rect = winEl.getBoundingClientRect();
-          setDragging({
-              id,
-              offsetX: e.clientX - rect.left,
-              offsetY: e.clientY - rect.top
-          });
-      }
-  };
-
-  const handleDragMove = useCallback((e) => {
-      if (!dragging) return;
-      setPositions(prev => ({
-          ...prev,
-          [dragging.id]: {
-              x: e.clientX - dragging.offsetX,
-              y: e.clientY - dragging.offsetY
-          }
-      }));
-  }, [dragging]);
-
-  const handleDragEnd = useCallback(() => {
-      setDragging(null);
-  }, []);
-
-  // Attach global mouse listeners for smooth dragging outside of elements
-  useEffect(() => {
-      if (dragging) {
-          window.addEventListener('mousemove', handleDragMove);
-          window.addEventListener('mouseup', handleDragEnd);
-      } else {
-          window.removeEventListener('mousemove', handleDragMove);
-          window.removeEventListener('mouseup', handleDragEnd);
-      }
-      return () => {
-          window.removeEventListener('mousemove', handleDragMove);
-          window.removeEventListener('mouseup', handleDragEnd);
-      };
-  }, [dragging, handleDragMove, handleDragEnd]);
-
-  // Data State
-  const [notifications, setNotifications] = useState([]);
-  const [marketData, setMarketData] = useState([
-    { n: 'STX/USD', p: 2.41, v: 5.2 }, { n: 'BTC/USD', p: 94102, v: -0.4 },
-    { n: 'ETH/USD', p: 2641, v: 1.2 }, { n: 'SOL/USD', p: 198.4, v: 3.7 }, { n: 'NVDA', p: 135.20, v: 2.1 },
-  ]);
+  const [showTerminal, setShowTerminal] = useState(false);
+  const [history, setHistory] = useState(["SOUVEREIGN_OS_ESTABLISHED", "TYPE 'HELP' FOR COMMANDS"]);
   const [input, setInput] = useState("");
-  const [history, setHistory] = useState(["LEONCE EQUITY SYSTEM LOADED.", "Type 'help' for commands."]);
+  const marketData = useMarketEngine();
+  const sfx = useSoundSystem(false);
 
-  // Initial Responsive Setup
-  useEffect(() => {
-    if (isMobile) {
-        setOpenWindows({ terminal: true, market: false, news: false, forensics: false });
-    } else {
-        setOpenWindows({ terminal: true, market: true, news: true, forensics: true });
-        // Recalculate safe positions for desktop on resize/load
-        setPositions({
-            terminal: { x: 20, y: 70 },
-            market: { x: window.innerWidth - 300, y: 70 }, // assuming ~25% width
-            news: { x: 20, y: window.innerHeight - 250 },
-            forensics: { x: window.innerWidth/2 - 150, y: window.innerHeight/2 - 100 }
-        });
-    }
-  }, [isMobile]);
+  const [openWindows, setOpenWindows] = useState({ terminal: true, market: true, network: true, newsTerminal: false, calcTerminal: false, sudokuTerminal: false });
 
-  // Simulation Loop
-  useEffect(() => {
-    const i = setInterval(() => {
-      setMarketData(p => p.map(x => ({...x, p: x.p*(1+(Math.random()-0.5)*0.005), v: x.v+(Math.random()-0.5)*0.1})));
-    }, 800);
-    return () => clearInterval(i);
+  const toggleWindow = useCallback((id) => { 
+    setOpenWindows(p => ({ ...p, [id]: !p[id] })); 
+    sfx.hover(); 
+  }, [sfx]);
+
+  const onBootComplete = useCallback(() => {
+    setBooted(true);
   }, []);
 
-  // Alert Loop
-  useEffect(() => {
-    if (alertMode && !muted) {
-        const i = setInterval(() => sfx.alert(), 2000);
-        return () => clearInterval(i);
-    }
-  }, [alertMode, muted, sfx]);
-
-  const addNotif = (t, m, type) => {
-      const id = Date.now(); 
-      setNotifications(p => [...p, {id, title:t, message:m, type}]);
-      if(type === 'alert') sfx.error();
-      setTimeout(() => setNotifications(p => p.filter(n => n.id !== id)), 4000);
-  };
-  
-  const bringToFront = (id) => setWindowOrder(prev => [...prev.filter(w => w !== id), id]);
-
-  const toggleWindow = (id) => {
-    setOpenWindows(prev => {
-        const isMobileAction = window.innerWidth < 768; 
-        if (isMobileAction && !prev[id]) {
-            return { terminal: false, market: false, news: false, forensics: false, [id]: true };
-        }
-        const newState = { ...prev, [id]: !prev[id] };
-        if(newState[id]) bringToFront(id);
-        return newState;
-    });
-    sfx.hover();
+  const handleCommand = (e) => {
+    if (e.key !== 'Enter') return;
+    const cmd = input.trim().toUpperCase(); setInput("");
+    setHistory(p => [...p, "> " + cmd]);
+    if (cmd === 'HELP') setHistory(p => [...p, "NEWS, CALC, SODOKU, SUDOKU, CLEAR, REBOOT"]);
+    if (cmd === 'NEWS') toggleWindow('newsTerminal');
+    if (cmd === 'CALC') toggleWindow('calcTerminal');
+    if (cmd === 'SUDOKU' || cmd === 'SODOKU') toggleWindow('sudokuTerminal');
+    if (cmd === 'CLEAR') setHistory([]);
+    if (cmd === 'REBOOT') window.location.reload();
   };
 
-  const handleCmd = (e) => {
-      if(e.key !== 'Enter') return;
-      sfx.keyPress();
-      const [cmd, arg1, arg2] = input.trim().toLowerCase().split(' ');
-      setHistory(p => [...p, `> ${input}`]); setInput("");
-      
-      switch(cmd) {
-        case 'help': setHistory(p => [...p, "cmds: help, clear, inject [asset], alert, calm, ghost, mute/unmute"]); break;
-        case 'clear': setHistory([]); break;
-        case 'mute': setMuted(true); setHistory(p => [...p, "Audio output disabled."]); break;
-        case 'unmute': setMuted(false); setHistory(p => [...p, "Audio output enabled."]); sfx.success(); break;
-        case 'alert': 
-            setAlertMode(true); setGhostMode(false); 
-            addNotif('ALERT', 'SYSTEM BREACH DETECTED', 'alert'); 
-            break;
-        case 'calm': 
-            setAlertMode(false); 
-            addNotif('INFO', 'System stable', 'info'); 
-            sfx.success();
-            break;
-        case 'ghost': 
-            setGhostMode(true); setAlertMode(false); 
-            addNotif('GHOST', 'Stealth mode active', 'info'); 
-            break;
-        case 'inject': 
-            addNotif('INJECT', `Injection on ${arg1?.toUpperCase()}`, 'alert');
-            setHistory(p => [...p, `[SUCCESS] Massive liquidity injection on ${arg1?.toUpperCase()}`]);
-            break;
-        case 'open': 
-            if (isMobile) {
-                setOpenWindows({ terminal: false, market: false, news: false, forensics: false, [arg1]: true });
-            } else {
-                setOpenWindows(p => ({...p, [arg1]: true})); 
-                bringToFront(arg1);
-            }
-            break;
-        case 'close': setOpenWindows(p => ({...p, [arg1]: false})); break;
-        default: setHistory(p => [...p, "Unknown command."]); sfx.error();
-      }
-  };
+  if (!showTerminal) return (
+    <div className="h-screen w-screen bg-black flex items-center justify-center font-mono cursor-pointer" onClick={() => { setShowTerminal(true); sfx.boot(); }}>
+      <GlobalStyles />
+      <div className="text-center space-y-4">
+        <Shield className="mx-auto text-emerald-500 animate-pulse" size={48} />
+        <div className="text-zinc-500 text-sm tracking-[1.2em] uppercase">Leonce Sovereign Terminal</div>
+        <div className="text-[10px] text-zinc-700 uppercase">Initialize Secure Uplink</div>
+      </div>
+    </div>
+  );
 
-  if (!booted) return <><GlobalStyles /><BootSequence sfx={sfx} onComplete={() => setBooted(true)} /></>;
-
-  const accent = alertMode ? 'text-red-500' : 'text-emerald-500';
-  const border = alertMode ? 'border-red-500/50' : 'border-emerald-500/30';
+  if (!booted) return <><GlobalStyles /><BootSequence sfx={sfx} onComplete={onBootComplete} /></>;
 
   return (
-    <div className={`relative h-screen w-screen bg-black overflow-hidden flex flex-col font-mono transition-colors duration-500 
-      ${ghostMode ? 'grayscale brightness-50' : ''} ${alertMode ? 'shake-screen' : ''}`}>
-      
+    <div className="h-screen w-screen bg-[#0a0a0c] flex flex-col font-mono overflow-hidden">
       <GlobalStyles />
-      <CRTOverlay />
-      <TacticalCursor isAlert={alertMode} />
-      {!ghostMode && <NotificationToast notifications={notifications} />}
-
-      {/* --- BACKGROUND --- */}
-      <div className="absolute inset-0 z-0">
-         <SpectacularGlobe isAlert={alertMode} />
+      <div className="h-10 border-b border-[#242427] flex items-center justify-between px-4 shrink-0 bg-zinc-950/80 backdrop-blur">
+        <div className="flex items-center gap-4">
+          <Shield className="text-emerald-500" size={16} />
+          <span className="font-bold text-sm text-zinc-200 uppercase tracking-tighter">Sovereign_OS v5.1</span>
+          <div className="h-4 w-[1px] bg-zinc-800 mx-1" />
+          <div className="flex gap-4">
+             <button onClick={() => toggleWindow('newsTerminal')} className="text-[10px] text-zinc-500 hover:text-emerald-400 font-bold uppercase transition-colors">News</button>
+             <button onClick={() => toggleWindow('calcTerminal')} className="text-[10px] text-zinc-500 hover:text-emerald-400 font-bold uppercase transition-colors">Calc</button>
+             <button onClick={() => toggleWindow('sudokuTerminal')} className="text-[10px] text-zinc-500 hover:text-emerald-400 font-bold uppercase transition-colors">Sudoku</button>
+          </div>
+        </div>
+        <div className="flex gap-6 text-[10px] items-center">
+          <div className="flex gap-4 border-r border-zinc-800 pr-4">
+            {marketData.map(a => <div key={a.id} className="flex gap-2"><span className="text-zinc-500">{a.id}</span><span className={a.change >= 0 ? 'text-emerald-400' : 'text-red-400'}>{a.price.toFixed(2)}</span></div>)}
+          </div>
+          <span className="text-zinc-600 font-bold uppercase">{new Date().toLocaleTimeString()} UTC</span>
+        </div>
       </div>
 
-      {/* --- HEADER --- */}
-      <div className={`relative z-50 h-12 bg-gray-950/80 border-b flex items-center justify-between px-4 backdrop-blur ${border}`}>
-         <div className="flex items-center gap-2 md:gap-4">
-             <Shield className={accent} size={20} />
-             <span className={`font-bold text-lg md:text-xl tracking-[0.2em] glitch-text ${accent}`}>
-                {isMobile ? 'LEONCE_M' : 'LEONCE_OS'}
-             </span>
-         </div>
-         
-         {/* TASKBAR */}
-         {!ghostMode && (
-            <div className="flex gap-2 overflow-x-auto no-scrollbar max-w-[40vw] md:max-w-none px-2 items-center">
-              {['terminal', 'market', 'news', 'forensics'].map((id) => (
-                <button 
-                  key={id}
-                  onClick={() => toggleWindow(id)}
-                  onMouseEnter={() => sfx.hover()}
-                  className={`px-3 py-1 text-[9px] border rounded transition-all flex items-center gap-2 font-bold uppercase whitespace-nowrap
-                    ${openWindows[id] ? `bg-opacity-20 ${alertMode ? 'bg-red-500 border-red-500 text-red-300' : 'bg-emerald-500 border-emerald-500 text-emerald-300'}` 
-                                      : `opacity-50 ${alertMode ? 'border-red-900 text-red-700' : 'border-emerald-900 text-emerald-700'}`}
-                  `}
-                >
-                  {id}
-                </button>
-              ))}
+      <div className="flex-1 p-2 grid grid-cols-12 grid-rows-6 gap-2 data-grid relative">
+        <Window title="CONSOLE_MAÎTRE" icon={Terminal} className="col-span-12 md:col-span-8 row-span-3">
+            <div className="flex flex-col h-full p-2">
+              <div className="flex-1 overflow-auto no-scrollbar space-y-1 text-zinc-500 text-[11px]">
+                {history.map((line, i) => <div key={i} className="flex gap-2"><span className="opacity-20">[{new Date().toLocaleTimeString()}]</span><span className={line.startsWith('>') ? 'text-emerald-500' : ''}>{line}</span></div>)}
+              </div>
+              <div className="flex items-center gap-2 border-t border-zinc-800 pt-2 mt-2">
+                <ChevronRight size={14} className="text-emerald-500" />
+                <input autoFocus className="bg-transparent outline-none flex-1 text-zinc-200 text-[11px] uppercase" value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleCommand} placeholder="SYSTEM_CMD..." />
+              </div>
             </div>
-         )}
-         
-         <div className="flex items-center gap-4">
-             <button onClick={() => setMuted(!muted)} className={`${accent} opacity-50 hover:opacity-100`}>
-                 {muted ? <VolumeX size={16}/> : <Volume2 size={16}/>}
-             </button>
-             <div className={`text-[10px] md:text-xs font-bold border px-2 py-1 ${border} ${accent} whitespace-nowrap hidden md:block`}>
-                 {alertMode ? "DEFCON 1" : "SYSTEM ONLINE"}
-             </div>
-         </div>
+        </Window>
+
+        <Window title="TOPOLOGIE_GLOBAL" icon={Globe} className="col-span-12 md:col-span-4 row-span-3"><NetworkGlobe /></Window>
+
+        {openWindows.newsTerminal && (
+          <Window title="NEWS_INTEL" icon={Newspaper} className="w-[600px] h-[500px]" onClose={toggleWindow} id="newsTerminal" initialPos={{x: 60, y: 120}}>
+            <iframe srcDoc={NEWS_TERMINAL_CONTENT} className="w-full h-full border-none" title="News" />
+          </Window>
+        )}
+        {openWindows.calcTerminal && (
+          <Window title="FINANCIAL_CALC" icon={Calculator} className="w-[350px] h-[480px]" onClose={toggleWindow} id="calcTerminal" initialPos={{x: 420, y: 180}}>
+            <iframe srcDoc={CALC_TERMINAL_CONTENT} className="w-full h-full border-none" title="Calc" />
+          </Window>
+        )}
+        {openWindows.sudokuTerminal && (
+          <Window title="SUDOKU_KERNEL" icon={Grid3X3} className="w-[500px] h-[700px]" onClose={toggleWindow} id="sudokuTerminal" initialPos={{x: 650, y: 60}}>
+            <iframe srcDoc={SUDOKU_TERMINAL_CONTENT} className="w-full h-full border-none" title="Sudoku" />
+          </Window>
+        )}
+
+        <Window title="INDICATEURS_ALPHA" icon={Zap} className="col-span-12 md:col-span-12 row-span-3">
+           <div className="grid grid-cols-1 md:grid-cols-4 gap-3 h-full uppercase p-2">
+                {[{ n: 'REVERSION_L2', c: 84 }, { n: 'MOMENTUM_BTC', c: 62 }, { n: 'GAP_LIQUIDITÉ', c: 91 }, { n: 'SENTIMENT_AI', c: 75 }].map(sig => (
+                  <div key={sig.n} className="bg-zinc-900/50 border border-zinc-800/50 p-4 rounded flex flex-col justify-between">
+                    <span className="text-[10px] font-bold text-zinc-500">{sig.n}</span>
+                    <div className="flex justify-between items-end"><span className="text-2xl font-bold text-zinc-200">{sig.c}%</span><ArrowUpRight className="text-emerald-500" size={24} /></div>
+                  </div>
+                ))}
+           </div>
+        </Window>
       </div>
 
-      {/* --- WORKSPACE --- */}
-      <div className="relative flex-1 z-40 w-full overflow-hidden">
-         <Window 
-            id="terminal" 
-            title="ROOT_ACCESS" 
-            icon={Terminal} 
-            isOpen={openWindows.terminal} 
-            onClose={()=>toggleWindow('terminal')} 
-            zIndex={windowOrder.indexOf('terminal') + 10} 
-            onFocus={bringToFront} 
-            isAlert={alertMode} 
-            isGhost={ghostMode}
-            position={positions.terminal}
-            onMouseDown={handleDragStart}
-         >
-            {history.map((l,i) => <div key={i} className="mb-1">{l}</div>)}
-            <div className="flex mt-2">
-                <span className="mr-2 opacity-50">root@sys:~#</span>
-                <input autoFocus={!isMobile} className="bg-transparent outline-none flex-1 text-inherit min-w-0" value={input} onChange={e=>setInput(e.target.value)} onKeyDown={handleCmd} />
-            </div>
-         </Window>
-         
-         <Window 
-            id="market" 
-            title="LIQUIDITY_FLOW" 
-            icon={BarChart3} 
-            isOpen={openWindows.market} 
-            onClose={()=>toggleWindow('market')} 
-            zIndex={windowOrder.indexOf('market') + 10} 
-            onFocus={bringToFront} 
-            isAlert={alertMode} 
-            isGhost={ghostMode}
-            position={positions.market}
-            onMouseDown={handleDragStart}
-         >
-            <div className="flex justify-between text-[10px] opacity-50 mb-2 border-b border-white/10 pb-1">
-                <span>ASSET</span><span>PRICE</span><span>CHG</span>
-            </div>
-            {marketData.map((m,i) => (
-                <div key={i} className="flex justify-between p-1 hover:bg-white/5 cursor-pointer">
-                    <span className="font-bold">{m.n}</span>
-                    <span>{m.p.toFixed(2)}</span>
-                    <span className={m.v>0 ? (alertMode?'text-red-300':'text-green-400') : 'text-red-500'}>{m.v>0?'+':''}{m.v.toFixed(1)}%</span>
-                </div>
-            ))}
-         </Window>
-         
-         <Window 
-            id="news" 
-            title="GLOBAL_WIRE_RSS" 
-            icon={Radio} 
-            isOpen={openWindows.news} 
-            onClose={()=>toggleWindow('news')} 
-            zIndex={windowOrder.indexOf('news') + 10} 
-            onFocus={bringToFront} 
-            isAlert={alertMode} 
-            isGhost={ghostMode}
-            position={positions.news}
-            onMouseDown={handleDragStart}
-         >
-            {newsLoading ? (
-                <div className="animate-pulse text-[10px]">ESTABLISHING SECURE CONNECTION TO NEWS SERVERS...</div>
-            ) : (
-                <div className="flex flex-col gap-2">
-                    {news.map((item, i) => (
-                        <div key={i} className="border-b border-white/5 pb-2 mb-1 last:border-0 hover:bg-white/5 p-1 transition-colors cursor-default group">
-                            <div className="flex justify-between items-center mb-1">
-                                <span className={`text-[9px] font-bold px-1 rounded ${i===0 ? (alertMode ? 'bg-red-900 text-red-300' : 'bg-emerald-900 text-emerald-300') : 'text-gray-500'}`}>
-                                    {item.source}
-                                </span>
-                                <span className="text-[8px] opacity-50">{new Date(item.pubDate).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                            </div>
-                            <a href={item.link} target="_blank" rel="noopener noreferrer" className="hover:underline decoration-emerald-500/50 block">
-                                <div className="leading-tight text-[11px] group-hover:text-white transition-colors">{item.title}</div>
-                            </a>
-                        </div>
-                    ))}
-                </div>
-            )}
-         </Window>
-
-         <Window 
-            id="forensics" 
-            title="NEXUS_FORENSICS" 
-            icon={Share2} 
-            isOpen={openWindows.forensics} 
-            onClose={()=>toggleWindow('forensics')} 
-            zIndex={windowOrder.indexOf('forensics') + 10} 
-            onFocus={bringToFront} 
-            isAlert={alertMode} 
-            isGhost={ghostMode}
-            position={positions.forensics}
-            onMouseDown={handleDragStart}
-         >
-             <ForensicsViewer isAlert={alertMode} />
-         </Window>
+      <div className="h-6 border-t border-[#242427] bg-zinc-950 flex items-center overflow-hidden italic text-[9px] text-zinc-600 px-4">
+        <div className="animate-ticker">
+           <span>INTEL_LIVE: ALERTE_BALEINE: +1200 BTC BINANCE /// MARKET_SENTIMENT: GREED (64.2) /// SYSTEM_LOAD: 12% ///</span>
+           <span>INTEL_LIVE: ALERTE_BALEINE: +1200 BTC BINANCE /// MARKET_SENTIMENT: GREED (64.2) /// SYSTEM_LOAD: 12% ///</span>
+        </div>
       </div>
-
-      {/* --- FOOTER TICKER --- */}
-      <div className={`h-8 md:h-6 border-t flex items-center overflow-hidden z-40 text-[9px] font-bold ${border} ${ghostMode ? 'text-gray-600' : 'text-emerald-500'}`}>
-         <div className={`px-2 md:px-3 h-full flex items-center shrink-0 border-r ${border} ${alertMode ? 'bg-red-900/40' : 'bg-emerald-900/40'}`}>
-             <Activity size={10} className="mr-2 animate-pulse"/> LIVE_WIRE
-         </div>
-         <div className="flex-1 overflow-hidden relative group">
-             <div className="animate-ticker whitespace-nowrap flex gap-8 md:gap-12 absolute top-1/2 -translate-y-1/2">
-                 {!newsLoading && news.length > 0 ? (
-                     news.slice(0, 10).map((n, i) => (
-                         <span key={i} className="flex items-center gap-2">
-                             <span className="w-1 h-1 bg-current rounded-full opacity-50"></span>
-                             [{n.source}] {n.title}
-                         </span>
-                     ))
-                 ) : (
-                     <>
-                        <span>INITIALIZING NEWS FEED PROTOCOL...</span>
-                        <span>WAITING FOR SATELLITE UPLINK...</span>
-                     </>
-                 )}
-                 <span className="text-opacity-50">SYSTEM_STATUS: OPTIMAL</span>
-             </div>
-         </div>
-      </div>
-
       <div className="scanline" />
     </div>
   );
