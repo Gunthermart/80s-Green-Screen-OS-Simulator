@@ -111,7 +111,7 @@ const LOB3DTerrain = ({ isStressed, burstMode }) => {
   return <div ref={mountRef} className="w-full h-full min-h-[250px]" />;
 };
 
-// --- GLOBE SPECTACULAIRE (MODE DÉPLOIEMENT GLOBAL) ---
+// --- GLOBE SPECTACULAIRE ---
 const SpectacularGlobe = ({ isStressed, opacity = 0.4 }) => {
     const mountRef = useRef(null);
     const rendererRef = useRef(null);
@@ -277,7 +277,17 @@ export default function App() {
       case 'NEURAL_SCAN': setIsScanning(true); addLog("RUNNING_NEURAL_SCAN..."); setTimeout(() => { setIsScanning(false); addLog("SENTIMENT: BULLISH_84%"); }, 2000); break;
       case 'RISK_FLUSH': setIsStressed(true); addLog("SCALING_EXPOSURE_-50%"); setOrders(prev => prev.map(o => ({...o, amount: (o.amount / 2).toFixed(4)}))); setTimeout(() => setIsStressed(false), 1000); break;
       case 'DATA_BURST': setBurstMode(true); addLog("DATA_BURST_ENGAGED"); setTimeout(() => setBurstMode(false), 3000); break;
-      case 'HELP': addLog("ACTIONS: LIQUIDATE, STEALTH, NEURAL_SCAN, RISK_FLUSH, DATA_BURST"); break;
+      case 'OS': 
+      case 'LAUNCH_OS':
+        setIsStressed(true);
+        addLog("DECRYPTING_OS_HANDSHAKE...");
+        setTimeout(() => {
+          setIsStressed(false);
+          addLog("UPLINK_REDIRECT: OS.HTML");
+          window.open('os.html', '_blank');
+        }, 800);
+        break;
+      case 'HELP': addLog("ACTIONS: OS, LIQUIDATE, STEALTH, NEURAL_SCAN, RISK_FLUSH, DATA_BURST"); break;
       default: addLog("ERR: UNKNOWN_CMD");
     }
   };
@@ -294,10 +304,7 @@ export default function App() {
         <GlobalCinemaStyles />
         <div className="crt-overlay" />
         <div className="scanline" />
-        
-        {/* LE GLOBE DES LE DEBUT */}
         <SpectacularGlobe isStressed={false} opacity={0.5} />
-        
         <div className="relative z-10 flex flex-col items-center gap-10">
           <div className="relative">
              <Crosshair size={120} className="text-emerald-500/20 animate-[spin_15s_linear_infinite]" strokeWidth={0.5} />
@@ -307,10 +314,7 @@ export default function App() {
             <h1 className="text-white text-xl tracking-[1.5em] md:tracking-[2.5em] uppercase font-black ml-[1.5em] md:ml-[2.5em] glow-text">Leonce_Equity</h1>
             <p className="text-emerald-900 text-[10px] font-bold tracking-[0.8em] uppercase">Sovereign_Omni_Deck_V5.6</p>
           </div>
-          <button 
-            onClick={() => setIsLive(true)} 
-            className="group relative px-16 py-4 border border-emerald-500/20 text-emerald-500 uppercase tracking-[1em] overflow-hidden transition-all hover:border-emerald-500 bg-black/40 backdrop-blur-sm"
-          >
+          <button onClick={() => setIsLive(true)} className="group relative px-16 py-4 border border-emerald-500/20 text-emerald-500 uppercase tracking-[1em] overflow-hidden transition-all hover:border-emerald-500 bg-black/40 backdrop-blur-sm">
             <span className="relative z-10 group-hover:text-black transition-colors">Start_Uplink</span>
             <div className="absolute inset-0 bg-emerald-500 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
           </button>
