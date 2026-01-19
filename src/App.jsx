@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
-  Terminal, Shield, Activity, Zap, ChevronRight, List, 
-  Crosshair, Radio, Gauge, Box, GripVertical, AlertTriangle, Target,
-  Network, Share2, Cloud, Wind, Minus, Maximize2, Scaling, Minimize2,
-  TrendingUp, LayoutGrid, MoveDiagonally, Lock, ArrowRight, ChevronsRight
+  Terminal, Shield, Zap, ChevronRight, List, 
+  Crosshair, Radio, Gauge, Box, GripVertical, AlertTriangle,
+  Share2, Cloud, Minus, Maximize2, Minimize2,
+  TrendingUp, ChevronsRight, Network // AJOUT DE L'IMPORT MANQUANT
 } from 'lucide-react';
 
 /* =========================================
@@ -68,18 +68,8 @@ const GlobalCinemaStyles = () => (
     @keyframes slide-up { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
     .animate-slide-up { animation: slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
     
-    @keyframes neon-pulse { 0% { box-shadow: 0 0 5px var(--color); } 50% { box-shadow: 0 0 20px var(--color); } 100% { box-shadow: 0 0 5px var(--color); } }
-
-    @keyframes flash-red { 0% { background: rgba(239, 68, 68, 0.5); } 100% { background: transparent; } }
-    @keyframes glitch-jitter {
-      0% { transform: translate(0); }
-      25% { transform: translate(-1px, 1px); }
-      50% { transform: translate(1px, -1px); }
-      100% { transform: translate(0); }
-    }
-
-    @keyframes ticker { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
     .animate-ticker { display: flex; width: fit-content; animation: ticker 30s linear infinite; }
+    @keyframes ticker { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
 
     .grid-bg { background-image: radial-gradient(rgba(16, 185, 129, 0.08) 1px, transparent 1px); background-size: 30px 30px; }
     .scan-bar { position: absolute; top: 0; left: 0; width: 100%; height: 4px; background: #10b981; box-shadow: 0 0 15px #10b981; animation: scanning 2s linear infinite; z-index: 100; }
@@ -913,12 +903,25 @@ const TacticalWindow = ({
     onActivate, // Handler d'activation
     isMobile // Mode mobile (no drag/resize)
 }) => {
+    
+  // LOOKUP TABLE STATIQUE POUR TAILWIND (Indispensable pour que le compilateur voie les classes)
+  const colSpans = {
+      2: 'md:col-span-2', 3: 'md:col-span-3', 4: 'md:col-span-4', 5: 'md:col-span-5', 6: 'md:col-span-6',
+      7: 'md:col-span-7', 8: 'md:col-span-8', 9: 'md:col-span-9', 10: 'md:col-span-10', 11: 'md:col-span-11', 12: 'md:col-span-12'
+  };
+  const rowSpans = {
+      1: 'row-span-1', 2: 'row-span-2', 3: 'row-span-3', 4: 'row-span-4', 5: 'row-span-5', 6: 'row-span-6'
+  };
+
+  const colClass = colSpans[w] || 'md:col-span-3'; // Default fallback
+  const rowClass = rowSpans[h] || 'row-span-2'; // Default fallback
+
   // Calcul dynamique des classes Grid
   const gridClass = isMobile
     ? 'w-full h-full flex flex-col animate-slide-up' // Mobile style: Full Card
     : collapsed 
         ? 'col-span-12 row-span-1 h-[40px]' 
-        : `col-span-12 md:col-span-${w} row-span-${h}`;
+        : `col-span-12 ${colClass} ${rowClass}`;
     
   // Gestion du style actif (Z-index et Bordure)
   const activeStyle = isMobile
@@ -1281,9 +1284,9 @@ export default function App() {
         </div>
       </header>
 
-      {/* DESKTOP MAIN GRID */}
+      {/* DESKTOP MAIN GRID - FIX: Use h-full and min-h-0 to force confinement within flex container */}
       <main 
-        className="hidden md:grid flex-1 p-2 grid-cols-12 grid-rows-6 gap-2 relative overflow-hidden"
+        className="hidden md:grid flex-1 p-2 grid-cols-12 grid-rows-6 gap-2 relative overflow-hidden min-h-0"
         style={{ cursor: resizing ? 'nwse-resize' : 'auto' }}
       >
         {layout.map((item, index) => (
