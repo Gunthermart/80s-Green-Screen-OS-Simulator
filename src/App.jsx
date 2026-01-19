@@ -3,7 +3,7 @@ import {
   Terminal, Shield, Activity, Zap, ChevronRight, List, 
   Crosshair, Radio, Gauge, Box, GripVertical, AlertTriangle, Target,
   Network, Share2, Cloud, Wind, Minus, Maximize2, Scaling, Minimize2,
-  TrendingUp, LayoutGrid, MoveDiagonally, Lock
+  TrendingUp, LayoutGrid, MoveDiagonally, Lock, ArrowRight, ChevronsRight
 } from 'lucide-react';
 
 /* =========================================
@@ -63,6 +63,12 @@ const GlobalCinemaStyles = () => (
         -webkit-overflow-scrolling: touch;
         scroll-behavior: smooth;
     }
+    
+    /* Animations Mobile Fun */
+    @keyframes slide-up { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .animate-slide-up { animation: slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+    
+    @keyframes neon-pulse { 0% { box-shadow: 0 0 5px var(--color); } 50% { box-shadow: 0 0 20px var(--color); } 100% { box-shadow: 0 0 5px var(--color); } }
 
     @keyframes flash-red { 0% { background: rgba(239, 68, 68, 0.5); } 100% { background: transparent; } }
     @keyframes glitch-jitter {
@@ -140,7 +146,6 @@ const LOB3DTerrain = ({ isStressed, burstMode }) => {
       };
       animate();
 
-      // Resize Observer Integration
       resizeObserver = new ResizeObserver(entries => {
         for (let entry of entries) {
             if (rendererRef.current && cameraRef.current) {
@@ -199,11 +204,9 @@ const CorrelationMatrix = ({ isStressed }) => {
         }
     };
     
-    // Observer
     const resizeObserver = new ResizeObserver(() => resize());
     if (containerRef.current) resizeObserver.observe(containerRef.current);
-    
-    resize(); // Force init
+    resize();
 
     let animationFrameId;
     const draw = () => {
@@ -363,7 +366,6 @@ const SentimentCloud = ({ isStressed }) => {
       };
       animate();
 
-      // Resize Observer Integration
       resizeObserver = new ResizeObserver(entries => {
         for (let entry of entries) {
             if (rendererRef.current && cameraRef.current) {
@@ -496,7 +498,6 @@ const VortexLiquidation = ({ isStressed }) => {
       };
       animate();
 
-      // Resize Observer Integration
       resizeObserver = new ResizeObserver(entries => {
         for (let entry of entries) {
             if (rendererRef.current && cameraRef.current) {
@@ -602,43 +603,31 @@ const SpectacularGlobe = ({ isStressed, opacity = 0.4 }) => {
               globe.add(line);
           }
 
-          // --- ADDED ARTIFACTS (Fuschia Glitches - Communications) ---
+          // --- ARTEFACTS (Fuschia Glitches) ---
           const artifactGeo = new THREE.BufferGeometry();
           const artifactCount = 60;
           const artifactPos = new Float32Array(artifactCount * 3);
           for (let i = 0; i < artifactCount; i++) {
-              const r = 85 + Math.random() * 5; // Slightly above surface
+              const r = 85 + Math.random() * 5; 
               const theta = Math.random() * Math.PI * 2;
               const phi = Math.acos(2 * Math.random() - 1);
-              
               artifactPos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
               artifactPos[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
               artifactPos[i * 3 + 2] = r * Math.cos(phi);
           }
           artifactGeo.setAttribute('position', new THREE.BufferAttribute(artifactPos, 3));
-          const artifactMat = new THREE.PointsMaterial({ 
-              color: 0xd946ef, // Fuchsia
-              size: 2, 
-              transparent: true, 
-              opacity: 0.9,
-              blending: THREE.AdditiveBlending
-          });
+          const artifactMat = new THREE.PointsMaterial({ color: 0xd946ef, size: 2, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending });
           const artifacts = new THREE.Points(artifactGeo, artifactMat);
           globe.add(artifacts);
 
-          // --- COMMUNICATION ARCS (Trajectoires) ---
+          // --- COMMUNICATION ARCS ---
           const commsGroup = new THREE.Group();
           globe.add(commsGroup);
           
-          // Helper pour point sphérique aléatoire
           const getSpherePoint = (r) => {
               const theta = Math.random() * Math.PI * 2;
               const phi = Math.acos(2 * Math.random() - 1);
-              return new THREE.Vector3(
-                  r * Math.sin(phi) * Math.cos(theta),
-                  r * Math.sin(phi) * Math.sin(theta),
-                  r * Math.cos(phi)
-              );
+              return new THREE.Vector3(r * Math.sin(phi) * Math.cos(theta), r * Math.sin(phi) * Math.sin(theta), r * Math.cos(phi));
           };
 
           const activeComms = [];
@@ -646,7 +635,7 @@ const SpectacularGlobe = ({ isStressed, opacity = 0.4 }) => {
               const start = getSpherePoint(85);
               const end = getSpherePoint(85);
               const dist = start.distanceTo(end);
-              const mid = start.clone().add(end).multiplyScalar(0.5).normalize().multiplyScalar(85 + dist * 0.5); // Arc height
+              const mid = start.clone().add(end).multiplyScalar(0.5).normalize().multiplyScalar(85 + dist * 0.5); 
               
               const curve = new THREE.QuadraticBezierCurve3(start, mid, end);
               const points = curve.getPoints(30);
@@ -655,19 +644,9 @@ const SpectacularGlobe = ({ isStressed, opacity = 0.4 }) => {
               const curveMesh = new THREE.Line(geometry, material);
               commsGroup.add(curveMesh);
 
-              // Packet de données (Fuchsia)
-              const packet = new THREE.Mesh(
-                  new THREE.SphereGeometry(1, 4, 4),
-                  new THREE.MeshBasicMaterial({ color: 0xd946ef })
-              );
+              const packet = new THREE.Mesh(new THREE.SphereGeometry(1, 4, 4), new THREE.MeshBasicMaterial({ color: 0xd946ef }));
               commsGroup.add(packet);
-              
-              activeComms.push({
-                  curve: curve,
-                  packet: packet,
-                  progress: Math.random(),
-                  speed: 0.005 + Math.random() * 0.01
-              });
+              activeComms.push({ curve: curve, packet: packet, progress: Math.random(), speed: 0.005 + Math.random() * 0.01 });
           }
 
           const animate = () => {
@@ -675,24 +654,18 @@ const SpectacularGlobe = ({ isStressed, opacity = 0.4 }) => {
               const factor = isStressed ? 5 : 1;
               globe.rotation.y += 0.0015 * factor;
               globe.rotation.x += 0.0004 * factor;
-              
-              // Animate artifacts (counter-rotate)
               artifacts.rotation.y -= 0.002 * factor;
-
-              // Animate Comms
               activeComms.forEach(comm => {
                   comm.progress += comm.speed * factor;
                   if(comm.progress > 1) comm.progress = 0;
                   const pos = comm.curve.getPoint(comm.progress);
                   comm.packet.position.copy(pos);
               });
-
               rendererRef.current.render(scene, camera);
               animationId = requestAnimationFrame(animate);
           };
           animate();
 
-          // Resize Observer
           resizeObserver = new ResizeObserver(entries => {
             for (let entry of entries) {
                 if (rendererRef.current && cameraRef.current) {
@@ -724,7 +697,7 @@ const SpectacularGlobe = ({ isStressed, opacity = 0.4 }) => {
     return <div ref={mountRef} className="absolute inset-0 w-full h-full pointer-events-none" style={{ opacity }} />;
 };
 
-// --- NOUVEAU MODULE: L'ORACLE DE PROJECTION (NEURAL FORWARD WAVE) ---
+// --- NOUVEAU MODULE: L'ORACLE DE PROJECTION ---
 const NeuralOracle = ({ isStressed }) => {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
@@ -734,12 +707,10 @@ const NeuralOracle = ({ isStressed }) => {
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     
-    // Config de la simulation
     let points = [];
-    const historyLength = 60; // Points passés
-    const projectionLength = 30; // Points futurs
+    const historyLength = 60; 
+    const projectionLength = 30; 
     
-    // Init data
     for (let i = 0; i < historyLength; i++) {
         points.push(50 + Math.sin(i * 0.2) * 20 + (Math.random() - 0.5) * 10);
     }
@@ -753,7 +724,7 @@ const NeuralOracle = ({ isStressed }) => {
     
     const resizeObserver = new ResizeObserver(() => resize());
     if (containerRef.current) resizeObserver.observe(containerRef.current);
-    resize(); // Init immediately
+    resize();
 
     let offset = 0;
     let animationFrameId;
@@ -762,7 +733,6 @@ const NeuralOracle = ({ isStressed }) => {
         if (!canvas) return;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
-        // --- 1. GRILLE DE FOND ---
         ctx.strokeStyle = 'rgba(16, 185, 129, 0.1)';
         ctx.lineWidth = 1;
         ctx.beginPath();
@@ -770,7 +740,6 @@ const NeuralOracle = ({ isStressed }) => {
         for(let i=0; i<canvas.height; i+=40) { ctx.moveTo(0,i); ctx.lineTo(canvas.width,i); }
         ctx.stroke();
 
-        // --- 2. CALCUL DYNAMIQUE ---
         offset += 0.05;
         const lastVal = points[points.length-1];
         const trend = isStressed ? -0.5 : 0.1;
@@ -780,14 +749,12 @@ const NeuralOracle = ({ isStressed }) => {
         points.push(newVal);
         if(points.length > historyLength) points.shift();
 
-        // Mapping coords
         const w = canvas.width;
         const h = canvas.height;
         const totalPoints = historyLength + projectionLength;
         const step = w / totalPoints;
         const scaleY = (val) => h/2 - (val - 50) * 2; 
 
-        // --- 3. DESSIN HISTORIQUE (PASSÉ) ---
         ctx.beginPath();
         ctx.moveTo(0, scaleY(points[0]));
         for (let i = 1; i < points.length; i++) {
@@ -797,45 +764,29 @@ const NeuralOracle = ({ isStressed }) => {
         ctx.lineWidth = 2;
         ctx.stroke();
         
-        // Lueur
         ctx.lineTo((points.length-1)*step, h);
         ctx.lineTo(0, h);
-        ctx.fillStyle = isStressed 
-            ? 'linear-gradient(to bottom, rgba(239, 68, 68, 0.2), transparent)' 
-            : 'linear-gradient(to bottom, rgba(16, 185, 129, 0.2), transparent)';
         const gradient = ctx.createLinearGradient(0, 0, 0, h);
         gradient.addColorStop(0, isStressed ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.2)');
         gradient.addColorStop(1, 'transparent');
         ctx.fillStyle = gradient;
         ctx.fill();
 
-        // --- 4. ORACLE (FUTUR) ---
         const startX = (points.length - 1) * step;
         const startY = scaleY(points[points.length - 1]);
         
         ctx.beginPath();
         ctx.moveTo(startX, startY);
         
-        ctx.bezierCurveTo(
-            startX + w * 0.2, startY - (isStressed ? 20 : 50),
-            startX + w * 0.4, startY - (isStressed ? 10 : 100),
-            w, startY - (isStressed ? 50 : 150)
-        );
+        ctx.bezierCurveTo(startX + w * 0.2, startY - (isStressed ? 20 : 50), startX + w * 0.4, startY - (isStressed ? 10 : 100), w, startY - (isStressed ? 50 : 150));
         ctx.lineTo(w, startY + (isStressed ? 150 : 50));
-        ctx.bezierCurveTo(
-            startX + w * 0.4, startY + (isStressed ? 100 : 10),
-            startX + w * 0.2, startY + (isStressed ? 50 : 20),
-            startX, startY
-        );
+        ctx.bezierCurveTo(startX + w * 0.4, startY + (isStressed ? 100 : 10), startX + w * 0.2, startY + (isStressed ? 50 : 20), startX, startY);
         ctx.fillStyle = isStressed ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.05)';
         ctx.fill();
 
         ctx.beginPath();
         ctx.moveTo(startX, startY);
-        ctx.quadraticCurveTo(
-            startX + w * 0.2, startY + (isStressed ? 40 : -20),
-            w, startY + (isStressed ? 100 : -40)
-        );
+        ctx.quadraticCurveTo(startX + w * 0.2, startY + (isStressed ? 40 : -20), w, startY + (isStressed ? 100 : -40));
         ctx.setLineDash([5, 5]);
         ctx.strokeStyle = isStressed ? '#ef4444' : '#34d399';
         ctx.lineWidth = 1;
@@ -873,9 +824,70 @@ const NeuralOracle = ({ isStressed }) => {
 /* =========================================
    2. COMPOSANTS TACTIQUES
    ========================================= */
-const CombatOrderEntry = ({ onOrder, isStressed }) => {
+
+// -- SLIDER TACTILE POUR MOBILE (SWIPE TO KILL) --
+const CombatSlider = ({ onConfirm, isStressed, side }) => {
+    const [drag, setDrag] = useState(0);
+    const containerRef = useRef(null);
+    const isDragging = useRef(false);
+
+    const handleStart = (e) => isDragging.current = true;
+    const handleEnd = () => {
+        isDragging.current = false;
+        if (drag > 200) onConfirm();
+        setDrag(0);
+    };
+    const handleMove = (e) => {
+        if (!isDragging.current) return;
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const rect = containerRef.current.getBoundingClientRect();
+        const raw = clientX - rect.left;
+        setDrag(Math.max(0, Math.min(raw, rect.width - 50)));
+    };
+
+    return (
+        <div 
+            ref={containerRef}
+            className={`relative h-14 rounded-full border border-zinc-800 overflow-hidden flex items-center select-none ${side === 'BUY' ? 'bg-emerald-900/10' : 'bg-red-900/10'}`}
+            onTouchStart={handleStart} onTouchMove={handleMove} onTouchEnd={handleEnd}
+            onMouseDown={handleStart} onMouseMove={handleMove} onMouseUp={handleEnd} onMouseLeave={handleEnd}
+        >
+            <div className="absolute inset-0 flex items-center justify-center opacity-40">
+                <div className="flex items-center gap-2 animate-pulse">
+                    <ChevronsRight size={16} className={side === 'BUY' ? 'text-emerald-500' : 'text-red-500'} />
+                    <span className={`text-[10px] font-black tracking-[0.3em] ${side === 'BUY' ? 'text-emerald-500' : 'text-red-500'}`}>SLIDE_TO_{side}</span>
+                </div>
+            </div>
+            <div 
+                style={{ transform: `translateX(${drag}px)` }}
+                className={`w-12 h-12 rounded-full absolute left-1 shadow-lg flex items-center justify-center z-10 transition-transform duration-75 ${side === 'BUY' ? 'bg-emerald-500 text-black' : 'bg-red-600 text-white'}`}
+            >
+                <Zap size={18} fill="currentColor" />
+            </div>
+        </div>
+    );
+};
+
+const CombatOrderEntry = ({ onOrder, isStressed, isMobile }) => {
   const [side, setSide] = useState('BUY');
   const [amount, setAmount] = useState('');
+
+  if (isMobile) {
+      return (
+          <div className="flex flex-col h-full justify-between py-2">
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                 <button onClick={() => setSide('BUY')} className={`p-4 rounded border ${side === 'BUY' ? 'border-emerald-500 bg-emerald-500/20 text-emerald-400' : 'border-zinc-800 bg-zinc-900 text-zinc-600'} font-black text-xl transition-all`}>BUY</button>
+                 <button onClick={() => setSide('SELL')} className={`p-4 rounded border ${side === 'SELL' ? 'border-red-500 bg-red-500/20 text-red-400' : 'border-zinc-800 bg-zinc-900 text-zinc-600'} font-black text-xl transition-all`}>SELL</button>
+              </div>
+              <div className="flex-1 flex flex-col justify-center items-center relative mb-6">
+                 <span className="text-[10px] text-zinc-500 uppercase font-black absolute top-0 left-0">Quantity (BTC)</span>
+                 <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="bg-transparent text-center text-6xl font-black text-white outline-none w-full placeholder-zinc-800" placeholder="0.00" />
+              </div>
+              <CombatSlider side={side} isStressed={isStressed} onConfirm={() => { onOrder({ side, amount, symbol: 'BTC/USD' }); setAmount(''); }} />
+          </div>
+      )
+  }
+
   return (
     <div className={`flex flex-col gap-4 transition-all duration-300 ${isStressed ? 'scale-[0.98]' : ''}`}>
       <div className="flex bg-zinc-900/50 p-1 border border-zinc-800 rounded">
@@ -903,14 +915,14 @@ const TacticalWindow = ({
 }) => {
   // Calcul dynamique des classes Grid
   const gridClass = isMobile
-    ? 'w-full mb-4 border-l-2 border-r-0 border-t-0 border-b-0 min-h-[300px]' // Mobile style
+    ? 'w-full h-full flex flex-col animate-slide-up' // Mobile style: Full Card
     : collapsed 
         ? 'col-span-12 row-span-1 h-[40px]' 
         : `col-span-12 md:col-span-${w} row-span-${h}`;
     
   // Gestion du style actif (Z-index et Bordure)
   const activeStyle = isMobile
-    ? 'border-emerald-500/50 bg-zinc-900/20'
+    ? 'border-none bg-transparent'
     : isActive 
         ? 'border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.3)] z-50' 
         : 'border-[#1a1a1e] z-10 opacity-90 hover:opacity-100';
@@ -924,31 +936,29 @@ const TacticalWindow = ({
         onDragEnd={!isMobile ? onDragEnd : undefined}
         className={`flex flex-col ${THEME.surface} border ${gridClass} relative group overflow-hidden ${isMobile ? '' : 'draggable-item'} ${activeStyle} ${isStressed ? 'border-red-500/40 shadow-[inset_0_0_20px_rgba(239,68,68,0.1)]' : ''}`}
     >
-        {/* HEADER */}
-        <div 
-             draggable={!isMobile && !collapsed}
-             onDragStart={(e) => {
-                 if(isMobile) return;
-                 onActivate(index); 
-                 onDragStart(e, index);
-             }}
-             className={`flex items-center justify-between px-3 py-3 md:py-2 bg-zinc-900/60 border-b border-zinc-800/80 shrink-0 z-20 transition-colors ${handleClass}`}
-        >
-            <div className="flex items-center gap-2 pointer-events-none">
-                {!isMobile && <GripVertical size={12} className={`transition-colors ${isActive ? 'text-emerald-400' : 'text-zinc-600'}`} />}
-                <Icon size={14} className={isStressed ? 'text-white animate-pulse' : (isActive || isMobile ? 'text-emerald-400' : 'text-zinc-500')} />
-                <span className={`text-[12px] md:text-[10px] font-black tracking-widest uppercase glow-text ${isStressed ? 'text-white' : (isActive || isMobile ? 'text-white' : 'text-zinc-400')}`}>{title}</span>
-                {subTitle && (!collapsed || isMobile) && <span className="text-[10px] md:text-[8px] font-bold text-zinc-600 hidden sm:inline ml-2">{subTitle}</span>}
-            </div>
-            
-            <div className="flex items-center gap-2" onMouseDown={(e) => e.stopPropagation()}>
-                {!isMobile && (
+        {/* HEADER (Hidden on Mobile for cleaner look, handled by TabBar) */}
+        {!isMobile && (
+            <div 
+                 draggable={!isMobile && !collapsed}
+                 onDragStart={(e) => {
+                     onActivate(index); 
+                     onDragStart(e, index);
+                 }}
+                 className={`flex items-center justify-between px-3 py-3 md:py-2 bg-zinc-900/60 border-b border-zinc-800/80 shrink-0 z-20 transition-colors ${handleClass}`}
+            >
+                <div className="flex items-center gap-2 pointer-events-none">
+                    <GripVertical size={12} className={`transition-colors ${isActive ? 'text-emerald-400' : 'text-zinc-600'}`} />
+                    <Icon size={14} className={isStressed ? 'text-white animate-pulse' : (isActive ? 'text-emerald-400' : 'text-zinc-500')} />
+                    <span className={`text-[12px] md:text-[10px] font-black tracking-widest uppercase glow-text ${isStressed ? 'text-white' : (isActive ? 'text-white' : 'text-zinc-400')}`}>{title}</span>
+                    {subTitle && (!collapsed) && <span className="text-[10px] md:text-[8px] font-bold text-zinc-600 hidden sm:inline ml-2">{subTitle}</span>}
+                </div>
+                <div className="flex items-center gap-2" onMouseDown={(e) => e.stopPropagation()}>
                     <button onClick={() => onToggle(index)} className={`transition-colors ${collapsed ? 'text-emerald-500 animate-pulse' : 'text-zinc-500 hover:text-white'}`}>
                         {collapsed ? <Maximize2 size={10} /> : <Minus size={10} />}
                     </button>
-                )}
+                </div>
             </div>
-        </div>
+        )}
         
         {(!collapsed || isMobile) && (
             <>
@@ -981,7 +991,8 @@ export default function App() {
   const [isLiquidating, setIsLiquidating] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [burstMode, setBurstMode] = useState(false);
-  const [activeWindowId, setActiveWindowId] = useState('cmd'); // Focus par défaut sur CMD
+  const [activeWindowId, setActiveWindowId] = useState('cmd'); 
+  const [mobileTab, setMobileTab] = useState('EXECUTION'); // Default mobile tab
 
   const [logs, setLogs] = useState(["SYSTEM_READY", "SECURE_UPLINK_STABLE", "VORTEX_ENGINE_ACTIVE", "NEURAL_ORACLE_ONLINE"]);
   const [orders, setOrders] = useState([]);
@@ -1157,8 +1168,7 @@ export default function App() {
       case 'DATA_BURST': setBurstMode(true); addLog("DATA_BURST_ENGAGED"); setTimeout(() => setBurstMode(false), 3000); break;
       case 'CLEAR': setLogs([]); break;
       case 'HELP': 
-        addLog("--- OMNI_LAUNCHER_V7.3 ---");
-        addLog("--- TACTICAL_OPS ---");
+        addLog("--- OMNI_LAUNCHER_V7.4 ---");
         addLog("CMDS: LIQUIDATE, STEALTH, NEURAL_SCAN, RISK_FLUSH, DATA_BURST");
         break;
       default: addLog(`ERR: CMD_${cmd}_UNKNOWN.`);
@@ -1172,14 +1182,14 @@ export default function App() {
   };
 
   // --- RENDER COMPONENT MAPPING ---
-  const renderComponent = (type) => {
+  const renderComponent = (type, isMobile = false) => {
     switch(type) {
       case 'Vortex': return <VortexLiquidation isStressed={isStressed} />;
       case 'Matrix': return <CorrelationMatrix isStressed={isStressed} />;
       case 'Cloud': return <SentimentCloud isStressed={isStressed} />;
       case 'Oracle': return <NeuralOracle isStressed={isStressed} />;
       case 'LOB': return <LOB3DTerrain isStressed={isStressed} burstMode={burstMode} />;
-      case 'Execution': return <CombatOrderEntry onOrder={handleExecution} isStressed={isStressed} />;
+      case 'Execution': return <CombatOrderEntry onOrder={handleExecution} isStressed={isStressed} isMobile={isMobile} />;
       case 'CMD': return (
         <>
           <SpectacularGlobe isStressed={isStressed} opacity={0.4} />
@@ -1213,7 +1223,7 @@ export default function App() {
           </div>
           <div className="text-center space-y-3">
             <h1 className="text-white text-xl tracking-[1.5em] md:tracking-[2.5em] uppercase font-black ml-[1.5em] md:ml-[2.5em] glow-text">Leonce_Equity</h1>
-            <p className="text-emerald-900 text-[10px] font-bold tracking-[0.8em] uppercase">Sovereign_Omni_Deck_V7.3</p>
+            <p className="text-emerald-900 text-[10px] font-bold tracking-[0.8em] uppercase">Sovereign_Omni_Deck_V7.4</p>
           </div>
           <button onClick={() => setIsLive(true)} className="group relative px-16 py-4 border border-emerald-500/20 text-emerald-500 uppercase tracking-[1em] overflow-hidden transition-all hover:border-emerald-500 bg-black/40 backdrop-blur-sm">
             <span className="relative z-10 group-hover:text-black transition-colors">Start_Uplink</span>
@@ -1224,6 +1234,15 @@ export default function App() {
     );
   }
 
+  // Configuration des onglets Mobile (Le "Dock")
+  const mobileModules = {
+      'ORACLE': { component: 'Oracle', icon: TrendingUp },
+      'VORTEX': { component: 'Vortex', icon: Box },
+      'EXECUTION': { component: 'Execution', icon: Zap },
+      'COMMAND': { component: 'CMD', icon: Terminal },
+      'RISK': { component: 'Risk', icon: Gauge },
+  };
+
   return (
     <div className={`h-[100dvh] w-screen ${THEME.bg} flex flex-col font-mono text-zinc-400 overflow-hidden relative grid-bg ${isStressed ? 'system-stress' : ''} ${isStealth ? 'stealth-mode' : ''} ${isLiquidating ? 'liquidate-flash' : ''}`}>
       <GlobalCinemaStyles />
@@ -1231,6 +1250,7 @@ export default function App() {
       <div className="crt-overlay" />
       {isScanning && <div className="scan-bar" />}
 
+      {/* HEADER DESKTOP / MOBILE (Unifié mais adapté) */}
       <header className="h-14 border-b border-zinc-800/50 bg-black/90 backdrop-blur-xl flex items-center justify-between px-4 md:px-6 shrink-0 z-50">
         <div className="flex items-center gap-4">
           <Shield className="text-emerald-500" size={18} />
@@ -1286,53 +1306,54 @@ export default function App() {
             onDragEnd={onDragEnd}
             isMobile={false}
           >
-            {renderComponent(item.component)}
+            {renderComponent(item.component, false)}
           </TacticalWindow>
         ))}
       </main>
 
-      {/* MOBILE MAIN STREAM (No Tabs, No Drag, Just Feed) */}
-      <main className="md:hidden flex-1 overflow-y-auto mobile-scroll-container p-3 space-y-4 pb-20">
-        <div className="text-[10px] font-black text-zinc-600 uppercase mb-2 tracking-widest pl-1">/// PRIMARY_INTEL_STREAM</div>
-        
-        {/* CRITICAL MODULES FIRST */}
-        <TacticalWindow title="NEURAL_ORACLE" icon={TrendingUp} isStressed={isStressed} isMobile={true}>
-             <NeuralOracle isStressed={isStressed} />
-        </TacticalWindow>
+      {/* MOBILE MAIN STREAM (V7.4 - TACTICAL DECK) */}
+      <main className="md:hidden flex-1 relative overflow-hidden bg-black/50 p-4 pb-24 flex flex-col justify-center">
+         {/* Background Effect Specific to Mobile */}
+         <div className="absolute inset-0 pointer-events-none opacity-20 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-emerald-900/20 via-black to-black animate-pulse" />
 
-        <TacticalWindow title="LIQ_VORTEX" icon={Box} isStressed={isStressed} isMobile={true}>
-             <VortexLiquidation isStressed={isStressed} />
-        </TacticalWindow>
-
-        <TacticalWindow title="EXECUTION_PROTOCOL" icon={Zap} isStressed={isStressed} isMobile={true}>
-             <CombatOrderEntry onOrder={handleExecution} isStressed={isStressed} />
-        </TacticalWindow>
-        
-        <TacticalWindow title="CMD_CENTER" icon={Terminal} isStressed={isStressed} isMobile={true}>
-             {renderComponent('CMD')}
-        </TacticalWindow>
-
-        {/* SECONDARY MODULES */}
-        <div className="grid grid-cols-2 gap-2">
-            <TacticalWindow title="SENTIMENT" icon={Cloud} isStressed={isStressed} isMobile={true}>
-                <SentimentCloud isStressed={isStressed} />
-            </TacticalWindow>
-            <TacticalWindow title="MATRIX" icon={Share2} isStressed={isStressed} isMobile={true}>
-                <CorrelationMatrix isStressed={isStressed} />
-            </TacticalWindow>
-        </div>
-
-        <TacticalWindow title="RISK_MONITOR" icon={Gauge} isStressed={isStressed} isMobile={true}>
-            {renderComponent('Risk')}
-        </TacticalWindow>
-
+         {/* Active Module Card */}
+         <div className="relative z-10 w-full h-full max-h-[600px] bg-[#0c0c0e] border border-zinc-800 rounded-xl shadow-2xl overflow-hidden flex flex-col animate-slide-up">
+            <div className="h-8 bg-zinc-900/80 border-b border-zinc-800 flex items-center justify-between px-3">
+                 <div className="flex items-center gap-2">
+                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                     <span className="text-[10px] font-black tracking-widest text-emerald-500">{mobileTab}</span>
+                 </div>
+                 <div className="flex gap-1">
+                     {[1,2,3].map(i => <div key={i} className="w-1 h-1 bg-zinc-700 rounded-full" />)}
+                 </div>
+            </div>
+            <div className="flex-1 relative overflow-hidden p-2">
+                {renderComponent(mobileModules[mobileTab].component, true)}
+            </div>
+         </div>
       </main>
 
-      <footer className="h-10 md:h-10 border-t border-zinc-900 bg-black flex items-center shrink-0 z-50 overflow-hidden">
+      {/* MOBILE TACTICAL DOCK (Bottom Nav) */}
+      <div className="md:hidden fixed bottom-0 left-0 w-full h-20 bg-[#050505]/90 backdrop-blur-xl border-t border-zinc-800 z-50 flex items-center justify-around px-2 pb-2">
+          {Object.entries(mobileModules).map(([key, mod]) => {
+              const isActive = mobileTab === key;
+              return (
+                  <button 
+                    key={key} 
+                    onClick={() => setMobileTab(key)}
+                    className={`flex flex-col items-center justify-center w-14 h-14 rounded-lg transition-all duration-200 active:scale-90 ${isActive ? 'bg-emerald-900/20 border border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.2)]' : 'opacity-50 grayscale'}`}
+                  >
+                      <mod.icon size={20} className={isActive ? 'text-emerald-400' : 'text-zinc-500'} />
+                      <span className={`text-[8px] mt-1 font-black ${isActive ? 'text-emerald-400' : 'text-zinc-600'}`}>{key.substring(0, 4)}</span>
+                  </button>
+              )
+          })}
+      </div>
+
+      <footer className="hidden md:flex h-10 border-t border-zinc-900 bg-black items-center shrink-0 z-50 overflow-hidden">
         <div className="bg-emerald-950/20 h-full flex items-center px-4 border-r border-zinc-800 shrink-0 z-10"><span className="text-[9px] font-black text-emerald-500 uppercase italic animate-pulse">Live_Intel</span></div>
         <div className="flex-1 relative overflow-hidden flex items-center">
           <div className="animate-ticker whitespace-nowrap flex items-center gap-12 text-[9px] font-bold text-zinc-600 uppercase">
-            <span>WHALE_ALERT: +1,240 BTC BINANCE /// MARKET_SENTIMENT: 84% BULLISH /// VOLATILITY_SCAN: HIGH_ALERT /// NODE_STABILITY: 100% /// FED_WATCH: T-14D TO CPI_RELEASE /// SECURE_UPLINK: AES_256_ACTIVE ///</span>
             <span>WHALE_ALERT: +1,240 BTC BINANCE /// MARKET_SENTIMENT: 84% BULLISH /// VOLATILITY_SCAN: HIGH_ALERT /// NODE_STABILITY: 100% /// FED_WATCH: T-14D TO CPI_RELEASE /// SECURE_UPLINK: AES_256_ACTIVE ///</span>
           </div>
         </div>
