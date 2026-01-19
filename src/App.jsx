@@ -1238,6 +1238,8 @@ export default function App() {
   const mobileModules = {
       'ORACLE': { component: 'Oracle', icon: TrendingUp },
       'VORTEX': { component: 'Vortex', icon: Box },
+      'MATRIX': { component: 'Matrix', icon: Share2 },
+      'CLOUD': { component: 'Cloud', icon: Cloud },
       'EXECUTION': { component: 'Execution', icon: Zap },
       'COMMAND': { component: 'CMD', icon: Terminal },
       'RISK': { component: 'Risk', icon: Gauge },
@@ -1333,15 +1335,15 @@ export default function App() {
          </div>
       </main>
 
-      {/* MOBILE TACTICAL DOCK (Bottom Nav) */}
-      <div className="md:hidden fixed bottom-0 left-0 w-full h-20 bg-[#050505]/90 backdrop-blur-xl border-t border-zinc-800 z-50 flex items-center justify-around px-2 pb-2">
+      {/* MOBILE TACTICAL DOCK (Bottom Nav - Infinite Scroll) */}
+      <div className="md:hidden fixed bottom-0 left-0 w-full h-20 bg-[#050505]/90 backdrop-blur-xl border-t border-zinc-800 z-50 flex items-center gap-4 overflow-x-auto px-6 pb-2 no-scrollbar snap-x">
           {Object.entries(mobileModules).map(([key, mod]) => {
               const isActive = mobileTab === key;
               return (
                   <button 
                     key={key} 
                     onClick={() => setMobileTab(key)}
-                    className={`flex flex-col items-center justify-center w-14 h-14 rounded-lg transition-all duration-200 active:scale-90 ${isActive ? 'bg-emerald-900/20 border border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.2)]' : 'opacity-50 grayscale'}`}
+                    className={`shrink-0 snap-center flex flex-col items-center justify-center w-14 h-14 rounded-lg transition-all duration-200 active:scale-90 ${isActive ? 'bg-emerald-900/20 border border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.2)]' : 'opacity-50 grayscale'}`}
                   >
                       <mod.icon size={20} className={isActive ? 'text-emerald-400' : 'text-zinc-500'} />
                       <span className={`text-[8px] mt-1 font-black ${isActive ? 'text-emerald-400' : 'text-zinc-600'}`}>{key.substring(0, 4)}</span>
