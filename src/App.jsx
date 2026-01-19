@@ -238,7 +238,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, [isLive]);
 
-  const addLog = (msg) => setLogs(prev => [msg, ...prev].slice(0, 20));
+  const addLog = (msg) => setLogs(prev => [msg, ...prev].slice(0, 50));
 
   const handleCommand = (e) => {
     if (e.key !== 'Enter') return;
@@ -246,34 +246,72 @@ export default function App() {
     setInput("");
     addLog(`> ${cmd}`);
 
-    // Dictionnaire des lancements de sous-répertoires
+    // DICTIONNAIRE OMNI-LAUNCHER
+    // Le principe : Chaque clé est une commande, la valeur est le chemin relatif dans /public
     const launchTargets = {
       'SEA': 'SEA/index.html',
       'PACMAN': 'Pacman/index.html',
       'DOOM': 'Doom/index.html',
       'INDEX': 'index.html',
-      'OS': 'os.html'
+      'OS': 'os/os.html', // Corrigé selon ta demande précédente
+      // NOUVEAUX MODULES
+      'DRONE2': 'drone2/index.html',
+      'KLONDIKE': 'klondike/index.html',
+      'PERF': 'perf/index.html',
+      'TWIX': 'twix/index.html',
+      'TAMAGOTCHI': 'tamagotchi/index.html',
+      'AQUARIUM': 'aquarium/index.html',
+      'CALC': 'calc/index.html',
+      'CALC2': 'calc2/index.html',
+      'CANDY': 'candy/index.html',
+      'CCTV': 'cctv/index.html',
+      'CITY': 'city/index.html',
+      'CODEPAD': 'codepad/index.html',
+      'DRONE': 'drone/index.html',
+      'FI': 'fi/index.html',
+      'GEO': 'geo/index.html',
+      'GRAPH': 'graph/index.html',
+      'MAPMIND': 'mapmind/index.html',
+      'MINESWEEPER': 'minesweeper/index.html',
+      'MINUTEUR': 'minuteur/index.html',
+      'NEWS': 'news/index.html',
+      'NUCLEUS': 'nucleus/index.html',
+      'PLANETARIUM': 'planetarium/index.html',
+      'PPPD': 'pppd/index.html',
+      'SODUKU': 'sudoku/index.html', // Correction auto de "soduku" vers "sudoku"
+      'SUDOKU': 'sudoku/index.html'
     };
 
     if (launchTargets[cmd]) {
       setIsStressed(true);
-      addLog(`SYNCHRONIZING_UPLINK: /${launchTargets[cmd]}...`);
+      addLog(`INITIATING_UPLINK: ${cmd}...`);
       setTimeout(() => {
         setIsStressed(false);
-        addLog(`ACCESS_GRANTED: REDIRECTING_TO_${cmd}`);
-        window.open(launchTargets[cmd], '_blank');
+        addLog(`UPLINK_ESTABLISHED: ${launchTargets[cmd]}`);
+        window.open(`${window.location.origin}/${launchTargets[cmd]}`, '_blank');
       }, 800);
       return;
     }
 
     switch(cmd) {
-      case 'LIQUIDATE': setIsLiquidating(true); setOrders([]); addLog("CRITICAL: POSITIONS_PURGED"); setTimeout(() => setIsLiquidating(false), 500); break;
+      case 'LIQUIDATE': setIsLiquidating(true); setOrders([]); addLog("CRITICAL: ALL_POSITIONS_PURGED"); setTimeout(() => setIsLiquidating(false), 500); break;
       case 'STEALTH': setIsStealth(!isStealth); addLog(isStealth ? "STEALTH_OFF" : "STEALTH_ON"); break;
       case 'NEURAL_SCAN': setIsScanning(true); addLog("RUNNING_NEURAL_SCAN..."); setTimeout(() => { setIsScanning(false); addLog("SENTIMENT: BULLISH_84%"); }, 2000); break;
       case 'RISK_FLUSH': setIsStressed(true); addLog("SCALING_EXPOSURE_-50%"); setOrders(prev => prev.map(o => ({...o, amount: (o.amount / 2).toFixed(4)}))); setTimeout(() => setIsStressed(false), 1000); break;
       case 'DATA_BURST': setBurstMode(true); addLog("DATA_BURST_ENGAGED"); setTimeout(() => setBurstMode(false), 3000); break;
-      case 'HELP': addLog("MODULES: SEA, PACMAN, DOOM, OS, INDEX /// ACTIONS: LIQUIDATE, STEALTH, NEURAL_SCAN, RISK_FLUSH, DATA_BURST"); break;
-      default: addLog("ERR: UNKNOWN_CMD");
+      case 'CLEAR': setLogs([]); break;
+      case 'HELP': 
+        addLog("--- OMNI_LAUNCHER_V5.8 ---");
+        addLog("APPS: AQUARIUM, CALC, CALC2, CANDY, CCTV, CITY");
+        addLog("APPS: CODEPAD, DOOM, DRONE, DRONE2, FI, GEO");
+        addLog("APPS: GRAPH, INDEX, KLONDIKE, MAPMIND, MINESWEEPER");
+        addLog("APPS: MINUTEUR, NEWS, NUCLEUS, OS, PACMAN, PERF");
+        addLog("APPS: PLANETARIUM, PPPD, SEA, SUDOKU, TAMAGOTCHI, TWIX");
+        addLog("--- TACTICAL_OPS ---");
+        addLog("CMDS: LIQUIDATE, STEALTH, NEURAL_SCAN, RISK_FLUSH, DATA_BURST");
+        break;
+      default:
+        addLog(`ERR: CMD_${cmd}_UNKNOWN. TYPE 'HELP'.`);
     }
   };
 
@@ -297,7 +335,7 @@ export default function App() {
           </div>
           <div className="text-center space-y-3">
             <h1 className="text-white text-xl tracking-[1.5em] md:tracking-[2.5em] uppercase font-black ml-[1.5em] md:ml-[2.5em] glow-text">Leonce_Equity</h1>
-            <p className="text-emerald-900 text-[10px] font-bold tracking-[0.8em] uppercase">Sovereign_Omni_Deck_V5.7</p>
+            <p className="text-emerald-900 text-[10px] font-bold tracking-[0.8em] uppercase">Sovereign_Omni_Deck_V5.8</p>
           </div>
           <button onClick={() => setIsLive(true)} className="group relative px-16 py-4 border border-emerald-500/20 text-emerald-500 uppercase tracking-[1em] overflow-hidden transition-all hover:border-emerald-500 bg-black/40 backdrop-blur-sm">
             <span className="relative z-10 group-hover:text-black transition-colors">Start_Uplink</span>
@@ -342,7 +380,7 @@ export default function App() {
         <TacticalWindow title="Command_Center" icon={Terminal} className="col-span-12 md:col-span-3 row-span-4 border-emerald-500/20 bg-emerald-950/5 relative" isStressed={isStressed}>
           <SpectacularGlobe isStressed={isStressed} opacity={0.4} />
           <div className="flex-1 overflow-auto no-scrollbar space-y-1 mb-3 relative z-10">
-            {logs.map((l, i) => <div key={i} className={`text-[10px] ${l.startsWith('>') ? 'text-emerald-400 font-bold' : 'text-zinc-600'}`}>{l}</div>)}
+            {logs.map((l, i) => <div key={i} className={`text-[10px] ${l.startsWith('>') ? 'text-emerald-400 font-bold' : l.startsWith('---') ? 'text-emerald-600 font-black' : 'text-zinc-600'}`}>{l}</div>)}
           </div>
           <div className="flex items-center gap-2 border-t border-emerald-900/50 pt-2 relative z-10">
             <ChevronRight size={14} className="text-emerald-500" />
