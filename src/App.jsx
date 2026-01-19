@@ -3,7 +3,7 @@ import {
   Terminal, Shield, Zap, ChevronRight, List, 
   Crosshair, Radio, Gauge, Box, GripVertical, AlertTriangle,
   Share2, Cloud, Minus, Maximize2, Minimize2,
-  TrendingUp, ChevronsRight, Network // AJOUT DE L'IMPORT MANQUANT
+  TrendingUp, ChevronsRight, Network, Activity
 } from 'lucide-react';
 
 /* =========================================
@@ -58,13 +58,11 @@ const GlobalCinemaStyles = () => (
         height: 10px;
     }
 
-    /* Mobile optimisations */
     .mobile-scroll-container {
         -webkit-overflow-scrolling: touch;
         scroll-behavior: smooth;
     }
     
-    /* Animations Mobile Fun */
     @keyframes slide-up { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
     .animate-slide-up { animation: slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
     
@@ -167,101 +165,484 @@ const LOB3DTerrain = ({ isStressed, burstMode }) => {
     };
   }, [isStressed, burstMode]);
 
-  return <div ref={mountRef} className="w-full h-full min-h-[200px]" />;
+  return <div ref={mountRef} className="w-full h-full" />;
 };
 
-const CorrelationMatrix = ({ isStressed }) => {
-  const canvasRef = useRef(null);
-  const containerRef = useRef(null);
+// --- RISK HYPERCUBE (TESSERACT) ---
+const RiskHypercube = ({ isStressed }) => {
+    const mountRef = useRef(null);
+    const rendererRef = useRef(null);
+    const cameraRef = useRef(null);
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    
-    const assets = ['BTC', 'ETH', 'SOL', 'NDX', 'SPX', 'DXY', 'GOLD', 'OIL', 'VIX'];
-    let nodes = assets.map(() => ({
-      x: Math.random() * canvas.width,
-      y: Math.random() * canvas.height,
-      vx: (Math.random() - 0.5) * 1.5,
-      vy: (Math.random() - 0.5) * 1.5
-    }));
+    useEffect(() => {
+        let resizeObserver;
+        let animationId;
 
-    const resize = () => {
-        if(containerRef.current && canvas){
-            canvas.width = containerRef.current.clientWidth;
-            canvas.height = containerRef.current.clientHeight;
-        }
-    };
-    
-    const resizeObserver = new ResizeObserver(() => resize());
-    if (containerRef.current) resizeObserver.observe(containerRef.current);
-    resize();
+        function initCube() {
+            const THREE = window.THREE;
+            if (!mountRef.current) return;
+            const width = mountRef.current.clientWidth;
+            const height = mountRef.current.clientHeight;
 
-    let animationFrameId;
-    const draw = () => {
-      if (!ctx || !canvas) return;
-      ctx.fillStyle = isStressed ? 'rgba(20, 0, 0, 0.2)' : 'rgba(0, 5, 2, 0.2)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+            const scene = new THREE.Scene();
+            // Fog pour donner de la profondeur et cacher le vide
+            scene.fog = new THREE.FogExp2(0x000000, 0.02);
 
-      nodes.forEach(node => {
-        node.x += node.vx * (isStressed ? 2 : 1);
-        node.y += node.vy * (isStressed ? 2 : 1);
-        if (node.x < 0 || node.x > canvas.width) node.vx *= -1;
-        if (node.y < 0 || node.y > canvas.height) node.vy *= -1;
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, isStressed ? 3 : 2, 0, Math.PI * 2);
-        ctx.fillStyle = isStressed ? '#ef4444' : '#10b981';
-        ctx.fill();
-      });
+            const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 100);
+            camera.position.z = 8;
+            cameraRef.current = camera;
 
-      for (let i = 0; i < nodes.length; i++) {
-        for (let j = i + 1; j < nodes.length; j++) {
-          const dx = nodes[i].x - nodes[j].x;
-          const dy = nodes[i].y - nodes[j].y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < 150) {
-            ctx.beginPath();
-            ctx.moveTo(nodes[i].x, nodes[i].y);
-            ctx.lineTo(nodes[j].x, nodes[j].y);
-            const opacity = 1 - dist / 150;
-            ctx.strokeStyle = isStressed ? `rgba(239, 68, 68, ${opacity})` : `rgba(16, 185, 129, ${opacity * 0.5})`;
-            ctx.lineWidth = isStressed ? 1.5 : 0.8;
-            ctx.stroke();
-            if (Math.random() > 0.98) {
-               ctx.fillStyle = '#fff';
-               const t = Math.random();
-               ctx.beginPath();
-               ctx.arc(nodes[i].x + (nodes[j].x - nodes[i].x) * t, nodes[i].y + (nodes[j].y - nodes[i].y) * t, 1.5, 0, Math.PI * 2);
-               ctx.fill();
+            rendererRef.current = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            rendererRef.current.setSize(width, height);
+            mountRef.current.appendChild(rendererRef.current.domElement);
+
+            const group = new THREE.Group();
+            scene.add(group);
+
+            // 1. Cube Extérieur
+            const outerGeo = new THREE.BoxGeometry(3, 3, 3);
+            const edgesOuter = new THREE.EdgesGeometry(outerGeo);
+            const outerMat = new THREE.LineBasicMaterial({ color: isStressed ? 0xef4444 : 0x10b981, transparent: true, opacity: 0.8 });
+            const outerCube = new THREE.LineSegments(edgesOuter, outerMat);
+            group.add(outerCube);
+
+            // 2. Cube Intérieur (Le noyau)
+            const innerGeo = new THREE.BoxGeometry(1.5, 1.5, 1.5);
+            const edgesInner = new THREE.EdgesGeometry(innerGeo);
+            const innerMat = new THREE.LineBasicMaterial({ color: isStressed ? 0xff0000 : 0x34d399, transparent: true, opacity: 0.9 });
+            const innerCube = new THREE.LineSegments(edgesInner, innerMat);
+            group.add(innerCube);
+
+            // 3. Connecteurs (Tesseract effect)
+            const connectorMat = new THREE.LineBasicMaterial({ color: isStressed ? 0x991b1b : 0x065f46, transparent: true, opacity: 0.3 });
+            
+            // On crée manuellement les lignes reliant les coins du cube interne à l'externe
+            const vertices = [];
+            const outerPos = outerGeo.attributes.position;
+            const innerPos = innerGeo.attributes.position;
+
+            for(let i=0; i < outerPos.count; i++) {
+                vertices.push(
+                    outerPos.getX(i), outerPos.getY(i), outerPos.getZ(i),
+                    innerPos.getX(i), innerPos.getY(i), innerPos.getZ(i)
+                );
             }
-          }
-        }
-        ctx.fillStyle = isStressed ? '#fda4af' : '#6ee7b7';
-        ctx.font = '9px monospace';
-        ctx.fillText(assets[i], nodes[i].x + 8, nodes[i].y + 3);
-      }
-      animationFrameId = requestAnimationFrame(draw);
-    };
-    draw();
-    
-    return () => {
-        resizeObserver.disconnect();
-        cancelAnimationFrame(animationFrameId);
-    };
-  }, [isStressed]);
+            const connectorGeo = new THREE.BufferGeometry();
+            connectorGeo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+            const connectors = new THREE.LineSegments(connectorGeo, connectorMat);
+            group.add(connectors);
 
-  return (
-    <div ref={containerRef} className="relative w-full h-full min-h-[150px] overflow-hidden bg-black">
-      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
-      <div className="absolute top-2 left-2 pointer-events-none z-10">
-        <div className="bg-black/80 border border-emerald-500/20 p-1 px-2 backdrop-blur-md rounded flex items-center gap-2">
-            <Network size={10} className={isStressed ? 'text-red-500' : 'text-emerald-500'} />
-            <span className="text-[9px] font-black text-zinc-400">CORR_COEFF: <span className={isStressed ? 'text-red-400' : 'text-emerald-400'}>0.94</span></span>
+            // 4. Noyau instable (Core)
+            const coreGeo = new THREE.IcosahedronGeometry(0.5, 1);
+            const coreMat = new THREE.MeshBasicMaterial({ color: isStressed ? 0xffffff : 0x10b981, wireframe: true, transparent: true, opacity: 0.5 });
+            const core = new THREE.Mesh(coreGeo, coreMat);
+            group.add(core);
+
+            // Sauvegarde de la position originale pour le glitch
+            const originalOuterPos = outerGeo.attributes.position.clone();
+
+            const animate = () => {
+                if (!rendererRef.current) return;
+                
+                const time = Date.now() * 0.001;
+                const stressFactor = isStressed ? 4 : 1;
+
+                // Rotation complexe
+                group.rotation.x += 0.002 * stressFactor;
+                group.rotation.y += 0.005 * stressFactor;
+                
+                // Rotation inverse du noyau interne
+                innerCube.rotation.x -= 0.01 * stressFactor;
+                innerCube.rotation.z += 0.01 * stressFactor;
+                
+                // Respiration (Scale pulse)
+                const pulse = 1 + Math.sin(time * (isStressed ? 10 : 2)) * (isStressed ? 0.05 : 0.02);
+                innerCube.scale.set(pulse, pulse, pulse);
+                core.scale.set(pulse * 0.8, pulse * 0.8, pulse * 0.8);
+                core.rotation.y += 0.05 * stressFactor;
+
+                // GLITCH EFFECT (Vertex Displacement) en cas de stress
+                if (isStressed) {
+                    const positions = outerCube.geometry.attributes.position;
+                    const initial = originalOuterPos;
+                    
+                    for(let i=0; i < positions.count; i++) {
+                        if (Math.random() > 0.9) {
+                            positions.setXYZ(
+                                i,
+                                initial.getX(i) + (Math.random()-0.5) * 0.5,
+                                initial.getY(i) + (Math.random()-0.5) * 0.5,
+                                initial.getZ(i) + (Math.random()-0.5) * 0.5
+                            );
+                        } else {
+                            // Return to normal (snap back)
+                            positions.setXYZ(i, initial.getX(i), initial.getY(i), initial.getZ(i));
+                        }
+                    }
+                    positions.needsUpdate = true;
+                    outerMat.color.setHex(Math.random() > 0.8 ? 0xffffff : 0xef4444);
+                } else {
+                    // Reset to clean geometry if not stressed
+                    outerMat.color.setHex(0x10b981);
+                }
+
+                rendererRef.current.render(scene, camera);
+                animationId = requestAnimationFrame(animate);
+            };
+            animate();
+
+            resizeObserver = new ResizeObserver(entries => {
+                for (let entry of entries) {
+                    if (rendererRef.current && cameraRef.current) {
+                        const { width, height } = entry.contentRect;
+                        cameraRef.current.aspect = width / height;
+                        cameraRef.current.updateProjectionMatrix();
+                        rendererRef.current.setSize(width, height);
+                    }
+                }
+            });
+            resizeObserver.observe(mountRef.current);
+        }
+
+        if (window.THREE) initCube();
+        else {
+            const script = document.createElement('script');
+            script.src = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
+            script.onload = initCube;
+            document.head.appendChild(script);
+        }
+
+        return () => { 
+            if (animationId) cancelAnimationFrame(animationId);
+            if (resizeObserver) resizeObserver.disconnect();
+            if (rendererRef.current && mountRef.current) {
+                mountRef.current.removeChild(rendererRef.current.domElement); 
+                rendererRef.current = null;
+            }
+        };
+    }, [isStressed]);
+
+    return (
+        <div className="relative w-full h-full overflow-hidden">
+             {/* 3D CANVAS */}
+            <div ref={mountRef} className="absolute inset-0 w-full h-full" />
+            
+            {/* HUD OVERLAY - DONNÉES CRITIQUES */}
+            <div className="absolute inset-0 p-3 flex flex-col justify-between pointer-events-none z-10">
+                <div className="flex justify-between items-start">
+                    <div className="flex flex-col">
+                        <span className="text-[8px] font-black text-zinc-500 uppercase tracking-wider">VaR_99%</span>
+                        <span className={`text-sm font-black tracking-tight ${isStressed ? 'text-red-500' : 'text-emerald-400'}`}>$42,100</span>
+                    </div>
+                    <div className="flex flex-col text-right">
+                         <span className="text-[8px] font-black text-zinc-500 uppercase tracking-wider">BETA_EXP</span>
+                         <span className="text-sm font-black text-white">0.84</span>
+                    </div>
+                </div>
+
+                {isStressed && (
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center bg-black/80 p-2 border border-red-500/50 rounded backdrop-blur">
+                        <AlertTriangle className="w-6 h-6 text-red-500 mx-auto animate-bounce" />
+                        <span className="text-[10px] font-black text-red-500 tracking-[0.2em] uppercase blink">STRUCTURAL_FAIL</span>
+                    </div>
+                )}
+
+                <div className="flex justify-between items-end">
+                     <div className="flex flex-col">
+                        <span className="text-[8px] font-black text-zinc-500 uppercase tracking-wider">DD_MAX</span>
+                        <span className="text-xs font-bold text-zinc-300">2.14%</span>
+                    </div>
+                    <div className="flex flex-col text-right">
+                        <span className="text-[8px] font-black text-zinc-500 uppercase tracking-wider">NODE</span>
+                        <div className="flex items-center gap-1 justify-end">
+                             <div className={`w-1.5 h-1.5 rounded-full ${isStressed ? 'bg-red-500 animate-ping' : 'bg-emerald-500'}`} />
+                             <span className={`text-[9px] font-bold ${isStressed ? 'text-red-400' : 'text-emerald-600'}`}>
+                                 {isStressed ? 'CRITICAL' : 'SECURE'}
+                             </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
-      </div>
-    </div>
-  );
+    );
+};
+
+// --- GALAXIE DE CORRÉLATION (3D FORCE-DIRECTED GRAPH) ---
+const CorrelationGalaxy = ({ isStressed }) => {
+    const mountRef = useRef(null);
+    const rendererRef = useRef(null);
+    const cameraRef = useRef(null);
+    const containerRef = useRef(null); // FIXED: Defined missing ref
+    
+    useEffect(() => {
+        let resizeObserver;
+        let animationId;
+        
+        // --- DATASET: Actifs et leurs "groupes" naturels ---
+        const assets = [
+            { id: 'BTC', group: 1, size: 1.5 }, { id: 'ETH', group: 1, size: 1.2 }, { id: 'SOL', group: 1, size: 1.0 }, { id: 'BNB', group: 1, size: 0.9 },
+            { id: 'NDX', group: 2, size: 1.3 }, { id: 'SPX', group: 2, size: 1.3 }, { id: 'TSLA', group: 2, size: 1.0 }, { id: 'NVDA', group: 2, size: 1.1 },
+            { id: 'DXY', group: 3, size: 1.4 }, { id: 'EUR', group: 3, size: 0.8 }, { id: 'JPY', group: 3, size: 0.8 },
+            { id: 'GOLD', group: 4, size: 1.2 }, { id: 'OIL', group: 4, size: 1.0 },
+            { id: 'VIX', group: 5, size: 0.8 } // Outlier par nature
+        ];
+
+        // --- SIMULATION PHYSICS ENGINE ---
+        // On initialise des positions aléatoires
+        const nodes = assets.map(a => ({
+            ...a,
+            x: (Math.random() - 0.5) * 20,
+            y: (Math.random() - 0.5) * 20,
+            z: (Math.random() - 0.5) * 20,
+            vx: 0, vy: 0, vz: 0
+        }));
+
+        // On définit des liens "virtuels" pour la simulation
+        // (Dans une vraie app, ça viendrait d'une matrice de covariance)
+        const links = [];
+        for (let i = 0; i < nodes.length; i++) {
+            for (let j = i + 1; j < nodes.length; j++) {
+                const n1 = nodes[i];
+                const n2 = nodes[j];
+                let strength = 0;
+                
+                // Mêmes groupes s'attirent fort
+                if (n1.group === n2.group) strength = 0.8;
+                // Crypto et Tech s'attirent (Corrélation risque)
+                else if ((n1.group === 1 && n2.group === 2) || (n1.group === 2 && n2.group === 1)) strength = 0.4;
+                // DXY repousse Crypto/Tech (Corrélation inverse)
+                else if (n1.group === 3 && (n2.group === 1 || n2.group === 2)) strength = -0.3;
+                // VIX repousse tout le monde
+                else if (n1.id === 'VIX' || n2.id === 'VIX') strength = -0.5;
+                
+                if (Math.abs(strength) > 0.1) {
+                    links.push({ source: i, target: j, strength });
+                }
+            }
+        }
+
+        function initGalaxy() {
+            const THREE = window.THREE;
+            if (!mountRef.current) return;
+            const width = mountRef.current.clientWidth;
+            const height = mountRef.current.clientHeight;
+
+            const scene = new THREE.Scene();
+            // Fond très léger pour donner de la profondeur
+            scene.fog = new THREE.FogExp2(0x000000, 0.035);
+
+            const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
+            camera.position.z = 35;
+            cameraRef.current = camera;
+
+            rendererRef.current = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            rendererRef.current.setSize(width, height);
+            mountRef.current.appendChild(rendererRef.current.domElement);
+
+            const group = new THREE.Group();
+            scene.add(group);
+
+            // --- CRÉATION DES NODES (Spheres Glowing) ---
+            const nodeMeshes = [];
+            const sphereGeo = new THREE.SphereGeometry(1, 16, 16);
+            
+            // Texture pour les labels
+            const createLabel = (text) => {
+                const canvas = document.createElement('canvas');
+                canvas.width = 128;
+                canvas.height = 64;
+                const ctx = canvas.getContext('2d');
+                ctx.font = 'Bold 40px monospace';
+                ctx.fillStyle = '#ffffff';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(text, 64, 32);
+                const tex = new THREE.CanvasTexture(canvas);
+                const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0.8 });
+                const sprite = new THREE.Sprite(mat);
+                sprite.scale.set(6, 3, 1);
+                return sprite;
+            };
+
+            nodes.forEach((node, i) => {
+                // Couleur basée sur le groupe ou le stress
+                const color = isStressed 
+                    ? (node.id === 'VIX' || node.id === 'DXY' ? 0x10b981 : 0xef4444) // Refuge vert, Risk rouge
+                    : (node.group === 1 ? 0xfcd34d : node.group === 2 ? 0x60a5fa : 0x10b981); // Couleurs normales
+
+                const mat = new THREE.MeshBasicMaterial({ color: color, wireframe: true, transparent: true, opacity: 0.7 });
+                const mesh = new THREE.Mesh(sphereGeo, mat);
+                mesh.position.set(node.x, node.y, node.z);
+                const scale = node.size * (isStressed ? 1.5 : 1);
+                mesh.scale.set(scale, scale, scale);
+                
+                // Ajout Label
+                const label = createLabel(node.id);
+                label.position.y = 1.5;
+                mesh.add(label);
+
+                group.add(mesh);
+                nodeMeshes.push(mesh);
+            });
+
+            // --- CRÉATION DES LIENS (Lignes dynamiques) ---
+            // On utilise un BufferGeometry unique pour les lignes pour la perf
+            const lineMat = new THREE.LineBasicMaterial({ 
+                color: isStressed ? 0xef4444 : 0x34d399, 
+                transparent: true, 
+                opacity: isStressed ? 0.4 : 0.15,
+                blending: THREE.AdditiveBlending 
+            });
+            
+            // On prépare les positions (2 points par lien * 3 coord)
+            const linePositions = new Float32Array(links.length * 2 * 3); 
+            const lineGeo = new THREE.BufferGeometry();
+            lineGeo.setAttribute('position', new THREE.BufferAttribute(linePositions, 3));
+            const linesMesh = new THREE.LineSegments(lineGeo, lineMat);
+            group.add(linesMesh);
+
+            const animate = () => {
+                if (!rendererRef.current) return;
+                
+                // --- PHYSICS UPDATE STEP ---
+                // 1. Repulsion (Coulomb) - Tout le monde se repousse pour pas se marcher dessus
+                for (let i = 0; i < nodes.length; i++) {
+                    for (let j = i + 1; j < nodes.length; j++) {
+                        const dx = nodes[i].x - nodes[j].x;
+                        const dy = nodes[i].y - nodes[j].y;
+                        const dz = nodes[i].z - nodes[j].z;
+                        const d2 = dx*dx + dy*dy + dz*dz + 0.1; // éviter div par 0
+                        const d = Math.sqrt(d2);
+                        
+                        const force = 0.5 / d2; // Force de répulsion
+                        const fx = (dx/d) * force;
+                        const fy = (dy/d) * force;
+                        const fz = (dz/d) * force;
+
+                        nodes[i].vx += fx; nodes[i].vy += fy; nodes[i].vz += fz;
+                        nodes[j].vx -= fx; nodes[j].vy -= fy; nodes[j].vz -= fz;
+                    }
+                }
+
+                // 2. Attraction/Répulsion des liens (Hooke modifiée)
+                // En stress, tout se contracte (corrélation -> 1) sauf refuges
+                const globalContract = isStressed ? 2.0 : 0.5; 
+
+                links.forEach(link => {
+                    const n1 = nodes[link.source];
+                    const n2 = nodes[link.target];
+                    const dx = n1.x - n2.x;
+                    const dy = n1.y - n2.y;
+                    const dz = n1.z - n2.z;
+                    const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+                    
+                    // Si strength > 0, on veut une distance cible courte.
+                    // Si strength < 0, on veut une distance cible longue.
+                    const targetDist = link.strength > 0 ? (5 - link.strength * 3) : (15);
+                    
+                    // Force proportionnelle à l'écart par rapport à la cible
+                    const f = (dist - targetDist) * 0.01 * (isStressed ? 2 : 1);
+                    
+                    const fx = (dx/dist) * f;
+                    const fy = (dy/dist) * f;
+                    const fz = (dz/dist) * f;
+
+                    n1.vx -= fx; n1.vy -= fy; n1.vz -= fz;
+                    n2.vx += fx; n2.vy += fy; n2.vz += fz;
+                });
+
+                // 3. Centre Gravity (Pour pas que ça parte à l'infini)
+                nodes.forEach(n => {
+                    n.vx -= n.x * 0.005;
+                    n.vy -= n.y * 0.005;
+                    n.vz -= n.z * 0.005;
+                    
+                    // Friction
+                    n.vx *= 0.92;
+                    n.vy *= 0.92;
+                    n.vz *= 0.92;
+
+                    // Update Pos
+                    n.x += n.vx;
+                    n.y += n.vy;
+                    n.z += n.vz;
+                });
+
+                // --- RENDER UPDATE ---
+                // Update Mesh Positions
+                nodes.forEach((n, i) => {
+                    nodeMeshes[i].position.set(n.x, n.y, n.z);
+                    nodeMeshes[i].rotation.y += 0.02; // Petit spin sur soi-même
+                });
+
+                // Update Line Positions
+                const posArray = linesMesh.geometry.attributes.position.array;
+                let idx = 0;
+                links.forEach(link => {
+                     const n1 = nodes[link.source];
+                     const n2 = nodes[link.target];
+                     
+                     posArray[idx++] = n1.x;
+                     posArray[idx++] = n1.y;
+                     posArray[idx++] = n1.z;
+                     
+                     posArray[idx++] = n2.x;
+                     posArray[idx++] = n2.y;
+                     posArray[idx++] = n2.z;
+                });
+                linesMesh.geometry.attributes.position.needsUpdate = true;
+
+                // Rotation globale douce
+                group.rotation.y += 0.001 * (isStressed ? 5 : 1);
+
+                rendererRef.current.render(scene, camera);
+                animationId = requestAnimationFrame(animate);
+            };
+            animate();
+
+            resizeObserver = new ResizeObserver(entries => {
+                for (let entry of entries) {
+                    if (rendererRef.current && cameraRef.current) {
+                        const { width, height } = entry.contentRect;
+                        cameraRef.current.aspect = width / height;
+                        cameraRef.current.updateProjectionMatrix();
+                        rendererRef.current.setSize(width, height);
+                    }
+                }
+            });
+            resizeObserver.observe(mountRef.current);
+        }
+
+        if (window.THREE) initGalaxy();
+        else {
+            const script = document.createElement('script');
+            script.src = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
+            script.onload = initGalaxy;
+            document.head.appendChild(script);
+        }
+        
+        return () => {
+             if (animationId) cancelAnimationFrame(animationId);
+             if (resizeObserver) resizeObserver.disconnect();
+             if (rendererRef.current && mountRef.current) {
+                 mountRef.current.removeChild(rendererRef.current.domElement);
+                 rendererRef.current = null;
+             }
+        };
+
+    }, [isStressed]);
+
+    return (
+        <div ref={containerRef} className="relative w-full h-full overflow-hidden bg-black">
+            <div ref={mountRef} className="absolute inset-0 w-full h-full" />
+            <div className="absolute top-2 left-2 pointer-events-none z-10">
+                <div className="bg-black/80 border border-emerald-500/20 p-1 px-2 backdrop-blur-md rounded flex items-center gap-2">
+                    <Network size={10} className={isStressed ? 'text-red-500' : 'text-emerald-500'} />
+                    <span className="text-[9px] font-black text-zinc-400">GALAXY_NODE_COUNT: <span className={isStressed ? 'text-red-400' : 'text-emerald-400'}>14</span></span>
+                </div>
+            </div>
+        </div>
+    );
 };
 
 const SentimentCloud = ({ isStressed }) => {
@@ -388,7 +769,7 @@ const SentimentCloud = ({ isStressed }) => {
   }, [isStressed]);
 
   return (
-    <div className="relative w-full h-full min-h-[150px] overflow-hidden">
+    <div className="relative w-full h-full overflow-hidden">
         <div ref={mountRef} className="absolute inset-0 w-full h-full" />
         <div className="absolute top-2 right-2 pointer-events-none z-10 text-right">
              <div className="text-[9px] text-zinc-500 uppercase font-black">Social_Volume</div>
@@ -520,7 +901,7 @@ const VortexLiquidation = ({ isStressed }) => {
   }, [isStressed]);
 
   return (
-    <div className="relative w-full h-full min-h-[250px] overflow-hidden">
+    <div className="relative w-full h-full overflow-hidden">
         <div ref={mountRef} className="absolute inset-0 w-full h-full" />
         <div className="absolute top-2 left-2 flex flex-col gap-2 pointer-events-none z-10">
           <div className="bg-black/60 border border-emerald-500/20 p-2 backdrop-blur-md rounded">
@@ -743,7 +1124,8 @@ const NeuralOracle = ({ isStressed }) => {
         const h = canvas.height;
         const totalPoints = historyLength + projectionLength;
         const step = w / totalPoints;
-        const scaleY = (val) => h/2 - (val - 50) * 2; 
+        // CORRECTION MAJEURE : ÉCHELLE DYNAMIQUE BASÉE SUR LA HAUTEUR (AUTO-SCALING)
+        const scaleY = (val) => h / 2 - (val - 50) * (h / 100); 
 
         ctx.beginPath();
         ctx.moveTo(0, scaleY(points[0]));
@@ -768,15 +1150,20 @@ const NeuralOracle = ({ isStressed }) => {
         ctx.beginPath();
         ctx.moveTo(startX, startY);
         
-        ctx.bezierCurveTo(startX + w * 0.2, startY - (isStressed ? 20 : 50), startX + w * 0.4, startY - (isStressed ? 10 : 100), w, startY - (isStressed ? 50 : 150));
-        ctx.lineTo(w, startY + (isStressed ? 150 : 50));
-        ctx.bezierCurveTo(startX + w * 0.4, startY + (isStressed ? 100 : 10), startX + w * 0.2, startY + (isStressed ? 50 : 20), startX, startY);
+        // COURBE DE PROJECTION ADAPTÉE
+        const cp1y = startY - (isStressed ? h * 0.1 : h * 0.3);
+        const cp2y = startY - (isStressed ? h * 0.05 : h * 0.5);
+        const endY = startY - (isStressed ? h * 0.3 : h * 0.6);
+
+        ctx.bezierCurveTo(startX + w * 0.2, cp1y, startX + w * 0.4, cp2y, w, endY);
+        ctx.lineTo(w, h);
+        ctx.bezierCurveTo(startX + w * 0.4, h, startX + w * 0.2, h, startX, h); // Fermeture propre
         ctx.fillStyle = isStressed ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.05)';
         ctx.fill();
 
         ctx.beginPath();
         ctx.moveTo(startX, startY);
-        ctx.quadraticCurveTo(startX + w * 0.2, startY + (isStressed ? 40 : -20), w, startY + (isStressed ? 100 : -40));
+        ctx.quadraticCurveTo(startX + w * 0.2, startY + (isStressed ? h*0.2 : -h*0.1), w, startY + (isStressed ? h*0.5 : -h*0.2));
         ctx.setLineDash([5, 5]);
         ctx.strokeStyle = isStressed ? '#ef4444' : '#34d399';
         ctx.lineWidth = 1;
@@ -799,7 +1186,7 @@ const NeuralOracle = ({ isStressed }) => {
   }, [isStressed]);
 
   return (
-      <div ref={containerRef} className="relative w-full h-full min-h-[150px] overflow-hidden bg-black/80">
+      <div ref={containerRef} className="relative w-full h-full overflow-hidden bg-black/80">
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
         <div className="absolute top-2 left-2 pointer-events-none z-10">
           <div className="bg-black/80 border border-emerald-500/20 p-1 px-2 backdrop-blur-md rounded flex items-center gap-2">
@@ -1006,12 +1393,12 @@ export default function App() {
   const initialLayout = [
     { id: 'vortex', component: 'Vortex', title: 'LIQUIDATION_VORTEX', icon: Box, subTitle: 'GRAVITY_WELL', w: 6, h: 4, isCollapsed: false },
     { id: 'oracle', component: 'Oracle', title: 'NEURAL_ORACLE', icon: TrendingUp, subTitle: 'PROB_VECTOR', w: 6, h: 2, isCollapsed: false },
-    { id: 'matrix', component: 'Matrix', title: 'CORRELATION_MATRIX', icon: Share2, subTitle: 'NEURAL_NET', w: 3, h: 2, isCollapsed: false }, 
+    { id: 'matrix', component: 'Matrix', title: 'CORRELATION_GALAXY', icon: Share2, subTitle: 'GRAVITATIONAL_NET', w: 3, h: 2, isCollapsed: false }, 
     { id: 'cloud', component: 'Cloud', title: 'SENTIMENT_CLOUD', icon: Cloud, subTitle: 'SOCIAL_SWARM', w: 3, h: 2, isCollapsed: false },
     { id: 'cmd', component: 'CMD', title: 'Command_Center', icon: Terminal, w: 6, h: 2, isCollapsed: false },
     { id: 'pos', component: 'Positions', title: 'Active_Positions', icon: List, w: 4, h: 2, isCollapsed: false },
     { id: 'exec', component: 'Execution', title: 'Order_Execution', icon: Zap, w: 3, h: 2, isCollapsed: false }, 
-    { id: 'risk', component: 'Risk', title: 'Risk_Monitor', icon: Gauge, w: 5, h: 2, isCollapsed: false },
+    { id: 'risk', component: 'Risk', title: 'Hyper_Cube_Risk', icon: Gauge, w: 5, h: 2, isCollapsed: false },
   ];
   const [layout, setLayout] = useState(initialLayout);
   
@@ -1188,7 +1575,7 @@ export default function App() {
   const renderComponent = (type, isMobile = false) => {
     switch(type) {
       case 'Vortex': return <VortexLiquidation isStressed={isStressed} />;
-      case 'Matrix': return <CorrelationMatrix isStressed={isStressed} />;
+      case 'Matrix': return <CorrelationGalaxy isStressed={isStressed} />;
       case 'Cloud': return <SentimentCloud isStressed={isStressed} />;
       case 'Oracle': return <NeuralOracle isStressed={isStressed} />;
       case 'LOB': return <LOB3DTerrain isStressed={isStressed} burstMode={burstMode} />;
@@ -1207,7 +1594,7 @@ export default function App() {
       );
       case 'Tape': return <div className="flex flex-col gap-1 text-[9px] uppercase">{trades.map(t => (<div key={t.id} className="flex justify-between items-center border-l border-zinc-900 pl-2 animate-pop-in"><span className="opacity-30">{t.time}</span><span className={t.side === 'BUY' ? 'text-emerald-500 font-bold' : 'text-red-500 font-bold'}>{t.side}</span><span className="text-zinc-200">{t.size}</span><span className="text-zinc-700">{t.price}</span></div>))}</div>;
       case 'Positions': return <div className="flex flex-col h-full text-[9px] uppercase"><div className="grid grid-cols-4 pb-2 border-b border-zinc-900 font-black text-zinc-700"><span>Asset</span><span>Side</span><span>Size</span><span>PnL</span></div><div className="flex-1 overflow-auto no-scrollbar">{orders.map(o => (<div key={o.id} className="grid grid-cols-4 py-2 border-b border-zinc-900/50 items-center"><span className="font-bold text-zinc-300">{o.symbol}</span><span className={o.side === 'BUY' ? 'text-emerald-500' : 'text-red-500'}>{o.side}</span><span className="text-zinc-500">{o.amount}</span><span className="text-emerald-400 font-bold">+$142.20</span></div>))}</div></div>;
-      case 'Risk': return <div className="grid grid-cols-2 gap-4 h-full items-center">{[{ l: 'VaR_99%', v: '$42,100', d: '-0.4%' }, { l: 'Beta_Exp', v: '0.84', d: '+1.2%' }, { l: 'DD_Max', v: '2.14%', d: '0.0%' }, { l: 'Node_Auth', v: 'SECURE', d: 'ECC_ON' }].map(item => (<div key={item.l} className="flex flex-col border-l border-zinc-900 pl-4"><span className="text-[8px] font-black text-zinc-700 uppercase">{item.l}</span><div className="flex items-baseline gap-2"><span className={`text-sm font-black tracking-tighter ${isStressed && item.l === 'Node_Auth' ? 'text-red-500' : 'text-zinc-200'}`}>{item.v}</span><span className="text-[8px] font-bold text-emerald-500">{item.d}</span></div></div>))}</div>;
+      case 'Risk': return <RiskHypercube isStressed={isStressed} />;
       default: return null;
     }
   };
