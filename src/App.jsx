@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Terminal, Shield, Activity, Zap, ChevronRight, List, 
   Crosshair, Radio, Gauge, Box, GripVertical, AlertTriangle, Target,
   Network, Share2, Cloud, Wind, Minus, Maximize2, Scaling, Minimize2,
-  TrendingUp, LayoutGrid
+  TrendingUp, LayoutGrid, MoveDiagonally, Lock
 } from 'lucide-react';
 
 /* =========================================
@@ -27,9 +27,42 @@ const GlobalCinemaStyles = () => (
     .stealth-mode { filter: sepia(1) hue-rotate(-50deg) saturate(2) contrast(1.2) !important; }
     .liquidate-flash { animation: flash-red 0.5s ease-out; }
     
-    .draggable-item { cursor: grab; }
-    .draggable-item:active { cursor: grabbing; }
-    .dragging { opacity: 0.5; border: 1px dashed #10b981; }
+    .draggable-item { transition: transform 0.1s ease, box-shadow 0.2s ease; }
+    .drag-handle { cursor: grab; }
+    .drag-handle:active { cursor: grabbing; }
+    .dragging .drag-handle { cursor: grabbing; }
+    
+    .resize-handle {
+        cursor: nwse-resize;
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        width: 20px;
+        height: 20px;
+        z-index: 60;
+    }
+    .resize-handle::after {
+        content: '';
+        position: absolute;
+        bottom: 4px;
+        right: 4px;
+        width: 6px;
+        height: 6px;
+        border-right: 2px solid #047857;
+        border-bottom: 2px solid #047857;
+        transition: all 0.2s;
+    }
+    .resize-handle:hover::after {
+        border-color: #10b981;
+        width: 10px;
+        height: 10px;
+    }
+
+    /* Mobile optimisations */
+    .mobile-scroll-container {
+        -webkit-overflow-scrolling: touch;
+        scroll-behavior: smooth;
+    }
 
     @keyframes flash-red { 0% { background: rgba(239, 68, 68, 0.5); } 100% { background: transparent; } }
     @keyframes glitch-jitter {
@@ -58,17 +91,12 @@ const GlobalCinemaStyles = () => (
 const LOB3DTerrain = ({ isStressed, burstMode }) => {
   const mountRef = useRef(null);
   const rendererRef = useRef(null);
+  const cameraRef = useRef(null);
 
   useEffect(() => {
-    if (window.THREE) initThree();
-    else {
-      const script = document.createElement('script');
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
-      script.onload = initThree;
-      document.head.appendChild(script);
-    }
-
-    let scene, camera, terrain, geometry;
+    let scene, terrain, geometry;
+    let resizeObserver;
+    let animationId;
 
     function initThree() {
       const THREE = window.THREE;
@@ -77,9 +105,10 @@ const LOB3DTerrain = ({ isStressed, burstMode }) => {
       const height = mountRef.current.clientHeight;
 
       scene = new THREE.Scene();
-      camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+      const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
       camera.position.set(0, 25, 35);
       camera.lookAt(0, 0, 0);
+      cameraRef.current = camera;
 
       rendererRef.current = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       rendererRef.current.setSize(width, height);
@@ -107,27 +136,48 @@ const LOB3DTerrain = ({ isStressed, burstMode }) => {
         posAttr.needsUpdate = true;
         terrain.rotation.y += 0.001 * factor;
         rendererRef.current.render(scene, camera);
-        requestAnimationFrame(animate);
+        animationId = requestAnimationFrame(animate);
       };
       animate();
+
+      // Resize Observer Integration
+      resizeObserver = new ResizeObserver(entries => {
+        for (let entry of entries) {
+            if (rendererRef.current && cameraRef.current) {
+                const { width, height } = entry.contentRect;
+                cameraRef.current.aspect = width / height;
+                cameraRef.current.updateProjectionMatrix();
+                rendererRef.current.setSize(width, height);
+            }
+        }
+      });
+      resizeObserver.observe(mountRef.current);
+    }
+
+    if (window.THREE) initThree();
+    else {
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
+      script.onload = initThree;
+      document.head.appendChild(script);
     }
     
-    const handleResize = () => {
-        if (!mountRef.current || !rendererRef.current) return;
-        rendererRef.current.setSize(mountRef.current.clientWidth, mountRef.current.clientHeight);
-    };
-    window.addEventListener('resize', handleResize);
     return () => { 
-        window.removeEventListener('resize', handleResize);
-        if (rendererRef.current && mountRef.current) mountRef.current.removeChild(rendererRef.current.domElement); 
+        if (animationId) cancelAnimationFrame(animationId);
+        if (resizeObserver) resizeObserver.disconnect();
+        if (rendererRef.current && mountRef.current) {
+             mountRef.current.removeChild(rendererRef.current.domElement); 
+             rendererRef.current = null;
+        }
     };
   }, [isStressed, burstMode]);
 
-  return <div ref={mountRef} className="w-full h-full min-h-[250px]" />;
+  return <div ref={mountRef} className="w-full h-full min-h-[200px]" />;
 };
 
 const CorrelationMatrix = ({ isStressed }) => {
   const canvasRef = useRef(null);
+  const containerRef = useRef(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -135,7 +185,7 @@ const CorrelationMatrix = ({ isStressed }) => {
     const ctx = canvas.getContext('2d');
     
     const assets = ['BTC', 'ETH', 'SOL', 'NDX', 'SPX', 'DXY', 'GOLD', 'OIL', 'VIX'];
-    const nodes = assets.map(() => ({
+    let nodes = assets.map(() => ({
       x: Math.random() * canvas.width,
       y: Math.random() * canvas.height,
       vx: (Math.random() - 0.5) * 1.5,
@@ -143,13 +193,21 @@ const CorrelationMatrix = ({ isStressed }) => {
     }));
 
     const resize = () => {
-      canvas.width = canvas.parentElement.clientWidth;
-      canvas.height = canvas.parentElement.clientHeight;
+        if(containerRef.current && canvas){
+            canvas.width = containerRef.current.clientWidth;
+            canvas.height = containerRef.current.clientHeight;
+        }
     };
-    window.addEventListener('resize', resize);
-    resize();
+    
+    // Observer
+    const resizeObserver = new ResizeObserver(() => resize());
+    if (containerRef.current) resizeObserver.observe(containerRef.current);
+    
+    resize(); // Force init
 
+    let animationFrameId;
     const draw = () => {
+      if (!ctx || !canvas) return;
       ctx.fillStyle = isStressed ? 'rgba(20, 0, 0, 0.2)' : 'rgba(0, 5, 2, 0.2)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -190,14 +248,18 @@ const CorrelationMatrix = ({ isStressed }) => {
         ctx.font = '9px monospace';
         ctx.fillText(assets[i], nodes[i].x + 8, nodes[i].y + 3);
       }
-      requestAnimationFrame(draw);
+      animationFrameId = requestAnimationFrame(draw);
     };
     draw();
-    return () => window.removeEventListener('resize', resize);
+    
+    return () => {
+        resizeObserver.disconnect();
+        cancelAnimationFrame(animationFrameId);
+    };
   }, [isStressed]);
 
   return (
-    <div className="relative w-full h-full min-h-[150px] overflow-hidden bg-black">
+    <div ref={containerRef} className="relative w-full h-full min-h-[150px] overflow-hidden bg-black">
       <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
       <div className="absolute top-2 left-2 pointer-events-none z-10">
         <div className="bg-black/80 border border-emerald-500/20 p-1 px-2 backdrop-blur-md rounded flex items-center gap-2">
@@ -212,16 +274,12 @@ const CorrelationMatrix = ({ isStressed }) => {
 const SentimentCloud = ({ isStressed }) => {
   const mountRef = useRef(null);
   const rendererRef = useRef(null);
+  const cameraRef = useRef(null);
   const [sentiment, setSentiment] = useState({ label: 'GREED', value: 72 });
 
   useEffect(() => {
-    if (window.THREE) initCloud();
-    else {
-      const script = document.createElement('script');
-      script.src = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
-      script.onload = initCloud;
-      document.head.appendChild(script);
-    }
+    let resizeObserver;
+    let animationId;
 
     function initCloud() {
       const THREE = window.THREE;
@@ -232,6 +290,7 @@ const SentimentCloud = ({ isStressed }) => {
       const scene = new THREE.Scene();
       const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
       camera.position.z = 40;
+      cameraRef.current = camera;
 
       rendererRef.current = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       rendererRef.current.setSize(width, height);
@@ -282,7 +341,7 @@ const SentimentCloud = ({ isStressed }) => {
 
       const animate = () => {
         if (!rendererRef.current) return;
-        requestAnimationFrame(animate);
+        animationId = requestAnimationFrame(animate);
         
         const time = Date.now() * 0.001;
         cloud.rotation.y += isStressed ? 0.02 : 0.003;
@@ -303,15 +362,32 @@ const SentimentCloud = ({ isStressed }) => {
         rendererRef.current.render(scene, camera);
       };
       animate();
+
+      // Resize Observer Integration
+      resizeObserver = new ResizeObserver(entries => {
+        for (let entry of entries) {
+            if (rendererRef.current && cameraRef.current) {
+                const { width, height } = entry.contentRect;
+                cameraRef.current.aspect = width / height;
+                cameraRef.current.updateProjectionMatrix();
+                rendererRef.current.setSize(width, height);
+            }
+        }
+      });
+      resizeObserver.observe(mountRef.current);
     }
 
-    const handleResize = () => {
-        if (!mountRef.current || !rendererRef.current) return;
-        rendererRef.current.setSize(mountRef.current.clientWidth, mountRef.current.clientHeight);
-    };
-    window.addEventListener('resize', handleResize);
+    if (window.THREE) initCloud();
+    else {
+      const script = document.createElement('script');
+      script.src = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
+      script.onload = initCloud;
+      document.head.appendChild(script);
+    }
+
     return () => { 
-        window.removeEventListener('resize', handleResize);
+        if (animationId) cancelAnimationFrame(animationId);
+        if (resizeObserver) resizeObserver.disconnect();
         if (rendererRef.current && mountRef.current) {
              mountRef.current.removeChild(rendererRef.current.domElement); 
              rendererRef.current = null;
@@ -342,16 +418,12 @@ const SentimentCloud = ({ isStressed }) => {
 const VortexLiquidation = ({ isStressed }) => {
   const mountRef = useRef(null);
   const rendererRef = useRef(null);
+  const cameraRef = useRef(null);
   const [stats, setStats] = useState({ liquidations: 0, volume: 0 });
 
   useEffect(() => {
-    if (window.THREE) initVortex();
-    else {
-        const script = document.createElement('script');
-        script.src = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
-        script.onload = initVortex;
-        document.head.appendChild(script);
-    }
+    let resizeObserver;
+    let animationId;
 
     function initVortex() {
       const THREE = window.THREE;
@@ -362,6 +434,7 @@ const VortexLiquidation = ({ isStressed }) => {
       const scene = new THREE.Scene();
       const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
       camera.position.z = 200;
+      cameraRef.current = camera;
 
       rendererRef.current = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       rendererRef.current.setSize(width, height);
@@ -402,7 +475,7 @@ const VortexLiquidation = ({ isStressed }) => {
 
       const animate = () => {
         if (!rendererRef.current) return;
-        requestAnimationFrame(animate);
+        animationId = requestAnimationFrame(animate);
         points.rotation.z += isStressed ? 0.01 : 0.002;
         points.rotation.x = Math.sin(Date.now() * 0.0005) * 0.2;
 
@@ -422,15 +495,32 @@ const VortexLiquidation = ({ isStressed }) => {
         rendererRef.current.render(scene, camera);
       };
       animate();
+
+      // Resize Observer Integration
+      resizeObserver = new ResizeObserver(entries => {
+        for (let entry of entries) {
+            if (rendererRef.current && cameraRef.current) {
+                const { width, height } = entry.contentRect;
+                cameraRef.current.aspect = width / height;
+                cameraRef.current.updateProjectionMatrix();
+                rendererRef.current.setSize(width, height);
+            }
+        }
+      });
+      resizeObserver.observe(mountRef.current);
     }
 
-    const handleResize = () => {
-        if (!mountRef.current || !rendererRef.current) return;
-        rendererRef.current.setSize(mountRef.current.clientWidth, mountRef.current.clientHeight);
-    };
-    window.addEventListener('resize', handleResize);
+    if (window.THREE) initVortex();
+    else {
+        const script = document.createElement('script');
+        script.src = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
+        script.onload = initVortex;
+        document.head.appendChild(script);
+    }
+
     return () => { 
-        window.removeEventListener('resize', handleResize);
+        if (animationId) cancelAnimationFrame(animationId);
+        if (resizeObserver) resizeObserver.disconnect();
         if (rendererRef.current && mountRef.current) {
              mountRef.current.removeChild(rendererRef.current.domElement); 
              rendererRef.current = null;
@@ -465,15 +555,11 @@ const VortexLiquidation = ({ isStressed }) => {
 const SpectacularGlobe = ({ isStressed, opacity = 0.4 }) => {
     const mountRef = useRef(null);
     const rendererRef = useRef(null);
+    const cameraRef = useRef(null);
 
     useEffect(() => {
-        if (window.THREE) initGlobe();
-        else {
-             const script = document.createElement('script');
-             script.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
-             script.onload = initGlobe;
-             document.head.appendChild(script);
-        }
+        let resizeObserver;
+        let animationId;
 
         function initGlobe() {
           const THREE = window.THREE;
@@ -483,6 +569,8 @@ const SpectacularGlobe = ({ isStressed, opacity = 0.4 }) => {
           const scene = new THREE.Scene();
           const camera = new THREE.PerspectiveCamera(60, width / height, 1, 1000);
           camera.position.set(0, 0, 180);
+          cameraRef.current = camera;
+
           rendererRef.current = new THREE.WebGLRenderer({ antialias: true, alpha: true });
           rendererRef.current.setSize(width, height);
           mountRef.current.appendChild(rendererRef.current.domElement);
@@ -513,17 +601,124 @@ const SpectacularGlobe = ({ isStressed, opacity = 0.4 }) => {
               line.rotation.y = Math.random() * Math.PI;
               globe.add(line);
           }
+
+          // --- ADDED ARTIFACTS (Fuschia Glitches - Communications) ---
+          const artifactGeo = new THREE.BufferGeometry();
+          const artifactCount = 60;
+          const artifactPos = new Float32Array(artifactCount * 3);
+          for (let i = 0; i < artifactCount; i++) {
+              const r = 85 + Math.random() * 5; // Slightly above surface
+              const theta = Math.random() * Math.PI * 2;
+              const phi = Math.acos(2 * Math.random() - 1);
+              
+              artifactPos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+              artifactPos[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+              artifactPos[i * 3 + 2] = r * Math.cos(phi);
+          }
+          artifactGeo.setAttribute('position', new THREE.BufferAttribute(artifactPos, 3));
+          const artifactMat = new THREE.PointsMaterial({ 
+              color: 0xd946ef, // Fuchsia
+              size: 2, 
+              transparent: true, 
+              opacity: 0.9,
+              blending: THREE.AdditiveBlending
+          });
+          const artifacts = new THREE.Points(artifactGeo, artifactMat);
+          globe.add(artifacts);
+
+          // --- COMMUNICATION ARCS (Trajectoires) ---
+          const commsGroup = new THREE.Group();
+          globe.add(commsGroup);
+          
+          // Helper pour point sphérique aléatoire
+          const getSpherePoint = (r) => {
+              const theta = Math.random() * Math.PI * 2;
+              const phi = Math.acos(2 * Math.random() - 1);
+              return new THREE.Vector3(
+                  r * Math.sin(phi) * Math.cos(theta),
+                  r * Math.sin(phi) * Math.sin(theta),
+                  r * Math.cos(phi)
+              );
+          };
+
+          const activeComms = [];
+          for(let i=0; i<20; i++) {
+              const start = getSpherePoint(85);
+              const end = getSpherePoint(85);
+              const dist = start.distanceTo(end);
+              const mid = start.clone().add(end).multiplyScalar(0.5).normalize().multiplyScalar(85 + dist * 0.5); // Arc height
+              
+              const curve = new THREE.QuadraticBezierCurve3(start, mid, end);
+              const points = curve.getPoints(30);
+              const geometry = new THREE.BufferGeometry().setFromPoints(points);
+              const material = new THREE.LineBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.1 });
+              const curveMesh = new THREE.Line(geometry, material);
+              commsGroup.add(curveMesh);
+
+              // Packet de données (Fuchsia)
+              const packet = new THREE.Mesh(
+                  new THREE.SphereGeometry(1, 4, 4),
+                  new THREE.MeshBasicMaterial({ color: 0xd946ef })
+              );
+              commsGroup.add(packet);
+              
+              activeComms.push({
+                  curve: curve,
+                  packet: packet,
+                  progress: Math.random(),
+                  speed: 0.005 + Math.random() * 0.01
+              });
+          }
+
           const animate = () => {
               if (!rendererRef.current) return;
               const factor = isStressed ? 5 : 1;
               globe.rotation.y += 0.0015 * factor;
               globe.rotation.x += 0.0004 * factor;
+              
+              // Animate artifacts (counter-rotate)
+              artifacts.rotation.y -= 0.002 * factor;
+
+              // Animate Comms
+              activeComms.forEach(comm => {
+                  comm.progress += comm.speed * factor;
+                  if(comm.progress > 1) comm.progress = 0;
+                  const pos = comm.curve.getPoint(comm.progress);
+                  comm.packet.position.copy(pos);
+              });
+
               rendererRef.current.render(scene, camera);
-              requestAnimationFrame(animate);
+              animationId = requestAnimationFrame(animate);
           };
           animate();
+
+          // Resize Observer
+          resizeObserver = new ResizeObserver(entries => {
+            for (let entry of entries) {
+                if (rendererRef.current && cameraRef.current) {
+                    const { width, height } = entry.contentRect;
+                    cameraRef.current.aspect = width / height;
+                    cameraRef.current.updateProjectionMatrix();
+                    rendererRef.current.setSize(width, height);
+                }
+            }
+          });
+          resizeObserver.observe(mountRef.current);
         }
-        return () => { if (rendererRef.current && mountRef.current) mountRef.current.removeChild(rendererRef.current.domElement); };
+        
+        if (window.THREE) initGlobe();
+        else {
+             const script = document.createElement('script');
+             script.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
+             script.onload = initGlobe;
+             document.head.appendChild(script);
+        }
+
+        return () => { 
+            if (animationId) cancelAnimationFrame(animationId);
+            if (resizeObserver) resizeObserver.disconnect();
+            if (rendererRef.current && mountRef.current) mountRef.current.removeChild(rendererRef.current.domElement); 
+        };
     }, [isStressed]);
 
     return <div ref={mountRef} className="absolute inset-0 w-full h-full pointer-events-none" style={{ opacity }} />;
@@ -532,6 +727,7 @@ const SpectacularGlobe = ({ isStressed, opacity = 0.4 }) => {
 // --- NOUVEAU MODULE: L'ORACLE DE PROJECTION (NEURAL FORWARD WAVE) ---
 const NeuralOracle = ({ isStressed }) => {
   const canvasRef = useRef(null);
+  const containerRef = useRef(null);
   
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -549,13 +745,18 @@ const NeuralOracle = ({ isStressed }) => {
     }
 
     const resize = () => {
-        canvas.width = canvas.parentElement.clientWidth;
-        canvas.height = canvas.parentElement.clientHeight;
+        if (containerRef.current && canvas) {
+            canvas.width = containerRef.current.clientWidth;
+            canvas.height = containerRef.current.clientHeight;
+        }
     };
-    window.addEventListener('resize', resize);
-    resize();
+    
+    const resizeObserver = new ResizeObserver(() => resize());
+    if (containerRef.current) resizeObserver.observe(containerRef.current);
+    resize(); // Init immediately
 
     let offset = 0;
+    let animationFrameId;
 
     const draw = () => {
         if (!canvas) return;
@@ -571,13 +772,11 @@ const NeuralOracle = ({ isStressed }) => {
 
         // --- 2. CALCUL DYNAMIQUE ---
         offset += 0.05;
-        // Simule un nouveau prix entrant
         const lastVal = points[points.length-1];
         const trend = isStressed ? -0.5 : 0.1;
         const noise = (Math.random() - 0.5) * 4;
         const newVal = lastVal + Math.sin(offset) * 2 + noise + trend;
         
-        // Shift array
         points.push(newVal);
         if(points.length > historyLength) points.shift();
 
@@ -586,7 +785,7 @@ const NeuralOracle = ({ isStressed }) => {
         const h = canvas.height;
         const totalPoints = historyLength + projectionLength;
         const step = w / totalPoints;
-        const scaleY = (val) => h/2 - (val - 50) * 2; // Centré sur 50
+        const scaleY = (val) => h/2 - (val - 50) * 2; 
 
         // --- 3. DESSIN HISTORIQUE (PASSÉ) ---
         ctx.beginPath();
@@ -598,7 +797,7 @@ const NeuralOracle = ({ isStressed }) => {
         ctx.lineWidth = 2;
         ctx.stroke();
         
-        // Lueur sous la ligne
+        // Lueur
         ctx.lineTo((points.length-1)*step, h);
         ctx.lineTo(0, h);
         ctx.fillStyle = isStressed 
@@ -611,21 +810,17 @@ const NeuralOracle = ({ isStressed }) => {
         ctx.fill();
 
         // --- 4. ORACLE (FUTUR) ---
-        // Point de départ de la projection
         const startX = (points.length - 1) * step;
         const startY = scaleY(points[points.length - 1]);
         
-        // Cône d'incertitude
         ctx.beginPath();
         ctx.moveTo(startX, startY);
         
-        // Haut du cône (Scénario Optimiste)
         ctx.bezierCurveTo(
             startX + w * 0.2, startY - (isStressed ? 20 : 50),
             startX + w * 0.4, startY - (isStressed ? 10 : 100),
             w, startY - (isStressed ? 50 : 150)
         );
-        // Bas du cône (Scénario Pessimiste)
         ctx.lineTo(w, startY + (isStressed ? 150 : 50));
         ctx.bezierCurveTo(
             startX + w * 0.4, startY + (isStressed ? 100 : 10),
@@ -635,10 +830,8 @@ const NeuralOracle = ({ isStressed }) => {
         ctx.fillStyle = isStressed ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.05)';
         ctx.fill();
 
-        // Ligne de projection médiane (Probabilité Max)
         ctx.beginPath();
         ctx.moveTo(startX, startY);
-        // Projection simple
         ctx.quadraticCurveTo(
             startX + w * 0.2, startY + (isStressed ? 40 : -20),
             w, startY + (isStressed ? 100 : -40)
@@ -649,21 +842,23 @@ const NeuralOracle = ({ isStressed }) => {
         ctx.stroke();
         ctx.setLineDash([]);
 
-        // Pulse sur le présent
         ctx.beginPath();
         ctx.arc(startX, startY, 4, 0, Math.PI*2);
         ctx.fillStyle = '#fff';
         ctx.fill();
         
-        requestAnimationFrame(draw);
+        animationFrameId = requestAnimationFrame(draw);
     };
     
     draw();
-    return () => window.removeEventListener('resize', resize);
+    return () => {
+        resizeObserver.disconnect();
+        cancelAnimationFrame(animationFrameId);
+    };
   }, [isStressed]);
 
   return (
-      <div className="relative w-full h-full min-h-[150px] overflow-hidden bg-black/80">
+      <div ref={containerRef} className="relative w-full h-full min-h-[150px] overflow-hidden bg-black/80">
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
         <div className="absolute top-2 left-2 pointer-events-none z-10">
           <div className="bg-black/80 border border-emerald-500/20 p-1 px-2 backdrop-blur-md rounded flex items-center gap-2">
@@ -685,57 +880,92 @@ const CombatOrderEntry = ({ onOrder, isStressed }) => {
     <div className={`flex flex-col gap-4 transition-all duration-300 ${isStressed ? 'scale-[0.98]' : ''}`}>
       <div className="flex bg-zinc-900/50 p-1 border border-zinc-800 rounded">
         {['BUY', 'SELL'].map(s => (
-          <button key={s} onMouseDown={(e) => e.stopPropagation()} onClick={() => setSide(s)} className={`flex-1 py-3 text-[10px] font-black tracking-widest transition-all ${side === s ? (s === 'BUY' ? 'bg-emerald-600 text-black shadow-lg' : 'bg-red-600 text-white') : 'text-zinc-600'}`}>{s}</button>
+          <button key={s} onMouseDown={(e) => e.stopPropagation()} onClick={() => setSide(s)} className={`flex-1 py-4 md:py-3 text-[12px] md:text-[10px] font-black tracking-widest transition-all ${side === s ? (s === 'BUY' ? 'bg-emerald-600 text-black shadow-lg' : 'bg-red-600 text-white') : 'text-zinc-600'}`}>{s}</button>
         ))}
       </div>
-      <input type="number" value={amount} onMouseDown={(e) => e.stopPropagation()} onChange={(e) => setAmount(e.target.value)} className="bg-transparent border border-zinc-800 p-4 text-emerald-400 text-lg outline-none font-black tracking-tighter" placeholder="0.00" />
-      <button onMouseDown={(e) => e.stopPropagation()} onClick={() => { onOrder({ side, amount, symbol: 'BTC/USD' }); setAmount(''); }} className={`w-full py-4 font-black text-xs tracking-[0.2em] uppercase flex items-center justify-center gap-2 active:scale-95 transition-all ${side === 'BUY' ? 'bg-emerald-600 text-black' : 'bg-red-600 text-white'}`}><Zap size={14} fill="currentColor" /> EXEC_COMMIT</button>
+      <input type="number" value={amount} onMouseDown={(e) => e.stopPropagation()} onChange={(e) => setAmount(e.target.value)} className="bg-transparent border border-zinc-800 p-4 text-emerald-400 text-2xl md:text-lg outline-none font-black tracking-tighter" placeholder="0.00" />
+      <button onMouseDown={(e) => e.stopPropagation()} onClick={() => { onOrder({ side, amount, symbol: 'BTC/USD' }); setAmount(''); }} className={`w-full py-4 md:py-4 font-black text-sm md:text-xs tracking-[0.2em] uppercase flex items-center justify-center gap-2 active:scale-95 transition-all ${side === 'BUY' ? 'bg-emerald-600 text-black' : 'bg-red-600 text-white'}`}><Zap size={14} fill="currentColor" /> EXEC_COMMIT</button>
     </div>
   );
 };
 
-// -- FENÊTRE TACTIQUE MODULAIRE (AVEC REDUCTION & GESTION TAILLE) --
-const TacticalWindow = ({ title, icon: Icon, children, className = "", subTitle, isStressed, onDragStart, onDragOver, onDragEnd, id, index, collapsed, onToggle, onResize, sizeMode }) => {
-  // Détermine la classe finale selon l'état
-  let finalClass = className; // Par défaut
-  if (collapsed) {
-      finalClass = 'row-span-1 h-[40px] col-span-12'; // Réduit : prend une ligne
-  } else {
-      if (sizeMode === 'large') finalClass = 'col-span-12 md:col-span-6 row-span-4';
-      else if (sizeMode === 'wide') finalClass = 'col-span-12 row-span-2';
-      // Sinon reste sur className original
-  }
+// -- FENÊTRE TACTIQUE MODULAIRE --
+const TacticalWindow = ({ 
+    title, icon: Icon, children, 
+    subTitle, isStressed, 
+    onDragStart, onDragOver, onDragEnd, 
+    index, collapsed, onToggle, 
+    w, h, // Nouvelles props de dimensions
+    onResizeStart, // Handler pour commencer le resize
+    isActive, // State de focus
+    onActivate, // Handler d'activation
+    isMobile // Mode mobile (no drag/resize)
+}) => {
+  // Calcul dynamique des classes Grid
+  const gridClass = isMobile
+    ? 'w-full mb-4 border-l-2 border-r-0 border-t-0 border-b-0 min-h-[300px]' // Mobile style
+    : collapsed 
+        ? 'col-span-12 row-span-1 h-[40px]' 
+        : `col-span-12 md:col-span-${w} row-span-${h}`;
+    
+  // Gestion du style actif (Z-index et Bordure)
+  const activeStyle = isMobile
+    ? 'border-emerald-500/50 bg-zinc-900/20'
+    : isActive 
+        ? 'border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.3)] z-50' 
+        : 'border-[#1a1a1e] z-10 opacity-90 hover:opacity-100';
+
+  const handleClass = isMobile ? '' : 'drag-handle cursor-grab active:cursor-grabbing';
 
   return (
     <div 
-        draggable="true"
-        onDragStart={(e) => onDragStart(e, index)}
-        onDragOver={(e) => onDragOver(e, index)}
-        onDragEnd={onDragEnd}
-        className={`flex flex-col ${THEME.surface} border ${THEME.border} ${finalClass} relative group overflow-hidden transition-all duration-300 draggable-item ${isStressed ? 'border-emerald-500/40 shadow-[inset_0_0_20px_rgba(16,185,129,0.05)]' : ''}`}
+        onClick={() => !isMobile && onActivate(index)} // CLICK POUR ACTIVER (Desktop seulement)
+        onDragOver={(e) => !isMobile && onDragOver(e, index)}
+        onDragEnd={!isMobile ? onDragEnd : undefined}
+        className={`flex flex-col ${THEME.surface} border ${gridClass} relative group overflow-hidden ${isMobile ? '' : 'draggable-item'} ${activeStyle} ${isStressed ? 'border-red-500/40 shadow-[inset_0_0_20px_rgba(239,68,68,0.1)]' : ''}`}
     >
-        <div className="flex items-center justify-between px-3 py-2 bg-zinc-900/60 border-b border-zinc-800/80 shrink-0 z-20 cursor-grab active:cursor-grabbing">
-        <div className="flex items-center gap-2">
-            <GripVertical size={12} className="text-zinc-600 group-hover:text-emerald-500 transition-colors" />
-            <Icon size={12} className={isStressed ? 'text-white animate-pulse' : 'text-emerald-500'} />
-            <span className={`text-[10px] font-black tracking-widest uppercase glow-text ${isStressed ? 'text-white' : 'text-zinc-300'}`}>{title}</span>
-            {subTitle && !collapsed && <span className="text-[8px] font-bold text-zinc-600 hidden sm:inline ml-2">{subTitle}</span>}
-        </div>
-        <div className="flex items-center gap-2" onMouseDown={(e) => e.stopPropagation()}>
-            {/* BOUTON RESIZE (CYCLE) */}
-            <button onClick={() => onResize(index)} className={`text-zinc-600 hover:text-emerald-400 transition-colors ${collapsed ? 'hidden' : ''}`} title="Cycle Size">
-               <Scaling size={10} />
-            </button>
-            {/* BOUTON COLLAPSE / RESTORE */}
-            <button onClick={() => onToggle(index)} className={`transition-colors ${collapsed ? 'text-emerald-500 animate-pulse' : 'text-zinc-500 hover:text-red-400'}`}>
-                {collapsed ? <Maximize2 size={10} /> : <Minus size={10} />}
-            </button>
-        </div>
-        </div>
-        {!collapsed && (
-            <div className="flex-1 p-3 overflow-hidden relative flex flex-col z-10" onMouseDown={e => e.stopPropagation()}>
-            {children}
+        {/* HEADER */}
+        <div 
+             draggable={!isMobile && !collapsed}
+             onDragStart={(e) => {
+                 if(isMobile) return;
+                 onActivate(index); 
+                 onDragStart(e, index);
+             }}
+             className={`flex items-center justify-between px-3 py-3 md:py-2 bg-zinc-900/60 border-b border-zinc-800/80 shrink-0 z-20 transition-colors ${handleClass}`}
+        >
+            <div className="flex items-center gap-2 pointer-events-none">
+                {!isMobile && <GripVertical size={12} className={`transition-colors ${isActive ? 'text-emerald-400' : 'text-zinc-600'}`} />}
+                <Icon size={14} className={isStressed ? 'text-white animate-pulse' : (isActive || isMobile ? 'text-emerald-400' : 'text-zinc-500')} />
+                <span className={`text-[12px] md:text-[10px] font-black tracking-widest uppercase glow-text ${isStressed ? 'text-white' : (isActive || isMobile ? 'text-white' : 'text-zinc-400')}`}>{title}</span>
+                {subTitle && (!collapsed || isMobile) && <span className="text-[10px] md:text-[8px] font-bold text-zinc-600 hidden sm:inline ml-2">{subTitle}</span>}
             </div>
+            
+            <div className="flex items-center gap-2" onMouseDown={(e) => e.stopPropagation()}>
+                {!isMobile && (
+                    <button onClick={() => onToggle(index)} className={`transition-colors ${collapsed ? 'text-emerald-500 animate-pulse' : 'text-zinc-500 hover:text-white'}`}>
+                        {collapsed ? <Maximize2 size={10} /> : <Minus size={10} />}
+                    </button>
+                )}
+            </div>
+        </div>
+        
+        {(!collapsed || isMobile) && (
+            <>
+                <div className="flex-1 p-3 overflow-hidden relative flex flex-col z-10" onMouseDown={(e) => e.stopPropagation()}>
+                    {children}
+                </div>
+                {/* POIGNÉE DE REDIMENSIONNEMENT (Desktop seulement) */}
+                {!isMobile && (
+                    <div 
+                        className="resize-handle opacity-0 group-hover:opacity-100 transition-opacity"
+                        onMouseDown={(e) => {
+                            onActivate(index);
+                            onResizeStart(e, index);
+                        }}
+                    />
+                )}
+            </>
         )}
     </div>
   );
@@ -751,32 +981,95 @@ export default function App() {
   const [isLiquidating, setIsLiquidating] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [burstMode, setBurstMode] = useState(false);
-  const [activeTab, setActiveTab] = useState('DASHBOARD');
+  const [activeWindowId, setActiveWindowId] = useState('cmd'); // Focus par défaut sur CMD
 
   const [logs, setLogs] = useState(["SYSTEM_READY", "SECURE_UPLINK_STABLE", "VORTEX_ENGINE_ACTIVE", "NEURAL_ORACLE_ONLINE"]);
   const [orders, setOrders] = useState([]);
   const [input, setInput] = useState("");
   const [trades, setTrades] = useState([]);
 
-  // --- DRAG AND DROP & LAYOUT STATE ---
-  // sizeMode: 'default' | 'large' | 'wide'
+  // --- LAYOUT & RESIZE STATE ---
   const initialLayout = [
-    { id: 'vortex', component: 'Vortex', title: 'LIQUIDATION_VORTEX', icon: Box, subTitle: 'GRAVITY_WELL', className: 'col-span-12 md:col-span-6 row-span-4', isCollapsed: false, sizeMode: 'default' },
-    { id: 'oracle', component: 'Oracle', title: 'NEURAL_ORACLE', icon: TrendingUp, subTitle: 'PROB_VECTOR', className: 'col-span-12 md:col-span-6 row-span-2', isCollapsed: false, sizeMode: 'default' }, // NOUVEAU MODULE ORACLE
-    { id: 'matrix', component: 'Matrix', title: 'CORRELATION_MATRIX', icon: Share2, subTitle: 'NEURAL_NET', className: 'col-span-12 md:col-span-3 row-span-2', isCollapsed: false, sizeMode: 'default' }, 
-    { id: 'cloud', component: 'Cloud', title: 'SENTIMENT_CLOUD', icon: Cloud, subTitle: 'SOCIAL_SWARM', className: 'col-span-12 md:col-span-3 row-span-2', isCollapsed: false, sizeMode: 'default' },
-    { id: 'cmd', component: 'CMD', title: 'Command_Center', icon: Terminal, className: 'col-span-12 md:col-span-6 row-span-2 border-emerald-500/20 bg-emerald-950/5', isCollapsed: false, sizeMode: 'default' },
-    { id: 'pos', component: 'Positions', title: 'Active_Positions', icon: List, className: 'col-span-12 md:col-span-4 row-span-2', isCollapsed: false, sizeMode: 'default' },
-    { id: 'exec', component: 'Execution', title: 'Order_Execution', icon: Zap, className: 'col-span-12 md:col-span-3 row-span-2', isCollapsed: false, sizeMode: 'default' }, 
-    { id: 'risk', component: 'Risk', title: 'Risk_Monitor', icon: Gauge, className: 'col-span-12 md:col-span-5 row-span-2', isCollapsed: false, sizeMode: 'default' },
+    { id: 'vortex', component: 'Vortex', title: 'LIQUIDATION_VORTEX', icon: Box, subTitle: 'GRAVITY_WELL', w: 6, h: 4, isCollapsed: false },
+    { id: 'oracle', component: 'Oracle', title: 'NEURAL_ORACLE', icon: TrendingUp, subTitle: 'PROB_VECTOR', w: 6, h: 2, isCollapsed: false },
+    { id: 'matrix', component: 'Matrix', title: 'CORRELATION_MATRIX', icon: Share2, subTitle: 'NEURAL_NET', w: 3, h: 2, isCollapsed: false }, 
+    { id: 'cloud', component: 'Cloud', title: 'SENTIMENT_CLOUD', icon: Cloud, subTitle: 'SOCIAL_SWARM', w: 3, h: 2, isCollapsed: false },
+    { id: 'cmd', component: 'CMD', title: 'Command_Center', icon: Terminal, w: 6, h: 2, isCollapsed: false },
+    { id: 'pos', component: 'Positions', title: 'Active_Positions', icon: List, w: 4, h: 2, isCollapsed: false },
+    { id: 'exec', component: 'Execution', title: 'Order_Execution', icon: Zap, w: 3, h: 2, isCollapsed: false }, 
+    { id: 'risk', component: 'Risk', title: 'Risk_Monitor', icon: Gauge, w: 5, h: 2, isCollapsed: false },
   ];
   const [layout, setLayout] = useState(initialLayout);
+  
+  // Drag & Drop Refs
   const dragItem = useRef(null);
   const dragOverItem = useRef(null);
+  const [resizing, setResizing] = useState(null); 
 
+  // --- GESTION DU REDIMENSIONNEMENT (SNAP TO GRID) ---
+  const handleResizeStart = (e, index) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const item = layout[index];
+      setResizing({
+          index,
+          startX: e.clientX,
+          startY: e.clientY,
+          startW: item.w,
+          startH: item.h
+      });
+  };
+
+  const handleMouseMove = useCallback((e) => {
+      if (!resizing) return;
+      const deltaX = e.clientX - resizing.startX;
+      const deltaY = e.clientY - resizing.startY;
+      const colStep = window.innerWidth / 12;
+      const rowStep = window.innerHeight / 8; 
+      
+      const colsChanged = Math.round(deltaX / colStep);
+      const rowsChanged = Math.round(deltaY / rowStep);
+      
+      if (colsChanged === 0 && rowsChanged === 0) return;
+
+      setLayout(prev => {
+          const newLayout = [...prev];
+          const item = newLayout[resizing.index];
+          let newW = Math.max(2, Math.min(12, resizing.startW + colsChanged));
+          let newH = Math.max(1, Math.min(6, resizing.startH + rowsChanged));
+          if (item.w !== newW || item.h !== newH) {
+              item.w = newW;
+              item.h = newH;
+              return newLayout;
+          }
+          return prev;
+      });
+  }, [resizing]);
+
+  const handleMouseUp = useCallback(() => {
+      setResizing(null);
+  }, []);
+
+  useEffect(() => {
+      if (resizing) {
+          window.addEventListener('mousemove', handleMouseMove);
+          window.addEventListener('mouseup', handleMouseUp);
+      } else {
+          window.removeEventListener('mousemove', handleMouseMove);
+          window.removeEventListener('mouseup', handleMouseUp);
+      }
+      return () => {
+          window.removeEventListener('mousemove', handleMouseMove);
+          window.removeEventListener('mouseup', handleMouseUp);
+      };
+  }, [resizing, handleMouseMove, handleMouseUp]);
+
+
+  // --- GESTION DRAG & DROP ---
   const onDragStart = (e, index) => {
     dragItem.current = index;
-    e.target.classList.add('dragging');
+    document.body.style.cursor = 'grabbing';
+    e.target.parentElement.classList.add('dragging'); 
   };
 
   const onDragEnter = (e, index) => {
@@ -785,7 +1078,10 @@ export default function App() {
   };
 
   const onDragEnd = (e) => {
-    e.target.classList.remove('dragging');
+    document.body.style.cursor = 'auto';
+    const items = document.querySelectorAll('.dragging');
+    items.forEach(i => i.classList.remove('dragging'));
+    if (dragItem.current === null || dragOverItem.current === null) return;
     const newLayout = [...layout];
     const draggedItemContent = newLayout[dragItem.current];
     newLayout.splice(dragItem.current, 1);
@@ -796,27 +1092,20 @@ export default function App() {
   };
 
   const toggleCollapse = (index) => {
-      const newLayout = [...layout];
-      newLayout[index].isCollapsed = !newLayout[index].isCollapsed;
-      setLayout(newLayout);
+      setLayout(prev => {
+          const newLayout = [...prev];
+          const item = newLayout[index];
+          item.isCollapsed = !item.isCollapsed;
+          return newLayout;
+      });
   };
 
   const setGlobalCollapse = (collapsed) => {
       setLayout(prev => prev.map(item => ({...item, isCollapsed: collapsed})));
   };
 
-  const toggleSize = (index) => {
-      const newLayout = [...layout];
-      const currentMode = newLayout[index].sizeMode || 'default';
-      let nextMode = 'default';
-      
-      // Cycle: Default -> Large -> Wide -> Default
-      if (currentMode === 'default') nextMode = 'large';
-      else if (currentMode === 'large') nextMode = 'wide';
-      else nextMode = 'default';
-      
-      newLayout[index].sizeMode = nextMode;
-      setLayout(newLayout);
+  const handleWindowActivate = (index) => {
+      setActiveWindowId(layout[index].id);
   };
 
   // --- SIMULATION DATA ---
@@ -868,16 +1157,9 @@ export default function App() {
       case 'DATA_BURST': setBurstMode(true); addLog("DATA_BURST_ENGAGED"); setTimeout(() => setBurstMode(false), 3000); break;
       case 'CLEAR': setLogs([]); break;
       case 'HELP': 
-        addLog("--- OMNI_LAUNCHER_V6.8 ---");
-        addLog("APPS: AQUARIUM, CALC, CALC2, CANDY, CCTV, CITY");
-        addLog("APPS: CODEPAD, DOOM, DRONE, DRONE2, FI, GEO");
-        addLog("APPS: GRAPH, INDEX, KLONDIKE, MAPMIND, MINESWEEPER");
-        addLog("APPS: MINUTEUR, NEWS, NUCLEUS, OS, PACMAN, PERF");
-        addLog("APPS: PLANETARIUM, PPPD, SEA, SUDOKU, TAMAGOTCHI, TWIX");
+        addLog("--- OMNI_LAUNCHER_V7.3 ---");
         addLog("--- TACTICAL_OPS ---");
         addLog("CMDS: LIQUIDATE, STEALTH, NEURAL_SCAN, RISK_FLUSH, DATA_BURST");
-        addLog("--- SYSTEM ---");
-        addLog("CMDS: HELP, CLEAR");
         break;
       default: addLog(`ERR: CMD_${cmd}_UNKNOWN.`);
     }
@@ -895,7 +1177,7 @@ export default function App() {
       case 'Vortex': return <VortexLiquidation isStressed={isStressed} />;
       case 'Matrix': return <CorrelationMatrix isStressed={isStressed} />;
       case 'Cloud': return <SentimentCloud isStressed={isStressed} />;
-      case 'Oracle': return <NeuralOracle isStressed={isStressed} />; // RENDER ORACLE
+      case 'Oracle': return <NeuralOracle isStressed={isStressed} />;
       case 'LOB': return <LOB3DTerrain isStressed={isStressed} burstMode={burstMode} />;
       case 'Execution': return <CombatOrderEntry onOrder={handleExecution} isStressed={isStressed} />;
       case 'CMD': return (
@@ -931,7 +1213,7 @@ export default function App() {
           </div>
           <div className="text-center space-y-3">
             <h1 className="text-white text-xl tracking-[1.5em] md:tracking-[2.5em] uppercase font-black ml-[1.5em] md:ml-[2.5em] glow-text">Leonce_Equity</h1>
-            <p className="text-emerald-900 text-[10px] font-bold tracking-[0.8em] uppercase">Sovereign_Omni_Deck_V6.8</p>
+            <p className="text-emerald-900 text-[10px] font-bold tracking-[0.8em] uppercase">Sovereign_Omni_Deck_V7.3</p>
           </div>
           <button onClick={() => setIsLive(true)} className="group relative px-16 py-4 border border-emerald-500/20 text-emerald-500 uppercase tracking-[1em] overflow-hidden transition-all hover:border-emerald-500 bg-black/40 backdrop-blur-sm">
             <span className="relative z-10 group-hover:text-black transition-colors">Start_Uplink</span>
@@ -954,13 +1236,13 @@ export default function App() {
           <Shield className="text-emerald-500" size={18} />
           <div className="flex flex-col">
             <span className="font-black text-xs text-white tracking-widest italic glow-text">LEONCE_EQUITY</span>
-            <span className="text-[8px] text-zinc-700 font-bold uppercase tracking-tighter">Combat_Node_V6</span>
+            <span className="text-[8px] text-zinc-700 font-bold uppercase tracking-tighter">Combat_Node_V7</span>
           </div>
         </div>
         <div className="flex items-center gap-6">
             
-          {/* GLOBAL CONTROLS */}
-          <div className="flex items-center gap-2 mr-4 border-r border-zinc-900 pr-4">
+          {/* GLOBAL CONTROLS (Desktop Only) */}
+          <div className="hidden md:flex items-center gap-2 mr-4 border-r border-zinc-900 pr-4">
               <button onClick={() => setGlobalCollapse(true)} className="text-zinc-500 hover:text-white transition-colors" title="COLLAPSE_ALL">
                   <Minimize2 size={14} />
               </button>
@@ -969,7 +1251,7 @@ export default function App() {
               </button>
           </div>
 
-          <div className="hidden sm:flex flex-col items-end border-r border-zinc-900 pr-6 mr-6">
+          <div className="flex flex-col items-end border-r border-zinc-900 pr-6 mr-6">
             <span className="text-[8px] text-zinc-600 uppercase font-black">Net_Liquidity</span>
             <span className="text-xs text-emerald-500 font-black tracking-tighter">$1,240,492</span>
           </div>
@@ -977,7 +1259,11 @@ export default function App() {
         </div>
       </header>
 
-      <main className="hidden md:grid flex-1 p-2 grid-cols-12 grid-rows-6 gap-2 relative overflow-hidden">
+      {/* DESKTOP MAIN GRID */}
+      <main 
+        className="hidden md:grid flex-1 p-2 grid-cols-12 grid-rows-6 gap-2 relative overflow-hidden"
+        style={{ cursor: resizing ? 'nwse-resize' : 'auto' }}
+      >
         {layout.map((item, index) => (
           <TacticalWindow 
             key={item.id}
@@ -989,38 +1275,60 @@ export default function App() {
             className={item.className} 
             isStressed={isStressed}
             collapsed={item.isCollapsed}
-            sizeMode={item.sizeMode}
+            w={item.w}
+            h={item.h}
+            isActive={activeWindowId === item.id}
+            onActivate={handleWindowActivate}
             onToggle={toggleCollapse}
-            onResize={toggleSize}
+            onResizeStart={handleResizeStart}
             onDragStart={onDragStart}
             onDragOver={onDragEnter}
             onDragEnd={onDragEnd}
+            isMobile={false}
           >
             {renderComponent(item.component)}
           </TacticalWindow>
         ))}
       </main>
 
-      {/* VIEW MOBILE */}
-      <main className="md:hidden flex-1 p-2 relative">
-        {activeTab === 'DASHBOARD' && (
-           <div className="flex flex-col h-full gap-2">
-              <TacticalWindow title="NEURAL_ORACLE" icon={TrendingUp} className="flex-1" isStressed={isStressed}><NeuralOracle isStressed={isStressed} /></TacticalWindow>
-              <TacticalWindow title="LIQ_VORTEX" icon={Box} className="flex-1" isStressed={isStressed}><VortexLiquidation isStressed={isStressed} /></TacticalWindow>
-              <TacticalWindow title="SENTIMENT_CLOUD" icon={Cloud} className="h-48" isStressed={isStressed}><SentimentCloud isStressed={isStressed} /></TacticalWindow>
-              <TacticalWindow title="CORR_MATRIX" icon={Share2} className="h-48" isStressed={isStressed}><CorrelationMatrix isStressed={isStressed} /></TacticalWindow>
-              <TacticalWindow title="CMD_CENTER" icon={Terminal} className="h-40 relative" isStressed={isStressed}>
-                <SpectacularGlobe isStressed={isStressed} opacity={0.3} />
-                <div className="flex-1 overflow-auto no-scrollbar text-[9px] mb-2 relative z-10">{logs.slice(0,5).map((l,i)=><div key={i}>{l}</div>)}</div>
-                <div className="flex items-center gap-2 border-t border-zinc-800 pt-2 relative z-10"><ChevronRight size={12} className="text-emerald-500" /><input className="bg-transparent outline-none flex-1 text-[10px] uppercase" value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleCommand} placeholder="CMD..." /></div>
-              </TacticalWindow>
-           </div>
-        )}
-        {activeTab === 'EXECUTION' && (<TacticalWindow title="Execution" icon={Zap} className="h-full" isStressed={isStressed}><CombatOrderEntry onOrder={handleExecution} isStressed={isStressed} /></TacticalWindow>)}
-        {activeTab === 'RISK' && (<TacticalWindow title="Risk" icon={Gauge} className="h-full" isStressed={isStressed}><div className="grid grid-cols-2 gap-4">{[{l:'VaR', v:'$42K'}, {l:'Exp', v:'$842K'}, {l:'DD', v:'2.1%'}, {l:'Lat', v:'12ms'}].map(i => (<div key={i.l} className="p-4 bg-zinc-900/40 border border-zinc-800 rounded"><span className="text-[8px] text-zinc-600 font-bold uppercase">{i.l}</span><div className="text-base font-black text-zinc-200 tracking-tighter">{i.v}</div></div>))}</div></TacticalWindow>)}
+      {/* MOBILE MAIN STREAM (No Tabs, No Drag, Just Feed) */}
+      <main className="md:hidden flex-1 overflow-y-auto mobile-scroll-container p-3 space-y-4 pb-20">
+        <div className="text-[10px] font-black text-zinc-600 uppercase mb-2 tracking-widest pl-1">/// PRIMARY_INTEL_STREAM</div>
+        
+        {/* CRITICAL MODULES FIRST */}
+        <TacticalWindow title="NEURAL_ORACLE" icon={TrendingUp} isStressed={isStressed} isMobile={true}>
+             <NeuralOracle isStressed={isStressed} />
+        </TacticalWindow>
+
+        <TacticalWindow title="LIQ_VORTEX" icon={Box} isStressed={isStressed} isMobile={true}>
+             <VortexLiquidation isStressed={isStressed} />
+        </TacticalWindow>
+
+        <TacticalWindow title="EXECUTION_PROTOCOL" icon={Zap} isStressed={isStressed} isMobile={true}>
+             <CombatOrderEntry onOrder={handleExecution} isStressed={isStressed} />
+        </TacticalWindow>
+        
+        <TacticalWindow title="CMD_CENTER" icon={Terminal} isStressed={isStressed} isMobile={true}>
+             {renderComponent('CMD')}
+        </TacticalWindow>
+
+        {/* SECONDARY MODULES */}
+        <div className="grid grid-cols-2 gap-2">
+            <TacticalWindow title="SENTIMENT" icon={Cloud} isStressed={isStressed} isMobile={true}>
+                <SentimentCloud isStressed={isStressed} />
+            </TacticalWindow>
+            <TacticalWindow title="MATRIX" icon={Share2} isStressed={isStressed} isMobile={true}>
+                <CorrelationMatrix isStressed={isStressed} />
+            </TacticalWindow>
+        </div>
+
+        <TacticalWindow title="RISK_MONITOR" icon={Gauge} isStressed={isStressed} isMobile={true}>
+            {renderComponent('Risk')}
+        </TacticalWindow>
+
       </main>
 
-      <footer className="h-8 md:h-10 border-t border-zinc-900 bg-black flex items-center shrink-0 z-50 overflow-hidden">
+      <footer className="h-10 md:h-10 border-t border-zinc-900 bg-black flex items-center shrink-0 z-50 overflow-hidden">
         <div className="bg-emerald-950/20 h-full flex items-center px-4 border-r border-zinc-800 shrink-0 z-10"><span className="text-[9px] font-black text-emerald-500 uppercase italic animate-pulse">Live_Intel</span></div>
         <div className="flex-1 relative overflow-hidden flex items-center">
           <div className="animate-ticker whitespace-nowrap flex items-center gap-12 text-[9px] font-bold text-zinc-600 uppercase">
@@ -1028,7 +1336,6 @@ export default function App() {
             <span>WHALE_ALERT: +1,240 BTC BINANCE /// MARKET_SENTIMENT: 84% BULLISH /// VOLATILITY_SCAN: HIGH_ALERT /// NODE_STABILITY: 100% /// FED_WATCH: T-14D TO CPI_RELEASE /// SECURE_UPLINK: AES_256_ACTIVE ///</span>
           </div>
         </div>
-        <div className="md:hidden flex w-full h-full absolute inset-0 bg-black">{[{ id: 'DASHBOARD', icon: Box, label: 'SCAN' }, { id: 'EXECUTION', icon: Zap, label: 'EXEC' }, { id: 'RISK', icon: Gauge, label: 'RISK' }].map(tab => (<button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex-1 flex flex-col items-center justify-center gap-1 ${activeTab === tab.id ? 'text-emerald-500 bg-emerald-500/5' : 'text-zinc-800'}`}><tab.icon size={18} /><span className="text-[8px] font-black uppercase">{tab.label}</span></button>))}</div>
       </footer>
     </div>
   );
