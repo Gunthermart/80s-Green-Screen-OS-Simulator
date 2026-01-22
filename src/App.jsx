@@ -26,7 +26,7 @@ const SYSTEM_DOCS = [
     { id: 'Tape_Signals', icon: Activity, title: 'TAPE SIGNALS', descEN: 'Real-time trade feed.', descFR: 'Flux de transactions.' },
     { id: 'Whale_Watch', icon: Anchor, title: 'WHALE WATCH', descEN: 'Institutional tracker.', descFR: 'Traqueur institutionnel.' },
     { id: 'Risk_Shield', icon: Shield, title: 'RISK SHIELD', descEN: 'Exposure monitor.', descFR: 'Moniteur d\'exposition.' },
-    { id: 'Synaptic_Core', icon: HardDrive, title: 'SYNAPTIC CORE', descEN: 'Infrastructure health.', descFR: 'Santé infrastructure.' }
+    { id: 'Synaptic_Core', icon: HardDrive, title: 'HYPER-CORTEX', descEN: 'Neural Reactor. Visualizes system cognitive load and network coherence.', descFR: 'Réacteur Neural. Visualise la charge cognitive du système et la cohérence réseau.' }
 ];
 
 /* --- HOOKS --- */
@@ -80,7 +80,7 @@ const useDataStream = (isLive, whaleLimit) => {
     return { prices, trades, connectionStatus, volatility, setTrades };
 };
 
-/* --- UI COMPONENTS (RESTORED) --- */
+/* --- UI COMPONENTS --- */
 
 const Window = ({ title, children, icon: IconComp, className = "" }) => (
     <div className={`bg-gray-950/95 border border-emerald-500/20 flex flex-col overflow-hidden shadow-[inset_0_0_20px_rgba(16,185,129,0.02)] min-h-[250px] md:min-h-0 ${className}`}>
@@ -104,7 +104,7 @@ const HelpModal = ({ isOpen, onClose }) => {
             <div className="bg-gray-950 border border-emerald-500/50 w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl relative">
                 <div className="flex justify-between items-center p-4 border-b border-emerald-500/30 bg-emerald-900/10">
                     <div className="flex items-center gap-3 text-emerald-400 font-bold tracking-widest uppercase">
-                        <HelpCircle size={20} /> System_Manual_V9.9
+                        <HelpCircle size={20} /> System_Manual_V10.0
                     </div>
                     <button onClick={onClose} className="text-emerald-500 hover:text-red-500 transition-colors">
                         <X size={24} />
@@ -144,7 +144,6 @@ const SystemicTunnel3D = ({ prices, volatility }) => {
     const mountRef = useRef(null);
     const assets = useMemo(() => Object.keys(ASSETS_CONFIG), []);
 
-    // Calcul des corrélations (Gravité)
     const correlations = useMemo(() => {
         const matrix = {};
         assets.forEach(target => {
@@ -169,7 +168,6 @@ const SystemicTunnel3D = ({ prices, volatility }) => {
         const height = mountRef.current.clientHeight;
 
         const scene = new THREE.Scene();
-        // Fog pour la profondeur du tunnel
         scene.fog = new THREE.FogExp2(0x000000, 0.15);
 
         const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
@@ -179,11 +177,9 @@ const SystemicTunnel3D = ({ prices, volatility }) => {
         renderer.setSize(width, height);
         mountRef.current.appendChild(renderer.domElement);
 
-        // 1. LE TUNNEL (Cylinder Geometry)
         const tunnelGeo = new THREE.CylinderGeometry(3, 3, 40, 32, 20, true);
-        tunnelGeo.rotateX(Math.PI / 2); // Orienter vers la caméra
+        tunnelGeo.rotateX(Math.PI / 2);
         
-        // Stocker les positions initiales pour la déformation
         const positionAttribute = tunnelGeo.attributes.position;
         const vertex = new THREE.Vector3();
         const originalPositions = [];
@@ -192,16 +188,10 @@ const SystemicTunnel3D = ({ prices, volatility }) => {
             originalPositions.push({x: vertex.x, y: vertex.y, z: vertex.z, angle: Math.atan2(vertex.y, vertex.x)});
         }
 
-        const tunnelMat = new THREE.MeshBasicMaterial({ 
-            color: 0x10b981, 
-            wireframe: true, 
-            transparent: true, 
-            opacity: 0.15 
-        });
+        const tunnelMat = new THREE.MeshBasicMaterial({ color: 0x10b981, wireframe: true, transparent: true, opacity: 0.15 });
         const tunnel = new THREE.Mesh(tunnelGeo, tunnelMat);
         scene.add(tunnel);
 
-        // 2. LES ACTIFS (Spheres dans le tunnel)
         const nodes = {};
         const nodeGroup = new THREE.Group();
         scene.add(nodeGroup);
@@ -212,16 +202,13 @@ const SystemicTunnel3D = ({ prices, volatility }) => {
             const mat = new THREE.MeshBasicMaterial({ color: color });
             const mesh = new THREE.Mesh(geo, mat);
             
-            // Halo
             const glowGeo = new THREE.SphereGeometry(0.3, 12, 12);
             const glowMat = new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending });
             const glow = new THREE.Mesh(glowGeo, glowMat);
             mesh.add(glow);
 
             nodeGroup.add(mesh);
-            // Position de départ aléatoire mais au loin
             mesh.position.z = -10 - Math.random() * 10;
-            
             nodes[asset] = { mesh, glow, speed: 0.05 + Math.random() * 0.05, angle: Math.random() * Math.PI * 2 };
         });
 
@@ -232,64 +219,38 @@ const SystemicTunnel3D = ({ prices, volatility }) => {
             animationId = requestAnimationFrame(animate);
             time += 0.01;
 
-            // --- ANIMATION DU TUNNEL (DEFORMATION) ---
             const positions = tunnel.geometry.attributes.position;
-            // Facteur de resserrement basé sur la volatilité (Squeeze)
-            const squeezeFactor = 1 - (Math.min(volatility, 5) * 0.1); // Plus de vol = tunnel plus étroit
+            const squeezeFactor = 1 - (Math.min(volatility, 5) * 0.1);
 
             for (let i = 0; i < positions.count; i++) {
                 const orig = originalPositions[i];
-                // Ondulation qui avance (z + time)
                 const wave = Math.sin(orig.z * 0.5 + time * 2) * (volatility * 0.2);
                 const twist = Math.cos(orig.z * 0.2 + time) * (volatility * 0.1);
                 
-                // Appliquer la déformation
-                // x et y sont modifiés pour créer l'effet de respiration et de twist
                 const scale = 1 + (wave * 0.1);
-                
                 const newX = orig.x * scale * squeezeFactor + twist;
                 const newY = orig.y * scale * squeezeFactor + twist;
                 
-                // Mouvement infini : on décale Z, et on boucle
                 let newZ = orig.z + (time * 5) % 20; 
-                if (newZ > 5) newZ -= 40; // Reset au fond
+                if (newZ > 5) newZ -= 40;
 
                 positions.setXYZ(i, newX, newY, newZ);
             }
             positions.needsUpdate = true;
-            
-            // Rotation du tunnel pour effet désorientant si haute vol
             tunnel.rotation.z = Math.sin(time * 0.2) * 0.1 * volatility;
 
-
-            // --- ANIMATION DES ACTIFS ---
             assets.forEach(asset => {
                 const node = nodes[asset];
-                const corr = correlations[asset] || 0.5; // 0 (mur) à 1 (centre)
-                
-                // Logique de positionnement
-                // Corr élevée -> Proche du centre (0,0)
-                // Corr faible -> Proche des murs (radius ~2.5)
+                const corr = correlations[asset] || 0.5;
                 const targetRadius = (1 - corr) * 2.5; 
-                
-                // Mise à jour de l'angle (ils tournent dans le tunnel)
                 node.angle += 0.01;
-                
                 const targetX = Math.cos(node.angle) * targetRadius;
                 const targetY = Math.sin(node.angle) * targetRadius;
-
-                // Lerp vers la position cible
                 node.mesh.position.x += (targetX - node.mesh.position.x) * 0.05;
                 node.mesh.position.y += (targetY - node.mesh.position.y) * 0.05;
-                
-                // Mouvement en Z (avancent vers la caméra ou reculent)
-                // Ici on les fait flotter dans une zone visible
                 node.mesh.position.z = -2 + Math.sin(time + node.angle) * 2;
-
-                // Pulsation du glow
                 node.glow.scale.setScalar(1 + Math.sin(time * 5) * 0.2);
             });
-
             renderer.render(scene, camera);
         };
         animate();
@@ -316,8 +277,6 @@ const SystemicTunnel3D = ({ prices, volatility }) => {
     return (
         <div className="w-full h-full relative overflow-hidden bg-black">
             <div ref={mountRef} className="w-full h-full" />
-            
-            {/* Légende Interactive */}
             <div className="absolute bottom-2 left-2 pointer-events-auto flex flex-wrap gap-1 w-full pr-2">
                  {assets.map(a => (
                      <span key={a} className={`text-[7px] border px-1 rounded ${
@@ -336,37 +295,177 @@ const SystemicTunnel3D = ({ prices, volatility }) => {
     );
 };
 
-/* NODE HOLOGRAM */
+/* NODE HOLOGRAM (SYNAPTIC CORE V2.0) - THE HYPER-CORTEX */
 const NodeHologram = ({ volatility }) => {
     const mountRef = useRef(null);
+
     useEffect(() => {
         if (!mountRef.current) return;
-        const scene = new THREE.Scene(); scene.background = null; 
-        const width = mountRef.current.clientWidth; const height = mountRef.current.clientHeight;
-        const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 1000); camera.position.z = 4;
-        const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true }); renderer.setSize(width, height);
-        mountRef.current.appendChild(renderer.domElement);
-        const geometry = new THREE.IcosahedronGeometry(1.2, 1);
-        const material = new THREE.LineBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending });
-        const sphere = new THREE.LineSegments(new THREE.WireframeGeometry(geometry), material);
-        scene.add(sphere);
         
-        let time = 0; let animationId;
+        // 1. SCENE SETUP
+        const scene = new THREE.Scene();
+        const width = mountRef.current.clientWidth;
+        const height = mountRef.current.clientHeight;
+        const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 1000);
+        camera.position.z = 4.5;
+
+        const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+        renderer.setSize(width, height);
+        mountRef.current.appendChild(renderer.domElement);
+
+        const group = new THREE.Group();
+        scene.add(group);
+
+        // 2. LAYER 1: NEURAL WEB (Outer Shell)
+        // A complex sphere of lines representing the neural pathways
+        const outerGeo = new THREE.IcosahedronGeometry(1.2, 2);
+        const outerMat = new THREE.LineBasicMaterial({ 
+            color: 0x10b981, 
+            transparent: true, 
+            opacity: 0.15,
+            blending: THREE.AdditiveBlending
+        });
+        const outerShell = new THREE.LineSegments(new THREE.WireframeGeometry(outerGeo), outerMat);
+        group.add(outerShell);
+
+        // 3. LAYER 2: THE REACTOR (Inner Core)
+        // High density particles
+        const particleCount = 200;
+        const particleGeo = new THREE.BufferGeometry();
+        const positions = new Float32Array(particleCount * 3);
+        const speeds = [];
+
+        for(let i = 0; i < particleCount; i++) {
+            const r = 0.8 * Math.sqrt(Math.random());
+            const theta = Math.random() * 2 * Math.PI;
+            const phi = Math.acos(2 * Math.random() - 1);
+            
+            positions[i*3] = r * Math.sin(phi) * Math.cos(theta);
+            positions[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
+            positions[i*3+2] = r * Math.cos(phi);
+            
+            speeds.push((Math.random() - 0.5) * 0.02);
+        }
+        
+        particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        const particleMat = new THREE.PointsMaterial({
+            color: 0x34d399,
+            size: 0.04,
+            transparent: true,
+            opacity: 0.8,
+            blending: THREE.AdditiveBlending
+        });
+        const reactor = new THREE.Points(particleGeo, particleMat);
+        group.add(reactor);
+
+        // 4. LAYER 3: ORBITAL RINGS (Data Streams)
+        const ringGeo = new THREE.TorusGeometry(1.6, 0.02, 16, 100);
+        const ringMat = new THREE.MeshBasicMaterial({ color: 0x059669, transparent: true, opacity: 0.3 });
+        const ring1 = new THREE.Mesh(ringGeo, ringMat);
+        const ring2 = new THREE.Mesh(ringGeo, ringMat);
+        
+        ring1.rotation.x = Math.PI / 2;
+        ring2.rotation.x = Math.PI / 4;
+        ring2.rotation.y = Math.PI / 4;
+        
+        group.add(ring1);
+        group.add(ring2);
+
+        // ANIMATION LOOP
+        let time = 0;
+        let animationId;
+
         const animate = () => {
-            animationId = requestAnimationFrame(animate); time += 0.01;
-            sphere.rotation.y += 0.005; sphere.rotation.x += 0.002;
-            const pulse = 1 + Math.sin(time * (2 + volatility * 2)) * 0.05;
-            sphere.scale.set(pulse, pulse, pulse);
-            if (volatility > 3.5) { material.color.setHex(0xef4444); material.opacity = 0.8 + Math.random() * 0.2; sphere.rotation.z += 0.1; } 
-            else { material.color.setHex(0x10b981); material.opacity = 0.6; }
+            animationId = requestAnimationFrame(animate);
+            time += 0.02;
+
+            // DYNAMICS BASED ON VOLATILITY
+            // Calm = 1, Panic = 5
+            const stress = Math.max(1, Math.min(volatility, 5));
+            const pulseSpeed = time * stress;
+
+            // 1. ROTATION
+            outerShell.rotation.y += 0.002 * stress;
+            outerShell.rotation.z -= 0.001 * stress;
+            
+            reactor.rotation.y -= 0.01 * stress;
+            reactor.rotation.x += 0.005 * stress;
+
+            ring1.rotation.z += 0.01;
+            ring1.rotation.x = Math.sin(time * 0.5) * 0.5;
+            
+            ring2.rotation.z -= 0.015;
+
+            // 2. PULSATION (Heartbeat)
+            const heartbeat = 1 + Math.sin(pulseSpeed * 2) * (0.05 * stress);
+            outerShell.scale.setScalar(heartbeat);
+            reactor.scale.setScalar(heartbeat * 0.9); // Inner beats slightly off-sync
+
+            // 3. COLOR SHIFT (The "Alert" System)
+            if (stress > 3) {
+                // RED ALERT
+                outerMat.color.setHex(0xef4444);
+                particleMat.color.setHex(0xf87171);
+                ringMat.color.setHex(0x7f1d1d);
+                // Glitch effect shake
+                group.position.x = (Math.random() - 0.5) * 0.1;
+            } else if (stress > 1.8) {
+                // ORANGE WARNING
+                outerMat.color.setHex(0xf59e0b);
+                particleMat.color.setHex(0xfcd34d);
+                ringMat.color.setHex(0x78350f);
+                group.position.x = 0;
+            } else {
+                // GREEN STABLE
+                outerMat.color.setHex(0x10b981);
+                particleMat.color.setHex(0x34d399);
+                ringMat.color.setHex(0x064e3b);
+                group.position.x = 0;
+            }
+
+            // 4. PARTICLE TURBULENCE
+            const positions = reactor.geometry.attributes.position.array;
+            for(let i = 0; i < particleCount; i++) {
+                // Basic wobble
+                positions[i*3] += Math.sin(time + i) * 0.002 * stress;
+            }
+            reactor.geometry.attributes.position.needsUpdate = true;
+
             renderer.render(scene, camera);
         };
         animate();
-        const handleResize = () => { if (!mountRef.current) return; renderer.setSize(mountRef.current.clientWidth, mountRef.current.clientHeight); camera.aspect = mountRef.current.clientWidth / mountRef.current.clientHeight; camera.updateProjectionMatrix(); };
+
+        const handleResize = () => {
+            if (!mountRef.current) return;
+            const w = mountRef.current.clientWidth;
+            const h = mountRef.current.clientHeight;
+            renderer.setSize(w, h);
+            camera.aspect = w / h;
+            camera.updateProjectionMatrix();
+        };
         window.addEventListener('resize', handleResize);
-        return () => { window.removeEventListener('resize', handleResize); if(mountRef.current) mountRef.current.removeChild(renderer.domElement); cancelAnimationFrame(animationId); geometry.dispose(); material.dispose(); renderer.dispose(); };
+
+        return () => {
+            window.removeEventListener('resize', handleResize);
+            if (mountRef.current) mountRef.current.removeChild(renderer.domElement);
+            cancelAnimationFrame(animationId);
+            outerGeo.dispose(); outerMat.dispose();
+            particleGeo.dispose(); particleMat.dispose();
+            ringGeo.dispose(); ringMat.dispose();
+        };
     }, [volatility]);
-    return <div className="w-full h-full relative overflow-hidden group"><div ref={mountRef} className="w-full h-full" /><div className="absolute bottom-2 left-2 text-[8px] uppercase font-bold text-emerald-500/50 group-hover:text-emerald-400 transition-colors">Synaptic_Core: {volatility > 3.5 ? 'OVERLOAD' : 'STABLE'}</div></div>;
+
+    return (
+        <div className="w-full h-full relative overflow-hidden group bg-black/50">
+             <div ref={mountRef} className="w-full h-full" />
+             <div className="absolute bottom-2 left-2 text-[8px] uppercase font-bold text-emerald-500/50 group-hover:text-emerald-400 transition-colors bg-black/40 px-1 rounded backdrop-blur-sm">
+                 Status: {volatility > 3 ? 'CRITICAL_LOAD' : (volatility > 1.8 ? 'WARNING' : 'OPTIMAL')}
+             </div>
+             {/* Decorative HUD Elements */}
+             <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-emerald-500 animate-ping opacity-50"></div>
+             <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-emerald-500 opacity-80"></div>
+        </div>
+    );
 };
 
 /* NEURAL FORECAST */
@@ -495,9 +594,9 @@ export default function App() {
 
   const [input, setInput] = useState('');
   const [history, setHistory] = useState([
-    "LEONCE OS V9.9",
-    "LIQUIDITY_TUNNEL: DEPLOYED",
-    "MATRIX: DECOMPOSED"
+    "LEONCE OS V10.0",
+    "HYPER-CORTEX: ONLINE",
+    "TUNNEL: STABILIZED"
   ]);
 
   const bottomRef = useRef(null);
@@ -511,18 +610,46 @@ export default function App() {
       const [cmd, arg] = full.split(' ');
       const newHist = [...history, `> ${full}`];
       switch(cmd) {
-        case 'help': setShowHelp(true); break;
+        case 'help': 
+            setShowHelp(true); 
+            newHist.push("AVAILABLE: SCAN, PURGE, FOCUS, MENU, PING, RISK, SYS, WHOAMI");
+            break;
         case 'scan': Object.entries(prices).forEach(([s, d]) => newHist.push(` > ${s}: ${d.price.toFixed(2)}`)); break;
         case 'purge': setTrades([]); setHistory(["PURGED"]); break;
         case 'focus': if (ASSETS_CONFIG[arg?.toUpperCase()]) setActiveSymbol(arg.toUpperCase()); break;
         case 'clear': setHistory([]); setInput(''); return;
+        
+        /* NOUVELLES COMMANDES */
+        case 'menu': 
+            newHist.push("> REDIRECTING TO MENU HUB...");
+            setTimeout(() => window.location.href = '/menu/index.html', 1000); 
+            break;
+        case 'ping':
+            newHist.push(`> PING: ${Math.floor(Math.random() * 20) + 12}ms [STABLE]`);
+            newHist.push(`> SERVER: ASIA-NORTHEAST-1`);
+            break;
+        case 'risk':
+            const riskLevel = volatility > 3 ? "CRITICAL" : (volatility > 1.5 ? "ELEVATED" : "NOMINAL");
+            newHist.push(`> RISK LEVEL: ${riskLevel}`);
+            newHist.push(`> VOLATILITY INDEX: ${(volatility * 10).toFixed(2)}`);
+            break;
+        case 'sys':
+            newHist.push(`> CPU LOAD: ${Math.floor(Math.random() * 15) + 10}%`);
+            newHist.push(`> MEMORY: 14.2GB / 64GB`);
+            newHist.push(`> UPTIME: 42h 12m 04s`);
+            break;
+        case 'whoami':
+            newHist.push(`> USER: OPERATOR_LEONCE`);
+            newHist.push(`> ACCESS: LEVEL 5 (ROOT)`);
+            break;
+
         default: newHist.push(`ERR: ???`);
       }
-      setHistory(newHist.slice(-5)); setInput('');
+      setHistory(newHist.slice(-8)); setInput(''); // Augmenté à 8 lignes pour voir plus d'historique
     }
   };
 
-  if (!booted) return <div className="h-screen bg-black flex flex-col items-center justify-center font-mono text-emerald-500 tracking-[0.5em] animate-pulse text-xs md:text-base">INITIALIZING_V9.9</div>;
+  if (!booted) return <div className="h-screen bg-black flex flex-col items-center justify-center font-mono text-emerald-500 tracking-[0.5em] animate-pulse text-xs md:text-base">INITIALIZING_V10.0</div>;
 
   return (
     <div className="h-screen w-full bg-black font-mono text-emerald-500 overflow-hidden flex flex-col selection:bg-emerald-500/20">
@@ -573,7 +700,7 @@ export default function App() {
         <Window title="Neural_Forecast" icon={BarChart3} className="order-2"><NeuralForecast history={prices[activeSymbol]?.history || []} volatility={volatility} regime={marketRegime} /></Window>
         <Window title="Order_Depth" icon={Layers} className="order-3"><OrderDepth currentPrice={prices[activeSymbol]?.price || 0} volatility={volatility} /></Window>
 
-        {/* SYSTEMIC MATRIX REPLACED BY 3D TUNNEL */}
+        {/* SYSTEMIC TUNNEL (VORTEX) 3D VISUALIZER */}
         <Window title="Liquidity_Tunnel_3D" icon={Grid} className="order-4">
             <SystemicTunnel3D prices={prices} volatility={volatility} />
         </Window>
@@ -602,7 +729,7 @@ export default function App() {
             </div>
         </Window>
 
-        <Window title="Synaptic_Core" icon={HardDrive} className="order-9"><NodeHologram volatility={volatility} /></Window>
+        <Window title="Hyper-Cortex" icon={HardDrive} className="order-9"><NodeHologram volatility={volatility} /></Window>
       </div>
 
       <div className="h-8 md:h-6 bg-black border-t border-emerald-900/40 flex items-center overflow-hidden shrink-0">
@@ -618,3 +745,4 @@ export default function App() {
     </div>
   );
 }
+
