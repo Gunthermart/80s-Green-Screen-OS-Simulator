@@ -21,37 +21,15 @@
             }
         }
     </script>
-    <!-- Librairie pour la manipulation PDF -->
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
     
-    <!-- Injection du Manifest PWA en Data URI pour le support Single-File -->
-    <link rel="manifest" id="manifest-placeholder">
-    <script>
-        const manifest = {
-            "name": "Leonce PDF Tool",
-            "short_name": "Leonce PDF",
-            "start_url": ".",
-            "display": "standalone",
-            "background_color": "#111827",
-            "theme_color": "#111827",
-            "icons": [
-                {
-                    "src": "https://cdn-icons-png.flaticon.com/512/337/337946.png",
-                    "sizes": "512x512",
-                    "type": "image/png"
-                }
-            ]
-        };
-        const stringManifest = JSON.stringify(manifest);
-        const blob = new Blob([stringManifest], {type: 'application/json'});
-        const manifestURL = URL.createObjectURL(blob);
-        document.querySelector('#manifest-placeholder').setAttribute('href', manifestURL);
-    </script>
+    <!-- Lien vers le fichier manifest externe -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#111827">
 
     <style>
         body { font-family: 'Inter', sans-serif; }
         .drag-active { border-color: #60a5fa; background-color: #1e293b; }
-        /* Custom scrollbar for dark mode */
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #1f2937; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
@@ -60,7 +38,6 @@
 </head>
 <body class="h-screen flex flex-col items-center justify-center p-4 bg-gray-900 text-gray-100 relative">
 
-    <!-- Bouton d'installation (Caché par défaut) -->
     <button id="install-btn" class="hidden absolute top-4 right-4 bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white border border-gray-700 rounded-lg px-4 py-2 text-sm font-medium transition flex items-center gap-2 shadow-lg">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -71,10 +48,9 @@
     <div class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl p-6 md:p-8 border border-gray-700">
         <div class="mb-6">
             <h1 class="text-2xl font-bold text-white mb-2">Imprimante PDF Batch</h1>
-            <p class="text-sm text-gray-400">Fusionnez et imprimez vos fichiers en une seule opération pour contourner les blocages navigateur.</p>
+            <p class="text-sm text-gray-400">Fusionnez et imprimez vos fichiers en une seule opération.</p>
         </div>
 
-        <!-- Zone de dépôt -->
         <div id="drop-zone" class="border-2 border-dashed border-gray-600 rounded-lg p-8 text-center transition-colors cursor-pointer hover:border-blue-500 hover:bg-gray-750">
             <input type="file" id="file-input" class="hidden" multiple accept="application/pdf">
             <div class="space-y-2 pointer-events-none">
@@ -82,58 +58,65 @@
                     <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
                 <p class="text-sm text-gray-300">Glissez vos PDF ici ou <span class="text-blue-400 font-medium">cliquez pour parcourir</span></p>
-                <p class="text-xs text-gray-500">PDF uniquement</p>
             </div>
         </div>
 
-        <!-- Liste des fichiers -->
         <div id="file-list-container" class="mt-6 hidden">
             <h3 class="text-sm font-semibold text-gray-400 mb-3 flex justify-between items-center">
-                Fichiers à imprimer (<span id="file-count">0</span>)
+                Fichiers sélectionnés (<span id="file-count">0</span>)
                 <button id="clear-all" class="text-xs text-red-400 hover:text-red-300 underline">Tout effacer</button>
             </h3>
-            <ul id="file-list" class="max-h-48 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
-                <!-- Items injectés par JS -->
-            </ul>
+            <ul id="file-list" class="max-h-48 overflow-y-auto space-y-2 pr-2 custom-scrollbar"></ul>
         </div>
 
-        <!-- Actions -->
         <div class="mt-8 flex flex-col sm:flex-row gap-3">
-            <button id="process-btn" disabled class="flex-1 bg-blue-600 text-white font-medium py-3 px-4 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2 shadow-lg">
+            <button id="process-btn" disabled class="flex-1 bg-blue-600 text-white font-medium py-3 px-4 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 flex justify-center items-center gap-2 shadow-lg">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                 </svg>
                 <span>Fusionner et Imprimer</span>
             </button>
-            
-            <!-- Fallback button (hidden by default) -->
             <a id="fallback-link" target="_blank" class="hidden flex-1 bg-gray-700 text-white font-medium py-3 px-4 rounded-lg hover:bg-gray-600 transition flex justify-center items-center gap-2 text-center border border-gray-600">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                </svg>
-                <span>Ouvrir le PDF</span>
+                Ouvrir le PDF
             </a>
         </div>
-
-        <!-- Status / Error -->
         <div id="status-msg" class="mt-4 text-center text-sm hidden"></div>
     </div>
 
-    <!-- Footer -->
     <footer class="mt-8 text-gray-500 text-xs font-medium tracking-wide">
         Leonce - Equity
     </footer>
 
-    <!-- Iframe invisible pour l'impression -->
     <iframe id="print-frame" class="hidden h-0 w-0"></iframe>
 
     <script>
-        // --- State Management ---
         let selectedFiles = [];
         let currentBlobUrl = null;
-        let deferredPrompt; // Pour l'installation PWA
-        
-        // --- DOM Elements ---
+        let deferredPrompt;
+
+        // Enregistrement du Service Worker pour permettre l'installation PWA
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('data:text/javascript;base64,' + btoa('self.addEventListener("fetch", (event) => {});'))
+                .catch(err => console.log('SW registration failed', err));
+            });
+        }
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            document.getElementById('install-btn').classList.remove('hidden');
+        });
+
+        document.getElementById('install-btn').addEventListener('click', async () => {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                await deferredPrompt.userChoice;
+                deferredPrompt = null;
+                document.getElementById('install-btn').classList.add('hidden');
+            }
+        });
+
         const dropZone = document.getElementById('drop-zone');
         const fileInput = document.getElementById('file-input');
         const fileListContainer = document.getElementById('file-list-container');
@@ -144,51 +127,18 @@
         const fallbackLink = document.getElementById('fallback-link');
         const statusMsg = document.getElementById('status-msg');
         const printFrame = document.getElementById('print-frame');
-        const installBtn = document.getElementById('install-btn');
 
-        // --- PWA Logic ---
-        window.addEventListener('beforeinstallprompt', (e) => {
-            // Empêcher Chrome d'afficher le prompt automatiquement
-            e.preventDefault();
-            // Sauvegarder l'événement pour le déclencher plus tard
-            deferredPrompt = e;
-            // Afficher le bouton d'installation
-            installBtn.classList.remove('hidden');
-        });
-
-        installBtn.addEventListener('click', async () => {
-            if (deferredPrompt) {
-                deferredPrompt.prompt();
-                const { outcome } = await deferredPrompt.userChoice;
-                if (outcome === 'accepted') {
-                    console.log('User accepted the install prompt');
-                }
-                deferredPrompt = null;
-                installBtn.classList.add('hidden'); // Cacher le bouton après usage
-            }
-        });
-
-        // --- Drag & Drop ---
-        dropZone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            dropZone.classList.add('drag-active');
-        });
-
-        dropZone.addEventListener('dragleave', () => {
-            dropZone.classList.remove('drag-active');
-        });
-
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-active'); });
+        dropZone.addEventListener('dragleave', () => { dropZone.classList.remove('drag-active'); });
         dropZone.addEventListener('drop', (e) => {
             e.preventDefault();
             dropZone.classList.remove('drag-active');
             handleFiles(e.dataTransfer.files);
         });
 
-        // Click to upload
         dropZone.addEventListener('click', () => fileInput.click());
         fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
 
-        // Clear all
         clearAllBtn.addEventListener('click', () => {
             selectedFiles = [];
             renderFileList();
@@ -196,41 +146,27 @@
             resetState();
         });
 
-        // Process & Print
         processBtn.addEventListener('click', async () => {
             if (selectedFiles.length === 0) return;
             await mergeAndPrint();
         });
 
-        // --- Logic ---
-
         function handleFiles(files) {
             resetState();
             const validFiles = Array.from(files).filter(file => file.type === 'application/pdf');
+            if (validFiles.length < files.length) showStatus("Seuls les fichiers PDF sont acceptés.", "text-orange-400");
             
-            if (validFiles.length < files.length) {
-                showStatus("Certains fichiers ont été ignorés car ce ne sont pas des PDF.", "text-orange-400");
-            }
-
-            // Ajout sans doublons
             validFiles.forEach(file => {
-                const exists = selectedFiles.some(f => 
-                    f.name === file.name && 
-                    f.size === file.size && 
-                    f.lastModified === file.lastModified
-                );
+                const exists = selectedFiles.some(f => f.name === file.name && f.size === file.size);
                 if (!exists) selectedFiles.push(file);
             });
-
             renderFileList();
             updateUI();
         }
 
         function resetState() {
-            if (currentBlobUrl) {
-                URL.revokeObjectURL(currentBlobUrl);
-                currentBlobUrl = null;
-            }
+            if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
+            currentBlobUrl = null;
             fallbackLink.classList.add('hidden');
             processBtn.classList.remove('hidden');
             statusMsg.classList.add('hidden');
@@ -243,14 +179,10 @@
                 li.className = "flex justify-between items-center bg-gray-700 p-2 rounded border border-gray-600 text-sm";
                 li.innerHTML = `
                     <div class="flex items-center overflow-hidden">
-                        <span class="bg-red-900 text-red-200 px-2 py-0.5 rounded text-xs font-bold mr-2">PDF</span>
                         <span class="truncate text-gray-200 font-medium">${file.name}</span>
-                        <span class="ml-2 text-xs text-gray-400 whitespace-nowrap">(${(file.size / 1024).toFixed(0)} KB)</span>
                     </div>
-                    <button onclick="removeFile(${index})" class="text-gray-400 hover:text-red-400 ml-2 p-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
-                        </svg>
+                    <button onclick="removeFile(${index})" class="text-gray-400 hover:text-red-400 p-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
                     </button>
                 `;
                 fileList.appendChild(li);
@@ -258,7 +190,6 @@
             fileCountSpan.innerText = selectedFiles.length;
         }
 
-        // Exposé globalement
         window.removeFile = (index) => {
             selectedFiles.splice(index, 1);
             renderFileList();
@@ -269,70 +200,46 @@
             if (selectedFiles.length > 0) {
                 fileListContainer.classList.remove('hidden');
                 processBtn.disabled = false;
-                processBtn.classList.remove('opacity-50', 'cursor-not-allowed');
             } else {
                 fileListContainer.classList.add('hidden');
                 processBtn.disabled = true;
-                processBtn.classList.add('opacity-50', 'cursor-not-allowed');
             }
         }
 
         async function mergeAndPrint() {
-            resetState(); 
-
-            const originalBtnText = processBtn.innerHTML;
+            resetState();
             processBtn.disabled = true;
-            processBtn.innerHTML = `<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> <span class="ml-2">Traitement...</span>`;
-            showStatus("Fusion des fichiers en cours...", "text-blue-400");
+            showStatus("Fusion en cours...", "text-blue-400");
 
             try {
                 const PDFDocument = PDFLib.PDFDocument;
                 const mergedPdf = await PDFDocument.create();
-
                 for (const file of selectedFiles) {
                     const arrayBuffer = await file.arrayBuffer();
                     const pdf = await PDFDocument.load(arrayBuffer);
                     const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
                     copiedPages.forEach((page) => mergedPdf.addPage(page));
                 }
-
                 const pdfBytes = await mergedPdf.save();
                 const blob = new Blob([pdfBytes], { type: 'application/pdf' });
                 currentBlobUrl = URL.createObjectURL(blob);
-
                 fallbackLink.href = currentBlobUrl;
                 printFrame.src = currentBlobUrl;
                 
                 printFrame.onload = () => {
-                    processBtn.innerHTML = originalBtnText;
                     processBtn.disabled = false;
-                    
                     try {
                         const win = printFrame.contentWindow;
-                        if (!win) throw new Error("Iframe contentWindow inaccessible");
-                        
                         win.focus();
                         win.print();
-                        showStatus("Impression lancée.", "text-green-400");
+                        showStatus("Impression prête.", "text-green-400");
                     } catch (e) {
-                        console.warn("Impression auto bloquée, passage manuel.", e);
-                        showStatus("Impression auto bloquée. Utilisez le bouton ci-dessous.", "text-orange-400");
-                        
+                        showStatus("Blocage navigateur. Ouvrez le fichier manuellement.", "text-orange-400");
                         processBtn.classList.add('hidden');
                         fallbackLink.classList.remove('hidden');
-                        
-                        const newWin = window.open(currentBlobUrl, '_blank');
-                        if (!newWin) {
-                            showStatus("Pop-up bloqué. Cliquez sur 'Ouvrir le PDF'.", "text-orange-400");
-                        } else {
-                            showStatus("Ouvert dans un nouvel onglet.", "text-blue-400");
-                        }
                     }
                 };
-
             } catch (error) {
-                console.error(error);
-                processBtn.innerHTML = originalBtnText;
                 processBtn.disabled = false;
                 showStatus("Erreur : " + error.message, "text-red-400");
             }
