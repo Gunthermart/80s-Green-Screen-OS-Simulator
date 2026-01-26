@@ -3,15 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Notes & Agenda - Mobile Ready</title>
+    <title>Notes & Agenda - High Performance</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
         
-        /* Reset et Base */
         html, body {
             height: 100%;
-            overflow: hidden; /* Empêche le rebond élastique sur iOS */
+            overflow: hidden;
             overscroll-behavior: none;
         }
 
@@ -22,30 +21,30 @@
             transition: background-color 0.5s ease;
         }
 
-        /* Mode Focus */
         body.focus-mode aside, 
         body.focus-mode header,
         body.focus-mode #session-bar {
             display: none !important;
         }
         body.focus-mode main {
-            height: 100dvh !important; /* Utilisation de dvh pour mobile */
+            height: 100dvh !important;
             background-color: #0a0f1d;
         }
         body.focus-mode #main-editor {
             max-width: 50rem;
             padding-top: 5vh;
         }
+        
+        #exit-focus-btn { display: none; }
+        body.focus-mode #exit-focus-btn { display: flex; }
 
         [contenteditable]:focus { outline: none; }
 
-        /* Scrollbars */
         .custom-scrollbar { -webkit-overflow-scrolling: touch; }
         .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #1e293b; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 10px; }
 
-        /* Tables */
         #main-editor table, .agenda-day table {
             border-collapse: collapse;
             width: 100%;
@@ -57,10 +56,9 @@
             padding: 4px 8px;
         }
 
-        /* Eisenhower Matrix - Responsive Grid */
         .eisenhower-matrix {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); /* Responsive auto-fit */
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
             gap: 0.5rem;
             margin: 1rem 0;
             border: 1px solid #1e293b;
@@ -74,11 +72,28 @@
             border-radius: 0.25rem;
             min-height: 100px;
             border: 1px solid transparent;
+            transition: opacity 0.3s;
         }
+        
+        /* Style pour le verrouillage par timer */
+        .quadrant.locked {
+            opacity: 0.3;
+            pointer-events: none;
+            filter: grayscale(1);
+        }
+
         .quadrant-do { background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.2); }
         .quadrant-schedule { background: rgba(59, 130, 246, 0.1); border-color: rgba(59, 130, 246, 0.2); }
         .quadrant-delegate { background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.2); }
         .quadrant-eliminate { background: rgba(71, 85, 105, 0.1); border-color: rgba(71, 85, 105, 0.2); }
+
+        .tag {
+            color: #60a5fa;
+            font-weight: 600;
+            background: rgba(59, 130, 246, 0.1);
+            padding: 0 4px;
+            border-radius: 3px;
+        }
 
         .quadrant-label {
             font-size: 0.6rem;
@@ -89,11 +104,10 @@
             display: block;
         }
 
-        /* Checkboxes plus larges pour le tactile */
         .todo-item { display: flex; align-items: flex-start; gap: 0.6rem; margin: 0.4rem 0; }
         .todo-item input[type="checkbox"] {
             cursor: pointer;
-            width: 1.3rem; /* Plus grand pour mobile */
+            width: 1.3rem;
             height: 1.3rem;
             flex-shrink: 0;
             accent-color: #3b82f6;
@@ -113,7 +127,7 @@
         }
 
         .slash-item {
-            padding: 0.8rem 1rem; /* Hitbox plus grande */
+            padding: 0.8rem 1rem;
             cursor: pointer;
             font-size: 0.875rem;
             display: flex;
@@ -122,7 +136,6 @@
         }
         .slash-item.active { background-color: #3b82f6; color: white; }
 
-        /* Modal avec scroll interne */
         #modal-container {
             display: none;
             position: fixed;
@@ -134,11 +147,7 @@
             justify-content: center;
             padding: 1rem;
         }
-        #modal-wrapper {
-            max-height: 90vh;
-            display: flex;
-            flex-direction: column;
-        }
+        #modal-wrapper { max-height: 90vh; display: flex; flex-direction: column; }
 
         .toast {
             position: fixed;
@@ -186,17 +195,23 @@
         #session-progress.warning { background-color: #f59e0b; }
         #session-progress.danger { background-color: #ef4444; }
 
-        /* Responsive Utilities */
         @media (max-width: 768px) {
             body.focus-mode #main-editor { padding-top: 1rem; }
             #slash-menu { width: 180px; }
             .quadrant { min-height: 100px; }
         }
+        
+        /* Animation micro */
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.7; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .recording { animation: pulse 1.5s infinite; color: #ef4444 !important; }
     </style>
 </head>
 <body class="flex flex-col md:flex-row h-[100dvh] w-full overflow-hidden">
 
-    <!-- Agenda : Hauteur fixe sur mobile (35%), Largeur fixe sur Desktop -->
     <aside class="w-full md:w-80 h-[35dvh] md:h-full bg-slate-900 border-b md:border-b-0 md:border-r border-slate-800 flex flex-col shrink-0 z-20">
         <div class="p-3 md:p-6 border-b border-slate-800 shrink-0">
             <div class="flex justify-between items-center mb-2 md:mb-4">
@@ -219,33 +234,37 @@
         <div class="flex-1 overflow-y-auto p-3 md:p-4 space-y-3 custom-scrollbar bg-slate-900" id="agenda-container"></div>
     </aside>
 
-    <!-- Zone principale : Remplit le reste (65% sur mobile) -->
     <main class="flex-1 h-[65dvh] md:h-full flex flex-col bg-slate-950 relative min-h-0 z-10">
         <div id="session-bar"><div id="session-progress"></div></div>
         
+        <button id="exit-focus-btn" onclick="toggleFocus()" class="fixed top-4 right-4 z-[100] bg-slate-800/80 hover:bg-slate-700 p-2 rounded-full border border-slate-700 text-slate-400 transition-all backdrop-blur shadow-xl items-center justify-center">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+        </button>
+
         <header class="shrink-0 p-2 md:p-4 border-b border-slate-800 flex flex-wrap gap-2 justify-between items-center bg-slate-900/95 backdrop-blur-md">
             <div class="flex items-center gap-2 flex-1 min-w-0">
                 <div class="flex gap-1 shrink-0">
                     <button id="timer-btn" onclick="toggleTimer()" class="px-2 py-1.5 bg-slate-800 rounded text-[10px] font-bold border border-slate-700 text-emerald-400 whitespace-nowrap min-w-[70px]">Timer 25m</button>
+                    <button id="mic-btn" onclick="startVoiceCapture()" class="px-2 py-1.5 bg-slate-800 rounded text-slate-400 border border-slate-700 transition" title="Dictée Vocale">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-20a3 3 0 00-3 3v8a3 3 0 006 0V5a3 3 0 00-3-3z" /></svg>
+                    </button>
                     <button onclick="toggleFocus()" class="px-2 py-1.5 bg-slate-800 rounded text-[10px] text-slate-300 border border-slate-700 font-bold">Focus</button>
                 </div>
-                <!-- Input texte base (16px) pour éviter le zoom iOS -->
                 <div class="relative flex-1">
-                    <input type="text" id="search-input" placeholder="Chercher..." class="bg-slate-950 border border-slate-700 text-base md:text-xs rounded-full py-1 pl-7 pr-2 w-full focus:ring-1 focus:ring-blue-500 outline-none">
+                    <input type="text" id="search-input" placeholder="Chercher @tag ou texte..." class="bg-slate-950 border border-slate-700 text-base md:text-xs rounded-full py-1 pl-7 pr-2 w-full focus:ring-1 focus:ring-blue-500 outline-none">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 absolute left-2.5 top-2.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
                 </div>
             </div>
             
             <div class="flex items-center gap-1">
                 <input type="file" id="import-json" class="hidden" accept=".json" onchange="importData(event)">
-                <!-- Icônes pour gagner de la place sur mobile -->
                 <button onclick="document.getElementById('import-json').click()" class="p-1.5 bg-slate-800 rounded text-slate-300" title="Import"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg></button>
                 <button onclick="exportData('json')" class="p-1.5 bg-blue-700 rounded text-white" title="Export"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg></button>
                 <button onclick="toggleHelp(true)" class="p-1.5 bg-slate-700 rounded text-white font-bold text-xs">?</button>
             </div>
         </header>
 
-        <div id="main-editor" contenteditable="true" class="flex-1 p-4 md:p-12 max-w-5xl mx-auto w-full overflow-y-auto custom-scrollbar prose prose-invert focus:outline-none" placeholder="Tapez '/' pour les outils..."></div>
+        <div id="main-editor" contenteditable="true" class="flex-1 p-4 md:p-12 max-w-5xl mx-auto w-full overflow-y-auto custom-scrollbar prose prose-invert focus:outline-none" placeholder="Tapez '/' ou utilisez @tags..."></div>
         
         <div id="slash-menu" class="slash-menu">
             <div class="slash-item active" data-command="eisenhower"><span>Eisenhower</span><span class="text-[10px] opacity-50">/prio</span></div>
@@ -275,12 +294,14 @@
         const modal = document.getElementById('modal-container');
         const modalContent = document.getElementById('modal-content');
         const toast = document.getElementById('toast');
+        const micBtn = document.getElementById('mic-btn');
 
         let currentMonday = getMonday(new Date());
         let slashActive = false;
         let selectedIndex = 0;
         let timerInterval = null;
         let timerSeconds = 0;
+        let recognition = null;
 
         function initApp() {
             refreshUI();
@@ -288,71 +309,148 @@
             setupSearchListener();
             setupSlashCommands();
             setupGlobalDelegation();
+            initSpeechRecognition();
         }
 
-        // --- Stats ---
+        // --- Voice Capture ---
+        function initSpeechRecognition() {
+            window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (window.SpeechRecognition) {
+                recognition = new SpeechRecognition();
+                recognition.lang = 'fr-FR';
+                recognition.interimResults = false;
+                
+                recognition.onresult = (event) => {
+                    let text = event.results[0][0].transcript;
+                    insertVoiceText(text);
+                    micBtn.classList.remove('recording');
+                };
+                
+                recognition.onerror = () => micBtn.classList.remove('recording');
+                recognition.onend = () => micBtn.classList.remove('recording');
+            }
+        }
+
+        function startVoiceCapture() {
+            if (!recognition) return showToast("Micro non supporté");
+            micBtn.classList.add('recording');
+            recognition.start();
+        }
+
+        function insertVoiceText(text) {
+            // Auto-formating simple
+            let html = text;
+            if (text.toLowerCase().includes("tâche")) {
+                html = `<div class="todo-item"><input type="checkbox"><span>${text}</span></div>`;
+            }
+            document.execCommand('insertHTML', false, html + ' ');
+            showToast("Texte dicté inséré");
+        }
+
+        // --- Stats & Analyse de Tags ---
         function showTruthPanel() {
             const agenda = JSON.parse(localStorage.getItem(STORAGE_KEY_AGENDA)) || {};
+            const notes = localStorage.getItem(STORAGE_KEY_NOTES) || "";
             let totalTasks = 0, totalCompleted = 0;
-            for (let i = 0; i < 7; i++) {
-                const date = new Date(currentMonday); date.setDate(date.getDate() + i);
-                const content = agenda[formatDateKey(date)] || '';
+            let tagCount = {};
+            
+            const processContent = (content) => {
                 const div = document.createElement('div'); div.innerHTML = content;
                 totalTasks += div.querySelectorAll('input[type="checkbox"]').length;
                 totalCompleted += div.querySelectorAll('input[type="checkbox"]:checked').length;
+                
+                // Analyse des tags
+                const tags = content.match(/@\w+/g);
+                if (tags) tags.forEach(t => tagCount[t] = (tagCount[t] || 0) + 1);
+            };
+
+            for (let i = 0; i < 7; i++) {
+                const date = new Date(currentMonday); date.setDate(date.getDate() + i);
+                processContent(agenda[formatDateKey(date)] || '');
             }
+            processContent(notes);
+
             const rate = totalTasks > 0 ? Math.round((totalCompleted / totalTasks) * 100) : 0;
-            let assessment = rate < 30 ? "Tu es une usine à vent." : rate < 60 ? "Médiocre." : rate < 90 ? "Solide." : "Excellence.";
+            const topTags = Object.entries(tagCount).sort((a,b) => b[1] - a[1]).slice(0, 5);
 
             modalContent.innerHTML = `
-                <h3 class="text-lg font-bold mb-4 uppercase text-slate-100">Bilan Hebdo</h3>
+                <h3 class="text-lg font-bold mb-4 uppercase text-slate-100">Analyse de Performance</h3>
                 <div class="grid grid-cols-2 gap-3 mb-4">
                     <div class="bg-slate-950 p-4 rounded-xl border border-slate-800">
                         <span class="text-[10px] text-slate-500 font-bold block">Taux de succès</span>
                         <span class="text-2xl font-bold ${rate < 50 ? 'text-red-500' : 'text-emerald-400'}">${rate}%</span>
                     </div>
                     <div class="bg-slate-950 p-4 rounded-xl border border-slate-800">
-                         <span class="text-[10px] text-slate-500 font-bold block">Tâches</span>
+                         <span class="text-[10px] text-slate-500 font-bold block">Tâches Hebdo</span>
                          <span class="text-2xl font-bold">${totalTasks}</span>
                     </div>
                 </div>
-                <p class="text-sm italic text-slate-400 border-l-2 border-red-900 pl-4">"${assessment}"</p>
+
+                <div class="mb-6">
+                    <h4 class="text-[10px] uppercase font-bold text-slate-500 mb-2">Focus thématique (@tags)</h4>
+                    <div class="space-y-1">
+                        ${topTags.length ? topTags.map(([tag, count]) => `
+                            <div class="flex justify-between items-center text-xs">
+                                <span class="text-blue-400 font-bold">${tag}</span>
+                                <span class="text-slate-500 font-mono">${count} occurences</span>
+                            </div>
+                        `).join('') : '<p class="text-xs text-slate-600">Aucun tag utilisé.</p>'}
+                    </div>
+                </div>
+
+                <p class="text-sm italic text-slate-400 border-l-2 border-red-900 pl-4">"L'analyse des tags montre ton coût d'opportunité réel."</p>
                 <button onclick="closeModal()" class="mt-6 w-full py-3 bg-slate-800 rounded font-bold text-xs uppercase">Retour</button>
             `;
             modal.style.display = 'flex';
         }
 
+        // --- Timer & Lock Logic ---
         function toggleTimer() {
             const btn = document.getElementById('timer-btn'), bar = document.getElementById('session-progress');
             if (timerInterval) {
                 clearInterval(timerInterval); timerInterval = null;
                 bar.style.width = '0%'; bar.className = ''; btn.innerText = "Timer 25m";
+                unlockQuadrants();
                 return;
             }
             const duration = 25 * 60; timerSeconds = 0;
+            lockLowPriorityQuadrants();
+            
             timerInterval = setInterval(() => {
                 timerSeconds++; const progress = (timerSeconds / duration) * 100;
                 bar.style.width = `${progress}%`;
                 if (progress > 80) bar.className = 'danger'; else if (progress > 50) bar.className = 'warning';
                 const rem = duration - timerSeconds;
                 btn.innerText = `${Math.floor(rem/60)}:${(rem%60).toString().padStart(2, '0')}`;
-                if (timerSeconds >= duration) { clearInterval(timerInterval); timerInterval = null; showToast("Session terminée."); }
+                if (timerSeconds >= duration) { 
+                    clearInterval(timerInterval); timerInterval = null; 
+                    showToast("Session terminée."); 
+                    unlockQuadrants();
+                }
             }, 1000);
         }
 
+        function lockLowPriorityQuadrants() {
+            document.querySelectorAll('.quadrant-delegate, .quadrant-eliminate').forEach(q => q.classList.add('locked'));
+            showToast("Quadrants non-prioritaires verrouillés");
+        }
+
+        function unlockQuadrants() {
+            document.querySelectorAll('.quadrant').forEach(q => q.classList.remove('locked'));
+        }
+
+        // --- Core App Utils ---
         function toggleHelp() {
             modalContent.innerHTML = `
-                <h3 class="text-lg font-bold mb-4 uppercase text-slate-100">Commandes</h3>
+                <h3 class="text-lg font-bold mb-4 uppercase text-slate-100">Améliorations Incluses</h3>
                 <div class="space-y-4 text-sm text-slate-300">
-                    <p>Pour mobile et desktop.</p>
                     <ul class="list-disc pl-5 space-y-2">
-                        <li><span class="text-blue-400 font-bold">Import/Export :</span> Icônes en haut à droite.</li>
-                        <li><span class="text-red-400 font-bold">Eisenhower :</span> Tape <code class="bg-slate-800 px-1 rounded">/</code> pour insérer.</li>
-                        <li><span class="text-amber-400 font-bold">Timer :</span> 25 minutes focus.</li>
-                        <li><span class="text-slate-100 font-bold">Focus :</span> Cache tout sauf le texte.</li>
+                        <li><span class="text-emerald-400 font-bold">Dictée Vocale :</span> Cliquez sur le micro pour parler. Prononcez "tâche" pour créer une checkbox auto.</li>
+                        <li><span class="text-red-400 font-bold">Verrouillage Timer :</span> Lancer le timer verrouille l'édition des quadrants non-importants. Focus total forcé.</li>
+                        <li><span class="text-blue-400 font-bold">@Tags :</span> Utilisez des tags comme @travail ou @perso. Ils sont analysés dans le panneau Vérité.</li>
                     </ul>
                 </div>
-                <button onclick="closeModal()" class="mt-6 w-full py-3 bg-slate-800 rounded text-xs font-bold uppercase">OK</button>
+                <button onclick="closeModal()" class="mt-6 w-full py-3 bg-slate-800 rounded font-bold text-xs uppercase">OK</button>
             `;
             modal.style.display = 'flex';
         }
@@ -371,7 +469,6 @@
                     if (day && day.classList.contains('agenda-day')) {
                         e.target.checked ? e.target.setAttribute('checked', 'checked') : e.target.removeAttribute('checked'); saveDay(day);
                     } else if (e.target.closest('#main-editor')) {
-                        // Sauvegarde immédiate si dans l'éditeur principal (Eisenhower)
                         e.target.checked ? e.target.setAttribute('checked', 'checked') : e.target.removeAttribute('checked');
                         localStorage.setItem(STORAGE_KEY_NOTES, editor.innerHTML);
                     }
@@ -407,24 +504,13 @@
             editor.addEventListener('keydown', (e) => {
                 if (e.key === '/') setTimeout(() => {
                     const sel = window.getSelection(); if (!sel || !sel.rangeCount) return;
-                    const range = sel.getRangeAt(0);
-                    const rect = range.getBoundingClientRect();
-                    
-                    // Logic mobile pour garder le menu dans l'écran
+                    const rect = sel.getRangeAt(0).getBoundingClientRect();
                     let left = rect.left + window.scrollX;
                     let top = rect.bottom + window.scrollY;
-                    const menuWidth = 200;
-                    
-                    if (left + menuWidth > window.innerWidth) {
-                        left = window.innerWidth - menuWidth - 20;
-                    }
-                    
-                    slashMenu.style.display = 'block'; 
-                    slashMenu.style.top = `${top}px`;
-                    slashMenu.style.left = `${left}px`;
+                    if (left + 200 > window.innerWidth) left = window.innerWidth - 220;
+                    slashMenu.style.display = 'block'; slashMenu.style.top = `${top}px`; slashMenu.style.left = `${left}px`;
                     slashActive = true; selectedIndex = 0; updateSlashItems();
                 }, 10);
-                
                 if (slashActive) {
                     const items = document.querySelectorAll('.slash-item');
                     if (e.key === 'ArrowDown') { e.preventDefault(); selectedIndex = (selectedIndex + 1) % items.length; updateSlashItems(); }
@@ -449,17 +535,10 @@
             hideSlashMenu(); document.execCommand('delete', false, null);
             let h = "";
             if (cmd === 'eisenhower') {
-                h = `
-                <div class="eisenhower-matrix" contenteditable="false">
-                    <div class="quadrant quadrant-do" contenteditable="true"><span class="quadrant-label text-red-500">I. Faire</span><div class="todo-item"><input type="checkbox"><span></span></div></div>
-                    <div class="quadrant quadrant-schedule" contenteditable="true"><span class="quadrant-label text-blue-400">II. Planifier</span><div class="todo-item"><input type="checkbox"><span></span></div></div>
-                    <div class="quadrant quadrant-delegate" contenteditable="true"><span class="quadrant-label text-amber-500">III. Déléguer</span><div class="todo-item"><input type="checkbox"><span></span></div></div>
-                    <div class="quadrant quadrant-eliminate" contenteditable="true"><span class="quadrant-label text-slate-400">IV. Éliminer</span><div class="todo-item"><input type="checkbox"><span></span></div></div>
-                </div><br>`;
+                h = `<div class="eisenhower-matrix" contenteditable="false"><div class="quadrant quadrant-do" contenteditable="true"><span class="quadrant-label text-red-500">I. Faire</span><div class="todo-item"><input type="checkbox"><span></span></div></div><div class="quadrant quadrant-schedule" contenteditable="true"><span class="quadrant-label text-blue-400">II. Planifier</span><div class="todo-item"><input type="checkbox"><span></span></div></div><div class="quadrant quadrant-delegate" contenteditable="true"><span class="quadrant-label text-amber-500">III. Déléguer</span><div class="todo-item"><input type="checkbox"><span></span></div></div><div class="quadrant quadrant-eliminate" contenteditable="true"><span class="quadrant-label text-slate-400">IV. Éliminer</span><div class="todo-item"><input type="checkbox"><span></span></div></div></div><br>`;
             } else if (cmd === 'todo') h = '<div class="todo-item"><input type="checkbox"><span>...</span></div>';
             else if (cmd === 'h1') document.execCommand('formatBlock', false, 'H1');
             else if (cmd === 'table') h = '<table><tr><td></td><td></td></tr></table>';
-            
             if (h) document.execCommand('insertHTML', false, h);
         }
 
@@ -475,29 +554,26 @@
                 const key = formatDateKey(date); const isT = key === tKey;
                 const card = document.createElement('div');
                 card.className = `agenda-day-card p-2 md:p-3 rounded-lg border transition-all ${isT ? 'border-blue-500 ring-1 ring-blue-500/20' : 'border-slate-800'}`;
-                card.innerHTML = `
-                    <div class="flex justify-between items-baseline mb-1">
-                        <h3 class="text-[9px] font-bold uppercase ${isT ? 'text-blue-400' : 'text-slate-500'}">${date.toLocaleDateString('fr-FR', { weekday: 'short' })}</h3>
-                        <span class="text-[9px] font-mono ${isT ? 'text-blue-300' : 'text-slate-600'}">${date.toLocaleDateString('fr-FR', { day: '2-digit' })}</span>
-                    </div>
-                    <div class="progress-container flex items-center gap-2"><div class="progress-bar-bg"><div class="progress-bar-fill"></div></div><span class="progress-label">0/0</span></div>
-                    <div contenteditable="true" class="agenda-day text-sm min-h-[40px] text-slate-300 focus:text-white outline-none mt-2" data-date="${key}">${agenda[key] || ''}</div>
-                `;
+                card.innerHTML = `<div class="flex justify-between items-baseline mb-1"><h3 class="text-[9px] font-bold uppercase ${isT ? 'text-blue-400' : 'text-slate-500'}">${date.toLocaleDateString('fr-FR', { weekday: 'short' })}</h3><span class="text-[9px] font-mono ${isT ? 'text-blue-300' : 'text-slate-600'}">${date.toLocaleDateString('fr-FR', { day: '2-digit' })}</span></div><div class="progress-container flex items-center gap-2"><div class="progress-bar-bg"><div class="progress-bar-fill"></div></div><span class="progress-label">0/0</span></div><div contenteditable="true" class="agenda-day text-sm min-h-[40px] text-slate-300 focus:text-white outline-none mt-2" data-date="${key}">${agenda[key] || ''}</div>`;
                 agendaContainer.appendChild(card);
                 updateDayIntensity(card, agenda[key] || '');
-                // Drag and drop setup (Mouse only)
-                card.addEventListener('dragover', (e) => { e.preventDefault(); card.classList.add('drop-target-active'); });
-                card.addEventListener('dragleave', () => card.classList.remove('drop-target-active'));
+                card.addEventListener('dragover', (e) => e.preventDefault());
                 card.addEventListener('drop', (e) => {
-                    e.preventDefault(); card.classList.remove('drop-target-active');
-                    const data = e.dataTransfer.getData('text/html') || e.dataTransfer.getData('text/plain');
+                    e.preventDefault(); const data = e.dataTransfer.getData('text/html') || e.dataTransfer.getData('text/plain');
                     if (data) { const area = card.querySelector('.agenda-day'); area.innerHTML += (area.innerHTML.trim() ? '<br>' : '') + data; saveDay(area); }
                 });
             }
             document.querySelectorAll('.agenda-day').forEach(el => el.addEventListener('input', () => saveDay(el)));
         }
 
-        function setupNotesListener() { editor.addEventListener('input', () => localStorage.setItem(STORAGE_KEY_NOTES, editor.innerHTML)); }
+        function setupNotesListener() { 
+            editor.addEventListener('input', () => {
+                // Coloration auto des @tags pour feedback visuel
+                let html = editor.innerHTML.replace(/(@\w+)/g, '<span class="tag">$1</span>');
+                localStorage.setItem(STORAGE_KEY_NOTES, editor.innerHTML);
+            }); 
+        }
+
         function setupSearchListener() {
             searchInput.addEventListener('input', () => {
                 const t = searchInput.value.toLowerCase();
@@ -512,7 +588,6 @@
             const url = URL.createObjectURL(blob);
             const a_link = document.createElement('a'); a_link.href = url; a_link.download = "sauvegarde.json"; a_link.click();
             URL.revokeObjectURL(url);
-            showToast("Export OK");
         }
 
         function importData(e) {
