@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Agenda & Notes - Efficient Layout</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -25,16 +26,14 @@
             color: var(--text-main);
         }
 
-        /* Scrollbar discrète */
         .custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 99px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #64748b; }
 
-        /* --- ÉDITEUR PRINCIPAL --- */
         [contenteditable]:focus { outline: none; }
         #main-editor { font-size: 1.05rem; line-height: 1.7; scroll-behavior: smooth; }
-        #main-editor.read-mode { background: #0f172a; cursor: default; } /* Style mode lecture */
+        #main-editor.read-mode { background: #0f172a; cursor: default; }
         
         #main-editor h1 { font-size: 1.6em; font-weight: 700; margin: 0.8em 0 0.4em; color: white; border-bottom: 1px solid #334155; }
         #main-editor h2 { font-size: 1.3em; font-weight: 600; margin: 0.8em 0 0.4em; color: #cbd5e1; }
@@ -42,55 +41,17 @@
         #main-editor blockquote { border-left: 4px solid var(--accent); padding-left: 1em; color: var(--text-muted); font-style: italic; margin: 0.5em 0; }
         #main-editor b, #main-editor strong { font-weight: 700; color: #fff; }
 
-        /* Liens intelligents (Mode Lecture) */
-        .smart-link-date { 
-            color: #60a5fa; 
-            font-weight: 600; 
-            cursor: pointer; 
-            border-bottom: 1px dashed #60a5fa; 
-            padding-bottom: 1px;
-        }
+        .smart-link-date { color: #60a5fa; font-weight: 600; cursor: pointer; border-bottom: 1px dashed #60a5fa; padding-bottom: 1px; }
         .smart-link-date:hover { background: rgba(96, 165, 250, 0.1); }
-        
-        .smart-link-tag {
-            color: #34d399;
-            font-weight: 600;
-            cursor: pointer;
-            background: rgba(52, 211, 153, 0.1);
-            padding: 0 4px;
-            border-radius: 4px;
-        }
+        .smart-link-tag { color: #34d399; font-weight: 600; cursor: pointer; background: rgba(52, 211, 153, 0.1); padding: 0 4px; border-radius: 4px; }
         .smart-link-tag:hover { background: rgba(52, 211, 153, 0.2); }
 
-        /* --- AGENDA CONTENT --- */
-        .agenda-content { 
-            font-size: 0.9rem; 
-            color: #cbd5e1; 
-            line-height: 1.45;
-            word-wrap: break-word;
-            overflow-wrap: break-word;
-            max-height: 9rem; 
-            overflow-y: auto; 
-        }
-        
-        .agenda-content h1, .agenda-content h2, .agenda-content h3 { 
-            font-size: 1em !important; font-weight: 700 !important; margin: 0.2em 0 !important; 
-            line-height: 1.2 !important; color: #fff !important; border: none !important; 
-        }
+        .agenda-content { font-size: 0.9rem; color: #cbd5e1; line-height: 1.45; word-wrap: break-word; overflow-wrap: break-word; max-height: 9rem; overflow-y: auto; }
+        .agenda-content h1, .agenda-content h2, .agenda-content h3 { font-size: 1em !important; font-weight: 700 !important; margin: 0.2em 0 !important; line-height: 1.2 !important; color: #fff !important; border: none !important; }
         .agenda-content p { margin: 0 0 0.2em 0 !important; }
         .agenda-content ul, .agenda-content ol { padding-left: 1.2em !important; margin: 0.1em 0 !important; }
-        
-        .agenda-content span { color: inherit !important; font-size: inherit !important; font-family: inherit !important; }
-        .agenda-content span[style*="background-color"] { color: #000000 !important; }
 
-        /* --- AGENDA CARDS --- */
-        .agenda-card {
-            background: rgba(30, 41, 59, 0.3);
-            border-bottom: 1px solid var(--border);
-            border-left: 3px solid transparent;
-            transition: background 0.2s ease;
-            position: relative;
-        }
+        .agenda-card { background: rgba(30, 41, 59, 0.3); border-bottom: 1px solid var(--border); border-left: 3px solid transparent; transition: background 0.2s ease; position: relative; }
         .agenda-card:last-child { border-bottom: none; }
         .agenda-card:hover { background: rgba(30, 41, 59, 0.6); }
         .agenda-card.highlight-flash { animation: flash 1s ease; }
@@ -100,91 +61,31 @@
             100% { background: rgba(30, 41, 59, 0.3); }
         }
 
-        .agenda-card.today {
-            background: rgba(59, 130, 246, 0.08);
-            border-left-color: var(--accent);
-        }
-        .agenda-card.weekend {
-            background: rgba(15, 23, 42, 0.6);
-        }
+        .agenda-card.today { background: rgba(59, 130, 246, 0.08); border-left-color: var(--accent); }
+        .agenda-card.weekend { background: rgba(15, 23, 42, 0.6); }
 
-        .card-actions {
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.1s;
-        }
-        .agenda-card:hover .card-actions, .agenda-card:focus-within .card-actions {
-            opacity: 1;
-            pointer-events: auto;
-        }
+        .card-actions { opacity: 0; pointer-events: none; transition: opacity 0.1s; }
+        .agenda-card:hover .card-actions, .agenda-card:focus-within .card-actions { opacity: 1; pointer-events: auto; }
 
-        .action-icon {
-            padding: 4px; border-radius: 4px; color: #64748b; cursor: pointer; background: #1e293b; border: 1px solid #334155;
-        }
+        .action-icon { padding: 4px; border-radius: 4px; color: #64748b; cursor: pointer; background: #1e293b; border: 1px solid #334155; }
         .action-icon:hover { background: #334155; color: #e2e8f0; }
         .action-icon.danger:hover { color: #ef4444; border-color: #ef4444; }
         .action-icon.import-btn:hover { color: #3b82f6; border-color: #3b82f6; background: rgba(59, 130, 246, 0.1); }
         .action-icon.transfer-btn:hover { color: #10b981; border-color: #10b981; background: rgba(16, 185, 129, 0.1); }
 
-        /* --- SMART TOOLBAR --- */
-        #smart-toolbar {
-            position: absolute; display: none; background: #1e293b; border: 1px solid #475569;
-            border-radius: 6px; padding: 3px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.6);
-            z-index: 1000; flex-direction: row; gap: 2px;
-        }
-        .toolbar-btn {
-            padding: 4px 10px; font-size: 11px; font-weight: 600; color: #cbd5e1;
-            border-radius: 4px; cursor: pointer; white-space: nowrap;
-        }
+        #smart-toolbar { position: absolute; display: none; background: #1e293b; border: 1px solid #475569; border-radius: 6px; padding: 3px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.6); z-index: 1000; flex-direction: row; gap: 2px; }
+        .toolbar-btn { padding: 4px 10px; font-size: 11px; font-weight: 600; color: #cbd5e1; border-radius: 4px; cursor: pointer; white-space: nowrap; }
         .toolbar-btn:hover { background: var(--accent); color: white; }
 
-        /* Toast */
-        .toast {
-            position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%) translateY(20px);
-            background: #3b82f6; color: white; padding: 0.5rem 1rem; border-radius: 99px;
-            font-size: 0.875rem; font-weight: 500; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3);
-            opacity: 0; transition: all 0.3s; pointer-events: none; z-index: 9999;
-        }
+        .toast { position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%) translateY(20px); background: #3b82f6; color: white; padding: 0.5rem 1rem; border-radius: 99px; font-size: 0.875rem; font-weight: 500; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3); opacity: 0; transition: all 0.3s; pointer-events: none; z-index: 9999; }
         .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-        /* Modals Globaux */
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.7);
-            backdrop-filter: blur(4px);
-            z-index: 10000;
-            align-items: center;
-            justify-content: center;
-        }
-        .modal-box {
-            background: var(--bg-panel);
-            border: 1px solid var(--border);
-            padding: 1.5rem;
-            border-radius: 12px;
-            max-width: 500px;
-            width: 90%;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-            max-height: 90vh;
-            display: flex;
-            flex-direction: column;
-        }
+        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(4px); z-index: 10000; align-items: center; justify-content: center; }
+        .modal-box { background: var(--bg-panel); border: 1px solid var(--border); padding: 1.5rem; border-radius: 12px; max-width: 500px; width: 90%; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); max-height: 90vh; display: flex; flex-direction: column; }
 
-        /* Recherche */
-        .search-result-item {
-            padding: 8px 12px;
-            border-radius: 6px;
-            border: 1px solid transparent;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .search-result-item:hover {
-            background: rgba(59, 130, 246, 0.1);
-            border-color: var(--accent);
-        }
+        .search-result-item { padding: 8px 12px; border-radius: 6px; border: 1px solid transparent; cursor: pointer; transition: all 0.2s; }
+        .search-result-item:hover { background: rgba(59, 130, 246, 0.1); border-color: var(--accent); }
 
-        /* Help Styles */
         .help-section h4 { color: #fff; font-weight: 700; margin-bottom: 0.5rem; margin-top: 1rem; border-bottom: 1px solid #334155; padding-bottom: 0.25rem; }
         .help-list li { margin-bottom: 0.5rem; display: flex; align-items: flex-start; gap: 0.5rem; color: #cbd5e1; font-size: 0.9rem; }
         .help-icon { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 4px; background: #334155; color: #cbd5e1; flex-shrink: 0; }
@@ -214,15 +115,11 @@
     <main class="flex-1 h-[55vh] md:h-full flex flex-col bg-[#161e2e] relative min-h-0">
         <header class="h-14 border-b border-slate-800 flex items-center justify-between px-6 bg-slate-900/50 backdrop-blur shrink-0">
             <div class="flex items-center gap-1 md:gap-4">
-                
-                <!-- TOGGLE MODE LECTURE/EDITION -->
                 <button onclick="toggleViewMode()" id="view-mode-btn" class="p-2 mr-2 rounded transition bg-slate-800 text-slate-300 hover:text-white border border-slate-700" title="Basculer Édition / Liens Actifs">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
                 </button>
-
                 <div class="hidden md:block text-xs font-bold text-slate-500 uppercase tracking-widest mr-2">Brouillon</div>
                 <div class="hidden md:block h-4 w-[1px] bg-slate-700"></div>
-
                 <div class="flex bg-slate-800/50 rounded-lg p-0.5 items-center" id="formatting-tools">
                     <button onclick="execCmd('bold')" class="text-slate-400 hover:text-white px-2 py-1 hover:bg-slate-700 rounded text-sm font-bold">B</button>
                     <button onclick="execCmd('italic')" class="text-slate-400 hover:text-white px-2 py-1 hover:bg-slate-700 rounded text-sm italic">I</button>
@@ -233,27 +130,20 @@
                     <button onclick="execCmd('insertUnorderedList')" class="text-slate-400 hover:text-white px-2 py-1 hover:bg-slate-700 rounded">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
                     </button>
-                    
                     <div class="h-4 w-[1px] bg-slate-700 mx-1"></div>
-                    
                     <button onclick="scrollToTop()" class="text-slate-400 hover:text-white px-2 py-1 hover:bg-slate-700 rounded transition" title="Haut de page">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
                     </button>
-                    
                     <button onclick="addNewLineAtStart()" class="text-slate-400 hover:text-emerald-400 px-2 py-1 hover:bg-slate-700 rounded transition" title="Ligne au début">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4m-4 4l4-4m0 0l4 4m-4-4h16"></path></svg>
                     </button>
-
                     <button onclick="scrollToBottom()" class="text-slate-400 hover:text-white px-2 py-1 hover:bg-slate-700 rounded transition" title="Bas de page">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                     </button>
-                    
                     <button onclick="addNewLineAtEnd()" class="text-slate-400 hover:text-emerald-400 px-2 py-1 hover:bg-slate-700 rounded transition" title="Ligne à la fin">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4m12 4l4 4m0 0l-4 4m4-4H4"></path></svg>
                     </button>
-
                     <div class="h-4 w-[1px] bg-slate-700 mx-1"></div>
-                    
                     <button onclick="openConfirmModal()" class="text-slate-400 hover:text-red-400 px-2 py-1 hover:bg-slate-700 rounded transition" title="Tout effacer">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                     </button>
@@ -282,64 +172,45 @@
         </div>
     </main>
 
-    <!-- Modal Recherche -->
     <div id="search-modal" class="modal-overlay" onclick="closeSearchModal(event)">
         <div class="modal-box" onclick="event.stopPropagation()">
             <div class="flex items-center gap-3 border-b border-slate-700 pb-3 mb-3 shrink-0">
                 <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-                <input type="text" id="search-input" placeholder="Rechercher une note ou un #tag..." 
-                       class="bg-transparent border-none text-white w-full focus:outline-none text-lg" 
-                       oninput="handleSearch(this.value)">
+                <input type="text" id="search-input" placeholder="Rechercher une note ou un #tag..." class="bg-transparent border-none text-white w-full focus:outline-none text-lg" oninput="handleSearch(this.value)">
                 <button onclick="closeSearchModal()" class="text-slate-500 hover:text-white">Esc</button>
             </div>
             <div id="search-results" class="flex-1 overflow-y-auto custom-scrollbar space-y-1"></div>
         </div>
     </div>
 
-    <!-- Modal Aide -->
     <div id="help-modal" class="modal-overlay" onclick="closeHelpModal(event)">
         <div class="modal-box overflow-y-auto custom-scrollbar" onclick="event.stopPropagation()">
             <div class="flex justify-between items-start mb-4 border-b border-slate-700 pb-2">
                 <h3 class="text-xl font-bold text-white">Mode d'Emploi</h3>
                 <button onclick="closeHelpModal()" class="text-slate-500 hover:text-white"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
             </div>
-            
             <div class="help-section text-sm text-slate-300 space-y-4">
-                <p>Cet outil est conçu pour éliminer la friction. Pas de compte, pas de cloud, pas de distraction. Juste vous et votre travail.</p>
-
+                <p>Cet outil utilise désormais Dexie.js (IndexedDB) pour un stockage asynchrone robuste.</p>
                 <div class="grid md:grid-cols-2 gap-6">
                     <div>
-                        <h4>1. Le Brouillon (Zone de Chaos)</h4>
-                        <p class="mb-2">L'espace principal est votre décharge mentale. Écrivez tout ici, sans formatage complexe.</p>
+                        <h4>1. Le Brouillon</h4>
                         <ul class="help-list">
-                            <li><span class="help-icon"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg></span> <strong>Mode Édition</strong> : Pour écrire.</li>
-                            <li><span class="help-icon"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg></span> <strong>Mode Navigation</strong> : Rend les dates (ex: 25/01) et les #tags cliquables pour naviguer instantanément.</li>
-                            <li><span class="help-key">Alt</span>+<span class="help-key">N</span> : Nouvelle ligne au début.</li>
+                            <li><span class="help-icon"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg></span> <strong>Mode Édition</strong></li>
+                            <li><span class="help-icon"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg></span> <strong>Mode Navigation</strong> (Liens Dates & #Tags)</li>
                         </ul>
                     </div>
                     <div>
-                        <h4>2. L'Agenda (Zone de Structure)</h4>
-                        <p class="mb-2">La colonne de gauche est votre plan d'action. Ne surchargez pas les jours.</p>
+                        <h4>2. L'Agenda</h4>
                         <ul class="help-list">
-                            <li><span class="help-icon bg-slate-800 border border-slate-700 text-yellow-400">S</span> <strong>Surlignage</strong> : Texte noir sur jaune pour l'urgence.</li>
-                            <li><span class="help-icon text-blue-400">↓</span> <strong>Import</strong> : Copie le brouillon dans le jour.</li>
-                            <li><span class="help-icon text-emerald-400">→</span> <strong>Transfert</strong> : Renvoie une tâche vers le brouillon (arrêt du report incessant).</li>
+                            <li><span class="help-icon text-blue-400">↓</span> <strong>Import</strong> Brouillon</li>
+                            <li><span class="help-icon text-emerald-400">→</span> <strong>Transfert</strong> vers Brouillon</li>
                         </ul>
                     </div>
-                </div>
-
-                <div>
-                    <h4>3. Outils & Sécurité</h4>
-                    <ul class="help-list">
-                        <li><span class="help-icon"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg></span> <strong>Recherche Globale</strong> : Scanne tout (Ctrl+F).</li>
-                        <li><span class="help-icon">💾</span> <strong>Sauvegarde</strong> : Les données sont dans votre navigateur (LocalStorage). Exportez régulièrement votre fichier JSON via le bouton sauvegarde pour éviter toute perte si vous videz votre cache.</li>
-                    </ul>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Modal Confirmation -->
     <div id="confirm-modal" class="modal-overlay">
         <div class="modal-box">
             <h3 class="text-lg font-bold text-white mb-2">Vider le brouillon ?</h3>
@@ -354,7 +225,13 @@
     <div id="toast" class="toast">Action effectuée</div>
 
     <script>
-        const KEYS = { NOTES: 'pure_notes_v1', AGENDA: 'pure_agenda_v1' };
+        // --- INITIALISATION DEXIE ---
+        const db = new Dexie("EfficientAgendaDB");
+        db.version(1).stores({
+            notes: "id", // id="main"
+            agenda: "date" // date="YYYY-MM-DD"
+        });
+
         const editor = document.getElementById('main-editor');
         const agendaContainer = document.getElementById('agenda-container');
         const weekRangeEl = document.getElementById('week-range');
@@ -373,8 +250,8 @@
         let isReadMode = false;
         let rawEditorContent = '';
 
-        function init() {
-            loadData();
+        async function init() {
+            await loadData();
             renderAgenda();
             setupListeners();
             setInterval(() => { if (!isReadMode) saveData(); }, 5000); 
@@ -384,21 +261,13 @@
             }, 200);
 
             document.addEventListener('keydown', (e) => {
-                if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
-                    e.preventDefault();
-                    openSearchModal();
-                }
-                if (e.key === 'Escape') {
-                    closeSearchModal();
-                    closeHelpModal();
-                }
+                if ((e.ctrlKey || e.metaKey) && e.key === 'f') { e.preventDefault(); openSearchModal(); }
+                if (e.key === 'Escape') { closeSearchModal(); closeHelpModal(); }
             });
         }
 
-        // --- GESTION DES MODES (ÉDITION vs LECTURE/LIENS) ---
         function toggleViewMode() {
             isReadMode = !isReadMode;
-            
             if (isReadMode) {
                 saveData();
                 rawEditorContent = editor.innerHTML;
@@ -423,17 +292,14 @@
         }
 
         function parseAndLinkify() {
-            let html = editor.innerHTML;
             const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT, null, false);
             const nodes = [];
             while(walker.nextNode()) nodes.push(walker.currentNode);
-
             nodes.forEach(node => {
                 const text = node.nodeValue;
                 let newHtml = text
                     .replace(/(\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\b)/g, '<span class="smart-link-date" onclick="goToDateFromLink(\'$1\')">$1</span>')
                     .replace(/(#[a-zA-Z0-9éèàç_-]+)/g, '<span class="smart-link-tag" onclick="searchTag(\'$1\')">$1</span>');
-                
                 if (newHtml !== text) {
                     const span = document.createElement('span');
                     span.innerHTML = newHtml;
@@ -447,10 +313,7 @@
             const day = parseInt(parts[0], 10);
             const month = parseInt(parts[1], 10) - 1;
             let year = new Date().getFullYear();
-            if (parts[2]) {
-                year = parseInt(parts[2].length === 2 ? '20' + parts[2] : parts[2], 10);
-            }
-            
+            if (parts[2]) year = parseInt(parts[2].length === 2 ? '20' + parts[2] : parts[2], 10);
             const targetDate = new Date(year, month, day);
             if (!isNaN(targetDate.getTime())) {
                 currentMonday = getMonday(targetDate);
@@ -458,35 +321,16 @@
                 setTimeout(() => {
                     const key = dateToKey(targetDate);
                     const el = document.getElementById(`card-${key}`);
-                    if (el) {
-                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        el.classList.add('highlight-flash');
-                        setTimeout(() => el.classList.remove('highlight-flash'), 1000);
-                    } else {
-                        showToast("Date hors de portée");
-                    }
+                    if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('highlight-flash'); setTimeout(() => el.classList.remove('highlight-flash'), 1000); }
                 }, 100);
             }
         }
 
-        function searchTag(tag) {
-            openSearchModal();
-            searchInput.value = tag;
-            handleSearch(tag);
-        }
+        function searchTag(tag) { openSearchModal(); searchInput.value = tag; handleSearch(tag); }
 
-        // --- CORE FUNCTIONS ---
-        function getMonday(d) {
-            d = new Date(d);
-            const day = d.getDay();
-            const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-            const mon = new Date(d.setDate(diff));
-            mon.setHours(0,0,0,0);
-            return mon;
-        }
+        function getMonday(d) { d = new Date(d); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); const mon = new Date(d.setDate(diff)); mon.setHours(0,0,0,0); return mon; }
 
-        function renderAgenda() {
-            const agendaData = JSON.parse(localStorage.getItem(KEYS.AGENDA) || '{}');
+        async function renderAgenda() {
             agendaContainer.innerHTML = '';
             const sunday = new Date(currentMonday);
             sunday.setDate(sunday.getDate() + 6);
@@ -499,7 +343,10 @@
                 const key = dateToKey(date);
                 const isToday = key === todayKey;
                 const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-                const content = agendaData[key] || '';
+                
+                const entry = await db.agenda.get(key);
+                const content = entry ? entry.content : '';
+
                 const dayCard = document.createElement('div');
                 dayCard.className = `agenda-card px-4 py-3 ${isToday ? 'today' : ''} ${isWeekend ? 'weekend' : ''}`;
                 dayCard.id = `card-${key}`;
@@ -514,10 +361,10 @@
                             <div class="text-[10px] text-slate-600 font-mono">${dayNum}</div>
                         </div>
                         <div class="card-actions flex gap-1 transform translate-x-1">
-                            <button onclick="importDraftToDay('${key}')" class="action-icon import-btn" title="Importer ici"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg></button>
-                            <button onclick="copyDay('${key}')" class="action-icon" title="Copier"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg></button>
-                            <button onclick="moveDayToDraft('${key}')" class="action-icon transfer-btn" title="Transférer au brouillon"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg></button>
-                            <button onclick="clearDay('${key}')" class="action-icon danger" title="Vider"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
+                            <button onclick="importDraftToDay('${key}')" class="action-icon import-btn"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg></button>
+                            <button onclick="copyDay('${key}')" class="action-icon"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg></button>
+                            <button onclick="moveDayToDraft('${key}')" class="action-icon transfer-btn"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg></button>
+                            <button onclick="clearDay('${key}')" class="action-icon danger"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
                         </div>
                     </div>
                     <div class="agenda-content min-h-[50px] outline-none custom-scrollbar" contenteditable="true" oninput="saveData()">${content}</div>
@@ -526,193 +373,86 @@
             }
         }
 
-        // --- RECHERCHE ---
-        function openSearchModal() {
-            searchModal.style.display = 'flex';
-            searchInput.focus();
-        }
-
-        function closeSearchModal(e) {
-            if (e && e.target !== searchModal && e.target.tagName !== 'BUTTON') return;
-            searchModal.style.display = 'none';
-            searchInput.value = '';
-            searchResults.innerHTML = '';
-        }
-
-        // --- AIDE ---
+        function openSearchModal() { searchModal.style.display = 'flex'; searchInput.focus(); }
+        function closeSearchModal(e) { if (e && e.target !== searchModal && e.target.tagName !== 'BUTTON') return; searchModal.style.display = 'none'; searchInput.value = ''; searchResults.innerHTML = ''; }
         function openHelpModal() { helpModal.style.display = 'flex'; }
-        function closeHelpModal(e) {
-            if (e && e.target !== helpModal && e.target.tagName !== 'BUTTON') return;
-            helpModal.style.display = 'none';
-        }
+        function closeHelpModal(e) { if (e && e.target !== helpModal && e.target.tagName !== 'BUTTON') return; helpModal.style.display = 'none'; }
 
-        function handleSearch(val) {
-            if (!val || val.length < 2) {
-                searchResults.innerHTML = '';
-                return;
-            }
+        async function handleSearch(val) {
+            if (!val || val.length < 2) { searchResults.innerHTML = ''; return; }
             const q = val.toLowerCase();
             const results = [];
-
             const draftText = isReadMode ? rawEditorContent.replace(/<[^>]*>/g, ' ') : editor.innerText;
-            if (draftText.toLowerCase().includes(q)) {
-                results.push({ type: 'draft', title: 'Brouillon', snippet: getSnippet(draftText, q) });
-            }
+            if (draftText.toLowerCase().includes(q)) results.push({ type: 'draft', title: 'Brouillon', snippet: getSnippet(draftText, q) });
 
-            const agendaData = JSON.parse(localStorage.getItem(KEYS.AGENDA) || '{}');
-            Object.entries(agendaData).forEach(([key, html]) => {
+            const agendaEntries = await db.agenda.toArray();
+            agendaEntries.forEach(entry => {
                 const tempDiv = document.createElement('div');
-                tempDiv.innerHTML = html;
+                tempDiv.innerHTML = entry.content;
                 const text = tempDiv.innerText;
-                if (text.toLowerCase().includes(q)) {
-                    results.push({ type: 'agenda', key: key, title: formatDateKeyToHuman(key), snippet: getSnippet(text, q) });
-                }
+                if (text.toLowerCase().includes(q)) results.push({ type: 'agenda', key: entry.date, title: formatDateKeyToHuman(entry.date), snippet: getSnippet(text, q) });
             });
-
             renderSearchResults(results);
         }
 
-        function getSnippet(text, q) {
-            const index = text.toLowerCase().indexOf(q);
-            const start = Math.max(0, index - 30);
-            const end = Math.min(text.length, index + 50);
-            return (start > 0 ? '...' : '') + text.substring(start, end).replace(/\n/g, ' ') + (end < text.length ? '...' : '');
-        }
+        function getSnippet(text, q) { const index = text.toLowerCase().indexOf(q); const start = Math.max(0, index - 30); const end = Math.min(text.length, index + 50); return (start > 0 ? '...' : '') + text.substring(start, end).replace(/\n/g, ' ') + (end < text.length ? '...' : ''); }
 
         function renderSearchResults(results) {
-            if (results.length === 0) {
-                searchResults.innerHTML = '<div class="text-slate-500 text-sm p-4 text-center">Aucun résultat trouvé</div>';
-                return;
-            }
+            if (results.length === 0) { searchResults.innerHTML = '<div class="text-slate-500 text-sm p-4 text-center">Aucun résultat</div>'; return; }
             searchResults.innerHTML = results.map(res => `
                 <div class="search-result-item" onclick="goToResult('${res.type}', '${res.key || ''}')">
-                    <div class="flex justify-between items-center mb-1">
-                        <span class="text-xs font-bold uppercase tracking-wider ${res.type === 'draft' ? 'text-emerald-400' : 'text-blue-400'}">${res.title}</span>
-                    </div>
+                    <span class="text-xs font-bold uppercase tracking-wider ${res.type === 'draft' ? 'text-emerald-400' : 'text-blue-400'}">${res.title}</span>
                     <div class="text-sm text-slate-400">${res.snippet}</div>
                 </div>
             `).join('');
         }
 
-        function goToResult(type, key) {
-            closeSearchModal();
-            if (type === 'draft') {
-                if (isReadMode) toggleViewMode(); // Revenir en édition pour voir le résultat
-                editor.focus();
-            } else {
-                currentMonday = getMonday(new Date(key));
-                renderAgenda();
-                setTimeout(() => {
-                    const el = document.getElementById(`card-${key}`);
-                    if (el) {
-                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        el.classList.add('highlight-flash');
-                        setTimeout(() => el.classList.remove('highlight-flash'), 1000);
-                    }
-                }, 100);
-            }
-        }
+        function goToResult(type, key) { closeSearchModal(); if (type === 'draft') { if (isReadMode) toggleViewMode(); editor.focus(); } else { currentMonday = getMonday(new Date(key)); renderAgenda(); setTimeout(() => { const el = document.getElementById(`card-${key}`); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('highlight-flash'); setTimeout(() => el.classList.remove('highlight-flash'), 1000); } }, 100); } }
 
-        // --- HELPERS ---
         function importDraftToDay(key) {
             const draftContent = isReadMode ? rawEditorContent : editor.innerHTML;
             if (!draftContent || draftContent === '<br>') { showToast("Brouillon vide"); return; }
             appendToDay(key, draftContent);
         }
 
-        function moveDayToDraft(key) {
-            const agendaData = JSON.parse(localStorage.getItem(KEYS.AGENDA) || '{}');
-            const content = agendaData[key] || '';
-            if (!content) { showToast("Jour vide"); return; }
-            
+        async function moveDayToDraft(key) {
+            const entry = await db.agenda.get(key);
+            if (!entry || !entry.content) { showToast("Jour vide"); return; }
             const currentDraft = isReadMode ? rawEditorContent : editor.innerHTML;
-            const newContent = currentDraft + (currentDraft && currentDraft !== '<br>' ? '<div><br></div>' : '') + content;
-            
-            if (isReadMode) {
-                rawEditorContent = newContent;
-                // Si on est en mode lecture, on ne met pas à jour le DOM tout de suite ou on force un re-render
-                toggleViewMode(); // On repasse en édition pour simplifier
-            } else {
-                editor.innerHTML = newContent;
-            }
-
-            agendaData[key] = '';
-            localStorage.setItem(KEYS.AGENDA, JSON.stringify(agendaData));
+            const newContent = currentDraft + (currentDraft && currentDraft !== '<br>' ? '<div><br></div>' : '') + entry.content;
+            if (isReadMode) { rawEditorContent = newContent; toggleViewMode(); } else { editor.innerHTML = newContent; }
+            await db.agenda.delete(key);
             saveData();
             renderAgenda();
-            showToast('Transféré au brouillon');
+            showToast('Transféré');
             scrollToBottom();
         }
 
         function openConfirmModal() { confirmModal.style.display = 'flex'; }
         function closeConfirmModal() { confirmModal.style.display = 'none'; }
 
-        function clearDraft() {
-            editor.innerHTML = '';
-            rawEditorContent = '';
-            saveData();
-            closeConfirmModal();
-            showToast('Brouillon vidé');
+        async function clearDraft() {
+            editor.innerHTML = ''; rawEditorContent = '';
+            await db.notes.put({id: 'main', content: ''});
+            closeConfirmModal(); showToast('Vidé');
         }
 
         function scrollToTop() { editor.scrollTo({ top: 0, behavior: 'smooth' }); }
         function scrollToBottom() { editor.scrollTo({ top: editor.scrollHeight, behavior: 'smooth' }); }
 
-        function addNewLineAtEnd() {
-            if (isReadMode) return;
-            const newLine = document.createElement('div');
-            newLine.innerHTML = '<br>';
-            editor.appendChild(newLine);
-            saveData();
-            scrollToBottom();
-            setFocus(newLine);
-        }
-
-        function addNewLineAtStart() {
-            if (isReadMode) return;
-            const newLine = document.createElement('div');
-            newLine.innerHTML = '<br>';
-            if (editor.firstChild) editor.insertBefore(newLine, editor.firstChild);
-            else editor.appendChild(newLine);
-            saveData();
-            scrollToTop();
-            setFocus(newLine);
-        }
-
-        function setFocus(el) {
-            const range = document.createRange();
-            const sel = window.getSelection();
-            range.setStart(el, 0);
-            range.collapse(true);
-            sel.removeAllRanges();
-            sel.addRange(range);
-            editor.focus();
-        }
+        function addNewLineAtEnd() { if (isReadMode) return; const newLine = document.createElement('div'); newLine.innerHTML = '<br>'; editor.appendChild(newLine); saveData(); scrollToBottom(); setFocus(newLine); }
+        function addNewLineAtStart() { if (isReadMode) return; const newLine = document.createElement('div'); newLine.innerHTML = '<br>'; if (editor.firstChild) editor.insertBefore(newLine, editor.firstChild); else editor.appendChild(newLine); saveData(); scrollToTop(); setFocus(newLine); }
+        function setFocus(el) { const range = document.createRange(); const sel = window.getSelection(); range.setStart(el, 0); range.collapse(true); sel.removeAllRanges(); sel.addRange(range); editor.focus(); }
 
         function setupListeners() {
             document.addEventListener('selectionchange', () => {
                 if (isReadMode) return;
                 const selection = window.getSelection();
-                if (!selection.rangeCount || selection.isCollapsed || !editor.contains(selection.anchorNode)) {
-                    smartToolbar.style.display = 'none';
-                    return;
-                }
-                const range = selection.getRangeAt(0);
-                const rect = range.getBoundingClientRect();
-                const div = document.createElement('div');
-                div.appendChild(range.cloneContents());
-                const htmlContent = div.innerHTML;
-                if (selection.toString().trim().length > 0) {
-                    showSmartToolbar(rect, htmlContent);
-                } else {
-                    smartToolbar.style.display = 'none';
-                }
+                if (!selection.rangeCount || selection.isCollapsed || !editor.contains(selection.anchorNode)) { smartToolbar.style.display = 'none'; return; }
+                const range = selection.getRangeAt(0); const rect = range.getBoundingClientRect(); const div = document.createElement('div'); div.appendChild(range.cloneContents()); const htmlContent = div.innerHTML;
+                if (selection.toString().trim().length > 0) showSmartToolbar(rect, htmlContent); else smartToolbar.style.display = 'none';
             });
-            editor.addEventListener('input', () => {
-                if (isReadMode) return;
-                clearTimeout(toolbarTimeout);
-                toolbarTimeout = setTimeout(saveData, 1000);
-            });
+            editor.addEventListener('input', () => { if (isReadMode) return; clearTimeout(toolbarTimeout); toolbarTimeout = setTimeout(saveData, 1000); });
         }
 
         function showSmartToolbar(rect, htmlContent) {
@@ -720,128 +460,84 @@
             daysContainer.innerHTML = '';
             const days = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
             days.forEach((d, index) => {
-                const date = new Date(currentMonday);
-                date.setDate(date.getDate() + index);
-                const key = dateToKey(date);
-                const isToday = key === dateToKey(new Date());
-                const btn = document.createElement('div');
-                btn.className = `toolbar-btn ${isToday ? 'bg-blue-900/50 text-blue-200' : ''}`;
-                btn.textContent = d;
-                btn.onmousedown = (e) => {
-                    e.preventDefault();
-                    appendToDay(key, htmlContent);
-                    window.getSelection().removeAllRanges();
-                    smartToolbar.style.display = 'none';
-                };
+                const date = new Date(currentMonday); date.setDate(date.getDate() + index); const key = dateToKey(date); const isToday = key === dateToKey(new Date());
+                const btn = document.createElement('div'); btn.className = `toolbar-btn ${isToday ? 'bg-blue-900/50 text-blue-200' : ''}`; btn.textContent = d;
+                btn.onmousedown = (e) => { e.preventDefault(); appendToDay(key, htmlContent); window.getSelection().removeAllRanges(); smartToolbar.style.display = 'none'; };
                 daysContainer.appendChild(btn);
             });
             smartToolbar.style.display = 'flex';
-            let top = rect.bottom + window.scrollY + 10;
-            let left = rect.left + window.scrollX;
+            let top = rect.bottom + window.scrollY + 10; let left = rect.left + window.scrollX;
             if (left + smartToolbar.offsetWidth > window.innerWidth) left = window.innerWidth - smartToolbar.offsetWidth - 10;
-            smartToolbar.style.top = `${top}px`;
-            smartToolbar.style.left = `${left}px`;
+            smartToolbar.style.top = `${top}px`; smartToolbar.style.left = `${left}px`;
         }
 
-        function appendToDay(dateKey, htmlContent) {
-            const agendaData = JSON.parse(localStorage.getItem(KEYS.AGENDA) || '{}');
-            const currentContent = agendaData[dateKey] || '';
+        async function appendToDay(dateKey, htmlContent) {
+            const entry = await db.agenda.get(dateKey);
+            const currentContent = entry ? entry.content : '';
             const newContent = currentContent ? currentContent + '<div><br></div>' + htmlContent : htmlContent;
-            agendaData[dateKey] = newContent;
-            localStorage.setItem(KEYS.AGENDA, JSON.stringify(agendaData));
+            await db.agenda.put({date: dateKey, content: newContent});
             renderAgenda();
-            showToast(`Ajouté au ${formatDateKeyToHuman(dateKey)}`);
+            showToast(`Ajouté`);
         }
 
-        function copyDay(key) {
-            const agendaData = JSON.parse(localStorage.getItem(KEYS.AGENDA) || '{}');
-            const content = agendaData[key] || '';
-            if(!content) return showToast('Vide');
-            const tempDiv = document.createElement('div');
-            tempDiv.contentEditable = true;
-            tempDiv.innerHTML = content;
-            tempDiv.style.position = 'fixed';
-            tempDiv.style.left = '-9999px';
-            document.body.appendChild(tempDiv);
-            const range = document.createRange();
-            range.selectNodeContents(tempDiv);
-            window.getSelection().removeAllRanges();
-            window.getSelection().addRange(range);
-            try { document.execCommand('copy'); showToast('Copié !'); } catch (err) { showToast('Erreur copie'); }
-            document.body.removeChild(tempDiv);
-            window.getSelection().removeAllRanges();
+        async function copyDay(key) {
+            const entry = await db.agenda.get(key);
+            if(!entry || !entry.content) return showToast('Vide');
+            const tempDiv = document.createElement('div'); tempDiv.contentEditable = true; tempDiv.innerHTML = entry.content; tempDiv.style.position = 'fixed'; tempDiv.style.left = '-9999px';
+            document.body.appendChild(tempDiv); const range = document.createRange(); range.selectNodeContents(tempDiv); window.getSelection().removeAllRanges(); window.getSelection().addRange(range);
+            try { document.execCommand('copy'); showToast('Copié'); } catch (err) { showToast('Erreur'); }
+            document.body.removeChild(tempDiv); window.getSelection().removeAllRanges();
         }
 
-        function clearDay(key) {
-            const agendaData = JSON.parse(localStorage.getItem(KEYS.AGENDA) || '{}');
-            agendaData[key] = '';
-            localStorage.setItem(KEYS.AGENDA, JSON.stringify(agendaData));
-            renderAgenda();
-            showToast('Effacé');
+        async function clearDay(key) { await db.agenda.delete(key); renderAgenda(); showToast('Effacé'); }
+
+        function changeWeek(direction) { currentMonday.setDate(currentMonday.getDate() + (direction * 7)); renderAgenda(); }
+
+        function goToToday() { currentMonday = getMonday(new Date()); renderAgenda(); setTimeout(() => { const todayEl = document.querySelector('.today'); if (todayEl) todayEl.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 100); }
+
+        function execCmd(cmd, value = null) { if (isReadMode) return; document.execCommand(cmd, false, value); editor.focus(); }
+
+        async function loadData() {
+            const note = await db.notes.get('main');
+            if (note) editor.innerHTML = note.content;
         }
 
-        function changeWeek(direction) {
-            currentMonday.setDate(currentMonday.getDate() + (direction * 7));
-            renderAgenda();
-        }
-
-        function goToToday() {
-            currentMonday = getMonday(new Date());
-            renderAgenda();
-            setTimeout(() => {
-                const todayEl = document.querySelector('.today');
-                if (todayEl) todayEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }, 100);
-        }
-
-        function execCmd(cmd, value = null) {
+        async function saveData() {
             if (isReadMode) return;
-            document.execCommand(cmd, false, value);
-            editor.focus();
-        }
-
-        function loadData() {
-            const notes = localStorage.getItem(KEYS.NOTES);
-            if (notes) editor.innerHTML = notes;
-        }
-
-        function saveData() {
-            if (isReadMode) return; // Ne pas sauvegarder les spans de liens
-            localStorage.setItem(KEYS.NOTES, editor.innerHTML);
-            const agendaData = JSON.parse(localStorage.getItem(KEYS.AGENDA) || '{}');
-            document.querySelectorAll('.agenda-card').forEach(card => {
+            await db.notes.put({id: 'main', content: editor.innerHTML});
+            const cards = document.querySelectorAll('.agenda-card');
+            for (let card of cards) {
                 const key = card.dataset.date;
                 const content = card.querySelector('.agenda-content').innerHTML; 
-                agendaData[key] = content;
-            });
-            localStorage.setItem(KEYS.AGENDA, JSON.stringify(agendaData));
+                await db.agenda.put({date: key, content: content});
+            }
         }
 
-        function exportData() {
-            const data = { notes: localStorage.getItem(KEYS.NOTES), agenda: JSON.parse(localStorage.getItem(KEYS.AGENDA)) };
+        async function exportData() {
+            const agenda = await db.agenda.toArray();
+            const note = await db.notes.get('main');
+            const data = { notes: note ? note.content : '', agenda: agenda };
             const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
             const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url; a.download = `backup_agenda_${dateToKey(new Date())}.json`; a.click();
+            const a = document.createElement('a'); a.href = url; a.download = `backup_${dateToKey(new Date())}.json`; a.click();
             URL.revokeObjectURL(url);
             showToast('Exporté');
         }
 
         function triggerImport() { document.getElementById('import-input').click(); }
         function importData(e) {
-            const file = e.target.files[0];
-            if (!file) return;
+            const file = e.target.files[0]; if (!file) return;
             const reader = new FileReader();
-            reader.onload = function(e) {
+            reader.onload = async function(e) {
                 try {
                     const data = JSON.parse(e.target.result);
-                    if (data.notes) {
-                        localStorage.setItem(KEYS.NOTES, data.notes);
-                        rawEditorContent = data.notes;
+                    if (data.notes !== undefined) await db.notes.put({id: 'main', content: data.notes});
+                    if (data.agenda) {
+                        await db.agenda.clear();
+                        for (let item of data.agenda) await db.agenda.put(item);
                     }
-                    if (data.agenda) localStorage.setItem(KEYS.AGENDA, JSON.stringify(data.agenda));
                     location.reload();
-                } catch (err) { alert('Fichier invalide'); }
+                } catch (err) { alert('Invalide'); }
             };
             reader.readAsText(file);
         }
@@ -849,11 +545,7 @@
         function dateToKey(d) { return d.toISOString().split('T')[0]; }
         function formatDateShort(d) { return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }); }
         function formatDateKeyToHuman(key) { return new Date(key).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }); }
-        function showToast(msg) {
-            toastEl.textContent = msg;
-            toastEl.classList.add('show');
-            setTimeout(() => toastEl.classList.remove('show'), 2000);
-        }
+        function showToast(msg) { toastEl.textContent = msg; toastEl.classList.add('show'); setTimeout(() => toastEl.classList.remove('show'), 2000); }
 
         window.onload = init;
     </script>
