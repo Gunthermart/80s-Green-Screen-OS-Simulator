@@ -34,11 +34,33 @@
         /* --- ÉDITEUR PRINCIPAL --- */
         [contenteditable]:focus { outline: none; }
         #main-editor { font-size: 1.05rem; line-height: 1.7; scroll-behavior: smooth; }
+        #main-editor.read-mode { background: #0f172a; cursor: default; } /* Style mode lecture */
+        
         #main-editor h1 { font-size: 1.6em; font-weight: 700; margin: 0.8em 0 0.4em; color: white; border-bottom: 1px solid #334155; }
         #main-editor h2 { font-size: 1.3em; font-weight: 600; margin: 0.8em 0 0.4em; color: #cbd5e1; }
         #main-editor ul, #main-editor ol { padding-left: 1.5em; margin-bottom: 1em; }
         #main-editor blockquote { border-left: 4px solid var(--accent); padding-left: 1em; color: var(--text-muted); font-style: italic; margin: 0.5em 0; }
         #main-editor b, #main-editor strong { font-weight: 700; color: #fff; }
+
+        /* Liens intelligents (Mode Lecture) */
+        .smart-link-date { 
+            color: #60a5fa; 
+            font-weight: 600; 
+            cursor: pointer; 
+            border-bottom: 1px dashed #60a5fa; 
+            padding-bottom: 1px;
+        }
+        .smart-link-date:hover { background: rgba(96, 165, 250, 0.1); }
+        
+        .smart-link-tag {
+            color: #34d399;
+            font-weight: 600;
+            cursor: pointer;
+            background: rgba(52, 211, 153, 0.1);
+            padding: 0 4px;
+            border-radius: 4px;
+        }
+        .smart-link-tag:hover { background: rgba(52, 211, 153, 0.2); }
 
         /* --- AGENDA CONTENT --- */
         .agenda-content { 
@@ -71,7 +93,13 @@
         }
         .agenda-card:last-child { border-bottom: none; }
         .agenda-card:hover { background: rgba(30, 41, 59, 0.6); }
+        .agenda-card.highlight-flash { animation: flash 1s ease; }
         
+        @keyframes flash {
+            0% { background: rgba(59, 130, 246, 0.5); }
+            100% { background: rgba(30, 41, 59, 0.3); }
+        }
+
         .agenda-card.today {
             background: rgba(59, 130, 246, 0.08);
             border-left-color: var(--accent);
@@ -177,14 +205,17 @@
     <main class="flex-1 h-[55vh] md:h-full flex flex-col bg-[#161e2e] relative min-h-0">
         <header class="h-14 border-b border-slate-800 flex items-center justify-between px-6 bg-slate-900/50 backdrop-blur shrink-0">
             <div class="flex items-center gap-1 md:gap-4">
-                <!-- Bouton Recherche Global -->
-                <button onclick="openSearchModal()" class="text-slate-400 hover:text-white p-2 rounded hover:bg-slate-800 transition mr-2" title="Rechercher">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                
+                <!-- TOGGLE MODE LECTURE/EDITION -->
+                <button onclick="toggleViewMode()" id="view-mode-btn" class="p-2 mr-2 rounded transition bg-slate-800 text-slate-300 hover:text-white border border-slate-700" title="Basculer Édition / Liens Actifs">
+                    <!-- Icon will change via JS -->
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
                 </button>
 
+                <div class="hidden md:block text-xs font-bold text-slate-500 uppercase tracking-widest mr-2">Brouillon</div>
                 <div class="hidden md:block h-4 w-[1px] bg-slate-700"></div>
 
-                <div class="flex bg-slate-800/50 rounded-lg p-0.5 items-center">
+                <div class="flex bg-slate-800/50 rounded-lg p-0.5 items-center" id="formatting-tools">
                     <button onclick="execCmd('bold')" class="text-slate-400 hover:text-white px-2 py-1 hover:bg-slate-700 rounded text-sm font-bold">B</button>
                     <button onclick="execCmd('italic')" class="text-slate-400 hover:text-white px-2 py-1 hover:bg-slate-700 rounded text-sm italic">I</button>
                     <button onclick="execCmd('underline')" class="text-slate-400 hover:text-white px-2 py-1 hover:bg-slate-700 rounded text-sm underline">U</button>
@@ -221,6 +252,9 @@
                 </div>
             </div>
             <div class="flex items-center gap-2">
+                <button onclick="openSearchModal()" class="text-slate-400 hover:text-white p-2 rounded hover:bg-slate-800 transition mr-1" title="Rechercher (Ctrl+F)">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                </button>
                 <input type="file" id="import-input" class="hidden" accept=".json" onchange="importData(event)">
                 <button onclick="triggerImport()" class="p-2 text-slate-400 hover:text-blue-400 hover:bg-slate-800 rounded transition" title="Importer">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
@@ -242,22 +276,20 @@
         <div class="modal-box max-h-[80vh] flex flex-col" onclick="event.stopPropagation()">
             <div class="flex items-center gap-3 border-b border-slate-700 pb-3 mb-3">
                 <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-                <input type="text" id="search-input" placeholder="Rechercher une note ou une date..." 
+                <input type="text" id="search-input" placeholder="Rechercher une note ou un #tag..." 
                        class="bg-transparent border-none text-white w-full focus:outline-none text-lg" 
                        oninput="handleSearch(this.value)">
                 <button onclick="closeSearchModal()" class="text-slate-500 hover:text-white">Esc</button>
             </div>
-            <div id="search-results" class="flex-1 overflow-y-auto custom-scrollbar space-y-1">
-                <!-- Résultats -->
-            </div>
+            <div id="search-results" class="flex-1 overflow-y-auto custom-scrollbar space-y-1"></div>
         </div>
     </div>
 
-    <!-- Modal de confirmation -->
+    <!-- Modal Confirmation -->
     <div id="confirm-modal" class="modal-overlay">
         <div class="modal-box">
             <h3 class="text-lg font-bold text-white mb-2">Vider le brouillon ?</h3>
-            <p class="text-slate-400 text-sm mb-6">Cette action est irréversible. Tout le contenu du brouillon actuel sera supprimé.</p>
+            <p class="text-slate-400 text-sm mb-6">Cette action est irréversible.</p>
             <div class="flex justify-end gap-3">
                 <button onclick="closeConfirmModal()" class="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white">Annuler</button>
                 <button onclick="clearDraft()" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded-lg transition">Vider tout</button>
@@ -278,21 +310,24 @@
         const searchModal = document.getElementById('search-modal');
         const searchInput = document.getElementById('search-input');
         const searchResults = document.getElementById('search-results');
+        const viewModeBtn = document.getElementById('view-mode-btn');
+        const formattingTools = document.getElementById('formatting-tools');
         
         let currentMonday = getMonday(new Date());
         let toolbarTimeout;
+        let isReadMode = false;
+        let rawEditorContent = '';
 
         function init() {
             loadData();
             renderAgenda();
             setupListeners();
-            setInterval(saveData, 5000); 
+            setInterval(() => { if (!isReadMode) saveData(); }, 5000); 
             setTimeout(() => {
                 const todayEl = document.querySelector('.today');
                 if (todayEl) todayEl.scrollIntoView({ block: 'center' });
             }, 200);
 
-            // Raccourci recherche
             document.addEventListener('keydown', (e) => {
                 if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
                     e.preventDefault();
@@ -302,6 +337,105 @@
             });
         }
 
+        // --- GESTION DES MODES (ÉDITION vs LECTURE/LIENS) ---
+        function toggleViewMode() {
+            isReadMode = !isReadMode;
+            
+            if (isReadMode) {
+                // Passage en mode Lecture : On sauvegarde, puis on parse
+                saveData();
+                rawEditorContent = editor.innerHTML;
+                editor.contentEditable = "false";
+                editor.classList.add('read-mode');
+                formattingTools.style.opacity = '0.3';
+                formattingTools.style.pointerEvents = 'none';
+                
+                // Icône Oeil (actif)
+                viewModeBtn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>';
+                viewModeBtn.classList.add('text-blue-400', 'border-blue-500');
+                
+                parseAndLinkify();
+                showToast("Mode Navigation Actif");
+            } else {
+                // Retour en mode Édition : On remet le contenu brut
+                editor.innerHTML = rawEditorContent;
+                editor.contentEditable = "true";
+                editor.classList.remove('read-mode');
+                formattingTools.style.opacity = '1';
+                formattingTools.style.pointerEvents = 'auto';
+
+                // Icône Crayon
+                viewModeBtn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>';
+                viewModeBtn.classList.remove('text-blue-400', 'border-blue-500');
+                
+                showToast("Mode Édition Actif");
+            }
+        }
+
+        function parseAndLinkify() {
+            let html = editor.innerHTML;
+
+            // 1. Détecter les #tags
+            // Regex simple qui évite de casser les balises HTML existantes est très complexe.
+            // Approche pragmatique : on remplace les motifs texte pur.
+            // Note: C'est risqué sur du HTML riche, mais ici on a surtout du texte simple.
+            
+            // Remplacer les dates (JJ/MM ou JJ/MM/AAAA)
+            // On utilise un TreeWalker pour ne toucher qu'au texte et pas aux balises
+            const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT, null, false);
+            const nodes = [];
+            while(walker.nextNode()) nodes.push(walker.currentNode);
+
+            nodes.forEach(node => {
+                const text = node.nodeValue;
+                // Regex dates: 1 ou 2 chiffres / 1 ou 2 chiffres (/ 2 ou 4 chiffres optionnel)
+                // Regex tags: # suivi de lettres/chiffres
+                let newHtml = text
+                    .replace(/(\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\b)/g, '<span class="smart-link-date" onclick="goToDateFromLink(\'$1\')">$1</span>')
+                    .replace(/(#[a-zA-Z0-9éèàç_-]+)/g, '<span class="smart-link-tag" onclick="searchTag(\'$1\')">$1</span>');
+                
+                if (newHtml !== text) {
+                    const span = document.createElement('span');
+                    span.innerHTML = newHtml;
+                    node.parentNode.replaceChild(span, node);
+                }
+            });
+        }
+
+        function goToDateFromLink(dateStr) {
+            const parts = dateStr.split('/');
+            const day = parseInt(parts[0], 10);
+            const month = parseInt(parts[1], 10) - 1;
+            let year = new Date().getFullYear();
+            if (parts[2]) {
+                year = parseInt(parts[2].length === 2 ? '20' + parts[2] : parts[2], 10);
+            }
+            
+            const targetDate = new Date(year, month, day);
+            if (!isNaN(targetDate.getTime())) {
+                currentMonday = getMonday(targetDate);
+                renderAgenda();
+                setTimeout(() => {
+                    const key = dateToKey(targetDate);
+                    const el = document.getElementById(`card-${key}`);
+                    if (el) {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        el.classList.add('highlight-flash');
+                        setTimeout(() => el.classList.remove('highlight-flash'), 1000);
+                    } else {
+                        showToast("Date hors de portée");
+                    }
+                }, 100);
+            }
+        }
+
+        function searchTag(tag) {
+            openSearchModal();
+            searchInput.value = tag;
+            handleSearch(tag);
+        }
+
+        // --- CORE FUNCTIONS ---
         function getMonday(d) {
             d = new Date(d);
             const day = d.getDay();
@@ -373,29 +507,18 @@
             const q = val.toLowerCase();
             const results = [];
 
-            // 1. Chercher dans Brouillon
-            const draftText = editor.innerText;
+            const draftText = isReadMode ? rawEditorContent.replace(/<[^>]*>/g, ' ') : editor.innerText;
             if (draftText.toLowerCase().includes(q)) {
-                results.push({
-                    type: 'draft',
-                    title: 'Brouillon',
-                    snippet: getSnippet(draftText, q)
-                });
+                results.push({ type: 'draft', title: 'Brouillon', snippet: getSnippet(draftText, q) });
             }
 
-            // 2. Chercher dans l'Agenda complet
             const agendaData = JSON.parse(localStorage.getItem(KEYS.AGENDA) || '{}');
             Object.entries(agendaData).forEach(([key, html]) => {
                 const tempDiv = document.createElement('div');
                 tempDiv.innerHTML = html;
                 const text = tempDiv.innerText;
                 if (text.toLowerCase().includes(q)) {
-                    results.push({
-                        type: 'agenda',
-                        key: key,
-                        title: formatDateKeyToHuman(key),
-                        snippet: getSnippet(text, q)
-                    });
+                    results.push({ type: 'agenda', key: key, title: formatDateKeyToHuman(key), snippet: getSnippet(text, q) });
                 }
             });
 
@@ -414,7 +537,6 @@
                 searchResults.innerHTML = '<div class="text-slate-500 text-sm p-4 text-center">Aucun résultat trouvé</div>';
                 return;
             }
-
             searchResults.innerHTML = results.map(res => `
                 <div class="search-result-item" onclick="goToResult('${res.type}', '${res.key || ''}')">
                     <div class="flex justify-between items-center mb-1">
@@ -428,38 +550,45 @@
         function goToResult(type, key) {
             closeSearchModal();
             if (type === 'draft') {
+                if (isReadMode) toggleViewMode(); // Revenir en édition pour voir le résultat
                 editor.focus();
-                // On pourrait chercher l'élément exact, mais ici on remonte au brouillon
-                document.querySelector('main').scrollIntoView();
             } else {
                 currentMonday = getMonday(new Date(key));
                 renderAgenda();
                 setTimeout(() => {
                     const el = document.getElementById(`card-${key}`);
-                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    if (el) {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        el.classList.add('highlight-flash');
+                        setTimeout(() => el.classList.remove('highlight-flash'), 1000);
+                    }
                 }, 100);
             }
         }
 
-        // --- AUTRES FONCTIONS ---
+        // --- HELPERS ---
         function importDraftToDay(key) {
-            const draftContent = editor.innerHTML;
-            if (!draftContent || draftContent === '<br>' || editor.innerText.trim() === '') {
-                showToast("Brouillon vide");
-                return;
-            }
+            const draftContent = isReadMode ? rawEditorContent : editor.innerHTML;
+            if (!draftContent || draftContent === '<br>') { showToast("Brouillon vide"); return; }
             appendToDay(key, draftContent);
         }
 
         function moveDayToDraft(key) {
             const agendaData = JSON.parse(localStorage.getItem(KEYS.AGENDA) || '{}');
             const content = agendaData[key] || '';
-            if (!content || content === '<br>') {
-                showToast("Jour vide");
-                return;
+            if (!content) { showToast("Jour vide"); return; }
+            
+            const currentDraft = isReadMode ? rawEditorContent : editor.innerHTML;
+            const newContent = currentDraft + (currentDraft && currentDraft !== '<br>' ? '<div><br></div>' : '') + content;
+            
+            if (isReadMode) {
+                rawEditorContent = newContent;
+                // Si on est en mode lecture, on ne met pas à jour le DOM tout de suite ou on force un re-render
+                toggleViewMode(); // On repasse en édition pour simplifier
+            } else {
+                editor.innerHTML = newContent;
             }
-            const currentDraft = editor.innerHTML;
-            editor.innerHTML = currentDraft + (currentDraft && currentDraft !== '<br>' ? '<div><br></div>' : '') + content;
+
             agendaData[key] = '';
             localStorage.setItem(KEYS.AGENDA, JSON.stringify(agendaData));
             saveData();
@@ -468,15 +597,12 @@
             scrollToBottom();
         }
 
-        function openConfirmModal() {
-            if (editor.innerText.trim() === '' && !editor.innerHTML.includes('<img')) return;
-            confirmModal.style.display = 'flex';
-        }
-
+        function openConfirmModal() { confirmModal.style.display = 'flex'; }
         function closeConfirmModal() { confirmModal.style.display = 'none'; }
 
         function clearDraft() {
             editor.innerHTML = '';
+            rawEditorContent = '';
             saveData();
             closeConfirmModal();
             showToast('Brouillon vidé');
@@ -486,6 +612,7 @@
         function scrollToBottom() { editor.scrollTo({ top: editor.scrollHeight, behavior: 'smooth' }); }
 
         function addNewLineAtEnd() {
+            if (isReadMode) return;
             const newLine = document.createElement('div');
             newLine.innerHTML = '<br>';
             editor.appendChild(newLine);
@@ -495,10 +622,11 @@
         }
 
         function addNewLineAtStart() {
+            if (isReadMode) return;
             const newLine = document.createElement('div');
             newLine.innerHTML = '<br>';
-            if (editor.firstChild) { editor.insertBefore(newLine, editor.firstChild); } 
-            else { editor.appendChild(newLine); }
+            if (editor.firstChild) editor.insertBefore(newLine, editor.firstChild);
+            else editor.appendChild(newLine);
             saveData();
             scrollToTop();
             setFocus(newLine);
@@ -516,6 +644,7 @@
 
         function setupListeners() {
             document.addEventListener('selectionchange', () => {
+                if (isReadMode) return;
                 const selection = window.getSelection();
                 if (!selection.rangeCount || selection.isCollapsed || !editor.contains(selection.anchorNode)) {
                     smartToolbar.style.display = 'none';
@@ -533,6 +662,7 @@
                 }
             });
             editor.addEventListener('input', () => {
+                if (isReadMode) return;
                 clearTimeout(toolbarTimeout);
                 toolbarTimeout = setTimeout(saveData, 1000);
             });
@@ -618,6 +748,7 @@
         }
 
         function execCmd(cmd, value = null) {
+            if (isReadMode) return;
             document.execCommand(cmd, false, value);
             editor.focus();
         }
@@ -628,6 +759,7 @@
         }
 
         function saveData() {
+            if (isReadMode) return; // Ne pas sauvegarder les spans de liens
             localStorage.setItem(KEYS.NOTES, editor.innerHTML);
             const agendaData = JSON.parse(localStorage.getItem(KEYS.AGENDA) || '{}');
             document.querySelectorAll('.agenda-card').forEach(card => {
@@ -656,7 +788,10 @@
             reader.onload = function(e) {
                 try {
                     const data = JSON.parse(e.target.result);
-                    if (data.notes) localStorage.setItem(KEYS.NOTES, data.notes);
+                    if (data.notes) {
+                        localStorage.setItem(KEYS.NOTES, data.notes);
+                        rawEditorContent = data.notes;
+                    }
                     if (data.agenda) localStorage.setItem(KEYS.AGENDA, JSON.stringify(data.agenda));
                     location.reload();
                 } catch (err) { alert('Fichier invalide'); }
