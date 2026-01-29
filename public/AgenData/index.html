@@ -3,17 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Agenda & Notes - Knowledge Snippets</title>
+    <title>Agenda & Notes - Knowledge Snippets v4.6</title>
     
-    <!-- Dependencies -->
+    <!-- DÉPENDANCES -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
     
-    <!-- Typography -->
+    <!-- TYPOGRAPHIE -->
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
     <style>
-        /* --- DESIGN TOKENS --- */
         :root {
             --bg-dark: #0a0f1d;
             --bg-panel: #111827;
@@ -28,7 +27,6 @@
             --font-mono: 'JetBrains Mono', monospace;
         }
 
-        /* --- GLOBAL & LAYOUT --- */
         html, body {
             height: 100%;
             overflow: hidden;
@@ -41,13 +39,11 @@
 
         [contenteditable]:focus { outline: none; }
 
-        /* --- SCROLLBARS --- */
         .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 99px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
 
-        /* --- EDITOR STYLES --- */
         .editor-container {
             transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
             background: var(--editor-sheet);
@@ -72,98 +68,89 @@
         }
         #main-editor.read-mode { cursor: default; }
 
-        /* --- SMART LINKS & PARSING --- */
-        .smart-link-date { color: var(--accent); font-weight: 600; cursor: pointer; border-bottom: 1px solid rgba(59, 130, 246, 0.2); transition: all 0.2s; }
-        .smart-link-date:hover { background: rgba(59, 130, 246, 0.1); }
-        .smart-link-tag { color: #10b981; font-weight: 600; cursor: pointer; background: rgba(16, 185, 129, 0.1); padding: 1px 6px; border-radius: 4px; }
+        .smart-link-date { color: var(--accent); font-weight: 600; cursor: pointer; border-bottom: 1px solid rgba(59, 130, 246, 0.2); }
         .smart-link-backlink { color: #8b5cf6; font-weight: 700; cursor: pointer; background: rgba(139, 92, 246, 0.1); padding: 1px 4px; border-radius: 4px; border: 1px solid rgba(139, 92, 246, 0.2); }
-        
-        /* --- MATURITY & PRUNING --- */
-        .status-seed { opacity: 0.6; font-style: italic; filter: saturate(0.5); }
-        .status-grow { color: #10b981; }
-        .status-ever { color: #60a5fa; font-weight: 800; text-shadow: 0 0 15px rgba(96, 165, 250, 0.3); }
         
         .status-stale { 
             color: var(--stale-red) !important; 
             opacity: 0.9 !important; 
-            text-decoration: line-through;
-            text-decoration-style: dashed;
-            text-decoration-color: var(--stale-red);
+            text-decoration: line-through; 
+            text-decoration-style: dashed; 
         }
 
-        .task-checkbox { cursor: pointer; margin-right: 12px; transform: scale(1.2); accent-color: var(--accent); }
-        .task-line-done { text-decoration: line-through; opacity: 0.4; filter: grayscale(1); }
-
-        /* --- AGENDA CARDS --- */
-        .agenda-card {
-            background: rgba(255, 255, 255, 0.02);
-            border-bottom: 1px solid var(--border);
-            border-left: 3px solid transparent;
-            transition: all 0.2s ease;
-        }
+        .agenda-card { background: rgba(255, 255, 255, 0.02); border-bottom: 1px solid var(--border); border-left: 3px solid transparent; transition: all 0.2s ease; }
         .agenda-card.today { background: rgba(59, 130, 246, 0.05); border-left-color: var(--accent); }
-        .agenda-card.flashback-card { 
-            background: rgba(139, 92, 246, 0.05); 
-            border-left-color: #8b5cf6; 
-            margin-top: auto; 
-            border-top: 1px solid rgba(139, 92, 246, 0.2); 
-        }
-        .agenda-card.highlight-flash { animation: flash 1s ease; }
+        .agenda-card.flashback-card { background: rgba(139, 92, 246, 0.05); border-left-color: #8b5cf6; margin-top: auto; border-top: 1px solid rgba(139, 92, 246, 0.2); }
 
-        .agenda-content { 
-            font-size: 0.9rem; 
-            line-height: 1.5; 
-            height: 8.1rem; 
-            color: #94a3b8; 
-            overflow-y: auto;
-            word-break: break-word;
-        }
-
+        .agenda-content { font-size: 0.9rem; line-height: 1.5; height: 8.1rem; color: #94a3b8; overflow-y: auto; word-break: break-word; }
         .card-actions { opacity: 0; transform: translateY(3px); transition: all 0.2s; }
         .agenda-card:hover .card-actions { opacity: 1; transform: translateY(0); }
-        .action-icon { 
-            padding: 5px; border-radius: 5px; color: #64748b; cursor: pointer; 
-            background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border);
-            display: flex; align-items: center; justify-content: center;
-        }
+        .action-icon { padding: 5px; border-radius: 5px; color: #64748b; cursor: pointer; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; }
         .action-icon:hover { background: #334155; color: white; }
 
-        /* --- MODALS --- */
-        .modal-overlay { 
-            display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85); 
-            backdrop-filter: blur(8px); z-index: 10000; align-items: center; justify-content: center; 
-        }
-        .modal-box { 
-            background: var(--bg-panel); border: 1px solid var(--border); padding: 2.5rem; 
-            border-radius: 20px; max-width: 900px; width: 95%; max-height: 90vh; overflow-y: auto;
-            position: relative;
-        }
+        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(8px); z-index: 10000; align-items: center; justify-content: center; }
+        .modal-box { background: var(--bg-panel); border: 1px solid var(--border); padding: 2.5rem; border-radius: 20px; max-width: 900px; width: 95%; max-height: 90vh; overflow-y: auto; position: relative; }
 
-        .help-tab-btn { padding: 10px 20px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: var(--text-muted); border-bottom: 2px solid transparent; transition: all 0.2s; }
+        .help-tab-btn { padding: 10px 20px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: var(--text-muted); border-bottom: 2px solid transparent; cursor: pointer; transition: all 0.2s; }
         .help-tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
         .help-content-pane { display: none; margin-top: 2rem; }
         .help-content-pane.active { display: block; }
-        .help-key { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 4px; font-family: var(--font-mono); font-size: 0.7rem; color: #60a5fa; white-space: nowrap; font-weight: bold; }
 
-        #toast { 
-            visibility: hidden; min-width: 250px; background-color: #333; color: #fff; text-align: center; border-radius: 4px; padding: 16px; position: fixed; z-index: 1; left: 50%; bottom: 30px; transform: translateX(-50%); font-size: 14px; 
+        .macro-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 12px;
+            margin-bottom: 8px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
         }
+        .macro-card:hover {
+            background: rgba(255, 255, 255, 0.06);
+            border-color: rgba(59, 130, 246, 0.3);
+            transform: translateX(4px);
+        }
+        .macro-trigger-badge {
+            font-family: var(--font-mono);
+            background: rgba(59, 130, 246, 0.15);
+            color: #60a5fa;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 800;
+            white-space: nowrap;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+        }
+        .macro-preview {
+            flex-grow: 1;
+            color: #94a3b8;
+            font-size: 0.75rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-style: italic;
+        }
+
+        #toast { visibility: hidden; min-width: 250px; background-color: #333; color: #fff; text-align: center; border-radius: 4px; padding: 16px; position: fixed; z-index: 100000; left: 50%; bottom: 30px; transform: translateX(-50%); font-size: 14px; }
         #toast.show { visibility: visible; animation: fadein 0.5s, fadeout 0.5s 2.5s; }
         @keyframes fadein { from {bottom: 0; opacity: 0;} to {bottom: 30px; opacity: 1;} }
         @keyframes fadeout { from {bottom: 30px; opacity: 1;} to {bottom: 0; opacity: 0;} }
 
-        #smart-toolbar { 
-            position: absolute; display: none; background: rgba(15, 23, 42, 0.95); 
-            backdrop-filter: blur(10px); border: 1px solid var(--border);
-            border-radius: 8px; padding: 4px; z-index: 1000;
-        }
+        #smart-toolbar { position: absolute; display: none; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(10px); border: 1px solid var(--border); border-radius: 8px; padding: 4px; z-index: 1000; }
         .toolbar-btn { padding: 4px 10px; font-size: 10px; font-weight: 800; color: #94a3b8; cursor: pointer; border-radius: 4px; }
         .toolbar-btn:hover { background: var(--accent); color: white; }
+
+        .ai-pulse { animation: ai-glow 2s infinite; }
+        @keyframes ai-glow { 0% { box-shadow: 0 0 5px rgba(139, 92, 246, 0.2); } 50% { box-shadow: 0 0 15px rgba(139, 92, 246, 0.5); } 100% { box-shadow: 0 0 5px rgba(139, 92, 246, 0.2); } }
+        .recording-pulse { animation: pulse-red 1.5s infinite; color: #ef4444 !important; }
+        @keyframes pulse-red { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
     </style>
 </head>
 <body class="flex flex-col md:flex-row h-full w-full">
 
-    <!-- AGENDA SIDEBAR -->
     <aside class="w-full md:w-[380px] bg-black/30 border-r border-white/5 flex flex-col shrink-0 z-20 relative">
         <div class="h-14 flex items-center justify-between px-6 border-b border-white/5 shrink-0">
             <div class="flex items-center gap-2">
@@ -183,7 +170,6 @@
         </div>
     </aside>
 
-    <!-- MAIN EDITOR -->
     <main class="flex-1 h-full flex flex-col relative min-h-0">
         <header class="h-14 border-b border-white/5 flex items-center justify-between px-6 bg-white/[0.01] shrink-0">
             <div class="flex items-center gap-3">
@@ -200,13 +186,15 @@
                     <button onclick="App.Editor.addNewLineAtEnd()" class="p-2 text-emerald-500/70 hover:text-emerald-400" title="Alt+E">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
                     </button>
-                    <button onclick="App.UI.openConfirmModal()" class="p-2 text-slate-600 hover:text-red-500" title="Alt+Del">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                    </button>
                 </div>
             </div>
+
             <div class="flex items-center gap-2">
-                <button onclick="App.Macros.openModal()" class="p-2 text-slate-500 hover:text-purple-400" title="Alt+M">
+                <button onclick="App.AI.challengeDraft()" class="p-2 text-violet-400 hover:text-violet-300" title="IA">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+                </button>
+                <div class="h-5 w-[1px] bg-white/10"></div>
+                <button onclick="App.Macros.openModal()" class="p-2 text-slate-500 hover:text-purple-400" title="Macros (Alt+M)">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
                 </button>
                 <button id="voice-btn" onclick="App.Voice.toggle()" class="p-2 text-slate-500 hover:text-emerald-400" title="Alt+R">
@@ -238,126 +226,94 @@
         </div>
     </main>
 
-    <!-- HELP MODAL -->
+    <!-- MODALE AIDE (MANUEL RESTRUCTURÉ) -->
     <div id="help-modal" class="modal-overlay" onclick="App.UI.closeHelpModal(event)">
-        <div class="modal-box" onclick="event.stopPropagation()">
-            <button onclick="App.UI.closeHelpModal()" class="absolute top-6 right-6 p-2 text-slate-500 hover:text-white transition-colors bg-white/5 rounded-full">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
-            </button>
+        <div class="modal-box !max-w-xl" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between mb-8">
+                <h2 class="text-xl font-black text-white uppercase tracking-widest">Manuel Opérationnel</h2>
+                <button onclick="App.UI.closeHelpModal()" class="p-2 text-slate-500 hover:text-white bg-white/5 rounded-full">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
 
-            <div class="flex items-center mb-8 border-b border-white/5">
-                <div class="flex gap-2 flex-wrap">
-                    <button onclick="App.UI.switchHelpTab('method')" id="tab-method" class="help-tab-btn active">Méthode</button>
-                    <button onclick="App.UI.switchHelpTab('maturity')" id="tab-maturity" class="help-tab-btn">Maturité</button>
-                    <button onclick="App.UI.switchHelpTab('shortcuts')" id="tab-shortcuts" class="help-tab-btn">Commandes</button>
-                    <button onclick="App.UI.switchHelpTab('macros')" id="tab-macros" class="help-tab-btn">Macros</button>
-                </div>
+            <div class="flex gap-2 flex-wrap mb-8 border-b border-white/5 pb-2">
+                <button onclick="App.UI.switchHelpTab('method')" id="tab-method" class="help-tab-btn active">Méthode</button>
+                <button onclick="App.UI.switchHelpTab('maturity')" id="tab-maturity" class="help-tab-btn">Maturité</button>
+                <button onclick="App.UI.switchHelpTab('ai')" id="tab-ai" class="help-tab-btn">IA</button>
+                <button onclick="App.UI.switchHelpTab('shortcuts')" id="tab-shortcuts" class="help-tab-btn">Commandes</button>
             </div>
             
-            <div id="pane-method" class="help-content-pane active">
-                <div class="space-y-6 text-sm leading-relaxed text-slate-300">
-                    <h4 class="text-white font-bold text-lg">La Stratégie de Distillation</h4>
-                    <p>Ce système n'est pas un entrepôt, c'est une <strong>usine à pensée</strong>. Le texte circule selon un cycle précis pour éviter la surcharge cognitive.</p>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="bg-white/5 p-4 rounded-xl border border-white/5">
-                            <span class="text-blue-400 font-bold block mb-2">1. Capture brute (Le Brouillon)</span>
-                            <p class="text-xs text-slate-400">Le brouillon central est votre zone de déchargement. Écrivez sans filtrer. Utilisez le focus visuel pour rester concentré sur l'idée présente.</p>
-                        </div>
-                        <div class="bg-white/5 p-4 rounded-xl border border-white/5">
-                            <span class="text-emerald-400 font-bold block mb-2">2. Distribution (L'Agenda)</span>
-                            <p class="text-xs text-slate-400">Sélectionnez du texte dans le brouillon pour l'envoyer vers un jour précis. Cela transforme l'intuition en action ou en archive temporelle.</p>
-                        </div>
-                        <div class="bg-white/5 p-4 rounded-xl border border-white/5">
-                            <span class="text-violet-400 font-bold block mb-2">3. Maillage (Zettelkasten)</span>
-                            <p class="text-xs text-slate-400">Utilisez <code>[[Concept]]</code> pour relier des notes éparpillées. En mode lecture, cliquez sur ces liens pour synthétiser tous les extraits liés à ce thème.</p>
-                        </div>
-                        <div class="bg-white/5 p-4 rounded-xl border border-white/5">
-                            <span class="text-amber-400 font-bold block mb-2">4. Révision (Flashback)</span>
-                            <p class="text-xs text-slate-400">En bas de l'agenda, le système fait remonter des notes du passé (J-30, J-365). C'est votre antidote au biais de récence.</p>
-                        </div>
-                    </div>
+            <div id="pane-method" class="help-content-pane active text-sm text-slate-300 space-y-6">
+                <div>
+                    <h4 class="text-blue-400 font-black uppercase text-[10px] mb-2">Capture & Distribution</h4>
+                    <p class="leading-relaxed">Le <strong>Brouillon</strong> est votre zone de déchargement. Pour organiser, sélectionnez du texte : la barre flottante permet de l'injecter dans un jour spécifique de l'agenda.</p>
+                </div>
+                <div>
+                    <h4 class="text-blue-400 font-black uppercase text-[10px] mb-2">Liens Zettelkasten</h4>
+                    <p class="leading-relaxed">Utilisez <code>[[Concept]]</code> pour créer des liens. En mode lecture (Alt+V), cliquez dessus pour voir tous les extraits liés à ce concept et générer une synthèse.</p>
                 </div>
             </div>
 
-            <div id="pane-maturity" class="help-content-pane">
-                <div class="space-y-6 text-sm text-slate-300">
-                    <h4 class="text-amber-400 font-bold uppercase text-xs tracking-widest">Le Cycle de Maturité</h4>
-                    <div class="space-y-4">
-                        <div class="flex gap-4 items-start bg-black/20 p-4 rounded-xl">
-                            <span class="text-xl">🌱</span>
-                            <div>
-                                <span class="font-bold text-slate-200">Graine : ((graine))</span>
-                                <p class="text-xs text-slate-500 mt-1">Information fragile. Si une graine n'est pas éditée ou promue sous <strong>30 jours</strong>, elle devient <span class="text-red-500 font-bold">rouge barrée (Stale)</span>. C'est le signal qu'elle encombre votre esprit inutilement.</p>
-                            </div>
-                        </div>
-                        <div class="flex gap-4 items-start bg-black/20 p-4 rounded-xl">
-                            <span class="text-xl">🌿</span>
-                            <div>
-                                <span class="font-bold text-slate-200">Pousse : ((pousse))</span>
-                                <p class="text-xs text-slate-500 mt-1">Concept en cours de développement. Elle est protégée contre la dégradation automatique.</p>
-                            </div>
-                        </div>
-                        <div class="flex gap-4 items-start bg-black/20 p-4 rounded-xl">
-                            <span class="text-xl">🌳</span>
-                            <div>
-                                <span class="font-bold text-slate-200">Pilier : ((pilier))</span>
-                                <p class="text-xs text-slate-500 mt-1">Connaissance cristallisée, souvent issue d'une synthèse en vue Concept.</p>
-                            </div>
-                        </div>
-                    </div>
+            <div id="pane-maturity" class="help-content-pane text-sm text-slate-300 space-y-4">
+                <h4 class="text-amber-400 font-black uppercase text-[10px] mb-2">Système d'élagage</h4>
+                <p>Une <strong>Graine 🌱</strong> qui n'a pas été modifiée depuis 30 jours devient <strong>Périmée</strong> (barrée rouge). C'est le signal pour la supprimer ou la transformer en <strong>Pousse 🌿</strong> ou <strong>Pilier 🌳</strong>.</p>
+            </div>
+
+            <div id="pane-ai" class="help-content-pane text-sm text-slate-300 space-y-6">
+                <div>
+                    <h4 class="text-violet-400 font-black uppercase text-[10px] mb-2">Challenge Cognitif</h4>
+                    <p>L'icône cerveau analyse votre brouillon actuel pour débusquer les biais de raisonnement et les angles morts.</p>
+                </div>
+                <div>
+                    <h4 class="text-violet-400 font-black uppercase text-[10px] mb-2">Cristallisation</h4>
+                    <p>Dans la vue Concept, l'IA compile tous les fragments pour rédiger une "Note Permanente" structurée.</p>
                 </div>
             </div>
 
-            <div id="pane-shortcuts" class="help-content-pane">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 text-sm text-slate-400">
-                    <div class="space-y-3">
-                        <h5 class="text-white font-bold text-xs uppercase">Navigation</h5>
-                        <div class="flex justify-between"><span>Aujourd'hui</span><span class="help-key">Alt + T</span></div>
-                        <div class="flex justify-between"><span>Semaines</span><span class="help-key">Alt + ← / →</span></div>
-                        <div class="flex justify-between"><span>Lecture / Édition</span><span class="help-key">Alt + V</span></div>
-                        <div class="flex justify-between"><span>Recherche</span><span class="help-key">Ctrl + F</span></div>
+            <div id="pane-shortcuts" class="help-content-pane text-sm text-slate-300">
+                <div class="grid grid-cols-2 gap-y-4 gap-x-8">
+                    <div class="flex justify-between items-center border-b border-white/5 pb-2">
+                        <span class="text-slate-500 font-bold text-[10px] uppercase">Lecture / Édit</span>
+                        <code class="text-blue-400 font-black">Alt + V</code>
                     </div>
-                    <div class="space-y-3">
-                        <h5 class="text-white font-bold text-xs uppercase">Action</h5>
-                        <div class="flex justify-between"><span>Exporter Markdown</span><span class="help-key">Ctrl + S</span></div>
-                        <div class="flex justify-between"><span>Vider Brouillon</span><span class="help-key">Alt + Del</span></div>
-                        <div class="flex justify-between"><span>Ajouter haut/bas</span><span class="help-key">Alt + N / E</span></div>
-                        <div class="flex justify-between"><span>Dictée Vocale</span><span class="help-key">Alt + R</span></div>
+                    <div class="flex justify-between items-center border-b border-white/5 pb-2">
+                        <span class="text-slate-500 font-bold text-[10px] uppercase">Recherche</span>
+                        <code class="text-blue-400 font-black">Ctrl + F</code>
                     </div>
-                </div>
-            </div>
-
-            <div id="pane-macros" class="help-content-pane">
-                <div class="space-y-4">
-                    <p class="text-xs text-slate-500">Les macros s'activent en maintenant <strong>Alt</strong> puis en tapant les lettres l'une après l'autre.</p>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                        <div class="bg-white/5 p-3 rounded border border-white/5 flex justify-between">
-                            <span class="text-blue-400 font-mono">Alt + C, O</span>
-                            <span class="text-slate-500">Insère [[ ]] (Concept)</span>
-                        </div>
-                        <div class="bg-white/5 p-3 rounded border border-white/5 flex justify-between">
-                            <span class="text-purple-400 font-mono">Alt + S, D</span>
-                            <span class="text-slate-500">Graine 🌱</span>
-                        </div>
-                        <div class="bg-white/5 p-3 rounded border border-white/5 flex justify-between">
-                            <span class="text-purple-400 font-mono">Alt + G, R</span>
-                            <span class="text-slate-500">Pousse 🌿</span>
-                        </div>
-                        <div class="bg-white/5 p-3 rounded border border-white/5 flex justify-between">
-                            <span class="text-purple-400 font-mono">Alt + P, E</span>
-                            <span class="text-slate-500">Pilier 🌳</span>
-                        </div>
+                    <div class="flex justify-between items-center border-b border-white/5 pb-2">
+                        <span class="text-slate-500 font-bold text-[10px] uppercase">Dictée Vocale</span>
+                        <code class="text-blue-400 font-black">Alt + R</code>
+                    </div>
+                    <div class="flex justify-between items-center border-b border-white/5 pb-2">
+                        <span class="text-slate-500 font-bold text-[10px] uppercase">Macros</span>
+                        <code class="text-blue-400 font-black">Alt + M</code>
+                    </div>
+                    <div class="flex justify-between items-center border-b border-white/5 pb-2">
+                        <span class="text-slate-500 font-bold text-[10px] uppercase">Ligne Haut</span>
+                        <code class="text-blue-400 font-black">Alt + N</code>
+                    </div>
+                    <div class="flex justify-between items-center border-b border-white/5 pb-2">
+                        <span class="text-slate-500 font-bold text-[10px] uppercase">Ligne Bas</span>
+                        <code class="text-blue-400 font-black">Alt + E</code>
+                    </div>
+                    <div class="flex justify-between items-center border-b border-white/5 pb-2">
+                        <span class="text-slate-500 font-bold text-[10px] uppercase">Aujourd'hui</span>
+                        <code class="text-blue-400 font-black">Alt + T</code>
+                    </div>
+                    <div class="flex justify-between items-center border-b border-white/5 pb-2">
+                        <span class="text-slate-500 font-bold text-[10px] uppercase">Aide</span>
+                        <code class="text-blue-400 font-black">F1</code>
                     </div>
                 </div>
             </div>
 
             <div class="mt-12 pt-6 border-t border-white/5 flex justify-end">
-                <button onclick="App.UI.closeHelpModal()" class="px-8 py-3 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-xl font-black uppercase hover:bg-blue-500/20 text-xs">Fermer</button>
+                <button onclick="App.UI.closeHelpModal()" class="px-8 py-3 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-blue-500/20 transition-all">Fermer</button>
             </div>
         </div>
     </div>
 
-    <!-- CONCEPT VIEW MODAL -->
+    <!-- MODALE CONCEPTS -->
     <div id="concept-modal" class="modal-overlay" onclick="App.UI.closeConceptView(event)">
         <div class="modal-box !max-w-[1100px] !p-10" onclick="event.stopPropagation()">
             <div class="flex justify-between items-center mb-8 border-b border-white/5 pb-4">
@@ -365,66 +321,65 @@
                     <span class="text-[10px] font-black uppercase tracking-[0.2em] text-violet-500">Vue Concept</span>
                     <h2 id="concept-title" class="text-2xl font-black text-white"></h2>
                 </div>
-                <button onclick="App.UI.closeConceptView()" class="text-slate-500 hover:text-white transition-colors">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                </button>
+                <div class="flex items-center gap-4">
+                    <button id="ai-synthesis-btn" onclick="App.AI.synthesizeConcept()" class="flex items-center gap-2 text-[9px] font-black uppercase bg-violet-500/20 text-violet-300 border border-violet-500/40 px-4 py-2 rounded-lg hover:bg-violet-500/30 transition-all">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg> Cristalliser
+                    </button>
+                    <button onclick="App.UI.closeConceptView()" class="text-slate-500 hover:text-white">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
             </div>
-            <div class="concept-grid">
-                <div class="concept-snippets flex flex-col">
-                    <h4 class="text-[10px] font-black text-slate-500 uppercase mb-4 tracking-widest">Extraits collectés</h4>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 h-[500px]">
+                <div class="flex flex-col">
+                    <h4 class="text-[10px] font-black text-slate-500 uppercase mb-4">Extraits</h4>
                     <div id="concept-snippets-list" class="flex-1 overflow-y-auto custom-scrollbar space-y-4 pr-4"></div>
                 </div>
-                <div class="concept-synthesis flex flex-col">
-                    <h4 class="text-[10px] font-black text-slate-500 uppercase mb-4 tracking-widest">Synthèse (Note Permanente)</h4>
-                    <div id="synthesis-editor" contenteditable="true" class="synthesis-editor custom-scrollbar" placeholder="Cristallisez ici..."></div>
-                    <div class="mt-4 flex justify-between items-center">
-                        <span class="text-[9px] text-slate-600 font-bold uppercase">Sauvegarde automatique</span>
-                        <button onclick="App.UI.injectSynthesisToDraft()" class="text-[9px] font-black uppercase bg-violet-500/10 text-violet-400 border border-violet-500/20 px-3 py-1.5 rounded hover:bg-violet-500/20 text-emerald-400">Envoyer au Brouillon</button>
-                    </div>
+                <div class="flex flex-col">
+                    <h4 class="text-[10px] font-black text-slate-500 uppercase mb-4">Synthèse</h4>
+                    <div id="synthesis-editor" contenteditable="true" class="flex-1 bg-white/5 border border-white/5 rounded-xl p-6 outline-none custom-scrollbar"></div>
+                    <button onclick="App.UI.injectSynthesisToDraft()" class="mt-4 text-[9px] font-black uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-2 rounded">Injecter au brouillon</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- MACRO MODAL -->
+    <!-- MODALE MACROS -->
     <div id="macro-modal" class="modal-overlay" onclick="App.Macros.closeModal(event)">
-        <div class="modal-box max-w-sm" onclick="event.stopPropagation()">
-            <h3 class="text-white font-black uppercase text-xs mb-6 tracking-widest">Gestionnaire de Macros</h3>
-            <div id="macro-list" class="space-y-2 mb-6 max-h-48 overflow-y-auto custom-scrollbar"></div>
-            <div class="p-4 bg-white/5 rounded-lg border border-white/5 space-y-3">
-                <input type="text" id="new-macro-trigger" placeholder="Séquence (ex: c,o)" class="macro-input">
-                <textarea id="new-macro-text" placeholder="Structure à injecter" class="macro-textarea"></textarea>
-                <button onclick="App.Macros.add()" class="w-full py-2 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded text-[10px] font-black uppercase hover:bg-blue-500/20">Enregistrer</button>
+        <div class="modal-box max-w-md" onclick="event.stopPropagation()">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-white font-black uppercase text-xs tracking-widest">Macros</h3>
+                <span class="text-[9px] text-slate-500 font-bold uppercase bg-white/5 px-2 py-1 rounded">Alt + Séquence</span>
             </div>
-            <button onclick="App.Macros.closeModal()" class="w-full mt-4 text-slate-500 text-[10px] uppercase font-bold">Fermer</button>
+            <div class="space-y-6">
+                <div id="macro-list" class="space-y-2 max-h-64 overflow-y-auto custom-scrollbar pr-2"></div>
+                <div class="p-4 bg-white/5 rounded-xl border border-white/5 space-y-4">
+                    <div class="grid grid-cols-3 gap-3">
+                        <input type="text" id="new-macro-trigger" placeholder="c,o" class="bg-black/40 border border-white/10 w-full p-2 text-xs text-blue-400 font-mono rounded-lg outline-none">
+                        <textarea id="new-macro-text" placeholder="Contenu..." class="col-span-2 bg-black/40 border border-white/10 w-full p-2 text-xs text-white rounded-lg h-20 outline-none"></textarea>
+                    </div>
+                    <button onclick="App.Macros.add()" class="w-full py-3 bg-blue-500/20 text-blue-300 text-[10px] font-black uppercase rounded-lg border border-blue-500/30">Enregistrer</button>
+                </div>
+            </div>
+            <button onclick="App.Macros.closeModal()" class="w-full mt-6 text-slate-600 text-[9px] uppercase font-bold">Fermer</button>
         </div>
     </div>
 
-    <!-- SEARCH MODAL -->
+    <!-- MODALE RECHERCHE -->
     <div id="search-modal" class="modal-overlay" onclick="App.Search.closeModal(event)">
         <div class="modal-box" onclick="event.stopPropagation()">
-            <input type="text" id="search-input" placeholder="Rechercher..." class="bg-transparent text-white w-full outline-none text-xl font-light border-b border-white/10 pb-4 mb-6" oninput="App.Search.handle(this.value)">
+            <input type="text" id="search-input" placeholder="Rechercher partout..." class="bg-transparent text-white w-full outline-none text-xl font-light border-b border-white/10 pb-4 mb-6" oninput="App.Search.handle(this.value)">
             <div id="search-results" class="space-y-4 max-h-96 overflow-y-auto custom-scrollbar"></div>
-        </div>
-    </div>
-
-    <!-- CONFIRM MODAL -->
-    <div id="confirm-modal" class="modal-overlay">
-        <div class="modal-box max-w-xs text-center">
-            <h3 class="text-lg font-bold text-white mb-6">Effacer le brouillon ?</h3>
-            <div class="flex justify-center gap-4">
-                <button onclick="App.UI.closeConfirmModal()" class="text-slate-500 font-bold hover:text-white px-4">Annuler</button>
-                <button onclick="App.Editor.clearDraft()" class="px-6 py-2 bg-red-500/10 text-red-500 border border-red-500/20 rounded-lg font-black uppercase tracking-widest hover:bg-red-500/20">Vider</button>
-            </div>
         </div>
     </div>
 
     <div id="toast">Action effectuée</div>
 
     <script>
+        const apiKey = "";
         const App = {
             Config: { dbName: "EfficientAgendaDB", dbVersion: 4, pruningDays: 30, flashbackIntervals: [30, 180, 365] },
-            State: { currentMonday: null, isReadMode: false, rawEditorContent: '', isRecording: false, macroBuffer: [], macroTimeout: null, activeMacros: {}, activeConcept: null, recognition: null },
+            State: { currentMonday: null, isReadMode: false, rawEditorContent: '', macroBuffer: [], macroTimeout: null, activeMacros: {}, activeConcept: null, isRecording: false, recognition: null },
             DB: null
         };
 
@@ -445,7 +400,8 @@
             conceptModal: document.getElementById('concept-modal'),
             conceptTitle: document.getElementById('concept-title'),
             conceptSnippets: document.getElementById('concept-snippets-list'),
-            synthesisEditor: document.getElementById('synthesis-editor')
+            synthesisEditor: document.getElementById('synthesis-editor'),
+            aiSynthBtn: document.getElementById('ai-synthesis-btn')
         };
 
         App.Utils = {
@@ -453,11 +409,11 @@
             dateToKey: (d) => { const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, '0'); const day = String(d.getDate()).padStart(2, '0'); return `${y}-${m}-${day}`; },
             formatDS: (d) => d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }),
             showToast: (m) => { DOM.toastEl.textContent = m; DOM.toastEl.classList.add('show'); setTimeout(() => DOM.toastEl.classList.remove('show'), 3000); },
-            focusAndPlaceCaret: (el) => { if(!el) return; const range = document.createRange(); const sel = window.getSelection(); range.setStart(el, 0); range.collapse(true); sel.removeAllRanges(); sel.addRange(range); el.focus(); },
             htmlToMd: (html) => {
                 if (!html) return "";
                 return html.replace(/<div>/g, '\n').replace(/<\/div>/g, '').replace(/<br\s*\/?>/g, '\n').replace(/<b>(.*?)<\/b>/g, '**$1**').replace(/<strong>(.*?)<\/strong>/g, '**$1**').replace(/<input[^>]+checked[^>]*>/g, '- [x] ').replace(/<input[^>]+type="checkbox"[^>]*>/g, '- [ ] ').replace(/<[^>]*>/g, '').trim();
-            }
+            },
+            focusAndPlaceCaret: (el) => { if(!el) return; const range = document.createRange(); const sel = window.getSelection(); range.setStart(el, 0); range.collapse(true); sel.removeAllRanges(); sel.addRange(range); el.focus(); }
         };
 
         App.Storage = {
@@ -467,12 +423,43 @@
                 await App.DB.notes.put({id: 'main', content: DOM.editor.innerHTML, updatedAt: Date.now()}); 
                 const cards = document.querySelectorAll('.agenda-card:not(.flashback-card)'); 
                 for (let c of cards) {
-                    const existing = await App.DB.agenda.get(c.dataset.date);
+                    const dateKey = c.dataset.date;
+                    if (!dateKey) continue;
+                    const existing = await App.DB.agenda.get(dateKey);
                     const newContent = c.querySelector('.agenda-content').innerHTML;
-                    if (!existing || existing.content !== newContent) await App.DB.agenda.put({date: c.dataset.date, content: newContent, updatedAt: Date.now()}); 
+                    if (!existing || existing.content !== newContent) await App.DB.agenda.put({date: dateKey, content: newContent, updatedAt: Date.now()}); 
                 }
             },
             saveSynthesis: async () => { if (!App.State.activeConcept) return; await App.DB.concepts.put({ title: App.State.activeConcept, synthesis: DOM.synthesisEditor.innerHTML, updatedAt: Date.now() }); }
+        };
+
+        App.AI = {
+            async callGemini(prompt, system) {
+                if(!apiKey) return "Clé API absente.";
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+                const payload = { contents: [{ parts: [{ text: prompt }] }], systemInstruction: { parts: [{ text: system }] } };
+                try {
+                    const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                    const data = await response.json();
+                    return data.candidates?.[0]?.content?.parts?.[0]?.text || "Erreur API.";
+                } catch (e) { return "IA Indisponible."; }
+            },
+            async challengeDraft() {
+                const content = App.Utils.htmlToMd(DOM.editor.innerHTML); if (!content) return App.Utils.showToast("Brouillon vide.");
+                App.Utils.showToast("Analyse IA...");
+                const res = await this.callGemini(content, "Agis comme un conseiller brutalement honnête. Analyse ce brouillon, pointe les angles morts.");
+                App.Editor.insertAtCursor(`\n\n> 🧠 **Challenge IA** :\n> ${res.replace(/\n/g, '\n> ')}\n`);
+                App.Utils.showToast("Analyse terminée.");
+            },
+            async synthesizeConcept() {
+                const snippets = Array.from(DOM.conceptSnippets.querySelectorAll('div')).map(d => d.innerText).join('\n---\n');
+                if (!snippets) return App.Utils.showToast("Rien à synthétiser.");
+                DOM.aiSynthBtn.innerText = "Calcul...";
+                const res = await this.callGemini(`Concept : ${App.State.activeConcept}\n\nExtraits :\n${snippets}`, "Synthétise ces notes en une Note Permanente.");
+                DOM.synthesisEditor.innerHTML = res.replace(/\n/g, '<br>');
+                DOM.aiSynthBtn.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg> Cristalliser`;
+                App.Utils.showToast("Synthèse terminée.");
+            }
         };
 
         App.Agenda = {
@@ -484,14 +471,16 @@
                     const date = new Date(App.State.currentMonday); date.setDate(date.getDate() + i);
                     const key = App.Utils.dateToKey(date); const isToday = key === App.Utils.dateToKey(new Date());
                     const entry = await App.DB.agenda.get(key);
-                    const card = document.createElement('div');
-                    card.className = `agenda-card px-5 py-4 ${isToday ? 'today' : ''}`; card.id = `card-${key}`; card.dataset.date = key;
+                    const card = document.createElement('div'); 
+                    card.className = `agenda-card px-5 py-4 ${isToday ? 'today' : ''}`; 
+                    card.id = `card-${key}`;
+                    card.dataset.date = key;
                     card.innerHTML = `
                         <div class="flex justify-between items-start mb-1 group">
                             <span class="text-[9px] font-black uppercase tracking-widest ${isToday ? 'text-blue-400' : 'text-slate-600'}">${date.toLocaleDateString('fr-FR', {weekday:'short', day:'numeric'})}</span>
                             <div class="card-actions flex gap-1">
                                 <button onclick="App.Agenda.importDraftToDay('${key}')" class="action-icon" title="Importer"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg></button>
-                                <button onclick="App.Agenda.copyToClipboard('${key}')" class="action-icon" title="Copier"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2"/></svg></button>
+                                <button onclick="App.Agenda.copyToClipboard('${key}')" class="action-icon" title="Copier MD"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2"/></svg></button>
                                 <button onclick="App.Agenda.moveToDraft('${key}')" class="action-icon text-emerald-500/70" title="Retirer"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg></button>
                                 <button onclick="App.Agenda.clearDay('${key}')" class="action-icon text-red-500/50" title="Vider"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
                             </div>
@@ -503,179 +492,106 @@
                 App.Agenda.renderFlashback();
             },
             renderFlashback: async () => {
-                const now = new Date();
-                let entry = null; let label = "";
+                const now = new Date(); let entry = null; let label = "";
                 for (let days of App.Config.flashbackIntervals) {
                     const d = new Date(); d.setDate(now.getDate() - days);
-                    const key = App.Utils.dateToKey(d); const e = await App.DB.agenda.get(key);
-                    if (e && e.content.replace(/<[^>]*>/g, '').trim()) { entry = e; label = `${days} jours plus tôt`; break; }
-                }
-                if (!entry) {
-                    const all = await App.DB.agenda.toArray();
-                    const filtered = all.filter(e => e.content.replace(/<[^>]*>/g, '').trim().length > 10);
-                    if (filtered.length > 0) { entry = filtered[Math.floor(Math.random() * filtered.length)]; label = "Serendipity (Hasard)"; }
+                    const e = await App.DB.agenda.get(App.Utils.dateToKey(d));
+                    if (e && e.content.trim()) { entry = e; label = `${days} jours plus tôt`; break; }
                 }
                 DOM.flashbackContainer.innerHTML = '';
                 if (entry) {
-                    const card = document.createElement('div');
-                    card.className = `agenda-card px-5 py-4 flashback-card`;
-                    card.innerHTML = `
-                        <div class="flex justify-between items-start mb-1">
-                            <span class="text-[9px] font-black uppercase tracking-widest text-violet-400">⚡ Flashback : ${label}</span>
-                            <span class="text-[8px] font-mono text-slate-500">${entry.date}</span>
-                        </div>
-                        <div class="agenda-content custom-scrollbar text-slate-400 italic !h-24" style="font-size: 0.85rem">${App.Editor.applyStaleEffect(entry.content, entry.updatedAt)}</div>
-                    `;
+                    const card = document.createElement('div'); card.className = `agenda-card px-5 py-4 flashback-card`;
+                    card.innerHTML = `<div class="text-[9px] font-black uppercase text-violet-400 mb-1">⚡ Flashback : ${label}</div><div class="agenda-content text-slate-400 italic !h-24">${App.Editor.applyStaleEffect(entry.content, entry.updatedAt)}</div>`;
                     DOM.flashbackContainer.appendChild(card);
                 }
             },
             changeWeek: (d) => { App.State.currentMonday.setDate(App.State.currentMonday.getDate() + (d * 7)); App.Agenda.render(); },
             goToToday: () => { App.State.currentMonday = App.Utils.getMonday(new Date()); App.Agenda.render(); },
-            importDraftToDay: (k) => App.Agenda.appendToDay(k, App.State.isReadMode ? App.State.rawEditorContent : DOM.editor.innerHTML),
+            importDraftToDay: (k) => App.Agenda.appendToDay(k, DOM.editor.innerHTML),
             appendToDay: async (k, h) => { const e = await App.DB.agenda.get(k); const n = (e ? e.content : '') + '<div><br></div>' + h; await App.DB.agenda.put({date: k, content: n, updatedAt: Date.now()}); App.Agenda.render(); App.Utils.showToast("Importé"); },
             copyToClipboard: async (key) => {
                 const entry = await App.DB.agenda.get(key);
                 if (entry && entry.content) {
                     const md = App.Utils.htmlToMd(entry.content);
                     const temp = document.createElement('textarea'); temp.value = md; document.body.appendChild(temp); temp.select(); document.execCommand('copy'); document.body.removeChild(temp);
-                    App.Utils.showToast("Markdown copié");
+                    App.Utils.showToast("Copié");
                 }
             },
-            moveToDraft: async (key) => {
-                const entry = await App.DB.agenda.get(key);
-                if (entry && entry.content) { DOM.editor.innerHTML += '<div><br></div>' + entry.content; await App.DB.agenda.delete(key); App.Agenda.render(); App.Storage.saveData(); App.Utils.showToast("Renvoyé au brouillon"); }
-            },
-            clearDay: async (k) => { if(confirm("Effacer ce jour ?")) { await App.DB.agenda.delete(k); App.Agenda.render(); App.Utils.showToast("Effacé"); } }
+            moveToDraft: async (key) => { const entry = await App.DB.agenda.get(key); if (entry) { DOM.editor.innerHTML += '<div><br></div>' + entry.content; await App.DB.agenda.delete(key); App.Agenda.render(); App.Storage.saveData(); App.Utils.showToast("Retiré"); } },
+            clearDay: async (k) => { if(confirm("Vider ce jour ?")) { await App.DB.agenda.delete(k); App.Agenda.render(); App.Utils.showToast("Effacé"); } }
         };
 
         App.Editor = {
             insertAtCursor: (text) => {
                 const target = (document.activeElement && (document.activeElement === DOM.editor || document.activeElement.classList.contains('agenda-content'))) ? document.activeElement : DOM.editor;
                 if (target !== document.activeElement) target.focus();
-                const formatted = text.replace(/\n/g, '<br>');
-                document.execCommand('insertHTML', false, formatted);
-                // Si c'est un concept, on déplace le curseur au milieu
-                if (text === '[[]]') {
-                    const sel = window.getSelection();
-                    sel.modify("move", "backward", "character");
-                    sel.modify("move", "backward", "character");
-                }
+                document.execCommand('insertHTML', false, text.replace(/\n/g, '<br>'));
+                if (text === '[[]]') { try { window.getSelection().modify("move", "backward", "character"); window.getSelection().modify("move", "backward", "character"); } catch(e) {} }
             },
-            execCmd: (c, v=null) => { if(!App.State.isReadMode) { document.execCommand(c, false, v); DOM.editor.focus(); } },
-            applyHighlight: () => { if (!App.State.isReadMode) { document.execCommand('hiliteColor', false, '#fde047'); document.execCommand('foreColor', false, '#000000'); App.Storage.saveData(); } },
-            addNewLineAtStart: () => { if (App.State.isReadMode) return; const div = document.createElement('div'); div.innerHTML = '<br>'; DOM.editor.prepend(div); App.Utils.focusAndPlaceCaret(div); },
-            addNewLineAtEnd: () => { if (App.State.isReadMode) return; const div = document.createElement('div'); div.innerHTML = '<br>'; DOM.editor.append(div); App.Utils.focusAndPlaceCaret(div); },
-            clearDraft: async () => { DOM.editor.innerHTML = ''; App.State.rawEditorContent = ''; await App.DB.notes.put({id: 'main', content: '', updatedAt: Date.now()}); App.UI.closeConfirmModal(); App.Utils.showToast("Réinitialisé"); },
+            execCmd: (c, v=null) => { document.execCommand(c, false, v); DOM.editor.focus(); },
+            applyHighlight: () => { document.execCommand('hiliteColor', false, '#fde047'); document.execCommand('foreColor', false, '#000000'); App.Storage.saveData(); },
+            addNewLineAtStart: () => { const div = document.createElement('div'); div.innerHTML = '<br>'; DOM.editor.prepend(div); App.Utils.focusAndPlaceCaret(div); },
+            addNewLineAtEnd: () => { const div = document.createElement('div'); div.innerHTML = '<br>'; DOM.editor.append(div); App.Utils.focusAndPlaceCaret(div); },
             toggleViewMode: async () => {
                 App.State.isReadMode = !App.State.isReadMode;
                 if (App.State.isReadMode) {
-                    await App.Storage.saveData(); App.State.rawEditorContent = DOM.editor.innerHTML;
-                    const n = await App.DB.notes.get('main'); DOM.editor.contentEditable = "false"; DOM.editor.classList.add('read-mode'); DOM.viewModeBtn.classList.add('text-blue-400', 'bg-blue-500/10'); App.Editor.parseAndLinkify(n ? n.updatedAt : null);
-                } else {
-                    DOM.editor.innerHTML = App.State.rawEditorContent; DOM.editor.contentEditable = "true"; DOM.editor.classList.remove('read-mode'); DOM.viewModeBtn.classList.remove('text-blue-400', 'bg-blue-500/10');
-                }
+                    await App.Storage.saveData(); App.State.rawEditorContent = DOM.editor.innerHTML; DOM.editor.contentEditable = "false"; DOM.editor.classList.add('read-mode'); DOM.viewModeBtn.classList.add('text-blue-400', 'bg-blue-500/10'); App.Editor.parseAndLinkify();
+                } else { DOM.editor.innerHTML = App.State.rawEditorContent; DOM.editor.contentEditable = "true"; DOM.editor.classList.remove('read-mode'); DOM.viewModeBtn.classList.remove('text-blue-400', 'bg-blue-500/10'); }
             },
             applyStaleEffect: (html, updatedAt) => {
                 if (!updatedAt) return html;
-                const staleThreshold = App.Config.pruningDays * 24 * 60 * 60 * 1000;
-                if ((Date.now() - updatedAt) <= staleThreshold) return html;
-                const temp = document.createElement('div'); temp.innerHTML = html;
-                const walker = document.createTreeWalker(temp, NodeFilter.SHOW_TEXT);
-                while(walker.nextNode()) {
-                    const node = walker.currentNode;
-                    if(node.nodeValue.includes('((graine))') && node.parentElement) node.parentElement.classList.add('status-stale');
-                }
-                return temp.innerHTML;
+                if ((Date.now() - updatedAt) <= App.Config.pruningDays * 86400000) return html;
+                const t = document.createElement('div'); t.innerHTML = html;
+                t.querySelectorAll('*').forEach(n => { if(n.innerText.includes('((graine))')) n.classList.add('status-stale'); });
+                return t.innerHTML;
             },
-            parseAndLinkify: (updatedAt) => {
-                const staleThreshold = App.Config.pruningDays * 24 * 60 * 60 * 1000;
-                const isStale = updatedAt && (Date.now() - updatedAt) > staleThreshold;
+            parseAndLinkify: () => {
                 const walker = document.createTreeWalker(DOM.editor, NodeFilter.SHOW_TEXT);
                 const nodes = []; while(walker.nextNode()) nodes.push(walker.currentNode);
                 nodes.forEach(node => {
                     const text = node.nodeValue;
-                    let html = text
-                        .replace(/\[ \]/g, '<input type="checkbox" class="task-checkbox" onchange="this.parentElement.classList.toggle(\'task-line-done\')">')
-                        .replace(/\[x\]/g, '<input type="checkbox" class="task-checkbox" checked onchange="this.parentElement.classList.toggle(\'task-line-done\')">')
-                        .replace(/(\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\b)/g, '<span class="smart-link-date" onclick="App.Search.goToDateLink(\'$1\')">$1</span>')
-                        .replace(/(#[a-zA-Z0-9_-]+)/g, '<span class="smart-link-tag" onclick="App.Search.byTag(\'$1\')">$1</span>')
-                        .replace(/\[\[(.*?)\]\]/g, '<span class="smart-link-backlink" onclick="App.UI.openConceptView(\'$1\')">$1</span>')
-                        .replace(/\(\(graine\)\)/g, `<span class="status-seed ${isStale ? 'status-stale' : ''}">🌱</span>`)
-                        .replace(/\(\(pousse\)\)/g, '<span class="status-grow">🌿</span>')
-                        .replace(/\(\(pilier\)\)/g, '<span class="status-ever">🌳</span>');
-                    if (html !== text) { const span = document.createElement('span'); span.innerHTML = html; node.parentNode.replaceChild(span, node); }
+                    let html = text.replace(/(\d{1,2}\/\d{1,2})/g, '<span class="smart-link-date" onclick="App.Search.goToDateLink(\'$1\')">$1</span>')
+                                   .replace(/\[\[(.*?)\]\]/g, '<span class="smart-link-backlink" onclick="App.UI.openConceptView(\'$1\')">$1</span>')
+                                   .replace(/\(\(graine\)\)/g, '🌱').replace(/\(\(pousse\)\)/g, '🌿').replace(/\(\(pilier\)\)/g, '🌳');
+                    if (html !== text) { const s = document.createElement('span'); s.innerHTML = html; node.parentNode.replaceChild(s, node); }
                 });
             }
         };
 
         App.Macros = {
             load: async () => {
-                const arr = await App.DB.macros.toArray(); App.State.activeMacros = {};
-                arr.forEach(m => App.State.activeMacros[m.trigger] = m.text);
+                const arr = await App.DB.macros.toArray(); App.State.activeMacros = {}; arr.forEach(m => App.State.activeMacros[m.trigger] = m.text);
                 if (Object.keys(App.State.activeMacros).length === 0) {
-                    const defaults = { 'c,o': '[[]]', 's,d': '🌱 ((graine)) ', 'g,r': '🌿 ((pousse)) ', 'p,e': '🌳 ((pilier)) ', 'd,e,c': '<b>DÉCISION</b>\n\nContexte :\nOptions :\nDécision :\nActions :\n' };
-                    for (let k in defaults) await App.DB.macros.put({trigger: k, text: defaults[k]});
-                    await App.Macros.load();
+                    const defaults = { 'c,o': '[[]]', 's,d': '🌱 ((graine)) ', 'g,r': '🌿 ((pousse)) ', 'p,e': '🌳 ((pilier)) ' };
+                    for (let k in defaults) await App.DB.macros.put({trigger: k, text: defaults[k]}); await App.Macros.load();
                 }
             },
             renderList: () => {
                 DOM.macroList.innerHTML = '';
                 for (let trigger in App.State.activeMacros) {
-                    const item = document.createElement('div'); item.className = 'macro-list-item bg-white/5 p-2 rounded mb-1 flex justify-between items-center text-xs';
-                    item.innerHTML = `<div><span class="text-white font-mono mr-2">${trigger}</span><span class="text-slate-500">${App.State.activeMacros[trigger].substring(0,20)}...</span></div><button onclick="App.Macros.delete('${trigger}')" class="text-red-500">X</button>`;
-                    DOM.macroList.appendChild(item);
+                    const text = App.State.activeMacros[trigger];
+                    const card = document.createElement('div');
+                    card.className = 'macro-card';
+                    card.innerHTML = `<div class="macro-trigger-badge">${trigger.split(',').join(' + ')}</div><div class="macro-preview">${text.substring(0, 30)}</div><button onclick="App.Macros.delete('${trigger}')" class="text-red-500/50">X</button>`;
+                    DOM.macroList.appendChild(card);
                 }
             },
             add: async () => {
                 const trigger = document.getElementById('new-macro-trigger').value.toLowerCase().trim();
                 const text = document.getElementById('new-macro-text').value.trim();
-                if (!trigger || !text) return;
-                await App.DB.macros.put({trigger, text});
-                document.getElementById('new-macro-trigger').value = ''; document.getElementById('new-macro-text').value = '';
-                await App.Macros.load(); App.Macros.renderList(); App.Utils.showToast("Macro ajoutée");
+                if (trigger && text) { await App.DB.macros.put({trigger, text}); await App.Macros.load(); App.Macros.renderList(); }
             },
             delete: async (t) => { await App.DB.macros.delete(t); await App.Macros.load(); App.Macros.renderList(); },
             openModal: () => { document.getElementById('macro-modal').style.display='flex'; App.Macros.renderList(); },
             closeModal: () => { document.getElementById('macro-modal').style.display='none'; }
         };
 
-        App.Search = {
-            handle: async (q) => {
-                DOM.searchResults.innerHTML = ''; const highlights = []; const tempDiv = document.createElement('div');
-                const process = (content, date, type) => {
-                    tempDiv.innerHTML = content;
-                    tempDiv.querySelectorAll('div, p, li, span').forEach(node => { if (q && node.innerText.toLowerCase().includes(q.toLowerCase())) highlights.push({ type, html: node.innerHTML, date }); });
-                };
-                process(App.State.isReadMode ? App.State.rawEditorContent : DOM.editor.innerHTML, 'Brouillon', 'draft');
-                const entries = await App.DB.agenda.toArray();
-                for (const e of entries) process(e.content, e.date, 'agenda');
-                highlights.forEach(h => {
-                    const d = document.createElement('div'); d.className = "p-4 bg-white/[0.03] border border-white/5 rounded-lg cursor-pointer hover:bg-white/[0.06] text-xs";
-                    d.innerHTML = `<span class="text-[8px] font-black uppercase tracking-widest text-yellow-500">${h.date}</span><div class="text-slate-300 mt-2">${h.html}</div>`;
-                    d.onclick = () => h.type === 'draft' ? App.Search.goToDraft() : App.Search.goToDateLink(h.date.split('-').reverse().slice(0,2).join('/')); 
-                    DOM.searchResults.appendChild(d);
-                });
-            },
-            byTag: (tag) => { App.Search.openModal(); document.getElementById('search-input').value = tag; App.Search.handle(tag); },
-            goToDraft: () => { App.Search.closeModal(); if (App.State.isReadMode) App.Editor.toggleViewMode(); DOM.editor.focus(); },
-            goToDateLink: (ds) => {
-                const p = ds.split('/'); const t = new Date(new Date().getFullYear(), parseInt(p[1])-1, parseInt(p[0]));
-                App.State.currentMonday = App.Utils.getMonday(t); App.Agenda.render().then(() => {
-                    const el = document.getElementById(`card-${App.Utils.dateToKey(t)}`);
-                    if (el) { el.scrollIntoView({behavior:'smooth', block:'center'}); el.classList.add('highlight-flash'); setTimeout(() => el.classList.remove('highlight-flash'), 1000); }
-                });
-                App.Search.closeModal();
-            },
-            openModal: () => { document.getElementById('search-modal').style.display='flex'; document.getElementById('search-input').focus(); App.Search.handle(''); },
-            closeModal: () => { document.getElementById('search-modal').style.display='none'; }
-        };
-
         App.Voice = {
             init: () => {
-                if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-                    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-                    App.State.recognition = new SR(); App.State.recognition.continuous = false; App.State.recognition.lang = 'fr-FR';
-                    App.State.recognition.onstart = () => { App.State.isRecording = true; DOM.voiceBtn.classList.add('recording-pulse'); App.Utils.showToast("Écoute..."); };
+                const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+                if (SR) {
+                    App.State.recognition = new SR(); App.State.recognition.lang = 'fr-FR';
+                    App.State.recognition.onstart = () => { App.State.isRecording = true; DOM.voiceBtn.classList.add('recording-pulse'); };
                     App.State.recognition.onresult = (e) => { App.Editor.insertAtCursor(e.results[0][0].transcript); App.Storage.saveData(); };
                     App.State.recognition.onend = () => { App.State.isRecording = false; DOM.voiceBtn.classList.remove('recording-pulse'); };
                 }
@@ -683,19 +599,47 @@
             toggle: () => { if (!App.State.recognition) return; App.State.isRecording ? App.State.recognition.stop() : App.State.recognition.start(); }
         };
 
+        App.Search = {
+            handle: async (q) => {
+                DOM.searchResults.innerHTML = ''; const tempDiv = document.createElement('div');
+                const entries = await App.DB.agenda.toArray();
+                const sources = [...entries, {content: DOM.editor.innerHTML, date: 'Brouillon'}];
+                sources.forEach(e => {
+                    tempDiv.innerHTML = e.content;
+                    if (q && tempDiv.innerText.toLowerCase().includes(q.toLowerCase())) {
+                        const d = document.createElement('div'); d.className = "p-4 bg-white/[0.03] border border-white/5 rounded-xl cursor-pointer text-xs mb-2 hover:bg-white/5";
+                        d.innerHTML = `<span class="text-yellow-500 font-bold block mb-1 uppercase">${e.date}</span><div class="text-slate-400 line-clamp-2">${tempDiv.innerText}</div>`;
+                        d.onclick = () => { if(e.date === 'Brouillon') { App.Search.closeModal(); if (App.State.isReadMode) App.Editor.toggleViewMode(); DOM.editor.focus(); } else { App.Search.goToDateLink(e.date); } };
+                        DOM.searchResults.appendChild(d);
+                    }
+                });
+            },
+            goToDateLink: (ds) => {
+                const parts = ds.split(/[\/\-]/); if(parts.length < 2) return;
+                const d = new Date(); d.setMonth(parseInt(parts[1])-1); d.setDate(parseInt(parts[0]));
+                App.State.currentMonday = App.Utils.getMonday(d); 
+                App.Agenda.render().then(() => {
+                    const el = document.getElementById(`card-${App.Utils.dateToKey(d)}`);
+                    if (el) { el.scrollIntoView({behavior:'smooth', block:'center'}); }
+                });
+                App.Search.closeModal();
+            },
+            openModal: () => { document.getElementById('search-modal').style.display='flex'; document.getElementById('search-input').focus(); },
+            closeModal: () => { document.getElementById('search-modal').style.display='none'; }
+        };
+
         App.IO = {
             exportMarkdown: async () => {
-                const notes = await App.DB.notes.get('main'); const agenda = await App.DB.agenda.toArray(); const concepts = await App.DB.concepts.toArray();
-                let md = "---\ntitle: Export Journal\n---\n\n# BROUILLON\n\n" + App.Utils.htmlToMd(notes ? notes.content : "") + "\n\n# AGENDA\n\n";
-                agenda.sort((a,b) => a.date.localeCompare(b.date)).forEach(i => { if (i.content.replace(/<[^>]*>/g, '').trim()) md += `## ${i.date}\n\n${App.Utils.htmlToMd(i.content)}\n\n`; });
-                if (concepts.length > 0) { md += "\n# SYNTHÈSES\n\n"; concepts.forEach(c => md += `## ${c.title}\n\n${App.Utils.htmlToMd(c.synthesis)}\n\n`); }
-                const b = new Blob([md], {type: 'text/markdown'}); const l = document.createElement('a'); l.href = URL.createObjectURL(b); l.download = `journal.md`; l.click();
+                const notes = await App.DB.notes.get('main'); const agenda = await App.DB.agenda.toArray();
+                let md = "# BROUILLON\n\n" + App.Utils.htmlToMd(notes?.content || "") + "\n\n# AGENDA\n\n";
+                agenda.forEach(i => md += `## ${i.date}\n\n${App.Utils.htmlToMd(i.content)}\n\n`);
+                const b = new Blob([md], {type: 'text/markdown'}); const l = document.createElement('a'); l.href = URL.createObjectURL(b); l.download = `backup.md`; l.click();
             },
             triggerImport: () => document.getElementById('import-input').click(),
             importData: (e) => {
                 const f = e.target.files[0]; if (!f) return;
                 const r = new FileReader();
-                r.onload = async (ev) => { try { const d = JSON.parse(ev.target.result); if (d.notes) await App.DB.notes.put({id: 'main', content: d.notes, updatedAt: Date.now()}); if (d.agenda) { await App.DB.agenda.clear(); for (let i of d.agenda) await App.DB.agenda.put(i); } location.reload(); } catch(err) { App.Utils.showToast("Erreur import"); } };
+                r.onload = async (ev) => { try { const d = JSON.parse(ev.target.result); if (d.notes) await App.DB.notes.put({id: 'main', content: d.notes, updatedAt: Date.now()}); if (d.agenda) { for (let i of d.agenda) await App.DB.agenda.put(i); } location.reload(); } catch(err) { App.Utils.showToast("Erreur"); } };
                 r.readAsText(f);
             }
         };
@@ -703,35 +647,35 @@
         App.UI = {
             openHelpModal: () => document.getElementById('help-modal').style.display = 'flex',
             closeHelpModal: () => document.getElementById('help-modal').style.display = 'none',
-            switchHelpTab: (id) => { document.querySelectorAll('.help-tab-btn').forEach(b => b.classList.remove('active')); document.querySelectorAll('.help-content-pane').forEach(p => p.classList.remove('active')); document.getElementById('tab-'+id).classList.add('active'); document.getElementById('pane-'+id).classList.add('active'); },
+            switchHelpTab: (id) => { 
+                document.querySelectorAll('.help-tab-btn').forEach(b => b.classList.remove('active')); document.querySelectorAll('.help-content-pane').forEach(p => p.classList.remove('active')); 
+                document.getElementById('tab-' + id)?.classList.add('active'); document.getElementById('pane-' + id)?.classList.add('active'); 
+            },
             openConfirmModal: () => document.getElementById('confirm-modal').style.display='flex',
             closeConfirmModal: () => document.getElementById('confirm-modal').style.display='none',
-            openConceptView: async (keyword) => {
-                App.State.activeConcept = keyword; DOM.conceptTitle.textContent = keyword; DOM.conceptSnippets.innerHTML = ''; DOM.synthesisEditor.innerHTML = '';
-                const h = []; const t = document.createElement('div');
-                const collect = (c, d) => { t.innerHTML = c; t.querySelectorAll('div, p, li, span').forEach(n => { if (n.innerText.toLowerCase().includes(keyword.toLowerCase())) h.push({ html: n.innerHTML, date: d }); }); };
-                collect(App.State.isReadMode ? App.State.rawEditorContent : DOM.editor.innerHTML, 'Brouillon');
-                const a = await App.DB.agenda.toArray(); a.forEach(i => collect(i.content, i.date));
-                h.forEach(x => { const d = document.createElement('div'); d.className = "p-3 bg-white/[0.03] border border-white/5 rounded-lg text-xs text-slate-400"; d.innerHTML = `<span class="text-[8px] font-black uppercase text-violet-500 mb-1 block">${x.date}</span>${x.html}`; DOM.conceptSnippets.appendChild(d); });
-                const d = await App.DB.concepts.get(keyword); if (d) DOM.synthesisEditor.innerHTML = d.synthesis;
-                DOM.conceptModal.style.display = 'flex'; DOM.synthesisEditor.focus();
+            openConceptView: async (kw) => {
+                App.State.activeConcept = kw; DOM.conceptTitle.textContent = kw; DOM.conceptSnippets.innerHTML = '';
+                const a = await App.DB.agenda.toArray();
+                [...a, {content: DOM.editor.innerHTML, date: 'Brouillon'}].forEach(i => {
+                    const t = document.createElement('div'); t.innerHTML = i.content;
+                    t.querySelectorAll('*').forEach(n => { if (n.innerText.toLowerCase().includes(kw.toLowerCase()) && n.innerText.length < 500) {
+                        const d = document.createElement('div'); d.className = "p-3 bg-white/[0.03] rounded-lg text-xs mb-2 border border-white/5";
+                        d.innerHTML = `<span class="text-violet-500 text-[8px] uppercase block mb-1 font-bold">${i.date}</span>${n.innerHTML}`;
+                        DOM.conceptSnippets.appendChild(d);
+                    }});
+                });
+                const d = await App.DB.concepts.get(kw); if (d) DOM.synthesisEditor.innerHTML = d.synthesis;
+                DOM.conceptModal.style.display = 'flex';
             },
             closeConceptView: () => { DOM.conceptModal.style.display = 'none'; App.State.activeConcept = null; },
-            injectSynthesisToDraft: () => { const s = DOM.synthesisEditor.innerHTML; if (!s) return; App.Editor.insertAtCursor(`\n\n🌳 ((pilier)) **Synthèse : [[${App.State.activeConcept}]]**\n${s}\n`); App.Utils.showToast("Importé"); App.UI.closeConceptView(); },
-            showSmartToolbar: (r, t) => {
-                const c = document.getElementById('toolbar-days'); c.innerHTML = '';
-                ['L', 'M', 'M', 'J', 'V', 'S', 'D'].forEach((d, i) => { const date = new Date(App.State.currentMonday); date.setDate(date.getDate() + i); const k = App.Utils.dateToKey(date); const b = document.createElement('div'); b.className = `toolbar-btn`; b.textContent = d; b.onmousedown = (e) => { e.preventDefault(); App.Agenda.appendToDay(k, t); DOM.smartToolbar.style.display = 'none'; }; c.appendChild(b); });
-                DOM.smartToolbar.style.display = 'flex'; DOM.smartToolbar.style.top = `${r.bottom + window.scrollY + 10}px`; DOM.smartToolbar.style.left = `${r.left + window.scrollX}px`;
-            }
+            injectSynthesisToDraft: () => { if (DOM.synthesisEditor.innerHTML) { App.Editor.insertAtCursor(`\n\n🌳 **Synthèse : [[${App.State.activeConcept}]]**\n${DOM.synthesisEditor.innerHTML}\n`); App.UI.closeConceptView(); } }
         };
 
         async function init() {
-            try {
-                await App.DB.open(); App.State.currentMonday = App.Utils.getMonday(new Date());
-                await App.Storage.loadData(); await App.Macros.load(); await App.Agenda.render();
-                App.Voice.init(); setupListeners();
-                setInterval(() => { if (!App.State.isReadMode) App.Storage.saveData(); if(App.State.activeConcept) App.Storage.saveSynthesis(); }, 3000); 
-            } catch (e) { console.error(e); }
+            await App.DB.open(); App.State.currentMonday = App.Utils.getMonday(new Date());
+            await App.Storage.loadData(); await App.Macros.load(); await App.Agenda.render(); App.Voice.init();
+            setupListeners();
+            setInterval(() => { if (!App.State.isReadMode) App.Storage.saveData(); if(App.State.activeConcept) App.Storage.saveSynthesis(); }, 3000);
         }
 
         function setupListeners() {
@@ -741,25 +685,16 @@
                     const seq = App.State.macroBuffer.join(',');
                     if (App.State.activeMacros[seq]) { App.Editor.insertAtCursor(App.State.activeMacros[seq]); App.State.macroBuffer = []; } 
                     else {
-                        App.State.macroTimeout = setTimeout(() => { App.State.macroBuffer = []; }, 1000);
-                        if (App.State.macroBuffer.length === 1) {
-                            const k = App.State.macroBuffer[0];
-                            const actions = { 'm': App.Macros.openModal, 'v': App.Editor.toggleViewMode, 't': App.Agenda.goToToday, 'n': App.Editor.addNewLineAtStart, 'e': App.Editor.addNewLineAtEnd, 'r': App.Voice.toggle, 'arrowleft': () => App.Agenda.changeWeek(-1), 'arrowright': () => App.Agenda.changeWeek(1), 'delete': App.UI.openConfirmModal };
-                            if (actions[k]) { actions[k](); App.State.macroBuffer = []; }
-                        }
+                        App.State.macroTimeout = setTimeout(() => { App.State.macroBuffer = []; }, 800);
+                        const actions = { 'm': App.Macros.openModal, 'v': App.Editor.toggleViewMode, 't': App.Agenda.goToToday, 'n': App.Editor.addNewLineAtStart, 'e': App.Editor.addNewLineAtEnd, 'r': App.Voice.toggle };
+                        if (actions[App.State.macroBuffer[0]]) { actions[App.State.macroBuffer[0]](); App.State.macroBuffer = []; }
                     }
-                    return;
                 }
                 if ((e.ctrlKey || e.metaKey) && e.key === 'f') { e.preventDefault(); App.Search.openModal(); }
-                if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); App.IO.exportMarkdown(); }
-                if (e.key === 'F1') { e.preventDefault(); App.UI.openHelpModal(); }
-                if (e.key === 'Escape') { App.Search.closeModal(); App.UI.closeHelpModal(); App.UI.closeConfirmModal(); App.Macros.closeModal(); App.UI.closeConceptView(); }
             });
             document.addEventListener('selectionchange', () => {
                 const s = window.getSelection();
-                if (!s.rangeCount || s.isCollapsed || (!DOM.editor.contains(s.anchorNode) && !DOM.synthesisEditor.contains(s.anchorNode))) { DOM.smartToolbar.style.display = 'none'; return; }
-                const r = s.getRangeAt(0).getBoundingClientRect();
-                if (s.toString().trim().length > 0 && DOM.editor.contains(s.anchorNode)) App.UI.showSmartToolbar(r, s.toString());
+                if (s.rangeCount && !s.isCollapsed && DOM.editor.contains(s.anchorNode)) { App.UI.showSmartToolbar(s.getRangeAt(0).getBoundingClientRect(), s.toString()); } else { DOM.smartToolbar.style.display = 'none'; }
             });
         }
         window.onload = init;
