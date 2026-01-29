@@ -8,6 +8,7 @@
     <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        /* --- CORE THEME --- */
         :root {
             --bg-dark: #0a0f1d;
             --accent: #3b82f6;
@@ -27,11 +28,13 @@
             color: var(--text-main);
         }
 
+        /* --- SCROLLBARS --- */
         .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 99px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
 
+        /* --- EDITOR STYLES --- */
         [contenteditable]:focus { outline: none; }
         
         #main-editor { 
@@ -41,15 +44,14 @@
             color: #cbd5e1;
             caret-color: var(--accent);
         }
-
         #main-editor.read-mode { cursor: default; }
 
         .smart-link-date { color: var(--accent); font-weight: 600; cursor: pointer; border-bottom: 1px solid rgba(59, 130, 246, 0.2); }
         .smart-link-tag { color: #10b981; font-weight: 600; cursor: pointer; background: rgba(16, 185, 129, 0.1); padding: 1px 6px; border-radius: 4px; }
-
         .task-checkbox { cursor: pointer; margin-right: 12px; transform: scale(1.2); accent-color: var(--accent); }
         .task-line-done { text-decoration: line-through; opacity: 0.4; filter: grayscale(1); }
 
+        /* --- AGENDA STYLES --- */
         .agenda-card {
             background: rgba(255, 255, 255, 0.02);
             border-bottom: 1px solid var(--border);
@@ -58,8 +60,8 @@
         }
         .agenda-card.today { background: rgba(59, 130, 246, 0.05); border-left-color: var(--accent); }
         .agenda-card.highlight-flash { animation: flash 1s ease; }
-        @keyframes flash { 0% { background: rgba(59, 130, 246, 0.3); } 100% { background: transparent; } }
-
+        
+        /* Contrainte 6 lignes : 0.9rem (font) * 1.5 (line-height) * 6 = 8.1rem */
         .agenda-content { 
             font-size: 0.9rem; 
             line-height: 1.5; 
@@ -71,13 +73,13 @@
 
         .card-actions { opacity: 0; transform: translateY(3px); transition: all 0.2s; }
         .agenda-card:hover .card-actions { opacity: 1; transform: translateY(0); }
-
         .action-icon { 
             padding: 5px; border-radius: 5px; color: #64748b; cursor: pointer; 
             background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border);
         }
         .action-icon:hover { background: #334155; color: white; }
 
+        /* --- UI COMPONENTS --- */
         #smart-toolbar { 
             position: absolute; display: none; background: rgba(15, 23, 42, 0.95); 
             backdrop-filter: blur(10px); border: 1px solid var(--border);
@@ -114,90 +116,98 @@
         
         .recording-pulse { animation: pulse-red 1.5s infinite; color: #ef4444 !important; }
         @keyframes pulse-red { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        @keyframes flash { 0% { background: rgba(59, 130, 246, 0.3); } 100% { background: transparent; } }
     </style>
 </head>
 <body class="flex flex-col md:flex-row h-full w-full">
 
+    <!-- AGENDA SIDEBAR -->
     <aside class="w-full md:w-[380px] bg-black/30 border-r border-white/5 flex flex-col shrink-0 z-20 relative">
         <div class="h-14 flex items-center justify-between px-6 border-b border-white/5 shrink-0">
             <div class="flex items-center gap-2">
-                <button onclick="changeWeek(-1)" class="p-1.5 hover:bg-white/5 rounded text-slate-500 hover:text-white transition-colors">
+                <button onclick="Agenda.changeWeek(-1)" class="p-1.5 hover:bg-white/5 rounded text-slate-500 hover:text-white transition-colors">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M15 19l-7-7 7-7"/></svg>
                 </button>
                 <span id="week-range" class="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono"></span>
-                <button onclick="changeWeek(1)" class="p-1.5 hover:bg-white/5 rounded text-slate-500 hover:text-white transition-colors">
+                <button onclick="Agenda.changeWeek(1)" class="p-1.5 hover:bg-white/5 rounded text-slate-500 hover:text-white transition-colors">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>
                 </button>
             </div>
-            <button onclick="goToToday()" class="text-[9px] font-bold uppercase tracking-widest bg-blue-500/10 text-blue-400 px-3 py-1.5 rounded border border-blue-500/20 hover:bg-blue-500/20 transition-all">Aujourd'hui</button>
+            <button onclick="Agenda.goToToday()" class="text-[9px] font-bold uppercase tracking-widest bg-blue-500/10 text-blue-400 px-3 py-1.5 rounded border border-blue-500/20 hover:bg-blue-500/20 transition-all">Aujourd'hui</button>
         </div>
         <div class="flex-1 overflow-y-auto custom-scrollbar" id="agenda-container"></div>
     </aside>
 
+    <!-- MAIN EDITOR AREA -->
     <main class="flex-1 h-full flex flex-col relative min-h-0">
+        <!-- HEADER / TOOLBAR -->
         <header class="h-14 border-b border-white/5 flex items-center justify-between px-6 bg-white/[0.01] shrink-0">
             <div class="flex items-center gap-3">
-                <button onclick="toggleViewMode()" id="view-mode-btn" class="p-2 rounded-lg text-slate-400 hover:text-white transition-all" title="Mode Lecture (Alt+V)">
+                <button onclick="Editor.toggleViewMode()" id="view-mode-btn" class="p-2 rounded-lg text-slate-400 hover:text-white transition-all" title="Mode Lecture (Alt+V)">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-width="2.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
                 </button>
                 <div class="h-5 w-[1px] bg-white/10"></div>
                 
                 <div id="formatting-tools" class="flex items-center gap-1">
-                    <button onclick="execCmd('bold')" class="text-slate-500 hover:text-white px-2 py-1 text-xs font-black rounded hover:bg-white/5" title="Gras (Ctrl+B)">B</button>
-                    <button onclick="applyHighlight()" class="text-yellow-500/70 hover:text-yellow-400 px-2 py-1 text-xs font-bold rounded hover:bg-white/5" title="Surligner">S</button>
-                    <button onclick="addNewLineAtStart()" class="p-2 text-emerald-500/70 hover:text-emerald-400" title="Ajouter en haut (Alt+N)">
+                    <button onclick="Editor.execCmd('bold')" class="text-slate-500 hover:text-white px-2 py-1 text-xs font-black rounded hover:bg-white/5" title="Gras (Ctrl+B)">B</button>
+                    <button onclick="Editor.applyHighlight()" class="text-yellow-500/70 hover:text-yellow-400 px-2 py-1 text-xs font-bold rounded hover:bg-white/5" title="Surligner">S</button>
+                    <button onclick="Editor.addNewLineAtStart()" class="p-2 text-emerald-500/70 hover:text-emerald-400" title="Ajouter en haut (Alt+N)">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
                     </button>
-                    <button onclick="addNewLineAtEnd()" class="p-2 text-emerald-500/70 hover:text-emerald-400" title="Ajouter en bas (Alt+E)">
+                    <button onclick="Editor.addNewLineAtEnd()" class="p-2 text-emerald-500/70 hover:text-emerald-400" title="Ajouter en bas (Alt+E)">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
                     </button>
-                    <button onclick="openConfirmModal()" class="p-2 text-slate-600 hover:text-red-500" title="Vider le brouillon (Alt+Del)">
+                    <button onclick="UI.openConfirmModal()" class="p-2 text-slate-600 hover:text-red-500" title="Vider le brouillon (Alt+Del)">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                     </button>
                 </div>
             </div>
             
             <div class="flex items-center gap-2">
-                <button onclick="openMacroModal()" class="p-2 text-slate-500 hover:text-purple-400" title="Macros (Alt+M)">
+                <button onclick="Macros.openModal()" class="p-2 text-slate-500 hover:text-purple-400" title="Macros (Alt+M)">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
                 </button>
-                <button id="voice-btn" onclick="toggleVoiceRecognition()" class="p-2 text-slate-500 hover:text-emerald-400" title="Dictée vocale (Alt+R)">
+                <button id="voice-btn" onclick="Voice.toggle()" class="p-2 text-slate-500 hover:text-emerald-400" title="Dictée vocale (Alt+R)">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>
                 </button>
-                <button onclick="openSearchModal()" class="p-2 text-slate-500 hover:text-white" title="Rechercher (Ctrl+F)">
+                <button onclick="Search.openModal()" class="p-2 text-slate-500 hover:text-white" title="Rechercher (Ctrl+F)">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
                 </button>
-                <input type="file" id="import-input" class="hidden" accept=".json" onchange="importData(event)">
-                <button onclick="triggerImport()" class="p-2 text-slate-500 hover:text-blue-400" title="Importer (Ctrl+O)">
+                <input type="file" id="import-input" class="hidden" accept=".json" onchange="Storage.importData(event)">
+                <button onclick="Storage.triggerImport()" class="p-2 text-slate-500 hover:text-blue-400" title="Importer (Ctrl+O)">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
                 </button>
-                <button onclick="exportData()" class="p-2 text-slate-500 hover:text-blue-400" title="Exporter (Ctrl+S)">
+                <button onclick="Storage.exportData()" class="p-2 text-slate-500 hover:text-blue-400" title="Exporter (Ctrl+S)">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
                 </button>
-                <button onclick="openHelpModal()" class="p-2 text-slate-600 hover:text-yellow-500 font-black">?</button>
+                <button onclick="UI.openHelpModal()" class="p-2 text-slate-600 hover:text-yellow-500 font-black" title="Aide (F1)">?</button>
             </div>
         </header>
 
+        <!-- CONTENT AREA -->
         <div class="flex-1 overflow-y-auto custom-scrollbar bg-black/5">
             <div id="main-editor" contenteditable="true" class="max-w-3xl mx-auto p-12 md:p-20 outline-none" placeholder="Capturez l'éphémère ici..."></div>
         </div>
 
+        <!-- SMART TOOLBAR (Popup) -->
         <div id="smart-toolbar" class="flex items-center shadow-2xl">
             <div class="px-2 text-[8px] text-slate-500 font-black uppercase border-r border-white/10 mr-1">VERS</div>
             <div id="toolbar-days" class="flex gap-1"></div>
         </div>
     </main>
 
-    <!-- Detailed Help Modal -->
-    <div id="help-modal" class="modal-overlay" onclick="closeHelpModal(event)">
+    <!-- === MODALS === -->
+
+    <!-- HELP MODAL -->
+    <div id="help-modal" class="modal-overlay" onclick="UI.closeHelpModal(event)">
         <div class="modal-box" onclick="event.stopPropagation()">
             <div class="flex justify-between items-center border-b border-white/5 pb-3">
                 <div class="flex gap-6">
-                    <button onclick="switchHelpTab('shortcuts')" id="tab-shortcuts" class="help-tab-btn active">Commandes</button>
-                    <button onclick="switchHelpTab('macros')" id="tab-macros" class="help-tab-btn">Macros & Accords</button>
-                    <button onclick="switchHelpTab('method')" id="tab-method" class="help-tab-btn">Méthodologie</button>
+                    <button onclick="UI.switchHelpTab('shortcuts')" id="tab-shortcuts" class="help-tab-btn active">Commandes</button>
+                    <button onclick="UI.switchHelpTab('macros')" id="tab-macros" class="help-tab-btn">Macros & Accords</button>
+                    <button onclick="UI.switchHelpTab('method')" id="tab-method" class="help-tab-btn">Méthodologie</button>
                 </div>
-                <button onclick="closeHelpModal()" class="text-slate-500 hover:text-white text-xs">Fermer</button>
+                <button onclick="UI.closeHelpModal()" class="text-slate-500 hover:text-white text-xs">Fermer</button>
             </div>
             
             <div id="pane-shortcuts" class="help-content-pane active">
@@ -248,360 +258,384 @@
         </div>
     </div>
 
-    <!-- Macro Manager -->
-    <div id="macro-modal" class="modal-overlay" onclick="closeMacroModal(event)">
+    <!-- MACRO MODAL -->
+    <div id="macro-modal" class="modal-overlay" onclick="Macros.closeModal(event)">
         <div class="modal-box max-w-sm" onclick="event.stopPropagation()">
             <h3 class="text-white font-black uppercase text-xs mb-6 tracking-widest">Gestionnaire de Macros</h3>
             <div id="macro-list" class="space-y-2 mb-6 max-h-48 overflow-y-auto custom-scrollbar"></div>
             <div class="p-4 bg-white/5 rounded-lg border border-white/5 space-y-3">
                 <input type="text" id="new-macro-trigger" placeholder="Séquence (ex: h,i)" class="macro-input">
                 <input type="text" id="new-macro-text" placeholder="Texte de remplacement" class="macro-input">
-                <button onclick="addMacro()" class="w-full py-2 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded text-[10px] font-black uppercase hover:bg-blue-500/20">Enregistrer</button>
+                <button onclick="Macros.add()" class="w-full py-2 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded text-[10px] font-black uppercase hover:bg-blue-500/20">Enregistrer</button>
             </div>
-            <button onclick="closeMacroModal()" class="w-full mt-4 text-slate-500 text-[10px] uppercase font-bold">Fermer</button>
+            <button onclick="Macros.closeModal()" class="w-full mt-4 text-slate-500 text-[10px] uppercase font-bold">Fermer</button>
         </div>
     </div>
 
-    <!-- Modals (Search, Confirm) -->
-    <div id="search-modal" class="modal-overlay" onclick="closeSearchModal(event)">
+    <!-- SEARCH MODAL -->
+    <div id="search-modal" class="modal-overlay" onclick="Search.closeModal(event)">
         <div class="modal-box" onclick="event.stopPropagation()">
-            <input type="text" id="search-input" placeholder="Recherche globale ou tags..." class="bg-transparent text-white w-full outline-none text-xl font-light border-b border-white/10 pb-4 mb-6" oninput="handleSearch(this.value)">
+            <input type="text" id="search-input" placeholder="Recherche globale ou tags..." class="bg-transparent text-white w-full outline-none text-xl font-light border-b border-white/10 pb-4 mb-6" oninput="Search.handle(this.value)">
             <div id="search-results" class="space-y-4 max-h-96 overflow-y-auto custom-scrollbar"></div>
         </div>
     </div>
 
+    <!-- CONFIRM MODAL -->
     <div id="confirm-modal" class="modal-overlay">
         <div class="modal-box max-w-xs text-center">
             <h3 class="text-lg font-bold text-white mb-6">Effacer le brouillon ?</h3>
             <div class="flex justify-center gap-4">
-                <button onclick="closeConfirmModal()" class="text-slate-500 font-bold hover:text-white px-4">Annuler</button>
-                <button onclick="clearDraft()" class="px-6 py-2 bg-red-500/10 text-red-500 border border-red-500/20 rounded-lg font-black uppercase tracking-widest hover:bg-red-500/20">Vider</button>
+                <button onclick="UI.closeConfirmModal()" class="text-slate-500 font-bold hover:text-white px-4">Annuler</button>
+                <button onclick="Editor.clearDraft()" class="px-6 py-2 bg-red-500/10 text-red-500 border border-red-500/20 rounded-lg font-black uppercase tracking-widest hover:bg-red-500/20">Vider</button>
             </div>
         </div>
     </div>
 
+    <!-- TOAST -->
     <div id="toast" class="toast">Action effectuée</div>
 
     <script>
+        // --- CONSTANTS & STATE ---
         const db = new Dexie("EfficientAgendaDB");
-        db.version(2).stores({ 
-            notes: "id", 
-            agenda: "date",
-            macros: "trigger" 
-        });
+        db.version(2).stores({ notes: "id", agenda: "date", macros: "trigger" });
 
-        const editor = document.getElementById('main-editor');
-        const agendaContainer = document.getElementById('agenda-container');
-        const weekRangeEl = document.getElementById('week-range');
-        const smartToolbar = document.getElementById('smart-toolbar');
-        const toastEl = document.getElementById('toast');
-        const viewModeBtn = document.getElementById('view-mode-btn');
-        const voiceBtn = document.getElementById('voice-btn');
-        
-        let currentMonday = getMonday(new Date());
-        let isReadMode = false;
-        let rawEditorContent = '';
-        let isRecording = false;
-        let recognition = null;
-        let macroBuffer = [];
-        let macroTimeout = null;
-        let activeMacros = {};
+        const DOM = {
+            editor: document.getElementById('main-editor'),
+            agendaContainer: document.getElementById('agenda-container'),
+            weekRangeEl: document.getElementById('week-range'),
+            smartToolbar: document.getElementById('smart-toolbar'),
+            toastEl: document.getElementById('toast'),
+            viewModeBtn: document.getElementById('view-mode-btn'),
+            voiceBtn: document.getElementById('voice-btn'),
+            macroList: document.getElementById('macro-list'),
+            searchResults: document.getElementById('search-results')
+        };
 
-        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            recognition = new SpeechRecognition();
-            recognition.continuous = false;
-            recognition.lang = 'fr-FR';
-            recognition.onstart = () => { isRecording = true; voiceBtn.classList.add('recording-pulse'); showToast("Dictée active..."); };
-            recognition.onresult = (event) => { insertAtCursor(event.results[0][0].transcript); saveData(); };
-            recognition.onerror = () => { stopVoiceRecognition(); };
-            recognition.onend = () => { stopVoiceRecognition(); };
-        }
+        const State = {
+            currentMonday: null,
+            isReadMode: false,
+            rawEditorContent: '',
+            isRecording: false,
+            macroBuffer: [],
+            macroTimeout: null,
+            activeMacros: {},
+            recognition: null
+        };
 
+        // --- MODULES ---
+
+        const Utils = {
+            getMonday: (d) => { d = new Date(d); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); const mon = new Date(d.setDate(diff)); mon.setHours(0,0,0,0); return mon; },
+            dateToKey: (d) => { const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, '0'); const day = String(d.getDate()).padStart(2, '0'); return `${y}-${m}-${day}`; },
+            formatDS: (d) => d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }),
+            showToast: (m) => { DOM.toastEl.textContent = m; DOM.toastEl.classList.add('show'); setTimeout(() => DOM.toastEl.classList.remove('show'), 3000); },
+            focusAndPlaceCaret: (el) => { 
+                const range = document.createRange(); const sel = window.getSelection(); 
+                range.setStart(el, 0); range.collapse(true); sel.removeAllRanges(); sel.addRange(range); el.focus(); 
+            }
+        };
+
+        const Storage = {
+            loadData: async () => { const n = await db.notes.get('main'); if (n) DOM.editor.innerHTML = n.content; },
+            saveData: async () => { 
+                if (State.isReadMode) return; 
+                await db.notes.put({id: 'main', content: DOM.editor.innerHTML}); 
+                const cards = document.querySelectorAll('.agenda-card'); 
+                for (let c of cards) await db.agenda.put({date: c.dataset.date, content: c.querySelector('.agenda-content').innerHTML}); 
+            },
+            exportData: () => {
+                db.agenda.toArray().then(a => {
+                    db.notes.get('main').then(n => {
+                        const d = JSON.stringify({ notes: n ? n.content : '', agenda: a });
+                        const b = new Blob([d], {type: 'application/json'});
+                        const l = document.createElement('a'); l.href = URL.createObjectURL(b); l.download = `backup.json`; l.click();
+                    });
+                });
+            },
+            triggerImport: () => document.getElementById('import-input').click(),
+            importData: (e) => {
+                const f = e.target.files[0]; if (!f) return;
+                const r = new FileReader();
+                r.onload = async (ev) => {
+                    const d = JSON.parse(ev.target.result);
+                    if (d.notes) await db.notes.put({id: 'main', content: d.notes});
+                    if (d.agenda) { await db.agenda.clear(); for (let i of d.agenda) await db.agenda.put(i); }
+                    location.reload();
+                };
+                r.readAsText(f);
+            }
+        };
+
+        const Agenda = {
+            render: async () => {
+                DOM.agendaContainer.innerHTML = '';
+                const sunday = new Date(State.currentMonday); sunday.setDate(sunday.getDate() + 6);
+                DOM.weekRangeEl.textContent = `${Utils.formatDS(State.currentMonday)} - ${Utils.formatDS(sunday)}`;
+                
+                for (let i = 0; i < 7; i++) {
+                    const date = new Date(State.currentMonday); date.setDate(date.getDate() + i);
+                    const key = Utils.dateToKey(date); const isToday = key === Utils.dateToKey(new Date());
+                    const entry = await db.agenda.get(key);
+                    const card = document.createElement('div');
+                    card.className = `agenda-card px-5 py-4 ${isToday ? 'today' : ''}`; card.id = `card-${key}`; card.dataset.date = key;
+                    card.innerHTML = `
+                        <div class="flex justify-between items-start mb-1 group">
+                            <span class="text-[9px] font-black uppercase tracking-widest ${isToday ? 'text-blue-400' : 'text-slate-600'}">${date.toLocaleDateString('fr-FR', {weekday:'short', day:'numeric'})}</span>
+                            <div class="card-actions flex gap-1">
+                                <button onclick="Agenda.importDraftToDay('${key}')" class="action-icon" title="Importer"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg></button>
+                                <button onclick="Agenda.copyDay('${key}')" class="action-icon" title="Copier"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2"/></svg></button>
+                                <button onclick="Agenda.moveDayToDraft('${key}')" class="action-icon text-emerald-500/70" title="Brouillon"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg></button>
+                                <button onclick="Agenda.clearDay('${key}')" class="action-icon text-red-500/50" title="Vider"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+                            </div>
+                        </div>
+                        <div class="agenda-content outline-none custom-scrollbar" contenteditable="true" oninput="Storage.saveData()">${entry ? entry.content : ''}</div>
+                    `;
+                    DOM.agendaContainer.appendChild(card);
+                }
+            },
+            changeWeek: (d) => { State.currentMonday.setDate(State.currentMonday.getDate() + (d * 7)); Agenda.render(); },
+            goToToday: () => { State.currentMonday = Utils.getMonday(new Date()); Agenda.render(); },
+            copyDay: async (k) => {
+                const e = await db.agenda.get(k);
+                if (e && e.content) {
+                    const t = document.createElement('textarea');
+                    t.value = e.content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+                    document.body.appendChild(t); t.select(); document.execCommand('copy'); document.body.removeChild(t);
+                    Utils.showToast("Texte copié");
+                } else Utils.showToast("Journée vide");
+            },
+            moveDayToDraft: async (k) => {
+                const e = await db.agenda.get(k); if (!e || !e.content) return;
+                DOM.editor.innerHTML += '<div><br></div>' + e.content;
+                await db.agenda.delete(k); Agenda.render(); Storage.saveData(); Utils.showToast("Déplacé");
+            },
+            importDraftToDay: (k) => Agenda.appendToDay(k, State.isReadMode ? State.rawEditorContent : DOM.editor.innerHTML),
+            appendToDay: async (k, h) => { const e = await db.agenda.get(k); const n = (e ? e.content : '') + '<div><br></div>' + h; await db.agenda.put({date: k, content: n}); Agenda.render(); Utils.showToast("Importé"); },
+            clearDay: async (k) => { if(confirm("Effacer ce jour ?")) { await db.agenda.delete(k); Agenda.render(); Utils.showToast("Effacé"); } }
+        };
+
+        const Editor = {
+            insertAtCursor: (text) => {
+                const target = (document.activeElement && (document.activeElement === DOM.editor || document.activeElement.classList.contains('agenda-content'))) ? document.activeElement : DOM.editor;
+                if (target !== document.activeElement) target.focus();
+                document.execCommand('insertText', false, text + ' ');
+            },
+            execCmd: (c, v=null) => { if(!State.isReadMode) { document.execCommand(c, false, v); DOM.editor.focus(); } },
+            applyHighlight: () => { if (!State.isReadMode) { document.execCommand('hiliteColor', false, '#fde047'); document.execCommand('foreColor', false, '#000000'); Storage.saveData(); } },
+            addNewLineAtStart: () => { if (State.isReadMode) return; const div = document.createElement('div'); div.innerHTML = '<br>'; DOM.editor.prepend(div); Utils.focusAndPlaceCaret(div); },
+            addNewLineAtEnd: () => { if (State.isReadMode) return; const div = document.createElement('div'); div.innerHTML = '<br>'; DOM.editor.append(div); Utils.focusAndPlaceCaret(div); },
+            clearDraft: async () => { DOM.editor.innerHTML = ''; State.rawEditorContent = ''; await db.notes.put({id: 'main', content: ''}); UI.closeConfirmModal(); Utils.showToast("Réinitialisé"); },
+            toggleViewMode: () => {
+                State.isReadMode = !State.isReadMode;
+                if (State.isReadMode) {
+                    Storage.saveData(); State.rawEditorContent = DOM.editor.innerHTML;
+                    DOM.editor.contentEditable = "false"; DOM.editor.classList.add('read-mode');
+                    DOM.viewModeBtn.classList.add('text-blue-400', 'bg-blue-500/10'); Editor.parseAndLinkify();
+                } else {
+                    DOM.editor.innerHTML = State.rawEditorContent; DOM.editor.contentEditable = "true";
+                    DOM.editor.classList.remove('read-mode'); DOM.viewModeBtn.classList.remove('text-blue-400', 'bg-blue-500/10');
+                }
+            },
+            parseAndLinkify: () => {
+                const walker = document.createTreeWalker(DOM.editor, NodeFilter.SHOW_TEXT);
+                const nodes = []; while(walker.nextNode()) nodes.push(walker.currentNode);
+                nodes.forEach(node => {
+                    const text = node.nodeValue;
+                    let html = text
+                        .replace(/\[ \]/g, '<input type="checkbox" class="task-checkbox" onchange="this.parentElement.classList.toggle(\'task-line-done\')">')
+                        .replace(/\[x\]/g, '<input type="checkbox" class="task-checkbox" checked onchange="this.parentElement.classList.toggle(\'task-line-done\')">')
+                        .replace(/(\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\b)/g, '<span class="smart-link-date" onclick="Agenda.goToDateLink(\'$1\')">$1</span>')
+                        .replace(/(#[a-zA-Z0-9_-]+)/g, '<span class="smart-link-tag" onclick="Search.byTag(\'$1\')">$1</span>');
+                    if (html !== text) {
+                        const span = document.createElement('span'); span.innerHTML = html;
+                        node.parentNode.replaceChild(span, node);
+                    }
+                });
+            }
+        };
+
+        const Macros = {
+            load: async () => {
+                const macrosArr = await db.macros.toArray();
+                State.activeMacros = {};
+                macrosArr.forEach(m => State.activeMacros[m.trigger] = m.text);
+                if (Object.keys(State.activeMacros).length === 0) {
+                    const defaults = { 'h,i': '#Important', 'h,u': '#Urgent', 'h,d': '#Terminé' };
+                    for (let k in defaults) await db.macros.put({trigger: k, text: defaults[k]});
+                    await Macros.load();
+                }
+            },
+            renderList: () => {
+                DOM.macroList.innerHTML = '';
+                for (let trigger in State.activeMacros) {
+                    const item = document.createElement('div');
+                    item.className = 'macro-list-item';
+                    item.innerHTML = `
+                        <div class="flex flex-col">
+                            <span class="text-[10px] font-mono text-white">${trigger.replace(/,/g, ' + ')}</span>
+                            <span class="text-[9px] text-slate-500">${State.activeMacros[trigger]}</span>
+                        </div>
+                        <button onclick="Macros.delete('${trigger}')" class="text-red-500/50 hover:text-red-500 text-[8px] font-black">X</button>
+                    `;
+                    DOM.macroList.appendChild(item);
+                }
+            },
+            add: async () => {
+                const trigger = document.getElementById('new-macro-trigger').value.toLowerCase().trim();
+                const text = document.getElementById('new-macro-text').value.trim();
+                if (!trigger || !text) return;
+                await db.macros.put({trigger, text});
+                document.getElementById('new-macro-trigger').value = '';
+                document.getElementById('new-macro-text').value = '';
+                await Macros.load(); Macros.renderList(); Utils.showToast("Macro ajoutée");
+            },
+            delete: async (trigger) => { await db.macros.delete(trigger); await Macros.load(); Macros.renderList(); },
+            openModal: () => { document.getElementById('macro-modal').style.display='flex'; Macros.renderList(); },
+            closeModal: () => { document.getElementById('macro-modal').style.display='none'; }
+        };
+
+        const Search = {
+            handle: async (q) => {
+                DOM.searchResults.innerHTML = ''; 
+                const highlights = [];
+                const tempDiv = document.createElement('div');
+                const processSearch = (content, date, type) => {
+                    tempDiv.innerHTML = content;
+                    tempDiv.querySelectorAll('div, p, li').forEach(node => {
+                        const text = node.innerText.toLowerCase();
+                        const isHighlight = node.style.backgroundColor || node.querySelector('span.smart-link-tag');
+                        if ((q && text.includes(q.toLowerCase())) || (!q && isHighlight)) {
+                            highlights.push({ type, html: node.innerHTML, date });
+                        }
+                    });
+                };
+                processSearch(State.isReadMode ? State.rawEditorContent : DOM.editor.innerHTML, 'Brouillon', 'draft');
+                const entries = await db.agenda.toArray();
+                for (const e of entries) processSearch(e.content, e.date, 'agenda');
+                highlights.forEach(h => {
+                    const d = document.createElement('div'); d.className = "p-4 bg-white/[0.03] border border-white/5 rounded-lg cursor-pointer hover:bg-white/[0.06]";
+                    d.innerHTML = `<span class="text-[8px] font-black uppercase tracking-widest text-yellow-500">${h.date}</span><div class="text-xs text-slate-300 mt-2">${h.html}</div>`;
+                    d.onclick = () => h.type === 'draft' ? Search.goToDraft() : Search.goToDateLink(h.date.split('-').reverse().slice(0,2).join('/')); 
+                    DOM.searchResults.appendChild(d);
+                });
+            },
+            byTag: (tag) => { Search.openModal(); document.getElementById('search-input').value = tag; Search.handle(tag); },
+            goToDraft: () => { Search.closeModal(); if (State.isReadMode) Editor.toggleViewMode(); DOM.editor.focus(); },
+            goToDateLink: (ds) => {
+                const p = ds.split('/'); const t = new Date(new Date().getFullYear(), parseInt(p[1])-1, parseInt(p[0]));
+                State.currentMonday = Utils.getMonday(t); Agenda.render().then(() => {
+                    const el = document.getElementById(`card-${Utils.dateToKey(t)}`);
+                    if (el) { el.scrollIntoView({behavior:'smooth', block:'center'}); el.classList.add('highlight-flash'); setTimeout(() => el.classList.remove('highlight-flash'), 1000); }
+                });
+                Search.closeModal();
+            },
+            openModal: () => { document.getElementById('search-modal').style.display='flex'; document.getElementById('search-input').focus(); Search.handle(''); },
+            closeModal: () => { document.getElementById('search-modal').style.display='none'; }
+        };
+
+        const Voice = {
+            init: () => {
+                if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                    State.recognition = new SpeechRecognition();
+                    State.recognition.continuous = false;
+                    State.recognition.lang = 'fr-FR';
+                    State.recognition.onstart = () => { State.isRecording = true; DOM.voiceBtn.classList.add('recording-pulse'); Utils.showToast("Dictée active..."); };
+                    State.recognition.onresult = (event) => { Editor.insertAtCursor(event.results[0][0].transcript); Storage.saveData(); };
+                    State.recognition.onerror = () => { Voice.stop(); };
+                    State.recognition.onend = () => { Voice.stop(); };
+                }
+            },
+            toggle: () => {
+                if (State.isReadMode) return;
+                if (!State.recognition) return Utils.showToast("Non supporté");
+                State.isRecording ? State.recognition.stop() : State.recognition.start();
+            },
+            stop: () => { State.isRecording = false; DOM.voiceBtn.classList.remove('recording-pulse'); }
+        };
+
+        const UI = {
+            openHelpModal: () => document.getElementById('help-modal').style.display = 'flex',
+            closeHelpModal: () => document.getElementById('help-modal').style.display = 'none',
+            switchHelpTab: (tabId) => {
+                document.querySelectorAll('.help-tab-btn').forEach(btn => btn.classList.remove('active'));
+                document.querySelectorAll('.help-content-pane').forEach(pane => pane.classList.remove('active'));
+                document.getElementById('tab-' + tabId).classList.add('active');
+                document.getElementById('pane-' + tabId).classList.add('active');
+            },
+            openConfirmModal: () => document.getElementById('confirm-modal').style.display='flex',
+            closeConfirmModal: () => document.getElementById('confirm-modal').style.display='none',
+            showSmartToolbar: (rect, text) => {
+                const c = document.getElementById('toolbar-days'); c.innerHTML = '';
+                ['L', 'M', 'M', 'J', 'V', 'S', 'D'].forEach((d, i) => {
+                    const date = new Date(State.currentMonday); date.setDate(date.getDate() + i);
+                    const k = Utils.dateToKey(date); const b = document.createElement('div'); b.className = `toolbar-btn`; b.textContent = d;
+                    b.onmousedown = (e) => { e.preventDefault(); Agenda.appendToDay(k, text); DOM.smartToolbar.style.display = 'none'; };
+                    c.appendChild(b);
+                });
+                DOM.smartToolbar.style.display = 'flex'; DOM.smartToolbar.style.top = `${rect.bottom + window.scrollY + 10}px`; DOM.smartToolbar.style.left = `${rect.left + window.scrollX}px`;
+            }
+        };
+
+        // --- INIT & LISTENERS ---
         async function init() {
             try {
                 await db.open();
-                await loadData();
-                await loadMacros();
-                renderAgenda();
+                State.currentMonday = Utils.getMonday(new Date());
+                await Storage.loadData();
+                await Macros.load();
+                await Agenda.render();
+                Voice.init();
                 setupListeners();
-                setInterval(() => { if (!isReadMode) saveData(); }, 5000); 
-            } catch (err) { console.error(err); }
-        }
-
-        // --- HELP SYSTEM ---
-
-        function openHelpModal() { document.getElementById('help-modal').style.display = 'flex'; }
-        function closeHelpModal() { document.getElementById('help-modal').style.display = 'none'; }
-        function switchHelpTab(tabId) {
-            document.querySelectorAll('.help-tab-btn').forEach(btn => btn.classList.remove('active'));
-            document.querySelectorAll('.help-content-pane').forEach(pane => pane.classList.remove('active'));
-            document.getElementById('tab-' + tabId).classList.add('active');
-            document.getElementById('pane-' + tabId).classList.add('active');
-        }
-
-        // --- CORE FUNCTIONS ---
-
-        async function loadMacros() {
-            const macrosArr = await db.macros.toArray();
-            activeMacros = {};
-            macrosArr.forEach(m => activeMacros[m.trigger] = m.text);
-            if (Object.keys(activeMacros).length === 0) {
-                const defaults = { 'h,i': '#Important', 'h,u': '#Urgent', 'h,d': '#Terminé' };
-                for (let k in defaults) await db.macros.put({trigger: k, text: defaults[k]});
-                await loadMacros();
-            }
-        }
-
-        function renderMacrosList() {
-            const list = document.getElementById('macro-list');
-            list.innerHTML = '';
-            for (let trigger in activeMacros) {
-                const item = document.createElement('div');
-                item.className = 'macro-list-item';
-                item.innerHTML = `
-                    <div class="flex flex-col">
-                        <span class="text-[10px] font-mono text-white">${trigger.replace(/,/g, ' + ')}</span>
-                        <span class="text-[9px] text-slate-500">${activeMacros[trigger]}</span>
-                    </div>
-                    <button onclick="deleteMacro('${trigger}')" class="text-red-500/50 hover:text-red-500 text-[8px] font-black">X</button>
-                `;
-                list.appendChild(item);
-            }
-        }
-
-        async function addMacro() {
-            const trigger = document.getElementById('new-macro-trigger').value.toLowerCase().trim();
-            const text = document.getElementById('new-macro-text').value.trim();
-            if (!trigger || !text) return;
-            await db.macros.put({trigger, text});
-            document.getElementById('new-macro-trigger').value = '';
-            document.getElementById('new-macro-text').value = '';
-            await loadMacros(); renderMacrosList(); showToast("Macro ajoutée");
-        }
-
-        async function deleteMacro(trigger) { await db.macros.delete(trigger); await loadMacros(); renderMacrosList(); }
-        
-        function toggleVoiceRecognition() {
-            if (isReadMode) return;
-            if (!recognition) return showToast("Non supporté");
-            isRecording ? recognition.stop() : recognition.start();
-        }
-
-        function stopVoiceRecognition() { isRecording = false; voiceBtn.classList.remove('recording-pulse'); }
-
-        function insertAtCursor(text) {
-            const target = (document.activeElement && (document.activeElement === editor || document.activeElement.classList.contains('agenda-content'))) ? document.activeElement : editor;
-            if (target !== document.activeElement) target.focus();
-            document.execCommand('insertText', false, text + ' ');
-        }
-
-        function applyHighlight() { if (!isReadMode) { document.execCommand('hiliteColor', false, '#fde047'); document.execCommand('foreColor', false, '#000000'); saveData(); } }
-
-        function toggleViewMode() {
-            isReadMode = !isReadMode;
-            if (isReadMode) {
-                saveData(); rawEditorContent = editor.innerHTML;
-                editor.contentEditable = "false"; editor.classList.add('read-mode');
-                viewModeBtn.classList.add('text-blue-400', 'bg-blue-500/10'); parseAndLinkify();
-            } else {
-                editor.innerHTML = rawEditorContent; editor.contentEditable = "true";
-                editor.classList.remove('read-mode'); viewModeBtn.classList.remove('text-blue-400', 'bg-blue-500/10');
-            }
-        }
-
-        function parseAndLinkify() {
-            const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
-            const nodes = []; while(walker.nextNode()) nodes.push(walker.currentNode);
-            nodes.forEach(node => {
-                const text = node.nodeValue;
-                let html = text
-                    .replace(/\[ \]/g, '<input type="checkbox" class="task-checkbox" onchange="toggleTaskState(this, false)">')
-                    .replace(/\[x\]/g, '<input type="checkbox" class="task-checkbox" checked onchange="toggleTaskState(this, true)">')
-                    .replace(/(\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\b)/g, '<span class="smart-link-date" onclick="goToDateLink(\'$1\')">$1</span>')
-                    .replace(/(#[a-zA-Z0-9_-]+)/g, '<span class="smart-link-tag" onclick="searchTag(\'$1\')">$1</span>');
-                if (html !== text) {
-                    const span = document.createElement('span'); span.innerHTML = html;
-                    node.parentNode.replaceChild(span, node);
-                }
-            });
-        }
-
-        function getMonday(d) { d = new Date(d); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); const mon = new Date(d.setDate(diff)); mon.setHours(0,0,0,0); return mon; }
-        
-        async function renderAgenda() {
-            agendaContainer.innerHTML = '';
-            const sunday = new Date(currentMonday); sunday.setDate(sunday.getDate() + 6);
-            weekRangeEl.textContent = `${formatDS(currentMonday)} - ${formatDS(sunday)}`;
-            for (let i = 0; i < 7; i++) {
-                const date = new Date(currentMonday); date.setDate(date.getDate() + i);
-                const key = dateToKey(date); const isToday = key === dateToKey(new Date());
-                const entry = await db.agenda.get(key);
-                const card = document.createElement('div');
-                card.className = `agenda-card px-5 py-4 ${isToday ? 'today' : ''}`; card.id = `card-${key}`; card.dataset.date = key;
-                card.innerHTML = `
-                    <div class="flex justify-between items-start mb-1 group">
-                        <span class="text-[9px] font-black uppercase tracking-widest ${isToday ? 'text-blue-400' : 'text-slate-600'}">${date.toLocaleDateString('fr-FR', {weekday:'short', day:'numeric'})}</span>
-                        <div class="card-actions flex gap-1">
-                            <button onclick="importDraftToDay('${key}')" class="action-icon" title="Importer"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg></button>
-                            <button onclick="copyDay('${key}')" class="action-icon" title="Copier"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2"/></svg></button>
-                            <button onclick="moveDayToDraft('${key}')" class="action-icon text-emerald-500/70" title="Brouillon"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg></button>
-                            <button onclick="clearDay('${key}')" class="action-icon text-red-500/50" title="Vider"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
-                        </div>
-                    </div>
-                    <div class="agenda-content outline-none custom-scrollbar" contenteditable="true" oninput="saveData()">${entry ? entry.content : ''}</div>
-                `;
-                agendaContainer.appendChild(card);
-            }
-        }
-
-        async function loadData() { const n = await db.notes.get('main'); if (n) editor.innerHTML = n.content; }
-        async function saveData() { if (isReadMode) return; await db.notes.put({id: 'main', content: editor.innerHTML}); const cards = document.querySelectorAll('.agenda-card'); for (let c of cards) await db.agenda.put({date: c.dataset.date, content: c.querySelector('.agenda-content').innerHTML}); }
-
-        function dateToKey(d) { const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, '0'); const day = String(d.getDate()).padStart(2, '0'); return `${y}-${m}-${day}`; }
-        function formatDS(d) { return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }); }
-        
-        async function copyDay(k) {
-            const e = await db.agenda.get(k);
-            if (e && e.content) copyRawText(e.content);
-            else showToast("Journée vide");
-        }
-
-        function copyRawText(html) {
-            const t = document.createElement('textarea');
-            t.value = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-            document.body.appendChild(t); t.select(); document.execCommand('copy');
-            document.body.removeChild(t);
-            showToast("Texte copié");
-        }
-
-        async function moveDayToDraft(k) {
-            const e = await db.agenda.get(k); if (!e || !e.content) return;
-            editor.innerHTML += '<div><br></div>' + e.content;
-            await db.agenda.delete(k); renderAgenda(); saveData(); showToast("Déplacé");
-        }
-
-        function importDraftToDay(k) { appendToDay(k, isReadMode ? rawEditorContent : editor.innerHTML); }
-        async function appendToDay(k, h) { const e = await db.agenda.get(k); const n = (e ? e.content : '') + '<div><br></div>' + h; await db.agenda.put({date: k, content: n}); renderAgenda(); showToast("Importé"); }
-        async function clearDay(k) { if(confirm("Effacer ce jour ?")) { await db.agenda.delete(k); renderAgenda(); showToast("Effacé"); } }
-
-        function triggerImport() { document.getElementById('import-input').click(); }
-        async function importData(e) {
-            const f = e.target.files[0]; if (!f) return;
-            const r = new FileReader();
-            r.onload = async (ev) => {
-                const d = JSON.parse(ev.target.result);
-                if (d.notes) await db.notes.put({id: 'main', content: d.notes});
-                if (d.agenda) { await db.agenda.clear(); for (let i of d.agenda) await db.agenda.put(i); }
-                location.reload();
-            };
-            r.readAsText(f);
-        }
-
-        function exportData() {
-            db.agenda.toArray().then(a => {
-                db.notes.get('main').then(n => {
-                    const d = JSON.stringify({ notes: n ? n.content : '', agenda: a });
-                    const b = new Blob([d], {type: 'application/json'});
-                    const l = document.createElement('a'); l.href = URL.createObjectURL(b); l.download = `backup.json`; l.click();
-                });
-            });
-        }
-
-        function goToToday() { currentMonday = getMonday(new Date()); renderAgenda(); }
-        function changeWeek(d) { currentMonday.setDate(currentMonday.getDate() + (d * 7)); renderAgenda(); }
-        function openMacroModal() { document.getElementById('macro-modal').style.display='flex'; renderMacrosList(); }
-        function closeMacroModal() { document.getElementById('macro-modal').style.display='none'; }
-        function openSearchModal() { document.getElementById('search-modal').style.display='flex'; document.getElementById('search-input').focus(); handleSearch(''); }
-        function closeSearchModal() { document.getElementById('search-modal').style.display='none'; }
-        function openConfirmModal() { document.getElementById('confirm-modal').style.display='flex'; }
-        function closeConfirmModal() { document.getElementById('confirm-modal').style.display='none'; }
-        async function clearDraft() { editor.innerHTML = ''; rawEditorContent = ''; await db.notes.put({id: 'main', content: ''}); closeConfirmModal(); showToast("Réinitialisé"); }
-
-        function showToast(m) { toastEl.textContent = m; toastEl.classList.add('show'); setTimeout(() => toastEl.classList.remove('show'), 3000); }
-        function execCmd(c, v=null) { if(!isReadMode) { document.execCommand(c, false, v); editor.focus(); } }
-        function addNewLineAtStart() { if (isReadMode) return; const div = document.createElement('div'); div.innerHTML = '<br>'; editor.prepend(div); focusAndPlaceCaret(div); }
-        function addNewLineAtEnd() { if (isReadMode) return; const div = document.createElement('div'); div.innerHTML = '<br>'; editor.append(div); focusAndPlaceCaret(div); }
-        function focusAndPlaceCaret(el) { const range = document.createRange(); const sel = window.getSelection(); range.setStart(el, 0); range.collapse(true); sel.removeAllRanges(); sel.addRange(range); el.focus(); }
-
-        async function handleSearch(q) {
-            const r = document.getElementById('search-results'); r.innerHTML = ''; 
-            const highlights = [];
-            const tempDiv = document.createElement('div');
-            const processSearch = (content, date, type) => {
-                tempDiv.innerHTML = content;
-                tempDiv.querySelectorAll('div, p, li').forEach(node => {
-                    const text = node.innerText.toLowerCase();
-                    const isHighlight = node.style.backgroundColor || node.querySelector('span.smart-link-tag');
-                    if ((q && text.includes(q.toLowerCase())) || (!q && isHighlight)) {
-                        highlights.push({ type, html: node.innerHTML, date });
-                    }
-                });
-            };
-            processSearch(isReadMode ? rawEditorContent : editor.innerHTML, 'Brouillon', 'draft');
-            const entries = await db.agenda.toArray();
-            for (const e of entries) processSearch(e.content, e.date, 'agenda');
-            highlights.forEach(h => {
-                const d = document.createElement('div'); d.className = "p-4 bg-white/[0.03] border border-white/5 rounded-lg cursor-pointer hover:bg-white/[0.06]";
-                d.innerHTML = `<span class="text-[8px] font-black uppercase tracking-widest text-yellow-500">${h.date}</span><div class="text-xs text-slate-300 mt-2">${h.html}</div>`;
-                d.onclick = () => h.type === 'draft' ? goToDraft() : goToDateLink(h.date.split('-').reverse().slice(0,2).join('/')); 
-                r.appendChild(d);
-            });
-        }
-
-        function goToDraft() { closeSearchModal(); if (isReadMode) toggleViewMode(); editor.focus(); }
-        function goToDateLink(ds) {
-            const p = ds.split('/'); const t = new Date(new Date().getFullYear(), parseInt(p[1])-1, parseInt(p[0]));
-            currentMonday = getMonday(t); renderAgenda().then(() => {
-                const el = document.getElementById(`card-${dateToKey(t)}`);
-                if (el) { el.scrollIntoView({behavior:'smooth', block:'center'}); el.classList.add('highlight-flash'); setTimeout(() => el.classList.remove('highlight-flash'), 1000); }
-            });
-            closeSearchModal();
+                setInterval(() => { if (!State.isReadMode) Storage.saveData(); }, 5000); 
+            } catch (err) { console.error("Initialization Error:", err); }
         }
 
         function setupListeners() {
             document.addEventListener('keydown', e => {
                 if (e.altKey && !['Alt', 'Control', 'Shift', 'Meta'].includes(e.key)) {
-                    e.preventDefault(); macroBuffer.push(e.key.toLowerCase()); clearTimeout(macroTimeout);
-                    const sequence = macroBuffer.join(',');
-                    if (activeMacros[sequence]) { insertAtCursor(activeMacros[sequence]); macroBuffer = []; showToast(`Accord: ${activeMacros[sequence]}`); } 
-                    else {
-                        macroTimeout = setTimeout(() => { macroBuffer = []; }, 1000);
-                        if (macroBuffer.length === 1) {
-                            const k = macroBuffer[0];
-                            if (k === 'm') openMacroModal(); else if (k === 'v') toggleViewMode(); else if (k === 't') goToToday();
-                            else if (k === 'n') addNewLineAtStart(); else if (k === 'e') addNewLineAtEnd(); else if (k === 'r') toggleVoiceRecognition();
-                            else if (k === 'arrowleft') changeWeek(-1); else if (k === 'arrowright') changeWeek(1); else if (k === 'delete') openConfirmModal();
-                            if (['m','v','t','n','e','r','arrowleft','arrowright','delete'].includes(k)) macroBuffer = [];
+                    e.preventDefault(); 
+                    State.macroBuffer.push(e.key.toLowerCase()); 
+                    clearTimeout(State.macroTimeout);
+                    const sequence = State.macroBuffer.join(',');
+                    
+                    if (State.activeMacros[sequence]) { 
+                        Editor.insertAtCursor(State.activeMacros[sequence]); 
+                        State.macroBuffer = []; 
+                        Utils.showToast(`Accord: ${State.activeMacros[sequence]}`); 
+                    } else {
+                        State.macroTimeout = setTimeout(() => { State.macroBuffer = []; }, 1000);
+                        // Built-in shortcuts check
+                        if (State.macroBuffer.length === 1) {
+                            const k = State.macroBuffer[0];
+                            const actions = {
+                                'm': Macros.openModal, 'v': Editor.toggleViewMode, 't': Agenda.goToToday,
+                                'n': Editor.addNewLineAtStart, 'e': Editor.addNewLineAtEnd, 'r': Voice.toggle,
+                                'arrowleft': () => Agenda.changeWeek(-1), 'arrowright': () => Agenda.changeWeek(1), 'delete': UI.openConfirmModal
+                            };
+                            if (actions[k]) { actions[k](); State.macroBuffer = []; }
                         }
                     }
                     return;
                 }
-                if ((e.ctrlKey || e.metaKey) && e.key === 'f') { e.preventDefault(); openSearchModal(); }
-                if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveData(); showToast("Sauvegardé"); }
-                if ((e.ctrlKey || e.metaKey) && e.key === 'o') { e.preventDefault(); triggerImport(); }
-                if (e.key === 'F1') { e.preventDefault(); openHelpModal(); }
-                if (e.key === 'Escape') { closeSearchModal(); closeHelpModal(); closeConfirmModal(); closeMacroModal(); }
+                if ((e.ctrlKey || e.metaKey) && e.key === 'f') { e.preventDefault(); Search.openModal(); }
+                if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); Storage.saveData(); Utils.showToast("Sauvegardé"); }
+                if ((e.ctrlKey || e.metaKey) && e.key === 'o') { e.preventDefault(); Storage.triggerImport(); }
+                if (e.key === 'F1') { e.preventDefault(); UI.openHelpModal(); }
+                if (e.key === 'Escape') { Search.closeModal(); UI.closeHelpModal(); UI.closeConfirmModal(); Macros.closeModal(); }
             });
+
             document.addEventListener('selectionchange', () => {
                 const s = window.getSelection();
-                if (!s.rangeCount || s.isCollapsed || !editor.contains(s.anchorNode)) { smartToolbar.style.display = 'none'; return; }
+                if (!s.rangeCount || s.isCollapsed || !DOM.editor.contains(s.anchorNode)) { DOM.smartToolbar.style.display = 'none'; return; }
                 const rect = s.getRangeAt(0).getBoundingClientRect();
-                if (s.toString().trim().length > 0) showSmartToolbar(rect, s.toString());
+                if (s.toString().trim().length > 0) UI.showSmartToolbar(rect, s.toString());
             });
+            
+            // Expose globally for HTML onClick
+            window.Agenda = Agenda; window.Editor = Editor; window.Storage = Storage; window.Macros = Macros; window.Search = Search; window.Voice = Voice; window.UI = UI;
         }
 
-        function showSmartToolbar(rect, text) {
-            const c = document.getElementById('toolbar-days'); c.innerHTML = '';
-            ['L', 'M', 'M', 'J', 'V', 'S', 'D'].forEach((d, i) => {
-                const date = new Date(currentMonday); date.setDate(date.getDate() + i);
-                const k = dateToKey(date); const b = document.createElement('div'); b.className = `toolbar-btn`; b.textContent = d;
-                b.onmousedown = (e) => { e.preventDefault(); appendToDay(k, text); smartToolbar.style.display = 'none'; };
-                c.appendChild(b);
-            });
-            smartToolbar.style.display = 'flex'; smartToolbar.style.top = `${rect.bottom + window.scrollY + 10}px`; smartToolbar.style.left = `${rect.left + window.scrollX}px`;
-        }
-        function searchTag(tag) { openSearchModal(); document.getElementById('search-input').value = tag; handleSearch(tag); }
         window.onload = init;
     </script>
 </body>
