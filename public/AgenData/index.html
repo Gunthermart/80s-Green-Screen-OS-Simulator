@@ -49,7 +49,6 @@
         .smart-link-tag { color: #10b981; font-weight: 600; cursor: pointer; background: rgba(16, 185, 129, 0.1); padding: 1px 6px; border-radius: 4px; }
         .smart-link-backlink { color: #8b5cf6; font-weight: 700; cursor: pointer; background: rgba(139, 92, 246, 0.1); padding: 1px 4px; border-radius: 4px; border: 1px solid rgba(139, 92, 246, 0.2); }
         
-        /* MATURITY & STALE STYLES */
         .status-seed { opacity: 0.45; font-style: italic; filter: saturate(0.5); }
         .status-grow { color: #10b981; }
         .status-ever { color: #60a5fa; font-weight: 800; text-shadow: 0 0 15px rgba(96, 165, 250, 0.3); }
@@ -206,7 +205,6 @@
     <!-- HELP MODAL -->
     <div id="help-modal" class="modal-overlay" onclick="UI.closeHelpModal(event)">
         <div class="modal-box" onclick="event.stopPropagation()">
-            <!-- New Close Button Position (Top Right) -->
             <button onclick="UI.closeHelpModal()" class="absolute top-6 right-6 p-2 text-slate-500 hover:text-white transition-colors bg-white/5 rounded-full">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
             </button>
@@ -331,7 +329,6 @@
                 </div>
             </div>
 
-            <!-- Footer Action Button -->
             <div class="mt-12 pt-6 border-t border-white/5 flex justify-end">
                 <button onclick="UI.closeHelpModal()" class="px-8 py-3 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-xl font-black uppercase tracking-widest hover:bg-blue-500/20 transition-all text-xs">
                     Compris
@@ -523,8 +520,10 @@
                         <div class="flex justify-between items-start mb-1 group">
                             <span class="text-[9px] font-black uppercase tracking-widest ${isToday ? 'text-blue-400' : 'text-slate-600'}">${date.toLocaleDateString('fr-FR', {weekday:'short', day:'numeric'})}</span>
                             <div class="card-actions flex gap-1">
-                                <button onclick="Agenda.importDraftToDay('${key}')" class="action-icon"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg></button>
-                                <button onclick="Agenda.clearDay('${key}')" class="action-icon text-red-500/50"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+                                <button onclick="Agenda.importDraftToDay('${key}')" class="action-icon" title="Importer du brouillon"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg></button>
+                                <button onclick="Agenda.copyToClipboard('${key}')" class="action-icon" title="Copier le contenu"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2"/></svg></button>
+                                <button onclick="Agenda.moveToDraft('${key}')" class="action-icon text-emerald-500/70" title="Renvoyer au brouillon"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg></button>
+                                <button onclick="Agenda.clearDay('${key}')" class="action-icon text-red-500/50" title="Effacer"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
                             </div>
                         </div>
                         <div class="agenda-content outline-none custom-scrollbar" contenteditable="true" oninput="Storage.saveData()">${entry ? Editor.applyStaleEffect(entry.content, entry.updatedAt) : ''}</div>
@@ -561,6 +560,27 @@
                         <div class="agenda-content custom-scrollbar text-slate-400 italic !h-24" style="font-size: 0.85rem">${Editor.applyStaleEffect(entry.content, entry.updatedAt)}</div>
                     `;
                     DOM.flashbackContainer.appendChild(card);
+                }
+            },
+            copyToClipboard: async (key) => {
+                const entry = await db.agenda.get(key);
+                if (entry && entry.content) {
+                    const md = Utils.htmlToMd(entry.content);
+                    const temp = document.createElement('textarea');
+                    temp.value = md; document.body.appendChild(temp);
+                    temp.select(); document.execCommand('copy');
+                    document.body.removeChild(temp);
+                    Utils.showToast("Markdown copié");
+                }
+            },
+            moveToDraft: async (key) => {
+                const entry = await db.agenda.get(key);
+                if (entry && entry.content) {
+                    DOM.editor.innerHTML += '<div><br></div>' + entry.content;
+                    await db.agenda.delete(key);
+                    Agenda.render();
+                    Storage.saveData();
+                    Utils.showToast("Renvoyé au brouillon");
                 }
             },
             changeWeek: (d) => { State.currentMonday.setDate(State.currentMonday.getDate() + (d * 7)); Agenda.render(); },
