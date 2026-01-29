@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Agenda & Notes - Pro Keyboard Interface</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0a0f1d;
+            --bg-panel: rgba(30, 41, 59, 0.7);
+            --accent: #3b82f6;
+            --accent-glow: rgba(59, 130, 246, 0.3);
+            --text-main: #f1f5f9;
+            --text-muted: #94a3b8;
+            --border: rgba(255, 255, 255, 0.08);
+        }
+
+        html, body {
+            height: 100%;
+            overflow: hidden;
+            overscroll-behavior: none;
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            background-image: radial-gradient(circle at 50% -20%, #1e293b 0%, #0a0f1d 80%);
+            color: var(--text-main);
+        }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 99px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+        [contenteditable]:focus { outline: none; }
+        
+        #main-editor { 
+            font-size: 1.05rem; 
+            line-height: 1.8; 
+            scroll-behavior: smooth;
+            color: #cbd5e1;
+        }
+        #main-editor.read-mode { cursor: default; }
+        #main-editor h1 { font-size: 2.2rem; font-weight: 800; letter-spacing: -0.02em; margin: 1.5em 0 0.5em; color: white; }
+        #main-editor blockquote { border-left: 2px solid var(--accent); padding-left: 1.5rem; color: var(--text-muted); font-style: italic; margin: 1.5em 0; background: rgba(59, 130, 246, 0.03); padding: 1rem 1.5rem; border-radius: 0 8px 8px 0; }
+
+        .smart-link-date { color: var(--accent); font-weight: 600; cursor: pointer; border-bottom: 1px solid rgba(59, 130, 246, 0.2); }
+        .smart-link-tag { color: #10b981; font-weight: 600; cursor: pointer; background: rgba(16, 185, 129, 0.1); padding: 1px 6px; border-radius: 4px; }
+
+        .task-checkbox { cursor: pointer; margin-right: 12px; transform: scale(1.2); accent-color: var(--accent); }
+        .task-line-done { text-decoration: line-through; opacity: 0.4; filter: grayscale(1); }
+
+        .agenda-card {
+            background: rgba(255, 255, 255, 0.02);
+            border-bottom: 1px solid var(--border);
+            border-left: 2px solid transparent;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .agenda-card:hover { background: rgba(255, 255, 255, 0.04); }
+        .agenda-card.today { background: rgba(59, 130, 246, 0.05); border-left-color: var(--accent); }
+        .agenda-card.highlight-flash { animation: flash 1.2s ease; }
+        @keyframes flash { 0% { background: rgba(59, 130, 246, 0.4); } 100% { background: transparent; } }
+
+        .agenda-content { 
+            font-size: 0.92rem; 
+            color: #94a3b8; 
+            line-height: 1.5; 
+            max-height: 8.28rem;
+            overflow-y: auto;
+        }
+
+        .card-actions { opacity: 0; transform: translateY(5px); transition: all 0.2s; pointer-events: none; }
+        .agenda-card:hover .card-actions { opacity: 1; transform: translateY(0); pointer-events: auto; }
+
+        .action-icon { 
+            padding: 6px; border-radius: 6px; color: #64748b; cursor: pointer; 
+            background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border);
+            transition: all 0.2s;
+        }
+        .action-icon:hover { background: #334155; color: white; border-color: #475569; transform: scale(1.1); }
+
+        #smart-toolbar { 
+            position: absolute; display: none; background: rgba(15, 23, 42, 0.9); 
+            backdrop-filter: blur(10px); border: 1px solid var(--border);
+            border-radius: 8px; padding: 4px; z-index: 1000; box-shadow: 0 20px 40px -10px rgba(0,0,0,0.5); 
+        }
+        .toolbar-btn { padding: 6px 12px; font-size: 11px; font-weight: 700; color: #94a3b8; cursor: pointer; }
+        .toolbar-btn:hover { background: var(--accent); color: white; border-radius: 6px; }
+
+        .toast { 
+            position: fixed; bottom: 2.5rem; left: 50%; transform: translateX(-50%) translateY(20px); 
+            background: rgba(59, 130, 246, 0.9); backdrop-filter: blur(8px);
+            color: white; padding: 0.7rem 1.5rem; border-radius: 12px; font-size: 0.85rem; 
+            font-weight: 600; opacity: 0; transition: 0.4s; z-index: 9999;
+        }
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+        .modal-overlay { 
+            display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.8); 
+            backdrop-filter: blur(10px); z-index: 10000; align-items: center; justify-content: center; 
+        }
+        .modal-box { 
+            background: #111827; border: 1px solid var(--border); padding: 2rem; 
+            border-radius: 20px; max-width: 750px; width: 95%; max-height: 90vh; overflow-y: auto;
+        }
+        .btn-premium { background: linear-gradient(135deg, #1e293b, #0f172a); border: 1px solid var(--border); transition: all 0.3s; }
+        .btn-premium:hover { border-color: var(--accent); box-shadow: 0 0 15px var(--accent-glow); }
+
+        .help-tab-btn { padding: 8px 16px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); border-bottom: 2px solid transparent; transition: all 0.2s; }
+        .help-tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+        .help-content-pane { display: none; margin-top: 1.5rem; }
+        .help-content-pane.active { display: block; }
+
+        .help-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; }
+        .help-section h4 { color: white; font-weight: 800; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.1em; margin-bottom: 0.75rem; border-left: 2px solid var(--accent); padding-left: 0.75rem; }
+        .help-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 0.25rem; }
+        .help-item span { font-size: 0.8rem; color: var(--text-muted); }
+        .help-key { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; font-family: 'JetBrains Mono'; font-size: 0.7rem; color: white; white-space: nowrap; }
+
+        .search-result-block { color: #cbd5e1; font-size: 0.85rem; line-height: 1.6; }
+        .search-result-block [style*="background-color"], .search-result-block font[color], .search-result-block mark { border-radius: 2px; padding: 0 2px; }
+
+        .recording-pulse { animation: pulse-red 1.5s infinite; color: #ef4444 !important; }
+        @keyframes pulse-red { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.1); opacity: 0.7; } 100% { transform: scale(1); opacity: 1; } }
+    </style>
+</head>
+<body class="flex flex-col md:flex-row h-full w-full">
+
+    <aside class="w-full md:w-[380px] lg:w-[420px] h-[40vh] md:h-full bg-black/20 border-r border-white/5 flex flex-col shrink-0 z-20 relative">
+        <div class="h-16 flex items-center justify-between px-6 border-b border-white/5 bg-white/[0.02] shrink-0">
+            <div class="flex items-center gap-3">
+                <button onclick="changeWeek(-1)" class="p-2 hover:bg-white/5 rounded-full text-slate-500 hover:text-white transition-colors" title="Semaine précédente (Alt + ←)">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M15 19l-7-7 7-7"/></svg>
+                </button>
+                <span id="week-range" class="text-[11px] font-black uppercase tracking-widest text-slate-400 font-mono"></span>
+                <button onclick="changeWeek(1)" class="p-2 hover:bg-white/5 rounded-full text-slate-500 hover:text-white transition-colors" title="Semaine suivante (Alt + →)">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>
+                </button>
+            </div>
+            <button onclick="goToToday()" class="text-[9px] font-bold uppercase tracking-[0.2em] bg-blue-500/10 text-blue-400 px-4 py-2 rounded-full border border-blue-500/20 hover:bg-blue-500/20 transition-all" title="Revenir à aujourd'hui (Alt + T)">Aujourd'hui</button>
+        </div>
+        <div class="flex-1 overflow-y-auto custom-scrollbar" id="agenda-container"></div>
+    </aside>
+
+    <main class="flex-1 h-full flex flex-col relative min-h-0">
+        <header class="h-16 border-b border-white/5 flex items-center justify-between px-8 bg-white/[0.01] shrink-0">
+            <div class="flex items-center gap-3">
+                <button onclick="toggleViewMode()" id="view-mode-btn" class="p-2.5 rounded-xl btn-premium text-slate-400 hover:text-white" title="Navigation vs Édition (Alt + V)">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                </button>
+                <div class="h-6 w-[1px] bg-white/5"></div>
+                
+                <div id="formatting-tools" class="flex items-center gap-1">
+                    <button onclick="execCmd('bold')" class="text-slate-500 hover:text-white px-3 py-1.5 text-sm font-black rounded-lg hover:bg-white/5 transition-all" title="Gras (Ctrl + B)">B</button>
+                    <button onclick="toggleHighlight()" class="text-yellow-500/80 hover:text-yellow-400 px-3 py-1.5 text-sm font-bold rounded-lg hover:bg-white/5 transition-all" title="Surligner / Enlever">S</button>
+                    
+                    <div class="h-4 w-[1px] bg-white/5 mx-2"></div>
+                    
+                    <button onclick="scrollToTop()" class="p-2.5 text-slate-500 hover:text-white rounded-lg hover:bg-white/5 transition-all" title="Haut de page">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M5 15l7-7 7 7"/></svg>
+                    </button>
+                    <button onclick="addNewLineAtStart()" class="p-2.5 text-emerald-500/70 hover:text-emerald-400 rounded-lg hover:bg-white/5 transition-all" title="Ligne au début (Alt + N)">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M12 4v16m8-8H4m-4 4l4-4m0 0l4 4m-4-4h16"/></svg>
+                    </button>
+                    <button onclick="scrollToBottom()" class="p-2.5 text-slate-500 hover:text-white rounded-lg hover:bg-white/5 transition-all" title="Bas de page">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                    </button>
+                    <button onclick="addNewLineAtEnd()" class="p-2.5 text-emerald-500/70 hover:text-emerald-400 rounded-lg hover:bg-white/5 transition-all" title="Ligne à la fin (Alt + E)">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M12 4v16m8-8H4m12 4l4 4m0 0l-4 4m4-4H4"/></svg>
+                    </button>
+                    <button onclick="openConfirmModal()" class="p-2.5 text-slate-600 hover:text-red-500 rounded-lg hover:bg-white/5 transition-all" title="Vider le brouillon">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                    </button>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <button id="voice-btn" onclick="toggleVoiceRecognition()" class="p-2.5 text-slate-500 hover:text-emerald-400 transition-all" title="Saisie vocale">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>
+                </button>
+                <button onclick="openSearchModal()" class="p-2.5 text-slate-500 hover:text-white transition-all" title="Rechercher (Ctrl + F)">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                </button>
+                <input type="file" id="import-input" class="hidden" accept=".json" onchange="importData(event)">
+                <button onclick="triggerImport()" class="p-2.5 text-slate-500 hover:text-blue-400 transition-all" title="Importer JSON (Ctrl + O)">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                </button>
+                <button onclick="exportData()" class="p-2.5 text-slate-500 hover:text-blue-400 transition-all" title="Exporter JSON (Ctrl + S)">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
+                </button>
+                <button onclick="openHelpModal()" class="p-2.5 text-slate-600 hover:text-yellow-500 transition-all font-bold" title="Aide (F1)">?</button>
+            </div>
+        </header>
+
+        <div class="flex-1 overflow-y-auto custom-scrollbar">
+            <div id="main-editor" contenteditable="true" class="max-w-4xl mx-auto p-12 md:p-24 outline-none text-slate-400" placeholder="Zone de chaos créatif..."></div>
+        </div>
+
+        <div id="smart-toolbar" class="flex items-center shadow-2xl">
+            <div class="px-3 text-[9px] text-slate-500 font-black uppercase tracking-widest border-r border-white/5 mr-1">Envoi</div>
+            <div id="toolbar-days" class="flex gap-1"></div>
+        </div>
+    </main>
+
+    <!-- Modal Aide Améliorée -->
+    <div id="help-modal" class="modal-overlay" onclick="closeHelpModal(event)">
+        <div class="modal-box" onclick="event.stopPropagation()">
+            <div class="flex justify-between items-center border-b border-white/5 pb-2">
+                <div class="flex gap-4">
+                    <button onclick="switchHelpTab('shortcuts')" id="tab-shortcuts" class="help-tab-btn active">Raccourcis</button>
+                    <button onclick="switchHelpTab('functions')" id="tab-functions" class="help-tab-btn">Fonctions</button>
+                    <button onclick="switchHelpTab('philosophy')" id="tab-philosophy" class="help-tab-btn">Philosophie</button>
+                </div>
+                <button onclick="closeHelpModal()" class="text-slate-500 hover:text-white px-2">Fermer</button>
+            </div>
+            
+            <!-- Onglet Raccourcis -->
+            <div id="pane-shortcuts" class="help-content-pane active">
+                <div class="help-grid">
+                    <div class="help-section">
+                        <h4>Général</h4>
+                        <div class="help-item"><span>Aujourd'hui</span><span class="help-key">Alt + T</span></div>
+                        <div class="help-item"><span>Recherche / Surlignages</span><span class="help-key">Ctrl + F</span></div>
+                        <div class="help-item"><span>Mode Lecture/Navigation</span><span class="help-key">Alt + V</span></div>
+                        <div class="help-item"><span>Aide</span><span class="help-key">F1</span></div>
+                    </div>
+                    <div class="help-section">
+                        <h4>Navigation Temps</h4>
+                        <div class="help-item"><span>Semaine Préc.</span><span class="help-key">Alt + ←</span></div>
+                        <div class="help-item"><span>Semaine Suiv.</span><span class="help-key">Alt + →</span></div>
+                        <div class="help-item"><span>Exporter</span><span class="help-key">Ctrl + S</span></div>
+                        <div class="help-item"><span>Importer</span><span class="help-key">Ctrl + O</span></div>
+                    </div>
+                    <div class="help-section">
+                        <h4>Édition Brouillon</h4>
+                        <div class="help-item"><span>Ligne en haut</span><span class="help-key">Alt + N</span></div>
+                        <div class="help-item"><span>Ligne en bas</span><span class="help-key">Alt + E</span></div>
+                        <div class="help-item"><span>Saisie vocale</span><span class="help-key">Alt + R</span></div>
+                        <div class="help-item"><span>Haut de page</span><span class="help-key">Alt + ↑</span></div>
+                    </div>
+                    <div class="help-section">
+                        <h4>Nettoyage</h4>
+                        <div class="help-item"><span>Purge surlignages</span><span class="help-key">Alt + H</span></div>
+                        <div class="help-item"><span>Vider brouillon</span><span class="help-key">Alt + Del</span></div>
+                        <div class="help-item"><span>Fermer Modals</span><span class="help-key">Esc</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Onglet Fonctions Détaillées -->
+            <div id="pane-functions" class="help-content-pane">
+                <div class="space-y-6 text-sm text-slate-400">
+                    <div class="bg-white/5 p-4 rounded-xl">
+                        <h5 class="text-white font-bold mb-2 uppercase text-xs tracking-widest text-blue-400">Saisie Vocale (Web Speech)</h5>
+                        <p>Le module vocal utilise l'API native de votre navigateur. Une fois activé, le texte dicté est inséré directement à la position de votre curseur. Idéal pour capturer des idées sans friction.</p>
+                    </div>
+                    <div class="bg-white/5 p-4 rounded-xl">
+                        <h5 class="text-white font-bold mb-2 uppercase text-xs tracking-widest text-emerald-400">Gestion des Tâches</h5>
+                        <p>Utilisez <code class="bg-white/10 px-1 rounded">[ ]</code> pour créer une case à cocher. En mode <strong>Navigation (Alt+V)</strong>, cliquer sur la case barre automatiquement la ligne associée et met à jour votre base de données.</p>
+                    </div>
+                    <div class="bg-white/5 p-4 rounded-xl">
+                        <h5 class="text-white font-bold mb-2 uppercase text-xs tracking-widest text-yellow-400">Recherche Intelligente</h5>
+                        <p>Le module de recherche (Ctrl+F) a deux fonctions : si vous ne tapez rien, il liste tous les blocs surlignés dans votre base pour un accès rapide. Si vous tapez, il filtre les jours de l'agenda et les #tags.</p>
+                    </div>
+                    <div class="bg-white/5 p-4 rounded-xl">
+                        <h5 class="text-white font-bold mb-2 uppercase text-xs tracking-widest text-purple-400">Barre de Transfert (Drag-Free)</h5>
+                        <p>En sélectionnant n'importe quel texte dans le brouillon, une barre flottante apparaît. Elle vous permet d'envoyer instantanément cette sélection vers l'un des jours de la semaine affichée sans copier-coller.</p>
+                    </div>
+                    <div class="bg-white/5 p-4 rounded-xl">
+                        <h5 class="text-white font-bold mb-2 uppercase text-xs tracking-widest text-red-400">Limitation Agenda (Focus)</h5>
+                        <p>Chaque jour de l'agenda est limité visuellement à 6 lignes. C'est une contrainte délibérée pour vous forcer à prioriser vos engagements. Si vous dépassez, un défilement interne s'active.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Onglet Philosophie -->
+            <div id="pane-philosophy" class="help-content-pane">
+                <div class="max-w-xl mx-auto text-center py-8 space-y-4">
+                    <h4 class="text-white text-xl font-black">LE FLUX VS LA STRUCTURE</h4>
+                    <p class="text-slate-400 leading-relaxed">
+                        Le <strong>Brouillon</strong> est votre zone de stockage brute. Le chaos y est autorisé. L'<strong>Agenda</strong> est votre plan d'attaque. On ne transfère dans l'agenda que ce qui est actionnable et temporellement défini.
+                    </p>
+                    <p class="text-slate-500 text-xs font-mono">
+                        CONSERVATION LOCALE : Vos données ne quittent jamais votre navigateur (Dexie.js).
+                    </p>
+                </div>
+            </div>
+
+            <div class="mt-8 pt-4 border-t border-white/5 text-[10px] text-slate-600 font-mono text-center uppercase tracking-widest">
+                Manuel Pilote v2.9 - Engine: IndexedDB
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="search-modal" class="modal-overlay" onclick="closeSearchModal(event)">
+        <div class="modal-box" onclick="event.stopPropagation()">
+            <div class="flex items-center gap-4 border-b border-white/5 pb-4 mb-6">
+                <svg class="w-6 h-6 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                <input type="text" id="search-input" placeholder="Terme, #tag ou laissez vide pour les surlignages..." class="bg-transparent text-white w-full outline-none text-xl font-light" oninput="handleSearch(this.value)">
+            </div>
+            <div id="search-results" class="space-y-3 max-h-[50vh] overflow-y-auto custom-scrollbar"></div>
+        </div>
+    </div>
+
+    <div id="confirm-modal" class="modal-overlay">
+        <div class="modal-box text-center">
+            <h3 class="text-xl font-bold text-white mb-6">Effacer le brouillon ?</h3>
+            <div class="flex justify-center gap-6">
+                <button onclick="closeConfirmModal()" class="text-slate-500 font-bold hover:text-white">Annuler</button>
+                <button onclick="clearDraft()" class="px-8 py-3 bg-red-500/10 text-red-500 border border-red-500/20 rounded-xl font-black uppercase tracking-widest hover:bg-red-500/20">Confirmer</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast">Action confirmée</div>
+
+    <script>
+        const db = new Dexie("EfficientAgendaDB");
+        db.version(1).stores({ notes: "id", agenda: "date" });
+
+        const editor = document.getElementById('main-editor');
+        const agendaContainer = document.getElementById('agenda-container');
+        const weekRangeEl = document.getElementById('week-range');
+        const smartToolbar = document.getElementById('smart-toolbar');
+        const toastEl = document.getElementById('toast');
+        const viewModeBtn = document.getElementById('view-mode-btn');
+        const formattingTools = document.getElementById('formatting-tools');
+        const voiceBtn = document.getElementById('voice-btn');
+        
+        let currentMonday = getMonday(new Date());
+        let isReadMode = false;
+        let rawEditorContent = '';
+        let isRecording = false;
+        let recognition = null;
+
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            recognition.lang = 'fr-FR';
+            recognition.onstart = () => { isRecording = true; voiceBtn.classList.add('recording-pulse'); showToast("Microphone actif..."); };
+            recognition.onresult = (event) => { insertAtCursor(event.results[0][0].transcript); saveData(); };
+            recognition.onerror = (event) => { showToast("Erreur vocale : " + event.error); stopVoiceRecognition(); };
+            recognition.onend = () => { stopVoiceRecognition(); };
+        }
+
+        async function init() {
+            await loadData();
+            renderAgenda();
+            setupListeners();
+            setInterval(() => { if (!isReadMode) saveData(); }, 5000); 
+            setTimeout(() => {
+                const todayEl = document.querySelector('.today');
+                if (todayEl) todayEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 200);
+        }
+
+        function switchHelpTab(tabId) {
+            document.querySelectorAll('.help-tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.help-content-pane').forEach(pane => pane.classList.remove('active'));
+            document.getElementById('tab-' + tabId).classList.add('active');
+            document.getElementById('pane-' + tabId).classList.add('active');
+        }
+
+        function toggleVoiceRecognition() {
+            if (isReadMode) return showToast("Mode navigation actif.");
+            if (!recognition) return showToast("Saisie vocale non supportée.");
+            isRecording ? recognition.stop() : recognition.start();
+        }
+
+        function stopVoiceRecognition() { isRecording = false; voiceBtn.classList.remove('recording-pulse'); }
+        function insertAtCursor(text) {
+            if (document.activeElement !== editor && !document.activeElement.classList.contains('agenda-content')) editor.focus();
+            document.execCommand('insertText', false, text + ' ');
+        }
+
+        function toggleHighlight() {
+            if (isReadMode) return;
+            
+            // On récupère le nœud parent de la sélection
+            const selection = window.getSelection();
+            if (!selection.rangeCount) return;
+            
+            let parentNode = selection.anchorNode;
+            if (parentNode.nodeType === 3) parentNode = parentNode.parentNode;
+            
+            const computedStyle = window.getComputedStyle(parentNode);
+            const bgColor = computedStyle.backgroundColor;
+            
+            // Le jaune utilisé est rgb(253, 224, 71)
+            if (bgColor === 'rgb(253, 224, 71)') {
+                // Si déjà surligné, on retire la couleur de fond
+                document.execCommand('hiliteColor', false, 'transparent');
+                document.execCommand('foreColor', false, 'inherit');
+            } else {
+                // Sinon on applique le surlignage
+                document.execCommand('hiliteColor', false, '#fde047');
+                document.execCommand('foreColor', false, '#000000');
+            }
+            saveData();
+        }
+
+        function toggleViewMode() {
+            isReadMode = !isReadMode;
+            if (isReadMode) {
+                saveData();
+                rawEditorContent = editor.innerHTML;
+                editor.contentEditable = "false";
+                editor.classList.add('read-mode');
+                formattingTools.style.opacity = '0.2';
+                formattingTools.style.pointerEvents = 'none';
+                viewModeBtn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-width="2.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>';
+                viewModeBtn.classList.add('text-blue-400', 'bg-blue-500/10');
+                parseAndLinkify();
+            } else {
+                editor.innerHTML = rawEditorContent;
+                editor.contentEditable = "true";
+                editor.classList.remove('read-mode');
+                formattingTools.style.opacity = '1';
+                formattingTools.style.pointerEvents = 'auto';
+                viewModeBtn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>';
+                viewModeBtn.classList.remove('text-blue-400', 'bg-blue-500/10');
+            }
+        }
+
+        function parseAndLinkify() {
+            const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+            const nodes = [];
+            while(walker.nextNode()) nodes.push(walker.currentNode);
+            nodes.forEach(node => {
+                const text = node.nodeValue;
+                let html = text
+                    .replace(/\[ \]/g, '<input type="checkbox" class="task-checkbox" onchange="toggleTaskState(this, false)">')
+                    .replace(/\[x\]/g, '<input type="checkbox" class="task-checkbox" checked onchange="toggleTaskState(this, true)">')
+                    .replace(/(\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\b)/g, '<span class="smart-link-date" onclick="goToDateLink(\'$1\')">$1</span>')
+                    .replace(/(#[a-zA-Z0-9_-]+)/g, '<span class="smart-link-tag" onclick="searchTag(\'$1\')">$1</span>');
+                if (html !== text) {
+                    const span = document.createElement('span');
+                    span.innerHTML = html;
+                    if (html.includes('checked')) setTimeout(() => span.closest('div, p, li')?.classList.add('task-line-done'), 0);
+                    node.parentNode.replaceChild(span, node);
+                }
+            });
+        }
+
+        function toggleTaskState(cb) {
+            const line = cb.closest('div, p, li') || cb.parentNode;
+            line.classList.toggle('task-line-done', cb.checked);
+            const oldT = cb.checked ? '[ ]' : '[x]';
+            const newT = cb.checked ? '[x]' : '[ ]';
+            rawEditorContent = rawEditorContent.replace(oldT, newT);
+            saveData();
+        }
+
+        function getMonday(d) { d = new Date(d); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); const mon = new Date(d.setDate(diff)); mon.setHours(0,0,0,0); return mon; }
+        
+        async function renderAgenda() {
+            agendaContainer.innerHTML = '';
+            const sunday = new Date(currentMonday);
+            sunday.setDate(sunday.getDate() + 6);
+            weekRangeEl.textContent = `${formatDS(currentMonday)} - ${formatDS(sunday)}`;
+            for (let i = 0; i < 7; i++) {
+                const date = new Date(currentMonday); date.setDate(date.getDate() + i);
+                const key = dateToKey(date); const isToday = key === dateToKey(new Date());
+                const entry = await db.agenda.get(key);
+                const card = document.createElement('div');
+                card.className = `agenda-card px-6 py-5 ${isToday ? 'today' : ''}`;
+                card.id = `card-${key}`; card.dataset.date = key;
+                card.innerHTML = `
+                    <div class="flex justify-between items-start mb-2 group">
+                        <span class="text-[10px] font-black uppercase tracking-widest ${isToday ? 'text-blue-400' : 'text-slate-600'}">${date.toLocaleDateString('fr-FR', {weekday:'long', day:'numeric'})}</span>
+                        <div class="card-actions flex gap-1.5">
+                            <button onclick="importDraftToDay('${key}')" class="action-icon"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg></button>
+                            <button onclick="copyDay('${key}')" class="action-icon"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg></button>
+                            <button onclick="moveDayToDraft('${key}')" class="action-icon text-emerald-500/80"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg></button>
+                            <button onclick="clearDay('${key}')" class="action-icon text-red-500/60"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+                        </div>
+                    </div>
+                    <div class="agenda-content outline-none custom-scrollbar min-h-[40px]" contenteditable="true" oninput="saveData()">${entry ? entry.content : ''}</div>
+                `;
+                agendaContainer.appendChild(card);
+            }
+        }
+
+        async function loadData() { const n = await db.notes.get('main'); if (n) editor.innerHTML = n.content; }
+        async function saveData() { if (isReadMode) return; await db.notes.put({id: 'main', content: editor.innerHTML}); const cards = document.querySelectorAll('.agenda-card'); for (let c of cards) await db.agenda.put({date: c.dataset.date, content: c.querySelector('.agenda-content').innerHTML}); }
+
+        function dateToKey(d) { return d.toISOString().split('T')[0]; }
+        function formatDS(d) { return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }); }
+        function goToToday() { currentMonday = getMonday(new Date()); renderAgenda(); }
+        function changeWeek(d) { currentMonday.setDate(currentMonday.getDate() + (d * 7)); renderAgenda(); }
+        function showToast(m) { toastEl.textContent = m; toastEl.classList.add('show'); setTimeout(() => toastEl.classList.remove('show'), 3000); }
+        function execCmd(c, v=null) { if(!isReadMode) { document.execCommand(c, false, v); editor.focus(); } }
+
+        function scrollToBottom() { editor.parentNode.scrollTo({ top: editor.scrollHeight, behavior: 'smooth' }); }
+        function scrollToTop() { editor.parentNode.scrollTo({ top: 0, behavior: 'smooth' }); }
+        function addNewLineAtStart() { if (isReadMode) return; const div = document.createElement('div'); div.innerHTML = '<br>'; editor.prepend(div); editor.focus(); }
+        function addNewLineAtEnd() { if (isReadMode) return; const div = document.createElement('div'); div.innerHTML = '<br>'; editor.append(div); editor.focus(); scrollToBottom(); }
+
+        function clearAllHighlights() {
+            if (isReadMode) return;
+            const elements = editor.querySelectorAll('span, font, mark, b, i, u');
+            elements.forEach(el => { el.style.backgroundColor = ''; el.style.color = ''; });
+            editor.querySelectorAll('mark').forEach(el => el.replaceWith(...el.childNodes));
+            saveData(); showToast("Surlignages purgés");
+        }
+
+        function importDraftToDay(k) { appendToDay(k, isReadMode ? rawEditorContent : editor.innerHTML); }
+        async function appendToDay(k, h) {
+            const e = await db.agenda.get(k);
+            const n = (e ? e.content : '') + '<div><br></div>' + h;
+            await db.agenda.put({date: k, content: n}); renderAgenda(); showToast("Importé");
+        }
+        async function moveDayToDraft(k) {
+            const e = await db.agenda.get(k);
+            if (e && e.content) { editor.innerHTML += '<div><br></div>' + e.content; await db.agenda.delete(k); saveData(); renderAgenda(); showToast("Transféré"); }
+        }
+        async function clearDay(k) { await db.agenda.delete(k); renderAgenda(); showToast("Effacé"); }
+
+        async function copyDay(k) {
+            const e = await db.agenda.get(k); if (!e) return;
+            const t = document.createElement('textarea'); t.value = e.content.replace(/<[^>]*>/g, '');
+            document.body.appendChild(t); t.select(); document.execCommand('copy'); document.body.removeChild(t);
+            showToast("Copié");
+        }
+
+        function triggerImport() { document.getElementById('import-input').click(); }
+        async function importData(e) {
+            const f = e.target.files[0]; if (!f) return;
+            const r = new FileReader();
+            r.onload = async (ev) => {
+                const d = JSON.parse(ev.target.result);
+                if (d.notes) await db.notes.put({id: 'main', content: d.notes});
+                if (d.agenda) { await db.agenda.clear(); for (let i of d.agenda) await db.agenda.put(i); }
+                location.reload();
+            };
+            r.readAsText(f);
+        }
+
+        async function exportData() {
+            const a = await db.agenda.toArray(); const n = await db.notes.get('main');
+            const d = JSON.stringify({ notes: n ? n.content : '', agenda: a });
+            const b = new Blob([d], {type: 'application/json'});
+            const l = document.createElement('a'); l.href = URL.createObjectURL(b); l.download = `backup.json`; l.click();
+            showToast("Backup exporté");
+        }
+
+        function openSearchModal() { document.getElementById('search-modal').style.display='flex'; document.getElementById('search-input').focus(); handleSearch(''); }
+        function closeSearchModal() { document.getElementById('search-modal').style.display='none'; }
+        function openHelpModal() { document.getElementById('help-modal').style.display='flex'; }
+        function closeHelpModal() { document.getElementById('help-modal').style.display='none'; }
+        function openConfirmModal() { document.getElementById('confirm-modal').style.display='flex'; }
+        function closeConfirmModal() { document.getElementById('confirm-modal').style.display='none'; }
+        async function clearDraft() { editor.innerHTML = ''; rawEditorContent = ''; await db.notes.put({id: 'main', content: ''}); closeConfirmModal(); showToast("Réinitialisé"); }
+
+        async function handleSearch(q) {
+            const r = document.getElementById('search-results'); r.innerHTML = ''; 
+            const tempDiv = document.createElement('div');
+            
+            if (q.length === 0) {
+                const highlights = [];
+                const processNode = (node, type, date) => {
+                    const block = node.closest('div, p, li') || node.parentElement;
+                    if (block && block.innerText.trim()) {
+                        const isDup = highlights.some(h => h.source === date && h.html === block.innerHTML);
+                        if (!isDup) highlights.push({ type, html: block.innerHTML, date, source: date });
+                    }
+                };
+                tempDiv.innerHTML = isReadMode ? rawEditorContent : editor.innerHTML;
+                tempDiv.querySelectorAll('[style*="background-color"], font[color], mark').forEach(n => processNode(n, 'draft', 'Brouillon'));
+                const entries = await db.agenda.toArray();
+                for (const e of entries) {
+                    tempDiv.innerHTML = e.content;
+                    tempDiv.querySelectorAll('[style*="background-color"], font[color], mark').forEach(n => processNode(n, 'agenda', e.date));
+                }
+                if (highlights.length > 0) {
+                    highlights.forEach(h => {
+                        const d = document.createElement('div'); 
+                        d.className = "p-4 bg-white/[0.03] border border-white/5 rounded-xl cursor-pointer hover:bg-white/[0.08]";
+                        d.innerHTML = `<span class="text-yellow-400 font-black uppercase text-[10px]">${h.date}</span><div class="search-result-block mt-2">${h.html}</div>`;
+                        d.onclick = () => h.type === 'draft' ? goToDraft() : goToDateLink(h.date.split('-').reverse().slice(0,2).join('/')); 
+                        r.appendChild(d);
+                    });
+                } else { r.innerHTML = '<div class="text-slate-500 text-sm italic">Aucun bloc surligné détecté.</div>'; }
+                return;
+            }
+            if (q.length < 2) return;
+            const entries = await db.agenda.toArray();
+            entries.filter(e => e.content.toLowerCase().includes(q.toLowerCase())).forEach(e => {
+                const d = document.createElement('div'); d.className = "p-4 bg-white/[0.03] border border-white/5 rounded-xl cursor-pointer hover:bg-white/[0.08]";
+                d.innerHTML = `<span class="text-blue-400 font-black uppercase text-[10px]">${e.date}</span><p class="truncate text-slate-400 mt-1">${e.content.replace(/<[^>]*>/g, ' ')}</p>`;
+                d.onclick = () => goToDateLink(e.date.split('-').reverse().slice(0,2).join('/')); r.appendChild(d);
+            });
+        }
+
+        function goToDraft() { closeSearchModal(); if (isReadMode) toggleViewMode(); editor.focus(); }
+        function goToDateLink(ds) {
+            const p = ds.split('/'); const t = new Date(new Date().getFullYear(), parseInt(p[1])-1, parseInt(p[0]));
+            currentMonday = getMonday(t); renderAgenda().then(() => {
+                const el = document.getElementById(`card-${dateToKey(t)}`);
+                if (el) { el.scrollIntoView({behavior:'smooth', block:'center'}); el.classList.add('highlight-flash'); }
+            });
+            closeSearchModal();
+        }
+
+        function setupListeners() {
+            document.addEventListener('keydown', e => {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'f') { e.preventDefault(); openSearchModal(); }
+                if (e.altKey && e.key.toLowerCase() === 'v') { e.preventDefault(); toggleViewMode(); }
+                if (e.altKey && e.key.toLowerCase() === 't') { e.preventDefault(); goToToday(); }
+                if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); changeWeek(-1); }
+                if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); changeWeek(1); }
+                if (e.altKey && e.key.toLowerCase() === 'n') { e.preventDefault(); addNewLineAtStart(); }
+                if (e.altKey && e.key.toLowerCase() === 'e') { e.preventDefault(); addNewLineAtEnd(); }
+                if (e.altKey && e.key.toLowerCase() === 'h') { e.preventDefault(); clearAllHighlights(); }
+                if (e.altKey && e.key.toLowerCase() === 'r') { e.preventDefault(); toggleVoiceRecognition(); }
+                if (e.altKey && e.key === 'ArrowUp') { e.preventDefault(); scrollToTop(); }
+                if (e.altKey && e.key === 'ArrowDown') { e.preventDefault(); scrollToBottom(); }
+                if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); exportData(); }
+                if ((e.ctrlKey || e.metaKey) && e.key === 'o') { e.preventDefault(); triggerImport(); }
+                if (e.altKey && e.key === 'Delete') { e.preventDefault(); openConfirmModal(); }
+                if (e.key === 'F1') { e.preventDefault(); openHelpModal(); }
+                if (e.key === 'Escape') { closeSearchModal(); closeHelpModal(); closeConfirmModal(); }
+            });
+            document.addEventListener('selectionchange', () => {
+                const s = window.getSelection();
+                if (!s.rangeCount || s.isCollapsed || !editor.contains(s.anchorNode)) { smartToolbar.style.display = 'none'; return; }
+                const r = s.getRangeAt(0); const rect = r.getBoundingClientRect();
+                if (s.toString().trim().length > 0) showSmartToolbar(rect, s.toString());
+            });
+        }
+
+        function showSmartToolbar(rect, text) {
+            const c = document.getElementById('toolbar-days'); c.innerHTML = '';
+            ['L', 'M', 'M', 'J', 'V', 'S', 'D'].forEach((d, i) => {
+                const date = new Date(currentMonday); date.setDate(date.getDate() + i);
+                const k = dateToKey(date);
+                const b = document.createElement('div'); b.className = `toolbar-btn`; b.textContent = d;
+                b.onmousedown = (e) => { e.preventDefault(); appendToDay(k, text); smartToolbar.style.display = 'none'; };
+                c.appendChild(b);
+            });
+            smartToolbar.style.display = 'flex';
+            smartToolbar.style.top = `${rect.bottom + window.scrollY + 10}px`;
+            smartToolbar.style.left = `${rect.left + window.scrollX}px`;
+        }
+        
+        function searchTag(tag) { openSearchModal(); document.getElementById('search-input').value = tag; handleSearch(tag); }
+        window.onload = init;
+    </script>
+</body>
+</html>
