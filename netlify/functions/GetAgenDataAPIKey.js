@@ -1,6 +1,7 @@
 // netlify/functions/GetAgenDataAPIKey.js
 
 exports.handler = async function(event, context) {
+  // Gestion du Preflight CORS pour autoriser les requêtes depuis le navigateur
   if (event.httpMethod === 'OPTIONS') {
     return {
       statusCode: 200,
@@ -14,11 +15,11 @@ exports.handler = async function(event, context) {
   }
 
   try {
-    // Utilisation du nom exact de ta variable Netlify : AgenDataAPIKey
+    // Utilisation du nom exact de ta variable configurée sur Netlify
     const apiKey = process.env.AgenDataAPIKey;
 
     if (!apiKey) {
-      throw new Error("Variable AgenDataAPIKey absente de Netlify");
+      throw new Error("La variable AgenDataAPIKey est introuvable sur Netlify");
     }
 
     return {
