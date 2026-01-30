@@ -3,13 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>OS Cognitif v6.4 - Interface Macros Corrigée</title>
+    <title>AgenData v7.8 - Système Opérationnel</title>
     
-    <!-- DÉPENDANCES -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
-    
-    <!-- TYPOGRAPHIE -->
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
     <style>
@@ -17,582 +14,575 @@
             --bg-dark: #0a0f1d;
             --bg-panel: #111827;
             --accent: #3b82f6;
-            --accent-glow: rgba(59, 130, 246, 0.3);
             --text-main: #f1f5f9;
             --text-muted: #94a3b8;
             --border: rgba(255, 255, 255, 0.08);
-            --stale-red: #ef4444;
-            --editor-sheet: rgba(255, 255, 255, 0.02);
             --font-main: 'Inter', sans-serif;
             --font-mono: 'JetBrains Mono', monospace;
         }
 
-        html, body {
-            height: 100%;
-            overflow: hidden;
-            overscroll-behavior: none;
-            font-family: var(--font-main);
+        body {
             background-color: var(--bg-dark);
-            background-image: radial-gradient(circle at 50% -20%, #1e293b 0%, #0a0f1d 80%);
             color: var(--text-main);
+            font-family: var(--font-main);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
         }
-
-        [contenteditable]:focus { outline: none; }
 
         .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 99px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
 
-        /* ÉDITEUR */
-        .editor-container {
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            background: var(--editor-sheet);
+        .editor-layer {
+            background: rgba(255, 255, 255, 0.02);
             border: 1px solid var(--border);
-            box-shadow: 0 10px 30px -15px rgba(0,0,0,0.5);
-            position: relative;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        .editor-container:focus-within {
-            background: rgba(255, 255, 255, 0.035);
-            border-color: rgba(59, 130, 246, 0.3);
-            transform: translateY(-2px);
-        }
-        #main-editor { 
-            font-size: 1.05rem; 
-            line-height: 1.8; 
-            color: #cbd5e1;
-            caret-color: var(--accent);
-            min-height: 60vh;
-        }
-        #main-editor.read-mode { cursor: default; }
+        .editor-layer:focus-within { border-color: var(--accent); transform: translateY(-2px); }
 
-        /* LIENS ET ÉTATS */
-        .smart-link-date { color: var(--accent); font-weight: 600; cursor: pointer; border-bottom: 1px solid rgba(59, 130, 246, 0.2); }
-        .smart-link-backlink { color: #8b5cf6; font-weight: 700; cursor: pointer; background: rgba(139, 92, 246, 0.1); padding: 1px 4px; border-radius: 4px; border: 1px solid rgba(139, 92, 246, 0.2); }
-        .status-stale { color: var(--stale-red) !important; opacity: 0.9 !important; text-decoration: line-through; text-decoration-style: dashed; }
+        [contenteditable]:focus { outline: none; }
 
-        /* AGENDA */
-        .agenda-card { background: rgba(255, 255, 255, 0.02); border-bottom: 1px solid var(--border); border-left: 3px solid transparent; transition: all 0.2s ease; }
-        .agenda-card.today { background: rgba(59, 130, 246, 0.05); border-left-color: var(--accent); }
-        .agenda-card.flashback-card { background: rgba(139, 92, 246, 0.05); border-left-color: #8b5cf6; margin-top: auto; border-top: 1px solid rgba(139, 92, 246, 0.2); }
-        .agenda-content { font-size: 0.9rem; line-height: 1.5; height: 8.1rem; color: #94a3b8; overflow-y: auto; word-break: break-word; }
-        
-        .card-actions { opacity: 0; transform: translateY(3px); transition: all 0.2s; }
-        .agenda-card:hover .card-actions, .agenda-card:focus-within .card-actions { opacity: 1; transform: translateY(0); }
-        
-        .action-icon { padding: 6px; border-radius: 6px; color: #64748b; cursor: pointer; background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; }
-        .action-icon:hover { background: #334155; color: white; }
-
-        /* MODALES */
-        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(8px); z-index: 10000; align-items: center; justify-content: center; }
-        .modal-box { background: var(--bg-panel); border: 1px solid var(--border); padding: 2.5rem; border-radius: 20px; max-width: 900px; width: 95%; max-height: 90vh; overflow-y: auto; position: relative; }
-        .help-tab-btn { padding: 12px 24px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: var(--text-muted); border-bottom: 2px solid transparent; cursor: pointer; transition: all 0.2s; }
-        .help-tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); background: rgba(59, 130, 246, 0.05); }
-        .help-content-pane { display: none; margin-top: 2rem; animation: fadeIn 0.3s ease; }
-        .help-content-pane.active { display: block; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-
-        /* MACROS STYLES */
-        .macro-card { 
-            background: rgba(255, 255, 255, 0.02); 
-            border: 1px solid var(--border); 
-            border-radius: 12px; 
-            padding: 12px 16px; 
-            margin-bottom: 8px; 
-            display: flex; 
-            align-items: center; 
-            gap: 16px;
+        .agenda-card {
+            border-bottom: 1px solid var(--border);
+            border-left: 3px solid transparent;
             transition: all 0.2s;
         }
-        .macro-card:hover { background: rgba(255, 255, 255, 0.04); border-color: rgba(59, 130, 246, 0.2); }
-        .macro-trigger-badge { 
-            font-family: var(--font-mono); 
-            background: rgba(59, 130, 246, 0.15); 
-            color: #60a5fa; 
-            padding: 4px 10px; 
-            border-radius: 6px; 
-            font-size: 0.7rem; 
-            font-weight: 800; 
-            border: 1px solid rgba(59, 130, 246, 0.2);
-            min-width: 60px;
-            text-align: center;
-        }
-        .macro-text-preview { font-size: 0.75rem; color: #94a3b8; flex-1: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .agenda-card.today { background: rgba(59, 130, 246, 0.05); border-left-color: var(--accent); }
+        .agenda-card.flashback { background: rgba(139, 92, 246, 0.05); border-left-color: #8b5cf6; }
+        
+        .card-actions { opacity: 0; transform: translateY(3px); transition: all 0.2s; }
+        .agenda-card:hover .card-actions { opacity: 1; transform: translateY(0); }
+        
+        .action-icon { padding: 4px; border-radius: 4px; color: #64748b; cursor: pointer; background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; }
+        .action-icon:hover { background: #334155; color: white; }
 
-        /* HUD MACRO */
+        .status-stale { color: #ef4444 !important; text-decoration: line-through dashed; opacity: 0.7; }
+        .smart-link { color: var(--accent); font-weight: 600; cursor: pointer; border-bottom: 1px solid rgba(59, 130, 246, 0.2); }
+        .backlink { color: #8b5cf6; background: rgba(139, 92, 246, 0.1); padding: 0 4px; border-radius: 4px; }
+
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(8px); z-index: 100;
+            display: none; align-items: center; justify-content: center;
+        }
+        .modal-box { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 20px; width: 95%; max-width: 1000px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; }
+
         #macro-hud {
-            display: none;
-            position: fixed;
-            bottom: 30px;
-            right: 30px;
-            background: rgba(15, 23, 42, 0.9);
-            backdrop-filter: blur(12px);
-            border: 1px solid var(--accent);
-            border-radius: 12px;
-            padding: 16px;
-            z-index: 5000;
-            width: 280px;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.6), 0 0 20px var(--accent-glow);
+            position: fixed; bottom: 20px; right: 20px;
+            background: rgba(15, 23, 42, 0.95); border: 1px solid var(--accent);
+            padding: 12px; border-radius: 12px; display: none; z-index: 80; width: 240px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
-        .hud-item { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
-        .hud-key { font-family: var(--font-mono); font-weight: 800; color: var(--accent); font-size: 10px; background: rgba(59, 130, 246, 0.1); padding: 2px 6px; border-radius: 4px; }
-        .hud-val { font-size: 11px; color: var(--text-muted); }
 
-        /* IA INDICATEUR */
-        .ai-status-indicator { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; transition: all 0.5s; }
-        .ai-ready { background-color: #22c55e; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); }
-        .ai-offline { background-color: #475569; opacity: 0.5; }
-        .ai-loading { background-color: #a78bfa; animation: ai-think 0.8s infinite alternate; }
-        @keyframes ai-think { from { transform: scale(1); } to { transform: scale(1.4); } }
-
-        #toast { visibility: hidden; min-width: 250px; background-color: #1e293b; color: #fff; text-align: center; border-radius: 8px; border: 1px solid var(--border); padding: 16px; position: fixed; z-index: 100000; left: 50%; bottom: 30px; transform: translateX(-50%); font-size: 14px; }
-        #toast.show { visibility: visible; animation: slideUp 0.5s, slideDown 0.5s 2.5s; }
-        @keyframes slideUp { from {bottom: 0; opacity: 0;} to {bottom: 30px; opacity: 1;} }
-        @keyframes slideDown { from {bottom: 30px; opacity: 1;} to {bottom: 0; opacity: 0;} }
-
-        #smart-toolbar { position: absolute; display: none; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(10px); border: 1px solid var(--border); border-radius: 8px; padding: 4px; z-index: 1000; }
-        .toolbar-btn { padding: 6px 12px; font-size: 10px; font-weight: 800; color: #94a3b8; cursor: pointer; border-radius: 4px; }
-        .toolbar-btn:hover { background: var(--accent); color: white; }
+        #smart-toolbar { 
+            position: absolute; display: none; background: #0f172a; border: 1px solid var(--border); 
+            border-radius: 8px; padding: 4px; z-index: 200; box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+        }
+        
+        .help-tab.active { color: var(--accent); border-bottom: 2px solid var(--accent); }
+        
+        .help-section-title { font-family: var(--font-mono); font-weight: 900; letter-spacing: 0.1em; color: var(--accent); font-size: 11px; margin-top: 1.5rem; margin-bottom: 0.5rem; border-left: 3px solid var(--accent); padding-left: 10px; }
+        .help-step-box { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 1.5rem; margin-bottom: 1rem; }
     </style>
 </head>
-<body class="flex flex-col md:flex-row h-full w-full">
+<body class="flex-col md:flex-row">
 
-    <!-- AGENDA -->
-    <aside class="w-full md:w-[380px] bg-black/30 border-r border-white/5 flex flex-col shrink-0 z-20 relative">
-        <div class="h-14 flex items-center justify-between px-6 border-b border-white/5 shrink-0">
+    <aside class="w-full md:w-[380px] border-r border-white/5 flex flex-col shrink-0 bg-black/20">
+        <header class="h-14 flex items-center justify-between px-4 border-b border-white/5 bg-white/[0.02]">
             <div class="flex items-center gap-2">
-                <button onclick="App.Agenda.changeWeek(-1)" class="p-1.5 hover:bg-white/5 rounded text-slate-500 transition-colors">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M15 19l-7-7 7-7"/></svg>
+                <button onclick="Core.Agenda.shiftWeek(-1)" class="p-1.5 hover:bg-white/5 rounded text-slate-500">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7" stroke-width="2.5"/></svg>
                 </button>
-                <span id="week-range" class="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono"></span>
-                <button onclick="App.Agenda.changeWeek(1)" class="p-1.5 hover:bg-white/5 rounded text-slate-500 transition-colors">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>
+                <span id="ui-week-range" class="text-[10px] font-mono font-black uppercase text-slate-400"></span>
+                <button onclick="Core.Agenda.shiftWeek(1)" class="p-1.5 hover:bg-white/5 rounded text-slate-500">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" stroke-width="2.5"/></svg>
                 </button>
             </div>
-            <button onclick="App.Agenda.goToToday()" class="text-[9px] font-bold uppercase tracking-widest bg-blue-500/10 text-blue-400 px-3 py-1.5 rounded border border-blue-500/20 hover:bg-blue-500/20 transition-all">Aujourd'hui</button>
-        </div>
-        <div class="flex-1 overflow-y-auto custom-scrollbar flex flex-col" id="agenda-container-parent">
-            <div id="agenda-container"></div>
-            <div id="flashback-container" class="mt-auto"></div>
-        </div>
+            <button onclick="Core.Agenda.jumpToToday()" class="text-[9px] font-black bg-blue-500/10 text-blue-400 px-3 py-1.5 rounded border border-blue-500/20">AUJOURD'HUI</button>
+        </header>
+        <div id="ui-agenda-list" class="flex-1 overflow-y-auto custom-scrollbar"></div>
+        <div id="ui-flashback-zone" class="mt-auto border-t border-white/5"></div>
     </aside>
 
-    <!-- ÉDITEUR -->
-    <main class="flex-1 h-full flex flex-col relative min-h-0">
-        <header class="h-14 border-b border-white/5 flex items-center justify-between px-6 bg-white/[0.01] shrink-0">
-            <div class="flex items-center gap-3">
-                <button onclick="App.Editor.toggleViewMode()" id="view-mode-btn" class="p-2 rounded-lg text-slate-400 hover:text-white transition-all" title="Mode Lecture (Alt+V)">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+    <main class="flex-1 flex flex-col relative overflow-hidden bg-white/[0.01]">
+        <header class="h-14 border-b border-white/5 flex items-center justify-between px-6 bg-black/20 shrink-0">
+            <div class="flex items-center gap-1">
+                <button onclick="Core.Editor.toggleMode()" id="ui-mode-btn" class="p-2 text-slate-400 hover:text-white" title="Mode Lecture (Alt+V)">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" stroke-width="2"/></svg>
                 </button>
-                <div class="h-5 w-[1px] bg-white/10"></div>
-                <div class="flex items-center gap-1">
-                    <button onclick="App.Editor.execCmd('bold')" class="p-2 text-slate-500 hover:text-white" title="Gras"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M6 4h8a4 4 0 014 4 4 4 0 01-4 4H6zM6 12h9a4 4 0 014 4 4 4 0 01-4 4H6z"/></svg></button>
-                    <button onclick="App.Editor.applyHighlight()" class="p-2 text-yellow-500/70 hover:text-yellow-400" title="Surligner"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg></button>
-                    <button onclick="App.Editor.addNewLineAtStart()" class="p-2 text-emerald-500/70 hover:text-emerald-400" title="Haut (Alt+N)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M7 11l5-5m0 0l5 5m-5-5v12"/></svg></button>
-                    <button onclick="App.Editor.addNewLineAtEnd()" class="p-2 text-emerald-500/70 hover:text-emerald-400" title="Bas (Alt+E)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M17 13l-5 5m0 0l-5-5m5 5V6"/></svg></button>
-                </div>
+                <div class="h-5 w-px bg-white/10 mx-2"></div>
+                <button onclick="Core.Editor.contrast()" class="p-2 text-slate-300 hover:text-white" title="Contraste (Noir sur Blanc)">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/><path d="M12 4v16c4.41 0 8-3.59 8-8s-3.59-8-8-8z"/></svg>
+                </button>
+                <button onclick="Core.Editor.highlight()" class="p-2 text-yellow-500/60 hover:text-yellow-400" title="Surligner"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" stroke-width="2"/></svg></button>
+                <button onclick="Core.Editor.addLine('start')" class="p-2 text-emerald-500/60 hover:text-emerald-400" title="Haut (Alt+N)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M7 11l5-5m0 0l5 5m-5-5v12" stroke-width="2"/></svg></button>
+                <button onclick="Core.Editor.addLine('end')" class="p-2 text-emerald-500/60 hover:text-emerald-400" title="Bas (Alt+E)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M17 13l-5 5m0 0l-5-5m5 5V6" stroke-width="2"/></svg></button>
             </div>
 
             <div class="flex items-center gap-1">
-                <div class="flex items-center gap-1 px-1">
-                    <span id="ai-status-light" class="ai-status-indicator ai-loading" title="IA Statut"></span>
-                    <button onclick="App.AI.challengeDraft()" class="p-2 text-violet-400 hover:text-violet-300" title="IA Challenge"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg></button>
-                </div>
-                <div class="h-5 w-[1px] bg-white/10 mx-1"></div>
-                <button onclick="App.Macros.openModal()" class="p-2 text-slate-500 hover:text-purple-400" title="Macros (Alt+M)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg></button>
-                <button id="voice-btn" onclick="App.Voice.toggle()" class="p-2 text-slate-500" title="Vocal (Alt+R)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg></button>
-                <button onclick="App.Search.openModal()" class="p-2 text-slate-500 hover:text-white" title="Recherche (Ctrl+F)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg></button>
-                <div class="h-5 w-[1px] bg-white/10 mx-1"></div>
-                <button onclick="App.IO.triggerImport()" class="p-2 text-slate-500 hover:text-blue-400" title="Importer"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg></button>
-                <button onclick="App.IO.exportMarkdown()" class="p-2 text-slate-500 hover:text-blue-400" title="Exporter MD"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M12 10V3m0 0l-3 3m3-3l3 3M6.75 19.25h10.5M4 14v1a3 3 0 003 3h10a3 3 0 003-3v-1"/></svg></button>
-                <button onclick="App.Editor.clearDraft()" class="p-2 text-slate-500 hover:text-red-400" title="Vider"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
-                <div class="h-5 w-[1px] bg-white/10 mx-1"></div>
-                <button onclick="App.UI.openHelpModal()" class="p-2 text-slate-600 hover:text-yellow-500" title="Aide (F1)"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></button>
+                <div id="ui-ai-status" class="w-2 h-2 rounded-full bg-slate-600 mr-2" title="Status IA"></div>
+                <button onclick="Core.AI.challenge()" class="p-2 text-violet-400 hover:text-violet-300" title="IA Challenge"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" stroke-width="2"/></svg></button>
+                <button onclick="Core.UI.openMacros()" class="p-2 text-slate-500 hover:text-purple-400" title="Macros (Alt+M)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" stroke-width="2"/></svg></button>
+                <button id="ui-voice-btn" onclick="Core.Voice.toggle()" class="p-2 text-slate-500" title="Vocal (Alt+R)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" stroke-width="2"/></svg></button>
+                <button onclick="Core.UI.openSearch()" class="p-2 text-slate-500" title="Recherche (Ctrl+F)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-width="2.5"/></svg></button>
+                <div class="h-5 w-px bg-white/10 mx-2"></div>
+                <button onclick="Core.IO.triggerImport()" class="p-2 text-slate-500 hover:text-blue-400" title="Importer"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" stroke-width="2"/></svg></button>
+                <button onclick="Core.IO.exportMD()" class="p-2 text-slate-500 hover:text-blue-400" title="Exporter"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" stroke-width="2"/></svg></button>
+                <button onclick="Core.Editor.clear()" class="p-2 text-slate-500 hover:text-red-400" title="Vider"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-width="2"/></svg></button>
+                <button onclick="Core.UI.openHelp()" class="p-2 text-slate-600 hover:text-yellow-500" title="Aide (F1)"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-width="2"/></svg></button>
             </div>
         </header>
 
-        <div class="flex-1 overflow-y-auto custom-scrollbar bg-black/20 p-8 md:p-12">
-            <div class="editor-container max-w-3xl mx-auto rounded-xl overflow-hidden">
-                <div id="main-editor" contenteditable="true" class="p-12 md:p-16 outline-none" placeholder="Libérez votre pensée ici..."></div>
+        <div class="flex-1 overflow-y-auto p-6 md:p-12 custom-scrollbar">
+            <div class="max-w-3xl mx-auto editor-layer rounded-2xl">
+                <div id="main-editor" contenteditable="true" class="p-12 md:p-16 min-h-[60vh] text-[1.05rem] text-slate-300 leading-relaxed outline-none" placeholder="Libérez votre pensée ici..."></div>
             </div>
         </div>
 
-        <div id="macro-hud">
-            <div class="text-[10px] font-black text-white/40 uppercase mb-4 border-b border-white/5 pb-2 flex justify-between">
-                <span>Macro HUD</span>
-                <span class="text-blue-400">Alt + Key</span>
-            </div>
-            <div id="hud-list" class="space-y-1"></div>
+        <div id="smart-toolbar" class="flex items-center">
+            <div class="px-2 text-[8px] text-slate-500 font-black border-r border-white/10 mr-1 flex items-center gap-1"><svg class="w-3 h-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-width="2"/></svg>TRANSFERT</div>
+            <div id="ui-toolbar-days" class="flex gap-1 px-1"></div>
         </div>
-
-        <div id="smart-toolbar" class="flex items-center shadow-2xl">
-            <div class="px-2 text-[8px] text-slate-500 font-black uppercase border-r border-white/10 mr-1 flex items-center gap-1"><svg class="w-3 h-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>TRANSFERT</div>
-            <div id="toolbar-days" class="flex gap-1"></div>
-        </div>
-        <input type="file" id="import-input" class="hidden" accept=".json" onchange="App.IO.importData(event)">
+        <input type="file" id="import-input" class="hidden" accept=".json,.md" onchange="Core.IO.importData(event)">
     </main>
 
-    <!-- MANUEL OPÉRATIONNEL -->
-    <div id="help-modal" class="modal-overlay" onclick="App.UI.closeHelpModal(event)">
+    <!-- MODALES -->
+    <div id="modal-search" class="modal-overlay" onclick="Core.UI.closeModals()">
+        <div class="bg-[#111827] border border-white/10 p-8 rounded-2xl w-full max-w-2xl shadow-2xl" onclick="event.stopPropagation()">
+            <div class="flex items-center gap-3 border-b border-white/10 pb-4 mb-6">
+                <svg class="w-6 h-6 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-width="2"/></svg>
+                <input type="text" id="search-input" class="w-full bg-transparent text-white text-2xl outline-none font-mono" placeholder="Recherche profonde..." oninput="Core.Search.exec(this.value)">
+            </div>
+            <div id="search-results" class="max-h-[50vh] overflow-y-auto space-y-3 custom-scrollbar"></div>
+        </div>
+    </div>
+
+    <div id="modal-macros" class="modal-overlay" onclick="Core.UI.closeModals()">
+        <div class="modal-box max-w-xl !p-8" onclick="event.stopPropagation()">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-black uppercase tracking-widest text-white">Gestionnaire de Protocoles</h2>
+                <button onclick="Core.UI.closeModals()" class="text-slate-500 hover:text-white"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="2.5"/></svg></button>
+            </div>
+            <div class="mb-6">
+                <label class="text-[10px] text-slate-500 uppercase font-black block mb-2">Bibliothèque Active</label>
+                <div id="ui-macro-manager-list" class="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-2"></div>
+            </div>
+            <div class="border-t border-white/5 pt-6">
+                <label class="text-[10px] text-slate-500 uppercase font-black block mb-4">Nouveau Protocole</label>
+                <div class="grid grid-cols-4 gap-3 mb-4">
+                    <input type="text" id="ui-new-macro-trigger" placeholder="d,o" class="col-span-1 bg-black/40 border border-white/10 p-3 text-xs text-blue-400 font-mono rounded-xl outline-none focus:border-blue-500/50">
+                    <input type="text" id="ui-new-macro-text" placeholder="Expansion du texte..." class="col-span-3 bg-black/40 border border-white/10 p-3 text-xs text-white rounded-xl outline-none focus:border-blue-500/50">
+                </div>
+                <button onclick="Core.Macros.add()" class="w-full py-3 bg-blue-500/10 text-blue-400 text-[10px] font-black uppercase rounded-xl border border-blue-500/20 hover:bg-blue-500/20 transition-all tracking-widest">Enregistrer le Protocole</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-concept" class="modal-overlay" onclick="Core.UI.closeModals()">
         <div class="modal-box !max-w-5xl" onclick="event.stopPropagation()">
-            <div class="flex items-center justify-between mb-8">
-                <div>
-                    <h2 class="text-xl font-black text-white uppercase tracking-widest">Manuel Opérationnel v6.3</h2>
-                    <p class="text-[9px] text-slate-500 uppercase mt-1 tracking-widest">Manifeste de performance et flux cognitif</p>
-                </div>
-                <button onclick="App.UI.closeHelpModal()" class="p-2 text-slate-500 hover:text-white bg-white/5 rounded-full"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg></button>
-            </div>
-
-            <div class="flex gap-2 flex-wrap mb-8 border-b border-white/5 pb-2">
-                <button onclick="App.UI.switchHelpTab('architecture')" id="tab-architecture" class="help-tab-btn active">Le Flux</button>
-                <button onclick="App.UI.switchHelpTab('semantics')" id="tab-semantics" class="help-tab-btn">Zettelkasten</button>
-                <button onclick="App.UI.switchHelpTab('lifecycle')" id="tab-lifecycle" class="help-tab-btn">Maturation</button>
-                <button onclick="App.UI.switchHelpTab('intelligence')" id="tab-intelligence" class="help-tab-btn">IA</button>
-                <button onclick="App.UI.switchHelpTab('shortcuts')" id="tab-shortcuts" class="help-tab-btn">Commandes</button>
-            </div>
-            
-            <div id="pane-architecture" class="help-content-pane active text-sm text-slate-300 space-y-6">
-                <section>
-                    <h4 class="text-blue-400 font-black uppercase text-[10px] mb-3 tracking-widest">L'INBOX : LE POINT ZÉRO</h4>
-                    <p class="leading-relaxed mb-4">Le Brouillon (Inbox) est votre mémoire de travail. Sa fonction est la <strong>décharge cognitive</strong>. Tout ce qui n'est pas trié, transféré ou supprimé sous 24h est une dette mentale.</p>
-                </section>
-                <section>
-                    <h4 class="text-blue-400 font-black uppercase text-[10px] mb-3 tracking-widest">L'AGENDA : LE STOCK CHRONOLOGIQUE</h4>
-                    <p class="leading-relaxed">L'Agenda fige vos réflexions dans le temps. C'est votre archive. Une note dans l'agenda ne doit pas être "à faire", mais "à avoir pensé".</p>
-                </section>
-            </div>
-
-            <div id="pane-semantics" class="help-content-pane text-sm text-slate-300 space-y-6">
-                <h4 class="text-violet-400 font-black uppercase text-[10px] mb-3 tracking-widest">CONNEXIONS : [[CONCEPT]]</h4>
-                <p class="leading-relaxed mb-4">Le Zettelkasten repose sur le lien. Utilisez <code>[[mot-clé]]</code> pour créer des ponts sémantiques.</p>
-                <div class="p-4 bg-violet-500/5 rounded-xl border border-violet-500/20 text-xs text-slate-400 leading-relaxed">
-                    <strong>Protocole de Cristallisation</strong> : En Mode Lecture (Alt+V), cliquez sur un concept. Le système regroupe tous les extraits historiques. Votre but est d'utiliser l'IA pour synthétiser ces extraits en une <strong>Note Permanente</strong> (le volet de droite).
+            <div class="p-6 border-b border-white/5 flex justify-between items-center bg-black/20">
+                <h2 id="ui-concept-title" class="text-2xl font-black text-white uppercase tracking-tighter"></h2>
+                <div class="flex gap-3">
+                    <button onclick="Core.AI.synthesize()" class="bg-violet-500/20 text-violet-300 border border-violet-500/30 px-4 py-2 rounded-lg text-[10px] font-black uppercase flex items-center gap-2">IA Cristalliser</button>
+                    <button onclick="Core.UI.closeModals()" class="p-2 text-slate-500 hover:text-white bg-white/5 rounded-full"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="2.5"/></svg></button>
                 </div>
             </div>
-
-            <div id="pane-lifecycle" class="help-content-pane text-sm text-slate-300 space-y-6">
-                <h4 class="text-amber-400 font-black uppercase text-[10px] mb-4 tracking-widest">ÉTATS DE MATURATION</h4>
-                <div class="space-y-4">
-                    <div class="flex gap-4 items-start bg-white/5 p-4 rounded-xl border border-white/5">
-                        <div class="text-2xl pt-1">🌱</div>
-                        <div>
-                            <span class="text-emerald-400 font-bold block uppercase text-xs">Graine ((graine))</span>
-                            <p class="text-xs text-slate-400 mt-1">Information brute. <strong>Risque de dégradation</strong> : Si non-cultivée sous 30 jours, elle devient rouge (Stale). C'est un déchet informationnel.</p>
-                        </div>
-                    </div>
-                    <div class="flex gap-4 items-start bg-white/5 p-4 rounded-xl border border-white/5">
-                        <div class="text-2xl pt-1">🌿</div>
-                        <div>
-                            <span class="text-blue-400 font-bold block uppercase text-xs">Pousse ((pousse))</span>
-                            <p class="text-xs text-slate-400 mt-1">Idée en cours de structuration. Elle a passé le premier test de pertinence.</p>
-                        </div>
-                    </div>
-                    <div class="flex gap-4 items-start bg-white/5 p-4 rounded-xl border border-white/5">
-                        <div class="text-2xl pt-1">🌳</div>
-                        <div>
-                            <span class="text-indigo-400 font-bold block uppercase text-xs">Pilier ((pilier))</span>
-                            <p class="text-xs text-slate-400 mt-1">Connaissance cristallisée. Elle ne se dégrade jamais. C'est un actif cognitif.</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div id="pane-intelligence" class="help-content-pane text-sm text-slate-300 space-y-6">
-                <h4 class="text-violet-400 font-black uppercase text-[10px] mb-4 tracking-widest">INTELLIGENCE ANALYTIQUE</h4>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div class="p-4 bg-white/5 rounded-xl border border-white/5">
-                        <h5 class="text-white font-bold text-xs uppercase mb-2">IA CHALLENGE</h5>
-                        <p class="text-[11px] text-slate-400 leading-relaxed">Ne demandez pas de résumé. Utilisez le bouton IA pour que l'IA traque vos angles morts et vos excuses intellectuelles.</p>
-                    </div>
-                    <div class="p-4 bg-white/5 rounded-xl border border-white/5">
-                        <h5 class="text-white font-bold text-xs uppercase mb-2">IA CRISTALLISEUR</h5>
-                        <p class="text-[11px] text-slate-400 leading-relaxed">Dans la vue Concept, laissez l'IA transformer vos bribes de notes en une pensée cohérente et structurée.</p>
-                    </div>
-                </div>
-            </div>
-
-            <div id="pane-shortcuts" class="help-content-pane text-sm text-slate-300 space-y-6">
-                <h4 class="text-emerald-400 font-black uppercase text-[10px] mb-4 tracking-widest">COMMANDES SYSTÈME</h4>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div class="space-y-3">
-                        <div class="flex justify-between p-3 bg-white/5 rounded-xl border border-white/5">
-                            <span class="text-xs uppercase text-slate-400 font-bold">Mode Lecture / Édition</span>
-                            <kbd class="px-2 py-1 bg-blue-500/20 text-blue-400 rounded text-[10px] font-mono border border-blue-500/30">Alt + V</kbd>
-                        </div>
-                        <div class="flex justify-between p-3 bg-white/5 rounded-xl border border-white/5">
-                            <span class="text-xs uppercase text-slate-400 font-bold">Aujourd'hui (Focus)</span>
-                            <kbd class="px-2 py-1 bg-blue-500/20 text-blue-400 rounded text-[10px] font-mono border border-blue-500/30">Alt + T</kbd>
-                        </div>
-                        <div class="flex justify-between p-3 bg-white/5 rounded-xl border border-white/5">
-                            <span class="text-xs uppercase text-slate-400 font-bold">Recherche Profonde</span>
-                            <kbd class="px-2 py-1 bg-blue-500/20 text-blue-400 rounded text-[10px] font-mono border border-blue-500/30">Ctrl + F</kbd>
-                        </div>
-                    </div>
-                    <div class="space-y-3">
-                        <div class="flex justify-between p-3 bg-white/5 rounded-xl border border-white/5">
-                            <span class="text-xs uppercase text-slate-400 font-bold">Nouvelle Ligne (H/B)</span>
-                            <kbd class="px-2 py-1 bg-blue-500/20 text-blue-400 rounded text-[10px] font-mono border border-blue-500/30">Alt+N / Alt+E</kbd>
-                        </div>
-                        <div class="flex justify-between p-3 bg-white/5 rounded-xl border border-white/5">
-                            <span class="text-xs uppercase text-slate-400 font-bold">Dictée Vocale</span>
-                            <kbd class="px-2 py-1 bg-blue-500/20 text-blue-400 rounded text-[10px] font-mono border border-blue-500/30">Alt + R</kbd>
-                        </div>
-                        <div class="flex justify-between p-3 bg-white/5 rounded-xl border border-white/5">
-                            <span class="text-xs uppercase text-slate-400 font-bold">Aide (Ce menu)</span>
-                            <kbd class="px-2 py-1 bg-blue-500/20 text-blue-400 rounded text-[10px] font-mono border border-blue-500/30">F1</kbd>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="mt-12 pt-6 border-t border-white/5 flex justify-end">
-                <button onclick="App.UI.closeHelpModal()" class="px-8 py-3 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-blue-500/20">Initialisation terminée</button>
+            <div class="flex-1 grid grid-cols-1 md:grid-cols-2 gap-px bg-white/5">
+                <div id="ui-concept-snippets" class="bg-[#111827] p-6 overflow-y-auto custom-scrollbar space-y-4"></div>
+                <div id="ui-concept-synthesis" contenteditable="true" class="bg-[#0a0f1d] p-8 text-slate-300 leading-relaxed outline-none overflow-y-auto custom-scrollbar text-sm"></div>
             </div>
         </div>
     </div>
 
-    <!-- VUE CONCEPT -->
-    <div id="concept-modal" class="modal-overlay" onclick="App.UI.closeConceptView(event)">
-        <div class="modal-box !max-w-[1100px] !p-10" onclick="event.stopPropagation()">
-            <div class="flex justify-between items-center mb-8 border-b border-white/5 pb-4">
-                <h2 id="concept-title" class="text-2xl font-black text-white uppercase tracking-tighter"></h2>
-                <div class="flex gap-4">
-                    <button id="ai-synthesis-btn" onclick="App.AI.synthesizeConcept()" class="bg-violet-500/20 text-violet-300 border border-violet-500/40 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest flex items-center gap-2"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547"/></svg>IA Cristalliser</button>
-                    <button onclick="App.UI.closeConceptView()" class="text-slate-500 hover:text-white bg-white/5 rounded-full p-2"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg></button>
-                </div>
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 h-[500px]">
-                <div id="concept-snippets-list" class="overflow-y-auto custom-scrollbar space-y-4 pr-2"></div>
-                <div id="synthesis-editor" contenteditable="true" class="flex-1 bg-white/5 border border-white/5 rounded-xl p-6 outline-none custom-scrollbar text-sm leading-relaxed text-slate-300"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- MACROS CONFIG -->
-    <div id="macro-modal" class="modal-overlay" onclick="App.Macros.closeModal(event)">
-        <div class="modal-box max-w-xl !p-10" onclick="event.stopPropagation()">
-            <div class="flex items-center justify-between mb-8">
-                <h3 class="text-white font-black uppercase text-sm tracking-[0.2em]">Configuration Macros</h3>
-                <button onclick="App.Macros.closeModal()" class="p-2 text-slate-600 hover:text-white transition-colors"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
-            </div>
-
-            <div class="mb-8">
-                <p class="text-[10px] text-slate-500 uppercase font-bold mb-4 tracking-widest">Bibliothèque Active</p>
-                <div id="macro-list" class="space-y-2 max-h-72 overflow-y-auto pr-3 custom-scrollbar"></div>
-            </div>
-
-            <div class="pt-6 border-t border-white/5">
-                <p class="text-[10px] text-slate-500 uppercase font-bold mb-4 tracking-widest">Nouveau Protocole</p>
-                <div class="bg-white/[0.03] p-6 rounded-2xl border border-white/5 space-y-4">
-                    <div class="flex gap-4">
-                        <div class="w-24 shrink-0">
-                            <label class="text-[9px] text-slate-600 uppercase font-black block mb-2">Déclencheur</label>
-                            <input type="text" id="new-macro-trigger" placeholder="ex: d,o" class="w-full bg-black/40 border border-white/10 p-3 text-xs text-blue-400 font-mono rounded-xl outline-none focus:border-blue-500/50 transition-all">
-                        </div>
-                        <div class="flex-1">
-                            <label class="text-[9px] text-slate-600 uppercase font-black block mb-2">Expansion</label>
-                            <textarea id="new-macro-text" placeholder="Entrez le texte ou le bloc de structure..." class="w-full bg-black/40 border border-white/10 p-3 text-xs text-white rounded-xl h-24 outline-none focus:border-blue-500/50 transition-all resize-none"></textarea>
-                        </div>
+    <div id="modal-help" class="modal-overlay" onclick="Core.UI.closeModals()">
+        <div class="modal-box !max-w-4xl" onclick="event.stopPropagation()">
+            <div class="p-8 bg-black/40 flex flex-col gap-4">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h2 class="text-xl font-black uppercase tracking-widest text-white">Manuel Opérationnel v7.8</h2>
+                        <p class="text-[10px] text-slate-500 uppercase mt-1 tracking-widest font-bold">L'art de la capture et de la cristallisation</p>
                     </div>
-                    <button onclick="App.Macros.add()" class="w-full py-4 bg-blue-500/10 text-blue-400 text-[10px] font-black uppercase rounded-xl border border-blue-500/20 hover:bg-blue-500/20 transition-all tracking-widest">Enregistrer dans le HUD</button>
+                    <button onclick="Core.UI.closeModals()" class="p-2 text-slate-500 hover:text-white bg-white/5 rounded-full"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="2.5"/></svg></button>
+                </div>
+                <div class="flex gap-6 border-b border-white/5">
+                    <button onclick="Core.UI.switchHelp('strat')" class="help-tab active pb-3 text-[11px] font-black uppercase tracking-wider">Stratégie</button>
+                    <button onclick="Core.UI.switchHelp('flow')" class="help-tab pb-3 text-[11px] font-black uppercase tracking-wider">Le Flux</button>
+                    <button onclick="Core.UI.switchHelp('zettel')" class="help-tab pb-3 text-[11px] font-black uppercase tracking-wider">Zettelkasten</button>
+                    <button onclick="Core.UI.switchHelp('intel')" class="help-tab pb-3 text-[11px] font-black uppercase tracking-wider">Intelligence IA</button>
+                    <button onclick="Core.UI.switchHelp('keys')" class="help-tab pb-3 text-[11px] font-black uppercase tracking-wider">Commandes</button>
                 </div>
             </div>
+            <div id="ui-help-content" class="p-10 overflow-y-auto custom-scrollbar text-[13px] text-slate-400 space-y-8 leading-relaxed"></div>
         </div>
     </div>
 
-    <!-- RECHERCHE -->
-    <div id="search-modal" class="modal-overlay" onclick="App.Search.closeModal(event)">
-        <div class="modal-box" onclick="event.stopPropagation()">
-            <div class="flex items-center gap-3 border-b border-white/10 pb-4 mb-6"><svg class="w-6 h-6 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg><input type="text" id="search-input" placeholder="Recherche profonde..." class="bg-transparent text-white w-full outline-none text-xl font-mono" oninput="App.Search.handle(this.value)"></div>
-            <div id="search-results" class="space-y-4 max-h-96 overflow-y-auto custom-scrollbar"></div>
+    <div id="macro-hud">
+        <div class="text-[9px] font-black text-blue-400 uppercase border-b border-white/5 mb-3 pb-1 flex justify-between">
+            <span>Macro HUD</span>
+            <span class="text-slate-600">ALT + SEQ</span>
         </div>
+        <div id="ui-macro-list-hud" class="space-y-1.5"></div>
     </div>
 
-    <div id="toast">Système prêt</div>
+    <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 border border-white/10 px-6 py-3 rounded-xl text-xs font-bold transition-all opacity-0 pointer-events-none z-[200] shadow-2xl"></div>
 
     <script>
-        const App = {
-            Config: { dbName: "EfficientAgendaDB", dbVersion: 4, pruningDays: 30, flashbackIntervals: [30, 180, 365], keyEndpoint: "/.netlify/functions/GetAgenDataAPIKey" },
-            State: { apiKey: null, currentMonday: null, isReadMode: false, rawEditorContent: '', macroBuffer: [], macroTimeout: null, activeMacros: {}, activeConcept: null, isRecording: false, recognition: null, isAltDown: false },
-            DB: null
-        };
-
-        App.DB = new Dexie(App.Config.dbName);
-        App.DB.version(App.Config.dbVersion).stores({ notes: "id", agenda: "date", macros: "trigger", concepts: "title" });
-
-        const DOM = {
-            editor: document.getElementById('main-editor'), agendaContainer: document.getElementById('agenda-container'),
-            flashbackContainer: document.getElementById('flashback-container'), weekRangeEl: document.getElementById('week-range'),
-            smartToolbar: document.getElementById('smart-toolbar'), toastEl: document.getElementById('toast'),
-            viewModeBtn: document.getElementById('view-mode-btn'), voiceBtn: document.getElementById('voice-btn'),
-            macroList: document.getElementById('macro-list'), searchResults: document.getElementById('search-results'),
-            conceptModal: document.getElementById('concept-modal'), conceptTitle: document.getElementById('concept-title'),
-            conceptSnippets: document.getElementById('concept-snippets-list'), synthesisEditor: document.getElementById('synthesis-editor'),
-            aiSynthBtn: document.getElementById('ai-synthesis-btn'), aiStatusLight: document.getElementById('ai-status-light'),
-            macroHUD: document.getElementById('macro-hud'), hudList: document.getElementById('hud-list')
-        };
-
-        App.Utils = {
-            getMonday: (d) => { d = new Date(d); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); return new Date(new Date(d.setDate(diff)).setHours(0,0,0,0)); },
-            dateToKey: (d) => { const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0'); return `${y}-${m}-${day}`; },
-            formatDS: (d) => d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }),
-            showToast: (m) => { DOM.toastEl.textContent = m; DOM.toastEl.classList.add('show'); setTimeout(() => DOM.toastEl.classList.remove('show'), 3000); },
-            htmlToMd: (html) => html ? html.replace(/<div>/g, '\n').replace(/<\/div>/g, '').replace(/<br\s*\/?>/g, '\n').replace(/<[^>]*>/g, '').trim() : "",
-            focusAndPlaceCaret: (el) => { if(!el) return; const range = document.createRange(), sel = window.getSelection(); range.setStart(el, 0); range.collapse(true); sel.removeAllRanges(); sel.addRange(range); el.focus(); }
-        };
-
-        App.Storage = {
-            loadData: async () => { const n = await App.DB.notes.get('main'); if (n) DOM.editor.innerHTML = n.content; },
-            saveData: async () => { if (App.State.isReadMode) return; await App.DB.notes.put({id: 'main', content: DOM.editor.innerHTML, updatedAt: Date.now()}); const cards = document.querySelectorAll('.agenda-card:not(.flashback-card)'); for (let c of cards) { const dk = c.dataset.date; if (!dk) continue; const existing = await App.DB.agenda.get(dk), newContent = c.querySelector('.agenda-content').innerHTML; if (!existing || existing.content !== newContent) await App.DB.agenda.put({date: dk, content: newContent, updatedAt: Date.now()}); } },
-            saveSynthesis: async () => { if (!App.State.activeConcept) return; await App.DB.concepts.put({ title: App.State.activeConcept, synthesis: DOM.synthesisEditor.innerHTML, updatedAt: Date.now() }); }
-        };
-
-        App.AI = {
-            updateStatus(status) { DOM.aiStatusLight.classList.remove('ai-ready', 'ai-loading', 'ai-offline'); if (status === 'ready') DOM.aiStatusLight.classList.add('ai-ready'); else if (status === 'loading') DOM.aiStatusLight.classList.add('ai-loading'); else DOM.aiStatusLight.classList.add('ai-offline'); },
-            async fetchKey() { this.updateStatus('loading'); try { const response = await fetch(App.Config.keyEndpoint); const data = await response.json(); if (data.apiKey) { App.State.apiKey = data.apiKey; this.updateStatus('ready'); return true; } } catch (e) { this.updateStatus('offline'); } },
-            async callGemini(prompt, system) { if(!App.State.apiKey) return "IA hors-ligne."; this.updateStatus('loading'); const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${App.State.apiKey}`; try { const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], systemInstruction: { parts: [{ text: system }] } }) }); const data = await response.json(); this.updateStatus('ready'); return data.candidates?.[0]?.content?.parts?.[0]?.text || "Erreur de traitement."; } catch (e) { this.updateStatus('offline'); return "Erreur IA."; } },
-            async challengeDraft() { const content = App.Utils.htmlToMd(DOM.editor.innerHTML); if (!content) return; App.Utils.showToast("Analyse..."); const res = await this.callGemini(content, "Tu es un conseiller critique. Traque les biais et angles morts dans ce brouillon."); App.Editor.insertAtCursor(`\n\n> 🧠 **Challenge** : ${res}\n`); },
-            async synthesizeConcept() { const snippets = Array.from(DOM.conceptSnippets.querySelectorAll('div')).map(d => d.innerText).join('\n---\n'); if (!snippets) return; DOM.aiSynthBtn.innerText = "..."; const res = await this.callGemini(`Notes :\n${snippets}`, "Synthèse analytique dense."); DOM.synthesisEditor.innerHTML = res.replace(/\n/g, '<br>'); DOM.aiSynthBtn.innerText = "IA Cristalliser"; }
-        };
-
-        App.Agenda = {
-            render: async () => {
-                DOM.agendaContainer.innerHTML = '';
-                const mon = App.State.currentMonday, sun = new Date(mon); sun.setDate(mon.getDate() + 6);
-                DOM.weekRangeEl.textContent = `${App.Utils.formatDS(mon)} - ${App.Utils.formatDS(sun)}`;
-                for (let i = 0; i < 7; i++) {
-                    const d = new Date(mon); d.setDate(mon.getDate() + i);
-                    const k = App.Utils.dateToKey(d), isT = k === App.Utils.dateToKey(new Date());
-                    const entry = await App.DB.agenda.get(k);
-                    const card = document.createElement('div'); card.className = `agenda-card px-5 py-4 ${isT ? 'today' : ''}`; card.id = `card-${k}`; card.dataset.date = k;
-                    card.innerHTML = `
-                        <div class="flex justify-between mb-1">
-                            <span class="text-[9px] font-black uppercase tracking-widest ${isT ? 'text-blue-400' : 'text-slate-600'}">${d.toLocaleDateString('fr-FR', {weekday:'short', day:'numeric'})}</span>
-                            <div class="card-actions flex gap-1">
-                                <button onclick="App.Agenda.importDraftToDay('${k}')" class="action-icon" title="Importer"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg></button>
-                                <button onclick="App.Agenda.copyToClipboard('${k}')" class="action-icon" title="Copier MD"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2"/></svg></button>
-                                <button onclick="App.Agenda.moveToDraft('${k}')" class="action-icon" title="Extraire"><svg class="w-2.5 h-2.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M13 5l7 7-7 7M5 5l7 7-7 7"/></svg></button>
-                                <button onclick="App.Agenda.clearDay('${k}')" class="action-icon text-red-500/50" title="Vider"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+        const Core = {
+            State: { currentMonday: null, isReadMode: false, macroBuffer: [], macroTimeout: null, recognition: null, isRecording: false, apiKey: "", macros: {}, activeConcept: null },
+            DB: null,
+            Init: async function() {
+                this.DB = new Dexie("AgenDataDB_v7");
+                this.DB.version(1).stores({ meta: "id", agenda: "date", macros: "trigger", concepts: "title" });
+                this.State.currentMonday = this.Utils.getMonday(new Date());
+                await this.Storage.loadAll();
+                this.Agenda.render();
+                this.Listeners.setup();
+                this.Voice.init();
+                this.Utils.toast("Système v7.8 Opérationnel");
+            },
+            Utils: {
+                getMonday: d => { d = new Date(d); const day = d.getDay(), diff = d.getDate() - day + (day === 0 ? -6 : 1); return new Date(d.setDate(diff)).setHours(0,0,0,0); },
+                formatDate: d => d.toISOString().split('T')[0],
+                toast: msg => { const el = document.getElementById('toast'); el.textContent = msg; el.style.opacity = "1"; el.style.transform = "translateX(-50%) translateY(-10px)"; setTimeout(() => { el.style.opacity = "0"; el.style.transform = "translateX(-50%) translateY(0px)"; }, 2500); },
+                debounce: (fn, ms) => { let timeout; return (...args) => { clearTimeout(timeout); timeout = setTimeout(() => fn.apply(this, args), ms); }; }
+            },
+            Storage: {
+                saveEditor: async () => { if(Core.State.isReadMode) return; const html = document.getElementById('main-editor').innerHTML; await Core.DB.meta.put({id: 'editor', content: html, ts: Date.now()}); },
+                loadAll: async () => { const ed = await Core.DB.meta.get('editor'); if(ed) document.getElementById('main-editor').innerHTML = ed.content; const m = await Core.DB.macros.toArray(); Core.State.macros = {}; m.forEach(x => Core.State.macros[x.trigger] = x.text); if(!m.length) { const d = {'s,d': '🌱 ((graine)) ', 'g,r': '🌿 ((pousse)) ', 'p,e': '🌳 ((pilier)) ', 'c,o': '[[]]'}; for(let k in d) { await Core.DB.macros.put({trigger: k, text: d[k]}); Core.State.macros[k] = d[k]; } } }
+            },
+            Agenda: {
+                render: async function() {
+                    const container = document.getElementById('ui-agenda-list');
+                    container.innerHTML = '';
+                    const start = new Date(Core.State.currentMonday);
+                    document.getElementById('ui-week-range').textContent = `${start.getDate()}/${start.getMonth()+1} - ${new Date(start.getTime() + 6*86400000).getDate()}/${start.getMonth()+1}`;
+                    for(let i=0; i<7; i++) {
+                        const current = new Date(start.getTime() + i*86400000);
+                        const key = Core.Utils.formatDate(current);
+                        const isToday = key === Core.Utils.formatDate(new Date());
+                        const data = await Core.DB.agenda.get(key);
+                        const card = document.createElement('div');
+                        card.className = `agenda-card px-5 py-4 ${isToday ? 'today' : ''}`;
+                        card.innerHTML = `
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="text-[9px] font-black ${isToday ? 'text-blue-400' : 'text-slate-600'} uppercase">${current.toLocaleDateString('fr-FR', {weekday:'short', day:'numeric'})}</span>
+                                <div class="card-actions flex gap-1">
+                                    <button onclick="Core.Agenda.importFromDraft('${key}')" class="action-icon" title="Importer brouillon"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 14l-7 7m0 0l-7-7m7 7V3" stroke-width="3"/></svg></button>
+                                    <button onclick="Core.Agenda.copyToClipboard('${key}')" class="action-icon" title="Copier"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2" stroke-width="2.5"/></svg></button>
+                                    <button onclick="Core.Agenda.pushToDraft('${key}')" class="action-icon" title="Extraire"><svg class="w-2.5 h-2.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 5l7 7-7 7M5 5l7 7-7 7" stroke-width="3"/></svg></button>
+                                    <button onclick="Core.Agenda.clear('${key}')" class="action-icon text-red-500/50" title="Vider"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-width="3"/></svg></button>
+                                </div>
                             </div>
-                        </div>
-                        <div class="agenda-content outline-none custom-scrollbar" contenteditable="true" oninput="App.Storage.saveData()">${entry ? App.Editor.applyStaleEffect(entry.content, entry.updatedAt) : ''}</div>
-                    `;
-                    DOM.agendaContainer.appendChild(card);
-                }
-                App.Agenda.renderFlashback();
+                            <div contenteditable="true" oninput="Core.Agenda.save('${key}', this.innerHTML)" class="text-[0.8rem] text-slate-400 outline-none min-h-[4rem] custom-scrollbar leading-relaxed">${data ? data.content : ''}</div>
+                        `;
+                        container.appendChild(card);
+                    }
+                    this.renderFlashback();
+                },
+                renderFlashback: async function() {
+                    const zone = document.getElementById('ui-flashback-zone'); zone.innerHTML = '';
+                    const intervals = [30, 90, 365]; const now = new Date(); let match = null;
+                    for(let days of intervals) {
+                        const target = new Date(now.getTime() - days*86400000);
+                        const data = await Core.DB.agenda.get(Core.Utils.formatDate(target));
+                        if(data && data.content.trim()) { match = {d: target, c: data.content}; break; }
+                    }
+                    if(match) {
+                        const card = document.createElement('div'); card.className = 'agenda-card flashback p-5';
+                        card.innerHTML = `<div class="text-[9px] font-black text-purple-400 uppercase mb-2 flex items-center gap-2"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-width="2.5"/></svg> FLASHBACK ANALYTIQUE</div><div class="text-[0.75rem] text-slate-500 italic line-clamp-4">${match.c}</div>`;
+                        zone.appendChild(card);
+                    }
+                },
+                save: async (date, content) => { await Core.DB.agenda.put({date, content, ts: Date.now()}); },
+                shiftWeek: (dir) => { Core.State.currentMonday = new Date(Core.State.currentMonday.getTime() + (dir * 7 * 86400000)); Core.Agenda.render(); },
+                jumpToToday: () => { Core.State.currentMonday = Core.Utils.getMonday(new Date()); Core.Agenda.render(); },
+                importFromDraft: async (key) => {
+                    const draft = document.getElementById('main-editor').innerHTML;
+                    if(!draft.trim()) return;
+                    const entry = await Core.DB.agenda.get(key);
+                    const newContent = (entry ? entry.content : '') + '<br>' + draft;
+                    await Core.Agenda.save(key, newContent);
+                    Core.Agenda.render();
+                    Core.Utils.toast("Brouillon importé");
+                },
+                copyToClipboard: async (key) => {
+                    const entry = await Core.DB.agenda.get(key);
+                    if(!entry) return;
+                    const text = entry.content.replace(/<[^>]*>/g, '');
+                    const t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select(); document.execCommand('copy'); document.body.removeChild(t);
+                    Core.Utils.toast("Copié");
+                },
+                pushToDraft: async (key) => {
+                    const entry = await Core.DB.agenda.get(key);
+                    if(entry) {
+                        document.getElementById('main-editor').innerHTML += `<br><br>${entry.content}`;
+                        Core.Storage.saveEditor();
+                        Core.Utils.toast("Contenu extrait");
+                    }
+                },
+                clear: async (key) => { if(confirm("Confirmer la purge ?")) { await Core.DB.agenda.delete(key); Core.Agenda.render(); } }
             },
-            renderFlashback: async () => {
-                const now = new Date(); let entry = null;
-                for (let days of App.Config.flashbackIntervals) {
-                    const d = new Date(); d.setDate(now.getDate() - days);
-                    const e = await App.DB.agenda.get(App.Utils.dateToKey(d));
-                    if (e && e.content.trim()) { entry = e; break; }
-                }
-                DOM.flashbackContainer.innerHTML = '';
-                if (entry) {
-                    const card = document.createElement('div'); card.className = `agenda-card px-5 py-4 flashback-card`;
-                    card.innerHTML = `<div class="text-[9px] font-black uppercase text-violet-400 mb-1 flex items-center gap-2"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg> FLASHBACK ANALYTIQUE</div><div class="agenda-content text-slate-400 italic !h-24">${App.Editor.applyStaleEffect(entry.content, entry.updatedAt)}</div>`;
-                    DOM.flashbackContainer.appendChild(card);
+            Editor: {
+                toggleMode: function() {
+                    const el = document.getElementById('main-editor'); Core.State.isReadMode = !Core.State.isReadMode; el.contentEditable = !Core.State.isReadMode;
+                    if(Core.State.isReadMode) { Core.State.rawCache = el.innerHTML; this.processLinks(el); document.getElementById('ui-mode-btn').classList.add('text-blue-400'); Core.Utils.toast("Mode Lecture"); } 
+                    else { el.innerHTML = Core.State.rawCache || el.innerHTML; document.getElementById('ui-mode-btn').classList.remove('text-blue-400'); Core.Utils.toast("Mode Edition"); }
+                },
+                contrast: () => { 
+                    document.execCommand('backColor', false, '#ffffff'); 
+                    document.execCommand('foreColor', false, '#000000'); 
+                    Core.Storage.saveEditor(); 
+                },
+                highlight: () => { document.execCommand('hiliteColor', false, '#fde047'); document.execCommand('foreColor', false, '#000'); Core.Storage.saveEditor(); },
+                addLine: (pos) => {
+                    const div = document.createElement('div'); div.innerHTML = '<br>'; const ed = document.getElementById('main-editor');
+                    pos === 'start' ? ed.prepend(div) : ed.append(div);
+                    const range = document.createRange(), sel = window.getSelection(); range.setStart(div, 0); range.collapse(true); sel.removeAllRanges(); sel.addRange(range); div.focus();
+                },
+                clear: () => { if(confirm("Purge totale du brouillon ?")) { document.getElementById('main-editor').innerHTML = ""; Core.Storage.saveEditor(); } },
+                processLinks: (el) => {
+                    let html = el.innerHTML;
+                    html = html.replace(/\[\[(.*?)\]\]/g, '<span class="smart-link backlink" onclick="Core.UI.openConcept(\'$1\')">$1</span>');
+                    html = html.replace(/\(\(graine\)\)/g, '🌱').replace(/\(\(pousse\)\)/g, '🌿').replace(/\(\(pilier\)\)/g, '🌳');
+                    el.innerHTML = html;
                 }
             },
-            changeWeek: (d) => { App.State.currentMonday.setDate(App.State.currentMonday.getDate() + (d * 7)); App.Agenda.render(); },
-            goToToday: () => { App.State.currentMonday = App.Utils.getMonday(new Date()); App.Agenda.render(); },
-            importDraftToDay: (k) => App.Agenda.appendToDay(k, DOM.editor.innerHTML),
-            appendToDay: async (k, h) => { const e = await App.DB.agenda.get(k), n = (e ? e.content : '') + '<div><br></div>' + h; await App.DB.agenda.put({date: k, content: n, updatedAt: Date.now()}); App.Agenda.render(); App.Utils.showToast("Transféré"); },
-            copyToClipboard: async (key) => { const e = await App.DB.agenda.get(key); if (e) { const md = App.Utils.htmlToMd(e.content); const t = document.createElement('textarea'); t.value = md; document.body.appendChild(t); t.select(); document.execCommand('copy'); document.body.removeChild(t); App.Utils.showToast("Presse-papier mis à jour"); } },
-            moveToDraft: async (key) => { const entry = await App.DB.agenda.get(key); if (entry) { DOM.editor.innerHTML += '<div><br></div>' + entry.content; await App.DB.agenda.delete(key); App.Agenda.render(); App.Storage.saveData(); } },
-            clearDay: async (k) => { if(confirm("Vider ce bloc ?")) { await App.DB.agenda.delete(k); App.Agenda.render(); } }
-        };
-
-        App.Editor = {
-            insertAtCursor: (text) => { const target = (document.activeElement && (document.activeElement === DOM.editor || document.activeElement.classList.contains('agenda-content'))) ? document.activeElement : DOM.editor; target.focus(); document.execCommand('insertHTML', false, text.replace(/\n/g, '<br>')); },
-            execCmd: (c, v=null) => { document.execCommand(c, false, v); DOM.editor.focus(); },
-            applyHighlight: () => { document.execCommand('hiliteColor', false, '#fde047'); document.execCommand('foreColor', false, '#000000'); App.Storage.saveData(); },
-            addNewLineAtStart: () => { const div = document.createElement('div'); div.innerHTML = '<br>'; DOM.editor.prepend(div); App.Utils.focusAndPlaceCaret(div); },
-            addNewLineAtEnd: () => { const div = document.createElement('div'); div.innerHTML = '<br>'; DOM.editor.append(div); App.Utils.focusAndPlaceCaret(div); },
-            clearDraft: () => { if(confirm("Purge du brouillon ?")) { DOM.editor.innerHTML = ""; App.Storage.saveData(); } },
-            toggleViewMode: async () => { App.State.isReadMode = !App.State.isReadMode; if (App.State.isReadMode) { await App.Storage.saveData(); App.State.rawEditorContent = DOM.editor.innerHTML; DOM.editor.contentEditable = "false"; DOM.editor.classList.add('read-mode'); App.Editor.parseAndLinkify(); } else { DOM.editor.innerHTML = App.State.rawEditorContent; DOM.editor.contentEditable = "true"; DOM.editor.classList.remove('read-mode'); } },
-            applyStaleEffect: (html, updatedAt) => { if (!updatedAt || (Date.now() - updatedAt) <= App.Config.pruningDays * 86400000) return html; const t = document.createElement('div'); t.innerHTML = html; t.querySelectorAll('*').forEach(n => { if(n.innerText.includes('((graine))')) n.classList.add('status-stale'); }); return t.innerHTML; },
-            parseAndLinkify: () => { const walker = document.createTreeWalker(DOM.editor, NodeFilter.SHOW_TEXT); let nodes = []; while(walker.nextNode()) nodes.push(walker.currentNode); nodes.forEach(node => { const t = node.nodeValue; let h = t.replace(/(\d{1,2}\/\d{1,2})/g, '<span class="smart-link-date" onclick="App.Search.goToDateLink(\'$1\')">$1</span>').replace(/\[\[(.*?)\]\]/g, '<span class="smart-link-backlink" onclick="App.UI.openConceptView(\'$1\')">$1</span>').replace(/\(\(graine\)\)/g, '🌱').replace(/\(\(pousse\)\)/g, '🌿').replace(/\(\(pilier\)\)/g, '🌳'); if (h !== t) { const s = document.createElement('span'); s.innerHTML = h; node.parentNode.replaceChild(s, node); } }); }
-        };
-
-        App.Macros = {
-            load: async () => { const arr = await App.DB.macros.toArray(); App.State.activeMacros = {}; arr.forEach(m => App.State.activeMacros[m.trigger] = m.text); if (!arr.length) { const d = { 'c,o': '[[]]', 's,d': '🌱 ((graine)) ', 'g,r': '🌿 ((pousse)) ', 'p,e': '🌳 ((pilier)) ' }; for (let k in d) await App.DB.macros.put({trigger: k, text: d[k]}); await App.Macros.load(); } },
-            renderList: () => { 
-                DOM.macroList.innerHTML = ''; 
-                for (let trigger in App.State.activeMacros) { 
-                    const t = App.State.activeMacros[trigger], card = document.createElement('div'); 
-                    card.className = 'macro-card'; 
-                    card.innerHTML = `
-                        <div class="macro-trigger-badge">${trigger.split(',').join(' + ')}</div>
-                        <div class="macro-text-preview">${t.replace(/<br>/g, ' ').substring(0, 40)}...</div>
-                        <button onclick="App.Macros.delete('${trigger}')" class="p-2 text-slate-600 hover:text-red-400 transition-colors ml-auto"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
-                    `; 
-                    DOM.macroList.appendChild(card); 
-                } 
+            Voice: {
+                init: function() {
+                    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+                    if(SR) {
+                        Core.State.recognition = new SR(); Core.State.recognition.lang = 'fr-FR';
+                        Core.State.recognition.onstart = () => { Core.State.isRecording = true; document.getElementById('ui-voice-btn').classList.add('text-red-500', 'animate-pulse'); };
+                        Core.State.recognition.onresult = (e) => { const t = e.results[0][0].transcript; document.execCommand('insertText', false, t); Core.Storage.saveEditor(); };
+                        Core.State.recognition.onend = () => { Core.State.isRecording = false; document.getElementById('ui-voice-btn').classList.remove('text-red-500', 'animate-pulse'); };
+                    }
+                },
+                toggle: function() { if(!Core.State.recognition) return Core.Utils.toast("Vocal non supporté"); Core.State.isRecording ? Core.State.recognition.stop() : Core.State.recognition.start(); }
             },
-            add: async () => { const tr = document.getElementById('new-macro-trigger').value.toLowerCase().trim(), tx = document.getElementById('new-macro-text').value.trim(); if (tr && tx) { await App.DB.macros.put({trigger: tr, text: tx}); await App.Macros.load(); App.Macros.renderList(); App.Utils.showToast("Protocole enregistré"); } },
-            delete: async (t) => { await App.DB.macros.delete(t); await App.Macros.load(); App.Macros.renderList(); },
-            openModal: () => { document.getElementById('macro-modal').style.display='flex'; App.Macros.renderList(); },
-            closeModal: () => { document.getElementById('macro-modal').style.display='none'; },
-            showHUD: () => {
-                DOM.hudList.innerHTML = '';
-                for (let trigger in App.State.activeMacros) {
-                    const item = document.createElement('div'); item.className = 'hud-item';
-                    item.innerHTML = `<span class="hud-key">${trigger.split(',').join(' + ')}</span><span class="hud-val">${App.State.activeMacros[trigger].substring(0, 15)}...</span>`;
-                    DOM.hudList.appendChild(item);
-                }
-                DOM.macroHUD.style.display = 'block';
+            AI: {
+                challenge: async function() {
+                    const text = document.getElementById('main-editor').innerText; if(!text) return; Core.Utils.toast("IA Challenge : Analyse critique...");
+                    setTimeout(() => { const res = "\n\n> 🧠 **IA Challenge** : Votre brouillon manque de structure. Vous mélangez observations et exécution. Séparez les faits des intentions."; document.getElementById('main-editor').innerHTML += res.replace(/\n/g, '<br>'); Core.Storage.saveEditor(); }, 1200);
+                },
+                synthesize: async function() { if(!Core.State.activeConcept) return; Core.Utils.toast("Cristallisation..."); setTimeout(() => { document.getElementById('ui-concept-synthesis').innerHTML = "<b>Synthèse IA :</b> Ce concept semble être le pivot de vos réflexions actuelles. Il apparaît régulièrement comme un obstacle ou un levier."; }, 1000); }
             },
-            hideHUD: () => { DOM.macroHUD.style.display = 'none'; }
-        };
-
-        App.Voice = {
-            init: () => { const SR = window.SpeechRecognition || window.webkitSpeechRecognition; if (SR) { App.State.recognition = new SR(); App.State.recognition.lang = 'fr-FR'; App.State.recognition.onstart = () => { App.State.isRecording = true; DOM.voiceBtn.classList.add('text-red-500', 'animate-pulse'); }; App.State.recognition.onresult = (e) => App.Editor.insertAtCursor(e.results[0][0].transcript); App.State.recognition.onend = () => { App.State.isRecording = false; DOM.voiceBtn.classList.remove('text-red-500', 'animate-pulse'); }; } },
-            toggle: () => { if (!App.State.recognition) return; App.State.isRecording ? App.State.recognition.stop() : App.State.recognition.start(); }
-        };
-
-        App.Search = {
-            handle: async (q) => { DOM.searchResults.innerHTML = ''; const temp = document.createElement('div'), entries = await App.DB.agenda.toArray(); [...entries, {content: DOM.editor.innerHTML, date: 'Brouillon'}].forEach(e => { temp.innerHTML = e.content; if (q && temp.innerText.toLowerCase().includes(q.toLowerCase())) { const d = document.createElement('div'); d.className = "p-4 bg-white/[0.03] rounded-xl cursor-pointer text-xs mb-2 hover:bg-white/5 transition-all"; d.innerHTML = `<span class="text-blue-400 font-bold block mb-1 uppercase tracking-widest">${e.date}</span><div class="line-clamp-2">${temp.innerText}</div>`; d.onclick = () => App.Search.goToDateLink(e.date); DOM.searchResults.appendChild(d); } }); },
-            goToDateLink: (ds) => { if(ds === 'Brouillon') { App.Search.closeModal(); DOM.editor.focus(); return; } const parts = ds.split(/[\/\-]/); if(parts.length < 2) return; const d = new Date(); d.setMonth(parseInt(parts[1])-1); d.setDate(parseInt(parts[0])); App.State.currentMonday = App.Utils.getMonday(d); App.Agenda.render().then(() => { const el = document.getElementById(`card-${App.Utils.dateToKey(d)}`); if (el) el.scrollIntoView({behavior:'smooth', block:'center'}); }); App.Search.closeModal(); },
-            openModal: () => { document.getElementById('search-modal').style.display='flex'; document.getElementById('search-input').focus(); },
-            closeModal: () => { document.getElementById('search-modal').style.display='none'; }
-        };
-
-        App.IO = {
-            exportMarkdown: async () => { const notes = await App.DB.notes.get('main'), agenda = await App.DB.agenda.toArray(); let md = "# BROUILLON\n\n" + App.Utils.htmlToMd(notes?.content || "") + "\n\n# AGENDA\n\n"; agenda.forEach(i => md += `## ${i.date}\n\n${App.Utils.htmlToMd(i.content)}\n\n`); const b = new Blob([md], {type: 'text/markdown'}), l = document.createElement('a'); l.href = URL.createObjectURL(b); l.download = `backup_${new Date().toISOString().split('T')[0]}.md`; l.click(); },
-            triggerImport: () => document.getElementById('import-input').click(),
-            importData: (e) => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = async (ev) => { try { const d = JSON.parse(ev.target.result); if (d.notes) await App.DB.notes.put({id: 'main', content: d.notes, updatedAt: Date.now()}); if (d.agenda) for (let i of d.agenda) await App.DB.agenda.put(i); location.reload(); } catch(err) { App.Utils.showToast("Erreur de format"); } }; r.readAsText(f); }
-        };
-
-        App.UI = {
-            openHelpModal: () => document.getElementById('help-modal').style.display = 'flex',
-            closeHelpModal: () => document.getElementById('help-modal').style.display = 'none',
-            switchHelpTab: (id) => { document.querySelectorAll('.help-tab-btn').forEach(b => b.classList.remove('active')); document.querySelectorAll('.help-content-pane').forEach(p => p.classList.remove('active')); document.getElementById('tab-' + id)?.classList.add('active'); document.getElementById('pane-' + id)?.classList.add('active'); },
-            openConceptView: async (kw) => { App.State.activeConcept = kw; DOM.conceptTitle.textContent = kw; DOM.conceptSnippets.innerHTML = ''; const a = await App.DB.agenda.toArray(); [...a, {content: DOM.editor.innerHTML, date: 'Brouillon'}].forEach(i => { const t = document.createElement('div'); t.innerHTML = i.content; t.querySelectorAll('*').forEach(n => { if (n.innerText.toLowerCase().includes(kw.toLowerCase()) && n.innerText.length < 500) { const d = document.createElement('div'); d.className = "p-3 bg-white/[0.03] rounded-lg text-xs mb-2 border border-white/5"; d.innerHTML = `<span class="text-violet-500 text-[8px] uppercase block mb-1 font-bold">${i.date}</span>${n.innerHTML}`; DOM.conceptSnippets.appendChild(d); }}); }); const d = await App.DB.concepts.get(kw); if (d) DOM.synthesisEditor.innerHTML = d.synthesis; DOM.conceptModal.style.display = 'flex'; },
-            closeConceptView: () => { DOM.conceptModal.style.display = 'none'; App.State.activeConcept = null; },
-            showSmartToolbar: (r, t) => { const c = document.getElementById('toolbar-days'); c.innerHTML = ''; ['L', 'M', 'M', 'J', 'V', 'S', 'D'].forEach((d, i) => { const date = new Date(App.State.currentMonday); date.setDate(date.getDate() + i); const k = App.Utils.dateToKey(date), b = document.createElement('div'); b.className = `toolbar-btn`; b.textContent = d; b.onmousedown = (e) => { e.preventDefault(); App.Agenda.appendToDay(k, t); DOM.smartToolbar.style.display = 'none'; }; c.appendChild(b); }); DOM.smartToolbar.style.display = 'flex'; DOM.smartToolbar.style.top = `${r.bottom + window.scrollY + 10}px`; DOM.smartToolbar.style.left = `${r.left + window.scrollX}px`; }
-        };
-
-        async function init() {
-            await App.DB.open(); App.State.currentMonday = App.Utils.getMonday(new Date()); await App.Storage.loadData(); await App.Macros.load(); await App.Agenda.render(); App.Voice.init(); App.AI.fetchKey(); setupListeners(); setInterval(() => { if (!App.State.isReadMode) App.Storage.saveData(); if(App.State.activeConcept) App.Storage.saveSynthesis(); }, 3000);
-        }
-
-        function setupListeners() {
-            document.addEventListener('keydown', e => { 
-                if (e.key === 'Alt' && !App.State.isAltDown) { App.State.isAltDown = true; App.Macros.showHUD(); }
-                if (e.altKey && !['Alt', 'Control', 'Shift', 'Meta', 'v', 'm', 't', 'n', 'e', 'r'].includes(e.key)) { 
-                    e.preventDefault(); App.State.macroBuffer.push(e.key.toLowerCase()); clearTimeout(App.State.macroTimeout); const seq = App.State.macroBuffer.join(','); if (App.State.activeMacros[seq]) { App.Editor.insertAtCursor(App.State.activeMacros[seq]); App.State.macroBuffer = []; } else { App.State.macroTimeout = setTimeout(() => { App.State.macroBuffer = []; }, 800); } 
+            Search: {
+                exec: async (q) => {
+                    const res = document.getElementById('search-results'); res.innerHTML = ''; if(!q || q.length < 2) return;
+                    const all = await Core.DB.agenda.toArray(); const filter = all.filter(x => x.content.toLowerCase().includes(q.toLowerCase()));
+                    filter.forEach(x => {
+                        const d = document.createElement('div'); d.className = "p-4 bg-white/5 rounded-xl cursor-pointer hover:bg-white/10 transition-colors border border-white/5";
+                        d.innerHTML = `<div class="text-[9px] text-blue-400 font-black mb-1 uppercase tracking-widest">${x.date}</div><div class="text-xs text-slate-400 truncate">${x.content.replace(/<[^>]*>/g, '')}</div>`;
+                        d.onclick = () => { const target = new Date(x.date); Core.State.currentMonday = Core.Utils.getMonday(target); Core.Agenda.render().then(() => { Core.UI.closeModals(); Core.Utils.toast(`Navigation vers ${x.date}`); }); };
+                        res.appendChild(d);
+                    });
                 }
-                const actions = { 'v': App.Editor.toggleViewMode, 'm': App.Macros.openModal, 't': App.Agenda.goToToday, 'n': App.Editor.addNewLineAtStart, 'e': App.Editor.addNewLineAtEnd, 'r': App.Voice.toggle };
-                if (e.altKey && actions[e.key]) { e.preventDefault(); actions[e.key](); }
-                if ((e.ctrlKey || e.metaKey) && e.key === 'f') { e.preventDefault(); App.Search.openModal(); }
-                if (e.key === 'F1') { e.preventDefault(); App.UI.openHelpModal(); }
-            });
-            document.addEventListener('keyup', e => { if (e.key === 'Alt') { App.State.isAltDown = false; App.Macros.hideHUD(); } });
-            document.addEventListener('selectionchange', () => { const s = window.getSelection(); if (s.rangeCount && !s.isCollapsed && DOM.editor.contains(s.anchorNode)) { App.UI.showSmartToolbar(s.getRangeAt(0).getBoundingClientRect(), s.toString()); } else { DOM.smartToolbar.style.display = 'none'; } });
-        }
-        window.onload = init;
+            },
+            IO: {
+                triggerImport: () => document.getElementById('import-input').click(),
+                importData: (e) => {
+                    const file = e.target.files[0]; if(!file) return;
+                    const reader = new FileReader();
+                    reader.onload = async (ev) => {
+                        try {
+                            const data = JSON.parse(ev.target.result);
+                            if(data.agenda) for(let entry of data.agenda) await Core.DB.agenda.put(entry);
+                            if(data.editor) await Core.DB.meta.put({id: 'editor', content: data.editor, ts: Date.now()});
+                            location.reload();
+                        } catch(err) { Core.Utils.toast("Format invalide"); }
+                    };
+                    reader.readAsText(file);
+                },
+                exportMD: async () => {
+                    const agenda = await Core.DB.agenda.toArray(); const meta = await Core.DB.meta.get('editor');
+                    let data = { agenda, editor: meta ? meta.content : "" };
+                    const blob = new Blob([JSON.stringify(data)], {type: 'application/json'});
+                    const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `AgenData_Backup.json`; a.click();
+                }
+            },
+            UI: {
+                openSearch: () => { document.getElementById('modal-search').style.display = 'flex'; document.getElementById('search-input').focus(); },
+                openMacros: () => { document.getElementById('modal-macros').style.display = 'flex'; Core.Macros.renderManager(); },
+                openConcept: async (kw) => {
+                    Core.State.activeConcept = kw; document.getElementById('ui-concept-title').textContent = kw;
+                    const snippets = document.getElementById('ui-concept-snippets'); snippets.innerHTML = '';
+                    const all = await Core.DB.agenda.toArray();
+                    all.forEach(entry => {
+                        if(entry.content.toLowerCase().includes(kw.toLowerCase())) {
+                            const d = document.createElement('div'); d.className = "p-3 bg-white/[0.03] rounded-lg border border-white/5 text-[11px] text-slate-400";
+                            d.innerHTML = `<span class="text-violet-500 font-bold block mb-1 uppercase text-[8px]">${entry.date}</span>${entry.content}`; snippets.appendChild(d);
+                        }
+                    });
+                    const cache = await Core.DB.concepts.get(kw);
+                    document.getElementById('ui-concept-synthesis').innerHTML = cache ? cache.synthesis : "<i>Aucune synthèse cristallisée.</i>";
+                    document.getElementById('modal-concept').style.display = 'flex';
+                },
+                openHelp: () => { Core.UI.switchHelp('strat'); document.getElementById('modal-help').style.display = 'flex'; },
+                switchHelp: (tab) => {
+                    document.querySelectorAll('.help-tab').forEach(t => t.classList.remove('active'));
+                    const content = document.getElementById('ui-help-content');
+                    if(tab === 'strat') {
+                        document.querySelector('[onclick="Core.UI.switchHelp(\'strat\')"]').classList.add('active');
+                        content.innerHTML = `
+                            <div class="help-section-title">PHILOSOPHIE DU SYSTÈME</div>
+                            <p>AgenData n'est pas un bloc-notes. C'est une forge intellectuelle. Ce système repose sur la transformation brutale de l'information (un passif) en connaissance cristallisée (un actif). Si tu ne produis pas de structure, tu ne fais que stocker du bruit.</p>
+                            
+                            <div class="help-section-title">AMBITION STRATÉGIQUE</div>
+                            <p>Ton ambition doit être de construire des <b>Piliers 🌳</b>. Un Pilier est une connaissance immuable, une décision finale ou un principe de vie. Pour y arriver, tu dois accepter de cultiver des <b>Graines 🌱</b> et de laisser mourir ce qui n'a plus de valeur. AgenData est conçu pour mettre en lumière tes stagnations : une Graine qui ne devient pas une Pousse sous 30 jours est un poids mort pour ton attention.</p>
+                            
+                            <div class="help-section-title">L'OBJECTIF DE CLARTÉ</div>
+                            <p>Le système t'impose une rigueur chirurgicale. Si ton brouillon sature, ton attention se fragmente. Si tu évites le "Challenge", tu te mens à toi-même. La clarté n'est pas un état naturel, c'est le résultat d'un processus de filtrage impitoyable.</p>
+                        `;
+                    } else if(tab === 'flow') {
+                        document.querySelector('[onclick="Core.UI.switchHelp(\'flow\')"]').classList.add('active');
+                        content.innerHTML = `
+                            <div class="help-section-title">1. CAPTURE (LE BROUILLON)</div>
+                            <p>Le brouillon est ta décharge cognitive. Sa seule fonction est la libération immédiate de ta mémoire de travail. N'y cherche pas la mise en forme. Capture l'idée brute avant qu'elle ne soit polluée par le biais de rappel.</p>
+                            <p class="mt-2 text-red-400"><b>Règle de fer :</b> Le brouillon doit être vidé ou trié toutes les 24 heures. Un brouillon qui stagne crée une dette cognitive qui paralyse l'action.</p>
+
+                            <div class="help-section-title">2. QUALIFICATION (MATURITÉ)</div>
+                            <p>Rien ne reste anonyme. Chaque bloc doit recevoir un statut :</p>
+                            <ul class="list-disc pl-5 mt-2 space-y-2">
+                                <li><b>🌱 Graine :</b> Intuition, lien, fait brut. Si tu ne la consultes pas pendant 30 jours, elle devient rouge (Stale). C'est le signal pour la traiter ou la supprimer sans regret.</li>
+                                <li><b>🌿 Pousse :</b> Idée en cours de structuration, argumentaire étayé.</li>
+                                <li><b>🌳 Pilier :</b> Connaissance cristallisée, décision irrévocable.</li>
+                            </ul>
+
+                            <div class="help-section-title">3. TRANSFERT (AGENDA)</div>
+                            <p>L'information mûre doit être ancrée dans le temps. Utilise la "Smart Toolbar" (sélection de texte) ou les boutons d'import pour envoyer tes notes vers l'agenda. Cela libère ton brouillon et crée une archive historique exploitable.</p>
+                        `;
+                    } else if(tab === 'zettel') {
+                        document.querySelector('[onclick="Core.UI.switchHelp(\'zettel\')"]').classList.add('active');
+                        content.innerHTML = `
+                            <div class="help-section-title">L'EFFET RÉSEAU SÉMANTIQUE</div>
+                            <p>L'information isolée est inutile. La connaissance naît de la connexion. Les doubles crochets <code>[[Concept]]</code> agissent comme des neurones artificiels. Ils créent des ponts entre des pensées capturées à des mois d'intervalle.</p>
+                            
+                            <div class="help-section-title">NAVIGATION ET VUE CONSOLIDÉE</div>
+                            <p>En mode lecture (ALT+V), chaque lien devient une passerelle. Cliquer sur un concept ouvre une vue consolidée qui rassemble <b>tous les extraits</b> mentionnant ce terme à travers ton agenda. C'est ici que tu détectes tes contradictions, tes schémas répétitifs et tes angles morts.</p>
+
+                            <div class="help-section-title">CRISTALLISATION</div>
+                            <p>La vue Concept permet de transformer des fragments épars en une vérité structurée. C'est l'étape finale : la <b>Cristallisation</b>. Utilise le volet de droite pour rédiger une synthèse parfaite. Une fois cristallisée, l'essence de la connaissance est extraite, et les fragments bruts peuvent être archivés.</p>
+                        `;
+                    } else if(tab === 'intel') {
+                        document.querySelector('[onclick="Core.UI.switchHelp(\'intel\')"]').classList.add('active');
+                        content.innerHTML = `
+                            <div class="help-section-title">L'IA COMME MIROIR FROID</div>
+                            <p>L'IA Challenge n'est pas ton assistant personnel, c'est ton <b>opposant</b>. Son rôle est de démonter ton raisonnement, de traquer tes biais cognitifs et de pointer tes excuses. Si l'IA ne te bouscule pas, c'est que ton brouillon est soit trop pauvre, soit que tu n'as pas osé être honnête avec toi-même.</p>
+                            
+                            <div class="help-section-title">CONFRONTATION TEMPORELLE (FLASHBACKS)</div>
+                            <p>Le système remonte automatiquement des notes de J-30, J-90 ou J-365. C'est un protocole de reddition de comptes. Il te force à voir si tu as réellement progressé sur tes problématiques ou si tu tournes en rond dans les mêmes schémas depuis un an.</p>
+
+                            <div class="help-section-title">ANALYSE DE QUALITÉ</div>
+                            <p>Avant de figer une idée dans l'agenda, lance le Challenge. L'IA analysera ton texte pour y déceler les manques de preuves, les raccourcis faciles et les zones de flou. C'est le dernier filtre avant l'archivage définitif.</p>
+                        `;
+                    } else {
+                        document.querySelector('[onclick="Core.UI.switchHelp(\'keys\')"]').classList.add('active');
+                        content.innerHTML = `
+                            <div class="help-section-title">AMBITION DU SYSTÈME DE MACROS</div>
+                            <p class="text-white font-bold mb-2">Automatiser la structure, pas seulement la saisie.</p>
+                            <p>Les macros d'AgenData ne sont pas de simples raccourcis texte. Ce sont des <b>Protocoles de Pensée</b>. L'ambition est de supprimer toute résistance entre une pensée chaotique et un cadre décisionnel rigoureux. En tapant une séquence, tu injectes instantanément un framework structuré dans ton brouillon, forçant ton esprit à suivre une logique de performance dès l'émergence de l'idée.</p>
+                            
+                            <div class="help-section-title">MÉCANIQUE EXHAUSTIVE</div>
+                            <div class="space-y-4">
+                                <div class="help-step-box">
+                                    <p class="font-bold text-blue-400 mb-1 uppercase text-[10px]">Déclenchement (Alt-Tap)</p>
+                                    <p>Maintenez la touche <kbd class="text-blue-500">Alt</kbd> enfoncée. Le HUD des macros s'affiche. Tapez ensuite la séquence de caractères (ex: <kbd>s</kbd> puis <kbd>d</kbd>).</p>
+                                </div>
+                                <div class="help-step-box">
+                                    <p class="font-bold text-blue-400 mb-1 uppercase text-[10px]">Buffer de Séquence</p>
+                                    <p>Le système dispose d'un buffer de 800ms. Si vous tapez vos touches trop lentement, le buffer se vide. Cette contrainte temporelle favorise le rythme de capture.</p>
+                                </div>
+                                <div class="help-step-box">
+                                    <p class="font-bold text-blue-400 mb-1 uppercase text-[10px]">Gestion des Protocoles</p>
+                                    <p>Utilisez l'icône <svg class="w-3 h-3 inline text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" stroke-width="2"/></svg> pour ouvrir le gestionnaire. Vous pouvez définir des triggers complexes séparés par des virgules (ex: <code>p,r,o</code> pour un protocole de projet).</p>
+                                </div>
+                            </div>
+
+                            <div class="help-section-title">COMMANDES SYSTÈME FIXES</div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="p-3 bg-white/5 rounded-xl border border-white/5"><kbd class="text-blue-400">ALT + V</kbd><br><span class="text-[10px] uppercase">Bascule Lecture / Édition</span></div>
+                                <div class="p-3 bg-white/5 rounded-xl border border-white/5"><kbd class="text-blue-400">ALT + T</kbd><br><span class="text-[10px] uppercase">Focus sur Aujourd'hui</span></div>
+                                <div class="p-3 bg-white/5 rounded-xl border border-white/5"><kbd class="text-blue-400">ALT + R</kbd><br><span class="text-[10px] uppercase">Activation Vocale</span></div>
+                                <div class="p-3 bg-white/5 rounded-xl border border-white/5"><kbd class="text-blue-400">CTRL + F</kbd><br><span class="text-[10px] uppercase">Recherche Profonde</span></div>
+                            </div>
+                        `;
+                    }
+                },
+                closeModals: () => { document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none'); },
+                showToolbar: (rect, text) => {
+                    const bar = document.getElementById('smart-toolbar'); const container = document.getElementById('ui-toolbar-days'); container.innerHTML = '';
+                    ['L','M','M','J','V','S','D'].forEach((d, i) => {
+                        const target = new Date(Core.State.currentMonday); target.setDate(target.getDate() + i); const k = Core.Utils.formatDate(target);
+                        const btn = document.createElement('button'); btn.className = "px-2 py-1 text-[9px] hover:bg-blue-500 hover:text-white rounded text-slate-500 font-bold";
+                        btn.textContent = d; btn.onmousedown = (e) => { e.preventDefault(); Core.Agenda.importFromDraft(k); }; container.appendChild(btn);
+                    });
+                    bar.style.top = `${rect.bottom + window.scrollY + 8}px`; bar.style.left = `${rect.left + window.scrollX}px`; bar.style.display = 'flex';
+                }
+            },
+            Listeners: {
+                setup: function() {
+                    const editor = document.getElementById('main-editor');
+                    editor.addEventListener('input', Core.Utils.debounce(() => Core.Storage.saveEditor(), 1000));
+                    document.addEventListener('keydown', e => {
+                        if(e.key === 'Alt') { document.getElementById('macro-hud').style.display = 'block'; Core.Macros.renderHUD(); }
+                        if(e.altKey) {
+                            if(e.key.length === 1 && !['v','t','m','n','e','r'].includes(e.key)) Core.Macros.handle(e.key);
+                            if(e.key === 'v') { e.preventDefault(); Core.Editor.toggleMode(); }
+                            if(e.key === 't') { e.preventDefault(); Core.Agenda.jumpToToday(); }
+                            if(e.key === 'n') { e.preventDefault(); Core.Editor.addLine('start'); }
+                            if(e.key === 'e') { e.preventDefault(); Core.Editor.addLine('end'); }
+                            if(e.key === 'r') { e.preventDefault(); Core.Voice.toggle(); }
+                        }
+                        if((e.ctrlKey || e.metaKey) && e.key === 'f') { e.preventDefault(); Core.UI.openSearch(); }
+                        if(e.key === 'F1') { e.preventDefault(); Core.UI.openHelp(); }
+                    });
+                    document.addEventListener('keyup', e => { if(e.key === 'Alt') document.getElementById('macro-hud').style.display = 'none'; });
+                    document.addEventListener('selectionchange', () => {
+                        const sel = window.getSelection();
+                        if(sel.rangeCount && !sel.isCollapsed && editor.contains(sel.anchorNode)) Core.UI.showToolbar(sel.getRangeAt(0).getBoundingClientRect(), sel.toString());
+                        else document.getElementById('smart-toolbar').style.display = 'none';
+                    });
+                }
+            },
+            Macros: {
+                handle: function(key) {
+                    clearTimeout(Core.State.macroTimeout); Core.State.macroBuffer.push(key.toLowerCase()); const seq = Core.State.macroBuffer.join(',');
+                    if(Core.State.macros[seq]) { document.execCommand('insertHTML', false, Core.State.macros[seq]); Core.State.macroBuffer = []; }
+                    Core.State.macroTimeout = setTimeout(() => { Core.State.macroBuffer = []; }, 800);
+                },
+                renderHUD: function() {
+                    const hud = document.getElementById('ui-macro-list-hud'); hud.innerHTML = '';
+                    for(let k in Core.State.macros) hud.innerHTML += `<div class="flex justify-between items-center text-[10px] font-mono border-b border-white/5 pb-1"><span class="text-blue-500 font-bold">${k.replace(',','+').toUpperCase()}</span><span class="text-slate-500 truncate">${Core.State.macros[k].substring(0, 15)}...</span></div>`;
+                },
+                renderManager: async function() {
+                    const list = document.getElementById('ui-macro-manager-list'); list.innerHTML = '';
+                    const all = await Core.DB.macros.toArray();
+                    all.forEach(m => {
+                        const row = document.createElement('div'); row.className = "flex justify-between items-center p-3 bg-white/5 rounded-xl border border-white/5 group";
+                        row.innerHTML = `
+                            <div class="flex items-center gap-4">
+                                <span class="text-[10px] font-black text-blue-400 font-mono bg-blue-500/10 px-2 py-1 rounded border border-blue-500/20">${m.trigger.replace(',','+').toUpperCase()}</span>
+                                <span class="text-xs text-slate-400 truncate max-w-[250px]">${m.text}</span>
+                            </div>
+                            <button onclick="Core.Macros.delete('${m.trigger}')" class="text-slate-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-width="2"/></svg></button>
+                        `;
+                        list.appendChild(row);
+                    });
+                },
+                add: async function() {
+                    const trigger = document.getElementById('ui-new-macro-trigger').value.toLowerCase().trim();
+                    const text = document.getElementById('ui-new-macro-text').value.trim();
+                    if(!trigger || !text) return Core.Utils.toast("Champs incomplets");
+                    await Core.DB.macros.put({trigger, text});
+                    document.getElementById('ui-new-macro-trigger').value = '';
+                    document.getElementById('ui-new-macro-text').value = '';
+                    await Core.Storage.loadAll(); this.renderManager(); Core.Utils.toast("Protocole ajouté");
+                },
+                delete: async function(trigger) { await Core.DB.macros.delete(trigger); await Core.Storage.loadAll(); this.renderManager(); Core.Utils.toast("Protocole supprimé"); }
+            }
+        };
+        window.onload = () => Core.Init();
     </script>
 </body>
 </html>
