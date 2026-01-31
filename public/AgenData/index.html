@@ -117,11 +117,11 @@
         .search-date { font-size: 10px; font-weight: 900; color: var(--accent); font-family: var(--font-mono); }
         .search-body { font-size: 12px; color: var(--text-main); line-height: 1.5; opacity: 0.8; }
 
-        /* Styles Manuel Aide */
         .help-tab { color: var(--text-muted); transition: all 0.2s; cursor: pointer; padding-bottom: 12px; border-bottom: 2px solid transparent; }
         .help-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
         .help-section-title { font-family: var(--font-mono); font-weight: 900; letter-spacing: 0.1em; color: var(--accent); font-size: 11px; margin-top: 2rem; margin-bottom: 0.75rem; border-left: 3px solid var(--accent); padding-left: 10px; text-transform: uppercase; }
         .help-step-box { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 1.25rem; margin-bottom: 1rem; }
+        .code-inline { font-family: var(--font-mono); background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 4px; color: #fff; font-size: 11px; }
     </style>
 </head>
 <body class="flex-col md:flex-row">
@@ -182,7 +182,6 @@
         <div id="day-transfer-bar" class="day-transfer-bar flex items-center">
             <div id="ui-day-transfer-container" class="flex gap-1 px-1"></div>
         </div>
-        <!-- Input masqué pour l'importation -->
         <input type="file" id="import-input" class="hidden" accept=".json" onchange="Core.IO.importData(event)">
     </main>
 
@@ -220,16 +219,14 @@
         <div class="modal-box !max-w-4xl" onclick="event.stopPropagation()">
             <div class="p-8 bg-black/40 flex flex-col gap-4">
                 <div class="flex justify-between items-start">
-                    <div>
-                        <h2 class="text-xl font-black uppercase tracking-widest text-white">Manuel Opérationnel v7.7</h2>
-                    </div>
+                    <h2 class="text-xl font-black uppercase tracking-widest text-white">Manuel Opérationnel v7.7</h2>
                     <button onclick="Core.UI.closeModals()" class="p-2 text-slate-500 bg-white/5 rounded-full"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="2.5"/></svg></button>
                 </div>
-                <div class="flex gap-6 border-b border-white/5">
-                    <button onclick="Core.UI.switchHelp('strat')" class="help-tab active pb-3 text-[11px] font-black uppercase">Philosophie</button>
-                    <button onclick="Core.UI.switchHelp('comp')" class="help-tab pb-3 text-[11px] font-black uppercase">Composants</button>
-                    <button onclick="Core.UI.switchHelp('syntax')" class="help-tab pb-3 text-[11px] font-black uppercase">Syntaxe</button>
-                    <button onclick="Core.UI.switchHelp('workflow')" class="help-tab pb-3 text-[11px] font-black uppercase">Exemple</button>
+                <div class="flex gap-6 border-b border-white/5 overflow-x-auto">
+                    <button id="tab-strat" onclick="Core.UI.switchHelp('strat')" class="help-tab active pb-3 text-[11px] font-black uppercase whitespace-nowrap">Philosophie</button>
+                    <button id="tab-comp" onclick="Core.UI.switchHelp('comp')" class="help-tab pb-3 text-[11px] font-black uppercase whitespace-nowrap">Composants</button>
+                    <button id="tab-syntax" onclick="Core.UI.switchHelp('syntax')" class="help-tab pb-3 text-[11px] font-black uppercase whitespace-nowrap">Syntaxe & Touches</button>
+                    <button id="tab-workflow" onclick="Core.UI.switchHelp('workflow')" class="help-tab pb-3 text-[11px] font-black uppercase whitespace-nowrap">Exemple de Flux</button>
                 </div>
             </div>
             <div id="ui-help-content" class="p-10 overflow-y-auto custom-scrollbar text-[13px] text-slate-400 space-y-8 leading-relaxed"></div>
@@ -288,17 +285,15 @@
                     const term = query.toLowerCase();
                     const allData = await Core.DB.agenda.toArray();
                     const draftContent = Core.Utils.stripHTML(document.getElementById('main-editor').innerHTML);
-                    
                     if (draftContent.toLowerCase().includes(term)) {
-                        res.innerHTML += `<div class="search-category-title">Brouillon</div><div class="search-item" onclick="Core.UI.closeModals()"><div class="search-body">${draftContent.substring(0, 150)}...</div></div>`;
+                        res.innerHTML += `<div class="search-category-title">Brouillon Actuel</div><div class="search-item" onclick="Core.UI.closeModals()"><div class="search-body">${draftContent.substring(0, 200)}...</div></div>`;
                     }
-                    
-                    const archiveResults = allData.filter(x => x.content.toLowerCase().includes(term));
+                    const archiveResults = allData.filter(x => x.content.toLowerCase().includes(term)).sort((a,b) => b.date.localeCompare(a.date));
                     if (archiveResults.length > 0) {
-                        res.innerHTML += `<div class="search-category-title">Archives</div>`;
+                        res.innerHTML += `<div class="search-category-title">Archives Agenda</div>`;
                         archiveResults.forEach(x => {
-                            const item = document.createElement('div'); item.className = 'search-item mb-2';
-                            item.innerHTML = `<div class="search-meta"><span class="search-date">${x.date}</span></div><div class="search-body">${Core.Utils.stripHTML(x.content).substring(0, 150)}...</div>`;
+                            const item = document.createElement('div'); item.className = 'search-item mb-3';
+                            item.innerHTML = `<div class="search-meta"><span class="search-date">${x.date}</span></div><div class="search-body">${Core.Utils.stripHTML(x.content).substring(0, 200)}...</div>`;
                             item.onclick = () => { Core.State.currentMonday = Core.Utils.getMonday(new Date(x.date)); Core.Agenda.render().then(() => Core.UI.closeModals()); };
                             res.appendChild(item);
                         });
@@ -321,10 +316,10 @@
                             <div class="flex justify-between items-center mb-1">
                                 <span class="text-[9px] font-black text-slate-600 uppercase">${current.toLocaleDateString('fr-FR', {weekday:'short', day:'numeric'})}</span>
                                 <div class="card-actions flex gap-1">
-                                    <button onclick="Core.Agenda.importFromDraft('${key}')" class="action-icon" title="Importer"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 14l-7 7m0 0l-7-7m7 7V3" stroke-width="3"/></svg></button>
+                                    <button onclick="Core.Agenda.importFromDraft('${key}')" class="action-icon" title="Importer le brouillon ici"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 14l-7 7m0 0l-7-7m7 7V3" stroke-width="3"/></svg></button>
                                     <button onclick="Core.Agenda.cutToClipboard('${key}')" class="action-icon" title="Couper"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M14.121 14.121L19 19m-4.879-4.879l4.879-4.879M12 12l4.879 4.879M12 12L7.121 7.121m4.879 4.879L7.121 16.879M12 12l4.879-4.879" stroke-width="2"/></svg></button>
                                     <button onclick="Core.Agenda.copyToClipboard('${key}')" class="action-icon" title="Copier"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2" stroke-width="2.5"/></svg></button>
-                                    <button onclick="Core.Agenda.openTransferMenu(event, '${key}')" class="action-icon" title="Déplacer"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 5l7 7-7 7" stroke-width="3"/></svg></button>
+                                    <button onclick="Core.Agenda.openTransferMenu(event, '${key}')" class="action-icon" title="Déplacer vers un autre jour"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 5l7 7-7 7M5 5l7 7-7 7" stroke-width="3"/></svg></button>
                                     <button onclick="Core.Agenda.clear('${key}')" class="action-icon text-red-500/50" title="Effacer"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-width="3"/></svg></button>
                                 </div>
                             </div>
@@ -339,7 +334,7 @@
                 importFromDraft: async (key) => {
                     const draft = document.getElementById('main-editor').innerHTML; if(!draft.trim()) return;
                     const entry = await Core.DB.agenda.get(key);
-                    const newContent = (entry ? entry.content : '') + '<br>' + draft;
+                    const newContent = (entry ? entry.content : '') + (entry ? '<br>' : '') + draft;
                     await Core.DB.agenda.put({date: key, content: newContent}); Core.Agenda.render(); Core.Utils.toast("TRANSFÉRÉ");
                 },
                 cutToClipboard: async (key) => {
@@ -391,25 +386,19 @@
                         try { 
                             const data = JSON.parse(ev.target.result); 
                             if(data.agenda) for(let entry of data.agenda) await Core.DB.agenda.put(entry); 
-                            if(data.editor) {
-                                await Core.DB.meta.put({id: 'editor', content: data.editor, ts: Date.now()});
-                            }
-                            Core.Utils.toast("RESTAURATION TERMINÉE");
-                            setTimeout(() => location.reload(), 1000);
+                            if(data.editor) await Core.DB.meta.put({id: 'editor', content: data.editor, ts: Date.now()});
+                            Core.Utils.toast("RESTAURATION TERMINÉE"); setTimeout(() => location.reload(), 1000);
                         } catch(err) { Core.Utils.toast("ERREUR STRUCTURE JSON"); }
                     }; reader.readAsText(file);
                 },
                 exportMD: async () => {
-                    const agenda = await Core.DB.agenda.toArray(); 
-                    const meta = await Core.DB.meta.get('editor');
+                    const agenda = await Core.DB.agenda.toArray(); const meta = await Core.DB.meta.get('editor');
                     const blob = new Blob([JSON.stringify({ agenda, editor: meta ? meta.content : "" })], {type: 'application/json'});
                     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `AgenData_Backup.json`; a.click();
                     Core.Utils.toast("DONNÉES EXPORTÉES");
                 }
             },
-            AI: {
-                challenge: async function() { Core.Utils.toast("ANALYSE EN COURS..."); setTimeout(() => Core.Utils.toast("STRUCTURE OPTIMISABLE"), 1000); }
-            },
+            AI: { challenge: async function() { Core.Utils.toast("ANALYSE EN COURS..."); setTimeout(() => Core.Utils.toast("STRUCTURE OPTIMISABLE"), 1000); } },
             Voice: {
                 init: function() {
                     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -437,8 +426,7 @@
                     });
                 },
                 renderManager: async function() {
-                    const list = document.getElementById('ui-macro-manager-list'); if (!list) return;
-                    list.innerHTML = '';
+                    const list = document.getElementById('ui-macro-manager-list'); if (!list) return; list.innerHTML = '';
                     const all = await Core.DB.macros.toArray();
                     all.forEach(m => {
                         const div = document.createElement('div'); div.className = "flex justify-between items-center p-3 bg-white/5 rounded-xl text-xs";
@@ -447,71 +435,118 @@
                     });
                 },
                 add: async function() {
-                    const tr = document.getElementById('ui-new-macro-trigger').value.trim(); 
-                    const tx = document.getElementById('ui-new-macro-text').value.trim();
-                    if(tr && tx) { 
-                        await Core.DB.macros.put({trigger: tr, text: tx}); 
-                        await Core.Storage.loadAll(); 
-                        this.renderManager(); 
-                        document.getElementById('ui-new-macro-trigger').value = '';
-                        document.getElementById('ui-new-macro-text').value = '';
-                        Core.Utils.toast("MACRO ENREGISTRÉE"); 
-                    }
+                    const tr = document.getElementById('ui-new-macro-trigger').value.trim(); const tx = document.getElementById('ui-new-macro-text').value.trim();
+                    if(tr && tx) { await Core.DB.macros.put({trigger: tr, text: tx}); await Core.Storage.loadAll(); this.renderManager(); document.getElementById('ui-new-macro-trigger').value = ''; document.getElementById('ui-new-macro-text').value = ''; Core.Utils.toast("MACRO ENREGISTRÉE"); }
                 },
-                delete: async function(trigger) { 
-                    await Core.DB.macros.delete(trigger); 
-                    await Core.Storage.loadAll(); 
-                    this.renderManager(); 
-                    Core.Utils.toast("MACRO SUPPRIMÉE");
-                }
+                delete: async function(trigger) { await Core.DB.macros.delete(trigger); await Core.Storage.loadAll(); this.renderManager(); Core.Utils.toast("MACRO SUPPRIMÉE"); }
             },
             UI: {
                 openSearch: () => { document.getElementById('modal-search').style.display = 'flex'; document.getElementById('search-input').focus(); },
-                openMacros: () => { 
-                    document.getElementById('modal-macros').style.display = 'flex'; 
-                    Core.Macros.renderManager(); 
-                },
-                openHelp: () => {
-                    Core.UI.switchHelp('strat');
-                    document.getElementById('modal-help').style.display = 'flex';
-                },
+                openMacros: () => { document.getElementById('modal-macros').style.display = 'flex'; Core.Macros.renderManager(); },
+                openHelp: () => { Core.UI.switchHelp('strat'); document.getElementById('modal-help').style.display = 'flex'; },
                 switchHelp: (tab) => {
                     document.querySelectorAll('.help-tab').forEach(t => t.classList.remove('active'));
+                    document.getElementById(`tab-${tab}`).classList.add('active');
                     const content = document.getElementById('ui-help-content');
                     if(tab === 'strat') {
-                        document.querySelector('[onclick="Core.UI.switchHelp(\'strat\')"]').classList.add('active');
                         content.innerHTML = `
-                            <div class="help-section-title">PHILOSOPHIE DU SYSTÈME</div>
-                            <p>AgenData est conçu pour la forge cognitive. L'information n'a de valeur que si elle est transformée en synthèse.</p>
-                            <div class="help-step-box">
-                                <h3 class="text-white font-bold mb-2">Capture vs Cristallisation</h3>
-                                <p>Le Brouillon est un espace de décharge brute. L'Agenda est l'espace de cristallisation. Une journée vide dans l'agenda est une journée sans trace intellectuelle.</p>
+                            <div class="help-section-title">PHILOSOPHIE : LA FORGE COGNITIVE</div>
+                            <p>AgenData n'est pas un bloc-notes classique. C'est un <strong>système de cristallisation</strong>. Sa philosophie repose sur la séparation stricte entre le chaos de la pensée brute et l'ordre de la synthèse temporelle.</p>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                                <div class="help-step-box">
+                                    <h4 class="text-white font-bold mb-2">Le Chaos (Brouillon)</h4>
+                                    <p>La zone centrale est un espace "jetable". C'est ici que vous déchargez votre flux de conscience, vos notes de réunion en direct ou vos idées fugaces. Ne vous souciez pas de la structure, capturez la donnée.</p>
+                                </div>
+                                <div class="help-step-box">
+                                    <h4 class="text-white font-bold mb-2">L'Ordre (Agenda)</h4>
+                                    <p>La barre latérale est le registre immuable. On ne sauvegarde que ce qui a été "digéré". Transférer du Brouillon vers l'Agenda est un acte conscient de synthèse : vous décidez que cette information mérite d'être archivée.</p>
+                                </div>
                             </div>
+                            <p class="mt-4 italic text-slate-500">Principe : "Si une information n'est pas cristallisée dans l'agenda à la fin de la journée, elle est considérée comme du bruit perdu."</p>
                         `;
                     } else if(tab === 'comp') {
-                        document.querySelector('[onclick="Core.UI.switchHelp(\'comp\')"]').classList.add('active');
                         content.innerHTML = `
-                            <div class="help-section-title">LES OUTILS OPÉRATIONNELS</div>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div class="help-step-box"><h4 class="text-blue-400 font-black text-[10px] uppercase mb-2">BROUILLON</h4><p>Capture rapide et brute.</p></div>
-                                <div class="help-step-box"><h4 class="text-blue-400 font-black text-[10px] uppercase mb-2">AGENDA</h4><p>Synthèse temporelle archivée.</p></div>
+                            <div class="help-section-title">LES COMPOSANTS DU NOYAU</div>
+                            <div class="space-y-6">
+                                <div class="help-step-box">
+                                    <h4 class="text-blue-400 font-bold mb-2">1. L'Éditeur de Flux (Draft)</h4>
+                                    <p>Supporte l'édition riche, les contrastes inversés pour le focus et les surlignages tactiques. C'est votre laboratoire de capture.</p>
+                                </div>
+                                <div class="help-step-box">
+                                    <h4 class="text-blue-400 font-bold mb-2">2. L'Agenda Sémantique</h4>
+                                    <p>Cartes temporelles persistantes. Chaque carte possède ses propres leviers : import du draft, déplacement entre jours, copie rapide et purge sécurisée.</p>
+                                </div>
+                                <div class="help-step-box">
+                                    <h4 class="text-blue-400 font-bold mb-2">3. Le HUD Macro</h4>
+                                    <p>Visible uniquement via la touche <span class="code-inline">Alt</span>. Il affiche vos séquences d'expansion pour transformer des abréviations complexes en symboles ou structures pré-établies.</p>
+                                </div>
+                                <div class="help-step-box">
+                                    <h4 class="text-blue-400 font-bold mb-2">4. L'Interrogateur (Recherche)</h4>
+                                    <p>Système de recherche bilatéral. Il scanne simultanément votre brouillon actif et l'intégralité de vos archives historiques avec une mise en avant sémantique des termes.</p>
+                                </div>
                             </div>
                         `;
                     } else if(tab === 'syntax') {
-                        document.querySelector('[onclick="Core.UI.switchHelp(\'syntax\')"]').classList.add('active');
                         content.innerHTML = `
-                            <div class="help-section-title">COMMANDES CLÉS</div>
-                            <div class="space-y-4">
-                                <div class="flex justify-between items-center border-b border-white/5 pb-2"><span>Alt + V</span><span class="text-xs italic">Mode Lecture/Édition</span></div>
-                                <div class="flex justify-between items-center border-b border-white/5 pb-2"><span>Ctrl + F</span><span class="text-xs italic">Interrogation archives</span></div>
-                                <div class="flex justify-between items-center border-b border-white/5 pb-2"><span>Alt + Séquence</span><span class="text-xs italic">Expansion macros</span></div>
+                            <div class="help-section-title">COMMANDES ET PROTOCOLES</div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                <div>
+                                    <h4 class="text-white font-bold mb-4">Raccourcis Systèmes</h4>
+                                    <ul class="space-y-2">
+                                        <li class="flex justify-between border-b border-white/5 pb-1"><span class="code-inline">Alt + V</span> <span>Lecture / Édition</span></li>
+                                        <li class="flex justify-between border-b border-white/5 pb-1"><span class="code-inline">Ctrl + F</span> <span>Recherche</span></li>
+                                        <li class="flex justify-between border-b border-white/5 pb-1"><span class="code-inline">F1</span> <span>Ce manuel</span></li>
+                                        <li class="flex justify-between border-b border-white/5 pb-1"><span class="code-inline">Alt</span> <span>Maintenir pour le HUD</span></li>
+                                    </ul>
+                                </div>
+                                <div>
+                                    <h4 class="text-white font-bold mb-4">Syntaxe Macros</h4>
+                                    <p class="mb-2 text-xs">Les macros se déclenchent en pressant <span class="code-inline">Alt</span> puis en saisissant la séquence (ex: s, d) rapidement.</p>
+                                    <ul class="space-y-2">
+                                        <li><span class="code-inline">s,d</span> &rarr; 🌱 (Semence de pensée)</li>
+                                        <li><span class="code-inline">g,r</span> &rarr; 🌿 (Germination)</li>
+                                        <li><span class="code-inline">c,o</span> &rarr; [[ ]] (Structure de lien)</li>
+                                    </ul>
+                                </div>
                             </div>
                         `;
                     } else if(tab === 'workflow') {
-                        document.querySelector('[onclick="Core.UI.switchHelp(\'workflow\')"]').classList.add('active');
                         content.innerHTML = `
-                            <div class="help-section-title">FLUX OPÉRATIONNEL</div>
-                            <div class="space-y-4"><p>1. Capturez dans le brouillon.<br>2. Qualifiez avec des macros.<br>3. Transférez vers l'agenda via le menu contextuel ou le bouton d'import.</p></div>
+                            <div class="help-section-title">EXEMPLE DE FLUX OPÉRATIONNEL</div>
+                            <div class="help-step-box">
+                                <h4 class="text-white font-bold mb-4">Scénario : Gestion d'une réunion stratégique</h4>
+                                <div class="space-y-4">
+                                    <div class="flex gap-4">
+                                        <div class="text-blue-500 font-mono font-bold">09:00</div>
+                                        <div>
+                                            <strong>Capture Brute :</strong> Vous ouvrez l'éditeur central. Vous tapez au kilomètre les points clés.
+                                            Vous utilisez <span class="code-inline">Alt + H</span> (Highlight) sur les décisions critiques.
+                                        </div>
+                                    </div>
+                                    <div class="flex gap-4">
+                                        <div class="text-blue-500 font-mono font-bold">09:45</div>
+                                        <div>
+                                            <strong>Qualification :</strong> La réunion finit. Vous repassez sur vos notes. 
+                                            Vous insérez <span class="code-inline">s,d</span> devant les idées à creuser plus tard.
+                                        </div>
+                                    </div>
+                                    <div class="flex gap-4">
+                                        <div class="text-blue-500 font-mono font-bold">10:00</div>
+                                        <div>
+                                            <strong>Cristallisation :</strong> Vous survolez la carte "Lundi" dans l'Agenda.
+                                            Vous cliquez sur l'icône <span class="text-blue-400 font-bold">&darr;</span> (Importer). 
+                                            Vos notes sont maintenant archivées et datées.
+                                        </div>
+                                    </div>
+                                    <div class="flex gap-4">
+                                        <div class="text-blue-500 font-mono font-bold">10:05</div>
+                                        <div>
+                                            <strong>Purge :</strong> Vous videz le Brouillon (Bouton Poubelle). 
+                                            Votre espace de travail central est de nouveau vierge, prêt pour la prochaine tâche.
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         `;
                     }
                 },
