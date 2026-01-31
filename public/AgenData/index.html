@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AgenData v11.5.4 - HUD Tactique Titan</title>
+    <title>AgenData v7.7 - Système Opérationnel</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
@@ -11,616 +11,646 @@
     
     <style>
         :root {
-            --bg-body: #0a0f1d;
+            --bg-dark: #0a0f1d;
             --bg-panel: #111827;
             --accent: #3b82f6;
-            --accent-dim: rgba(59, 130, 246, 0.1);
             --text-main: #f1f5f9;
             --text-muted: #94a3b8;
             --border: rgba(255, 255, 255, 0.08);
-            --font-ui: 'Inter', sans-serif;
-            --font-code: 'JetBrains Mono', monospace;
+            --font-main: 'Inter', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
         }
 
-        body { background-color: var(--bg-body); color: var(--text-main); font-family: var(--font-ui); height: 100vh; overflow: hidden; display: flex; }
-        
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: var(--font-main);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+        }
+
         .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+        .editor-layer {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .editor-layer:focus-within { border-color: var(--accent); transform: translateY(-2px); }
+
         [contenteditable]:focus { outline: none; }
 
-        .editor-layer { background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border); transition: all 0.3s ease; }
-        .editor-layer:focus-within { border-color: var(--accent); transform: translateY(-1px); box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
-        
-        .high-contrast { background: #ffffff !important; color: #000000 !important; }
-        .high-contrast [contenteditable] { color: #000000 !important; }
-
-        .agenda-card { border-bottom: 1px solid var(--border); border-left: 3px solid transparent; transition: background 0.2s; position: relative; }
-        .agenda-card.today { background: var(--accent-dim); border-left-color: var(--accent); }
-        .agenda-card .actions { opacity: 0; transform: translateY(5px); transition: all 0.2s; }
-        .agenda-card:hover .actions { opacity: 1; transform: translateY(0); }
-        .action-btn { padding: 5px; border-radius: 4px; color: #64748b; background: rgba(15, 23, 42, 0.9); border: 1px solid var(--border); transition: all 0.2s; }
-        .action-btn:hover { background: #334155; color: white; transform: scale(1.1); }
-
-        .smart-link { font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
-        .smart-link:hover { opacity: 0.8; }
-        .backlink { color: #8b5cf6; background: rgba(139, 92, 246, 0.1); padding: 0 4px; border-radius: 4px; }
-        .hashtag { color: #10b981; background: rgba(16, 185, 129, 0.1); padding: 0 4px; border-radius: 4px; font-family: var(--font-code); font-size: 0.85em; }
-        mark { background: rgba(59, 130, 246, 0.4); color: white; border-radius: 2px; padding: 0 2px; }
-
-        .modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(8px); z-index: 100; display: none; align-items: center; justify-content: center; }
-        .modal-box { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 20px; width: 95%; max-width: 1000px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 25px 50px rgba(0,0,0,0.5); }
-
-        #macro-hud { 
-            position: fixed; 
-            bottom: 40px; 
-            right: 40px; 
-            background: rgba(10, 15, 29, 0.7); 
-            border: 1px solid rgba(255, 255, 255, 0.1); 
-            border-radius: 24px; 
-            display: none; 
-            z-index: 200; 
-            width: 320px; 
-            backdrop-filter: blur(30px) saturate(180%); 
-            font-family: var(--font-code); 
-            box-shadow: 0 30px 60px -12px rgba(0,0,0,0.8), inset 0 1px 1px rgba(255,255,255,0.05);
-            padding: 0;
-            overflow: hidden;
-            animation: hud-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        @keyframes hud-in { from { transform: translateY(20px) scale(0.95); opacity: 0; } to { transform: translateY(0) scale(1); opacity: 1; } }
-
-        .hud-header {
-            padding: 20px 24px;
-            background: linear-gradient(to bottom, rgba(255,255,255,0.02), transparent);
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-        }
-        .hud-title { font-size: 9px; font-weight: 800; color: var(--accent); text-transform: uppercase; letter-spacing: 0.2em; margin-bottom: 8px; display: block; }
-        .hud-buffer-zone { 
-            background: rgba(0,0,0,0.3); 
-            padding: 12px 16px; 
-            border-radius: 12px; 
-            border: 1px solid rgba(255,255,255,0.05); 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center;
-        }
-        #hud-buffer { font-size: 14px; font-weight: 700; color: #fff; letter-spacing: 0.1em; }
-        .hud-cursor { width: 8px; height: 14px; background: var(--accent); display: inline-block; animation: blink 1s infinite; vertical-align: middle; margin-left: 4px; }
-        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
-
-        .hud-list { max-height: 280px; overflow-y: auto; padding: 12px 8px; }
-        .hud-item { 
-            padding: 10px 16px; 
-            border-radius: 10px; 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center; 
+        .agenda-card {
+            border-bottom: 1px solid var(--border);
+            border-left: 3px solid transparent;
             transition: all 0.2s;
-            margin-bottom: 2px;
-            border: 1px solid transparent;
         }
-        .hud-item.active { 
-            background: var(--accent-dim); 
-            border-color: rgba(59, 130, 246, 0.3); 
-            transform: translateX(4px);
+        .agenda-card.today { background: rgba(59, 130, 246, 0.05); border-left-color: var(--accent); }
+        .agenda-card.flashback { background: rgba(139, 92, 246, 0.05); border-left-color: #8b5cf6; }
+        
+        .agenda-editable {
+            font-size: 0.8rem;
+            line-height: 1.5;
+            max-height: 7.2rem;
+            overflow: hidden;
+            display: block;
         }
-        .hud-item-trigger { font-size: 11px; font-weight: 700; color: var(--accent); }
-        .hud-item-label { font-size: 11px; color: var(--text-muted); text-align: right; max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        
+        .card-actions { opacity: 0; transform: translateY(3px); transition: all 0.2s; }
+        .agenda-card:hover .card-actions { opacity: 1; transform: translateY(0); }
+        
+        .action-icon { padding: 4px; border-radius: 4px; color: #64748b; cursor: pointer; background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; }
+        .action-icon:hover { background: #334155; color: white; }
 
-        .ai-status-dot { width: 8px; height: 8px; border-radius: 50%; transition: all 0.3s; }
-        .ai-status-dot.active { background: #10b981; box-shadow: 0 0 10px #10b981; }
-        .ai-status-dot.idle { background: #475569; }
-        .ai-status-dot.warning { background: #f59e0b; box-shadow: 0 0 10px #f59e0b; }
-        .ai-status-dot.danger { background: #ef4444; box-shadow: 0 0 10px #ef4444; }
+        .smart-link { color: var(--accent); font-weight: 600; cursor: pointer; border-bottom: 1px solid rgba(59, 130, 246, 0.2); }
+        .backlink { color: #8b5cf6; background: rgba(139, 92, 246, 0.1); padding: 0 4px; border-radius: 4px; }
 
-        .help-tab { padding-bottom: 0.75rem; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.5; transition: all 0.2s; border-bottom: 2px solid transparent; cursor: pointer; }
-        .help-tab.active { opacity: 1; color: var(--accent); border-bottom-color: var(--accent); }
-        .help-section h3 { color: var(--accent); font-family: var(--font-code); font-weight: 900; text-transform: uppercase; font-size: 12px; border-left: 3px solid var(--accent); padding-left: 12px; margin-bottom: 1.25rem; letter-spacing: 0.1em; }
-        .help-content { font-size: 14px; line-height: 1.8; color: var(--text-muted); }
-        .help-content strong { color: #f1f5f9; font-weight: 700; }
-        .help-example { background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.05); padding: 16px; border-radius: 12px; margin-top: 12px; font-family: var(--font-code); font-size: 13px; }
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(8px); z-index: 100;
+            display: none; align-items: center; justify-content: center;
+        }
+        .modal-box { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 20px; width: 95%; max-width: 1000px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; }
+
+        #macro-hud {
+            position: fixed; bottom: 20px; right: 20px;
+            background: rgba(15, 23, 42, 0.95); border: 1px solid var(--accent);
+            padding: 12px; border-radius: 12px; display: none; z-index: 80; width: 240px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        #smart-toolbar { 
+            position: absolute; display: none; background: #0f172a; border: 1px solid var(--border); 
+            border-radius: 8px; padding: 4px; z-index: 200; box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+        }
+        
+        .help-tab.active { color: var(--accent); border-bottom: 2px solid var(--accent); }
+        .help-section-title { font-family: var(--font-mono); font-weight: 900; letter-spacing: 0.1em; color: var(--accent); font-size: 11px; margin-top: 2rem; margin-bottom: 0.75rem; border-left: 3px solid var(--accent); padding-left: 10px; text-transform: uppercase; }
+        .help-step-box { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; }
+        
+        /* Recherche Styles */
+        .search-category-label { font-weight: 900; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 0.5rem; margin-top: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+        .search-category-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+        .search-result-item { @apply p-4 bg-white/[0.02] border border-white/5 rounded-xl hover:bg-white/[0.05] hover:border-blue-500/30 transition-all cursor-pointer; }
     </style>
 </head>
 <body class="flex-col md:flex-row">
 
-    <!-- SIDEBAR -->
-    <aside class="w-full md:w-[360px] border-r border-white/5 flex flex-col shrink-0 bg-black/20 z-10 relative">
+    <aside class="w-full md:w-[380px] border-r border-white/5 flex flex-col shrink-0 bg-black/20">
         <header class="h-14 flex items-center justify-between px-4 border-b border-white/5 bg-white/[0.02]">
             <div class="flex items-center gap-2">
-                <button onclick="App.Agenda.shift(-1)" class="p-1.5 hover:bg-white/5 rounded text-slate-500"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7" stroke-width="2.5"/></svg></button>
-                <span id="ui-week-label" class="text-[10px] font-mono font-black uppercase text-slate-400 tracking-wider">...</span>
-                <button onclick="App.Agenda.shift(1)" class="p-1.5 hover:bg-white/5 rounded text-slate-500"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" stroke-width="2.5"/></svg></button>
+                <button onclick="Core.Agenda.shiftWeek(-1)" class="p-1.5 hover:bg-white/5 rounded text-slate-500">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7" stroke-width="2.5"/></svg>
+                </button>
+                <span id="ui-week-range" class="text-[10px] font-mono font-black uppercase text-slate-400"></span>
+                <button onclick="Core.Agenda.shiftWeek(1)" class="p-1.5 hover:bg-white/5 rounded text-slate-500">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" stroke-width="2.5"/></svg>
+                </button>
             </div>
-            <button onclick="App.Agenda.jumpToday()" class="text-[9px] font-black bg-blue-500/10 text-blue-400 px-3 py-1.5 rounded border border-blue-500/20 hover:bg-blue-500/20 transition-colors">AUJOURD'HUI</button>
+            <button onclick="Core.Agenda.jumpToToday()" class="text-[9px] font-black bg-blue-500/10 text-blue-400 px-3 py-1.5 rounded border border-blue-500/20">AUJOURD'HUI</button>
         </header>
         <div id="ui-agenda-list" class="flex-1 overflow-y-auto custom-scrollbar"></div>
-        <div id="ui-flashback" class="mt-auto border-t border-white/5"></div>
+        <div id="ui-flashback-zone" class="mt-auto border-t border-white/5"></div>
     </aside>
 
-    <!-- MAIN AREA -->
     <main class="flex-1 flex flex-col relative overflow-hidden bg-white/[0.01]">
         <header class="h-14 border-b border-white/5 flex items-center justify-between px-6 bg-black/20 shrink-0">
             <div class="flex items-center gap-1">
-                <button onclick="App.Editor.toggleReadMode()" id="btn-readmode" class="p-2 text-slate-400 hover:text-white transition-colors" title="Mode Lecture (Alt+V)"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" stroke-width="2"/></svg></button>
-                <button onclick="App.Editor.toggleContrast()" class="p-2 text-slate-400 hover:text-white transition-colors" title="Mode Relecture"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/><path d="M12 4v16c4.41 0 8-3.59 8-8s-3.59-8-8-8z"/></svg></button>
-                <div class="h-4 w-px bg-white/10 mx-2"></div>
-                <button onclick="App.Editor.insertLine('start')" class="p-2 text-slate-500 hover:text-emerald-400" title="Insérer haut"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 19V5m-7 7l7-7 7 7" stroke-width="2.5"/></svg></button>
-                <button onclick="App.Editor.insertLine('end')" class="p-2 text-slate-500 hover:text-emerald-400" title="Insérer bas"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 5v14m-7-7l7 7 7-7" stroke-width="2.5"/></svg></button>
+                <button onclick="Core.Editor.toggleMode()" id="ui-mode-btn" class="p-2 text-slate-400 hover:text-white" title="Mode Lecture (Alt+V)">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" stroke-width="2"/></svg>
+                </button>
+                <div class="h-5 w-px bg-white/10 mx-2"></div>
+                <button onclick="Core.Editor.contrast()" class="p-2 text-slate-300 hover:text-white" title="Contraste (Noir sur Blanc)">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/><path d="M12 4v16c4.41 0 8-3.59 8-8s-3.59-8-8-8z"/></svg>
+                </button>
+                <button onclick="Core.Editor.highlight()" class="p-2 text-yellow-500/60 hover:text-yellow-400" title="Surligner"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" stroke-width="2"/></svg></button>
+                <button onclick="Core.Editor.addLine('start')" class="p-2 text-emerald-500/60 hover:text-emerald-400" title="Haut (Alt+N)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M7 11l5-5m0 0l5 5m-5-5v12" stroke-width="2"/></svg></button>
+                <button onclick="Core.Editor.insertLine()" class="p-2 text-blue-500/60 hover:text-blue-400" title="Insérer ligne (Curseur)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4" stroke-width="2.5"/></svg></button>
+                <button onclick="Core.Editor.addLine('end')" class="p-2 text-emerald-500/60 hover:text-emerald-400" title="Bas (Alt+E)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M17 13l-5 5m0 0l-5-5m5 5V6" stroke-width="2"/></svg></button>
             </div>
 
-            <div class="flex items-center gap-3">
-                <div class="flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded-full border border-white/5" id="ai-status-container">
-                    <div id="ai-dot" class="ai-status-dot idle"></div>
-                    <span id="ai-status" class="text-[9px] font-mono font-bold text-slate-500 uppercase">STANDBY</span>
-                </div>
-                <button onclick="App.AI.challenge()" class="p-2 text-violet-400 hover:text-violet-300" title="Titan Audit (Alt+C)"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" stroke-width="2"/></svg></button>
-                <button onclick="App.Modals.open('macros')" class="p-2 text-slate-500 hover:text-purple-400" title="Macros"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" stroke-width="2"/></svg></button>
-                <button onclick="App.Modals.open('search')" class="p-2 text-slate-500 hover:text-blue-400" title="Recherche"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-width="2.5"/></svg></button>
-                <button onclick="App.Modals.open('help')" class="p-2 text-slate-600 hover:text-yellow-500" title="Aide"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-width="2"/></svg></button>
-                <div class="h-4 w-px bg-white/10 mx-2"></div>
-                <button onclick="document.getElementById('import-file').click()" class="p-2 text-slate-500 hover:text-emerald-400" title="Import JSON"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" stroke-width="2.5"/></svg></button>
-                <button onclick="App.IO.export()" class="p-2 text-slate-500 hover:text-blue-400" title="Export JSON"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" stroke-width="2"/></svg></button>
+            <div class="flex items-center gap-1">
+                <div id="ui-ai-status" class="w-2 h-2 rounded-full bg-slate-600 mr-2" title="Status IA"></div>
+                <button onclick="Core.AI.challenge()" class="p-2 text-violet-400 hover:text-violet-300" title="IA Challenge"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" stroke-width="2"/></svg></button>
+                <button onclick="Core.UI.openMacros()" class="p-2 text-slate-500 hover:text-purple-400" title="Macros (Alt+M)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" stroke-width="2"/></svg></button>
+                <button id="ui-voice-btn" onclick="Core.Voice.toggle()" class="p-2 text-slate-500" title="Vocal (Alt+R)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" stroke-width="2"/></svg></button>
+                <button onclick="Core.UI.openSearch()" class="p-2 text-slate-500" title="Recherche (Ctrl+F)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-width="2.5"/></svg></button>
+                <div class="h-5 w-px bg-white/10 mx-2"></div>
+                <button onclick="Core.IO.triggerImport()" class="p-2 text-slate-500 hover:text-blue-400" title="Importer"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" stroke-width="2"/></svg></button>
+                <button onclick="Core.IO.exportMD()" class="p-2 text-slate-500 hover:text-blue-400" title="Exporter"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" stroke-width="2"/></svg></button>
+                <button onclick="Core.Editor.clear()" class="p-2 text-slate-500 hover:text-red-400" title="Vider"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1-1v3M4 7h16" stroke-width="2"/></svg></button>
+                <button onclick="Core.UI.openHelp()" class="p-2 text-slate-600 hover:text-yellow-500" title="Aide (F1)"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-width="2"/></svg></button>
             </div>
         </header>
 
-        <div class="flex-1 overflow-y-auto p-6 md:p-12 custom-scrollbar" id="editor-scroller">
-            <div id="editor-container" class="max-w-3xl mx-auto editor-layer rounded-2xl shadow-2xl">
-                <div id="main-editor" contenteditable="true" class="p-12 md:p-16 min-h-[60vh] text-[1.05rem] text-slate-300 leading-relaxed outline-none" placeholder="Capture radicale. Pas de bruit autorisé."></div>
+        <div class="flex-1 overflow-y-auto p-6 md:p-12 custom-scrollbar">
+            <div class="max-w-3xl mx-auto editor-layer rounded-2xl">
+                <div id="main-editor" contenteditable="true" class="p-12 md:p-16 min-h-[60vh] text-[1.05rem] text-slate-300 leading-relaxed outline-none" placeholder="Libérez votre pensée ici..."></div>
             </div>
         </div>
 
         <div id="smart-toolbar" class="flex items-center">
-            <div class="px-2 text-[8px] text-slate-500 font-black border-r border-white/10 mr-1 flex items-center gap-1 uppercase tracking-wider"><svg class="w-3 h-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-width="2"/></svg>Transfert</div>
-            <div id="toolbar-days" class="flex gap-1 px-1"></div>
+            <div class="px-2 text-[8px] text-slate-500 font-black border-r border-white/10 mr-1 flex items-center gap-1"><svg class="w-3 h-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-width="2"/></svg>TRANSFERT</div>
+            <div id="ui-toolbar-days" class="flex gap-1 px-1"></div>
         </div>
-        
-        <input type="file" id="import-file" class="hidden" accept=".json" onchange="App.IO.import(event)">
+        <input type="file" id="import-input" class="hidden" accept=".json,.md" onchange="Core.IO.importData(event)">
     </main>
 
-    <!-- HUD REFEIT -->
-    <div id="macro-hud">
-        <div class="hud-header">
-            <span class="hud-title">Input Buffer</span>
-            <div class="hud-buffer-zone">
-                <span id="hud-buffer">_</span>
-                <span class="hud-cursor"></span>
+    <!-- MODALES -->
+    <div id="modal-search" class="modal-overlay" onclick="Core.UI.closeModals()">
+        <div class="bg-[#111827] border border-white/10 p-8 rounded-2xl w-full max-w-3xl shadow-2xl" onclick="event.stopPropagation()">
+            <div class="flex items-center gap-3 border-b border-white/10 pb-4 mb-4">
+                <svg class="w-6 h-6 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-width="2"/></svg>
+                <input type="text" id="search-input" class="w-full bg-transparent text-white text-2xl outline-none font-mono" placeholder="Recherche sémantique..." oninput="Core.Search.exec(this.value)">
             </div>
-        </div>
-        <div id="hud-content" class="hud-list custom-scrollbar"></div>
-    </div>
-
-    <!-- MODALS -->
-    <div id="modal-search" class="modal-overlay" onclick="App.Modals.close()">
-        <div class="modal-box !max-w-3xl" onclick="event.stopPropagation()">
-            <div class="p-6 border-b border-white/5 bg-black/20">
-                <input type="text" id="search-input" class="w-full bg-transparent text-white text-2xl outline-none font-mono" placeholder="Extraction tactique..." oninput="App.Search.run(this.value)">
-            </div>
-            <div id="search-results" class="flex-1 overflow-y-auto p-6 custom-scrollbar bg-[#0a0f1d]/50 min-h-[400px]"></div>
-        </div>
-    </div>
-
-    <div id="modal-macros" class="modal-overlay" onclick="App.Modals.close()">
-        <div class="modal-box !max-w-xl p-8" onclick="event.stopPropagation()">
-            <h2 class="text-lg font-black uppercase text-white mb-6 tracking-widest border-b border-white/10 pb-4">Protocoles d'Expansion</h2>
-            <div id="macro-list" class="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar pr-2 mb-6"></div>
-            <div class="grid grid-cols-4 gap-3 pt-4 border-t border-white/10">
-                <input type="text" id="macro-new-trigger" placeholder="ex: d,o" class="col-span-1 bg-black/40 border border-white/10 p-2 text-xs text-blue-400 font-mono rounded outline-none">
-                <input type="text" id="macro-new-text" placeholder="Expansion..." class="col-span-3 bg-black/40 border border-white/10 p-2 text-xs text-white rounded outline-none">
-            </div>
-            <button onclick="App.Macros.add()" class="w-full mt-3 py-2 bg-blue-500/10 text-blue-400 text-[10px] font-black uppercase rounded border border-blue-500/20 hover:bg-blue-500/20">Enregistrer</button>
-        </div>
-    </div>
-
-    <div id="modal-concept" class="modal-overlay" onclick="App.Modals.close()">
-        <div class="modal-box !max-w-5xl" onclick="event.stopPropagation()">
-            <div class="p-6 border-b border-white/5 flex justify-between items-center bg-black/20">
-                <h2 id="concept-title" class="text-xl font-black text-white uppercase"></h2>
-                <button onclick="App.AI.synthesize()" class="bg-violet-500/20 text-violet-300 border border-violet-500/30 px-3 py-1.5 rounded text-[10px] font-black uppercase">Cristalliser</button>
-            </div>
-            <div class="flex-1 grid grid-cols-1 md:grid-cols-2 divide-x divide-white/5 bg-white/5">
-                <div id="concept-snippets" class="bg-gray-900 p-6 overflow-y-auto custom-scrollbar space-y-4"></div>
-                <div id="concept-synthesis" contenteditable="true" class="bg-[#0a0f1d] p-8 text-slate-300 outline-none overflow-y-auto custom-scrollbar text-sm"></div>
+            <div id="search-results" class="max-h-[65vh] overflow-y-auto space-y-4 custom-scrollbar pr-4">
+                <div class="text-center py-20 text-slate-600 uppercase text-[10px] font-black tracking-widest">Saisissez un terme pour explorer vos archives</div>
             </div>
         </div>
     </div>
 
-    <div id="modal-help" class="modal-overlay" onclick="App.Modals.close()">
-        <div class="modal-box !max-w-4xl" onclick="event.stopPropagation()">
-            <div class="p-8 border-b border-white/5 bg-black/20">
-                <h2 class="text-lg font-black uppercase text-white tracking-widest mb-6">AIDE TACTIQUE V11.5.4</h2>
-                <div class="flex gap-6 overflow-x-auto no-scrollbar">
-                    <button onclick="App.Help.show('doctrine')" class="help-tab active">Doctrine</button>
-                    <button onclick="App.Help.show('protocole')" class="help-tab">Protocole</button>
-                    <button onclick="App.Help.show('titan')" class="help-tab">Titan</button>
-                    <button onclick="App.Help.show('exemple')" class="help-tab">Exemple</button>
+    <div id="modal-macros" class="modal-overlay" onclick="Core.UI.closeModals()">
+        <div class="modal-box max-w-2xl !p-0" onclick="event.stopPropagation()">
+            <div class="p-6 bg-white/[0.02] border-b border-white/10 flex justify-between items-center">
+                <div>
+                    <h2 class="text-lg font-black uppercase tracking-widest text-white">Protocoles Sémantiques</h2>
+                    <p class="text-[10px] text-slate-500 font-bold uppercase mt-1">Expansion de texte via ALT + Séquence</p>
+                </div>
+                <button onclick="Core.UI.closeModals()" class="p-2 hover:bg-white/5 rounded-full text-slate-500 hover:text-white"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="2.5"/></svg></button>
+            </div>
+            <div id="ui-macro-manager-list" class="flex-1 overflow-y-auto p-6 space-y-3 custom-scrollbar max-h-[40vh] bg-black/20"></div>
+            <div class="p-6 border-t border-white/10 bg-white/[0.02]">
+                <div class="flex flex-col gap-4">
+                    <div class="grid grid-cols-5 gap-3">
+                        <div class="col-span-2">
+                            <label class="text-[9px] font-black text-slate-500 uppercase mb-1.5 block">Déclencheur (ex: d,o)</label>
+                            <input type="text" id="ui-new-macro-trigger" placeholder="Séquence..." class="w-full bg-black/40 border border-white/10 p-3 text-xs text-blue-400 font-mono rounded-xl outline-none focus:border-blue-500/50">
+                        </div>
+                        <div class="col-span-3">
+                            <label class="text-[9px] font-black text-slate-500 uppercase mb-1.5 block">Résultat de l'expansion</label>
+                            <input type="text" id="ui-new-macro-text" placeholder="Texte ou HTML..." class="w-full bg-black/40 border border-white/10 p-3 text-xs text-white rounded-xl outline-none focus:border-blue-500/50">
+                        </div>
+                    </div>
+                    <button onclick="Core.Macros.add()" class="w-full py-4 bg-blue-500 text-white text-[10px] font-black uppercase rounded-xl hover:bg-blue-600 transition-all tracking-[0.2em] shadow-lg shadow-blue-500/10">Initialiser le Protocole</button>
                 </div>
             </div>
-            <div id="help-content" class="p-10 overflow-y-auto custom-scrollbar h-[500px] bg-black/10"></div>
         </div>
     </div>
 
-    <div id="toast" class="fixed bottom-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-xl border border-white/10 shadow-2xl text-xs font-bold uppercase pointer-events-none transition-all duration-300 z-[200]"></div>
+    <div id="modal-confirm" class="modal-overlay" onclick="Core.UI.closeModals()">
+        <div class="bg-[#111827] border border-red-500/20 p-8 rounded-2xl w-full max-w-sm text-center shadow-2xl" onclick="event.stopPropagation()">
+            <h2 class="text-red-500 font-black uppercase tracking-widest text-sm mb-4">Confirmation Requise</h2>
+            <p id="ui-confirm-msg" class="text-slate-400 text-xs mb-8"></p>
+            <div class="flex gap-4">
+                <button onclick="Core.UI.closeModals()" class="flex-1 py-3 bg-white/5 text-slate-500 text-[10px] font-black uppercase rounded-xl">Annuler</button>
+                <button id="ui-confirm-btn" class="flex-1 py-3 bg-red-500/10 text-red-500 border border-red-500/20 text-[10px] font-black uppercase rounded-xl">Confirmer</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-concept" class="modal-overlay" onclick="Core.UI.closeModals()">
+        <div class="modal-box !max-w-5xl" onclick="event.stopPropagation()">
+            <div class="p-6 border-b border-white/5 flex justify-between items-center bg-black/20">
+                <h2 id="ui-concept-title" class="text-2xl font-black text-white uppercase tracking-tighter"></h2>
+                <div class="flex gap-3">
+                    <button onclick="Core.AI.synthesize()" class="bg-violet-500/20 text-violet-300 border border-violet-500/30 px-4 py-2 rounded-lg text-[10px] font-black uppercase">IA Cristalliser</button>
+                    <button onclick="Core.UI.closeModals()" class="p-2 text-slate-500 hover:text-white bg-white/5 rounded-full"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="2.5"/></svg></button>
+                </div>
+            </div>
+            <div class="flex-1 grid grid-cols-1 md:grid-cols-2 gap-px bg-white/5">
+                <div id="ui-concept-snippets" class="bg-[#111827] p-6 overflow-y-auto custom-scrollbar space-y-4"></div>
+                <div id="ui-concept-synthesis" contenteditable="true" class="bg-[#0a0f1d] p-8 text-slate-300 outline-none overflow-y-auto custom-scrollbar text-sm"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-help" class="modal-overlay" onclick="Core.UI.closeModals()">
+        <div class="modal-box !max-w-4xl" onclick="event.stopPropagation()">
+            <div class="p-8 bg-black/40 flex flex-col gap-4">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h2 class="text-xl font-black uppercase tracking-widest text-white">Manuel Opérationnel v7.7</h2>
+                        <p class="text-[10px] text-slate-500 uppercase mt-1 font-bold">Système de Capture et Cristallisation Sémantique</p>
+                    </div>
+                    <button onclick="Core.UI.closeModals()" class="p-2 text-slate-500 bg-white/5 rounded-full"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="2.5"/></svg></button>
+                </div>
+                <div class="flex gap-6 border-b border-white/5 overflow-x-auto no-scrollbar">
+                    <button onclick="Core.UI.switchHelp('philosophy')" class="help-tab active pb-3 text-[11px] font-black uppercase whitespace-nowrap">Philosophie</button>
+                    <button onclick="Core.UI.switchHelp('components')" class="help-tab pb-3 text-[11px] font-black uppercase whitespace-nowrap">Modules</button>
+                    <button onclick="Core.UI.switchHelp('syntax')" class="help-tab pb-3 text-[11px] font-black uppercase whitespace-nowrap">Commandes</button>
+                    <button onclick="Core.UI.switchHelp('example')" class="help-tab pb-3 text-[11px] font-black uppercase whitespace-nowrap">Exemple Pratique</button>
+                </div>
+            </div>
+            <div id="ui-help-content" class="p-10 overflow-y-auto custom-scrollbar text-[13px] text-slate-400 space-y-8 leading-relaxed"></div>
+        </div>
+    </div>
+
+    <div id="macro-hud">
+        <div class="text-[9px] font-black text-blue-400 uppercase border-b border-white/5 mb-3 pb-1">ALT + SEQ</div>
+        <div id="ui-macro-list-hud" class="space-y-1.5"></div>
+    </div>
+
+    <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 border border-white/10 px-6 py-3 rounded-xl text-xs font-bold transition-all opacity-0 pointer-events-none z-[200]"></div>
 
     <script>
-        const Utils = {
-            date: {
-                getMonday: (d) => { d = new Date(d); const day = d.getDay(), diff = d.getDate() - day + (day === 0 ? -6 : 1); return new Date(d.setDate(diff)).setHours(0,0,0,0); },
-                format: (d) => d.toISOString().split('T')[0],
-                readable: (d) => d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' }).toUpperCase(),
-                range: (start) => {
-                    const end = new Date(start.getTime() + 6 * 86400000);
-                    return `${start.getDate()}/${start.getMonth() + 1} - ${end.getDate()}/${end.getMonth() + 1}`;
-                }
+        const Core = {
+            State: { currentMonday: null, isReadMode: false, macroBuffer: [], macroTimeout: null, recognition: null, isRecording: false, macros: {}, activeConcept: null },
+            DB: null,
+            Init: async function() {
+                this.DB = new Dexie("AgenDataDB_v7");
+                this.DB.version(1).stores({ meta: "id", agenda: "date", macros: "trigger", concepts: "title" });
+                this.State.currentMonday = this.Utils.getMonday(new Date());
+                await this.Storage.loadAll();
+                this.Agenda.render();
+                this.Listeners.setup();
+                this.Voice.init();
+                this.Utils.toast("Système v7.7 Opérationnel");
             },
-            dom: {
-                el: (tag, cls = '', html = '') => { const e = document.createElement(tag); if(cls) e.className = cls; if(html) e.innerHTML = html; return e; },
-                toast: (msg) => {
-                    const t = document.getElementById('toast');
-                    t.textContent = msg; t.style.opacity = '1'; t.style.transform = 'translate(-50%, 0)';
-                    setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translate(-50%, 10px)'; }, 2500);
-                },
-                highlight: (text, q) => q && q.length > 1 ? text.replace(new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'), '<mark>$1</mark>') : text
+            Utils: {
+                getMonday: d => { d = new Date(d); const day = d.getDay(), diff = d.getDate() - day + (day === 0 ? -6 : 1); return new Date(d.setDate(diff)).setHours(0,0,0,0); },
+                formatDate: d => d.toISOString().split('T')[0],
+                toast: msg => { const el = document.getElementById('toast'); el.textContent = msg; el.style.opacity = "1"; el.style.transform = "translateX(-50%) translateY(-10px)"; setTimeout(() => { el.style.opacity = "0"; el.style.transform = "translateX(-50%) translateY(0px)"; }, 2500); },
+                debounce: (fn, ms) => { let timeout; return (...args) => { clearTimeout(timeout); timeout = setTimeout(() => fn.apply(this, args), ms); }; },
+                stripHTML: (html) => { const tmp = document.createElement("DIV"); tmp.innerHTML = html; return tmp.textContent || tmp.innerText || ""; }
             },
-            debounce: (fn, ms) => { let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); }; }
-        };
-
-        const Store = {
-            db: null,
-            init: async () => {
-                Store.db = new Dexie("AgenDataDB_v11");
-                Store.db.version(1).stores({ meta: "id", agenda: "date", macros: "trigger", concepts: "title" });
-                if ((await Store.db.macros.count()) === 0) {
-                    await Store.db.macros.bulkPut([{trigger:'s,d', text:'🌱 '}, {trigger:'g,r', text:'🌿 '}, {trigger:'p,e', text:'🌳 '}, {trigger:'c,o', text:'[[]]'}]);
-                }
+            Storage: {
+                saveEditor: async () => { if(Core.State.isReadMode) return; const html = document.getElementById('main-editor').innerHTML; await Core.DB.meta.put({id: 'editor', content: html, ts: Date.now()}); },
+                loadAll: async () => { const ed = await Core.DB.meta.get('editor'); if(ed) document.getElementById('main-editor').innerHTML = ed.content; const m = await Core.DB.macros.toArray(); Core.State.macros = {}; m.forEach(x => Core.State.macros[x.trigger] = x.text); if(!m.length) { const d = {'s,d': '🌱 ', 'g,r': '🌿 ', 'p,e': '🌳 ', 'c,o': '[[]]'}; for(let k in d) { await Core.DB.macros.put({trigger: k, text: d[k]}); Core.State.macros[k] = d[k]; } } }
             },
             Agenda: {
-                get: async (date) => (await Store.db.agenda.get(date))?.content || '',
-                set: async (date, content) => Store.db.agenda.put({ date, content, ts: Date.now() }),
-                getAll: async () => Store.db.agenda.toArray(),
-                delete: async (date) => Store.db.agenda.delete(date)
-            },
-            Editor: {
-                get: async () => (await Store.db.meta.get('editor'))?.content || '',
-                set: async (content) => Store.db.meta.put({ id: 'editor', content, ts: Date.now() })
-            },
-            Macros: {
-                getAll: async () => Store.db.macros.toArray(),
-                add: async (trigger, text) => Store.db.macros.put({ trigger, text }),
-                remove: async (trigger) => Store.db.macros.delete(trigger)
-            },
-            Concepts: {
-                get: async (title) => Store.db.concepts.get(title),
-                set: async (title, synthesis) => Store.db.concepts.put({ title, synthesis, ts: Date.now() }),
-                getAll: async () => Store.db.concepts.toArray()
-            }
-        };
-
-        const App = {
-            state: { monday: null, readMode: false, activeConcept: null, macroBuffer: [], macroTimer: null },
-            
-            init: async () => {
-                await Store.init();
-                App.state.monday = Utils.date.getMonday(new Date());
-                document.getElementById('main-editor').innerHTML = await Store.Editor.get();
-                App.Agenda.render();
-                App.AI.monitor();
-                App.Help.show('doctrine');
-                
-                document.getElementById('main-editor').addEventListener('input', Utils.debounce(() => {
-                    Store.Editor.set(document.getElementById('main-editor').innerHTML);
-                    App.AI.monitor();
-                    App.AI.surgicalTri();
-                }, 1000));
-                
-                document.addEventListener('selectionchange', App.Editor.handleSelection);
-                
-                document.addEventListener('keydown', (e) => {
-                    if (e.key === 'Alt') { document.getElementById('macro-hud').style.display = 'block'; App.Macros.renderHUD(); }
-                    if (e.key === 'Escape') App.Modals.close();
-                    if (e.altKey) {
-                        if (e.key === 'v') { e.preventDefault(); App.Editor.toggleReadMode(); }
-                        if (e.key === 'c') { e.preventDefault(); App.AI.challenge(); }
-                        else if (e.key.length === 1) App.Macros.buffer(e.key);
-                    }
-                    if ((e.ctrlKey || e.metaKey) && e.key === 'f') { e.preventDefault(); App.Modals.open('search'); }
-                });
-
-                document.addEventListener('keyup', (e) => { 
-                    if (e.key === 'Alt') { 
-                        document.getElementById('macro-hud').style.display = 'none'; 
-                        App.state.macroBuffer = []; 
-                        document.getElementById('hud-buffer').textContent = '_';
-                    } 
-                });
-                
-                Utils.dom.toast("Titan v11.5.4 Stabilisé");
-            },
-
-            Agenda: {
-                render: async () => {
-                    const list = document.getElementById('ui-agenda-list'); list.innerHTML = '';
-                    const start = new Date(App.state.monday);
-                    document.getElementById('ui-week-label').textContent = Utils.date.range(start);
-                    for (let i = 0; i < 7; i++) {
-                        const d = new Date(start.getTime() + i * 86400000);
-                        const key = Utils.date.format(d);
-                        const content = await Store.Agenda.get(key);
-                        const card = Utils.dom.el('div', `agenda-card px-5 py-4 ${key === Utils.date.format(new Date()) ? 'today' : ''}`);
+                render: async function() {
+                    const container = document.getElementById('ui-agenda-list');
+                    container.innerHTML = '';
+                    const start = new Date(Core.State.currentMonday);
+                    document.getElementById('ui-week-range').textContent = `${start.getDate()}/${start.getMonth()+1} - ${new Date(start.getTime() + 6*86400000).getDate()}/${start.getMonth()+1}`;
+                    for(let i=0; i<7; i++) {
+                        const current = new Date(start.getTime() + i*86400000);
+                        const key = Core.Utils.formatDate(current);
+                        const isToday = key === Core.Utils.formatDate(new Date());
+                        const data = await Core.DB.agenda.get(key);
+                        const card = document.createElement('div');
+                        card.className = `agenda-card px-5 py-4 ${isToday ? 'today' : ''}`;
                         card.innerHTML = `
                             <div class="flex justify-between items-center mb-1">
-                                <span class="text-[9px] font-black uppercase text-slate-600">${Utils.date.readable(d)}</span>
-                                <div class="actions flex gap-1">
-                                    <button class="action-btn" onclick="App.Agenda.purge('${key}')" title="Archiver Brouillon"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 14l-7 7m0 0l-7-7m7 7V3" stroke-width="2.5"/></svg></button>
-                                    <button class="action-btn" onclick="App.Agenda.copy('${key}')" title="Copier"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2" stroke-width="2.5"/></svg></button>
-                                    <button class="action-btn text-emerald-500" onclick="App.Agenda.restore('${key}')" title="Restaurer"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 5l7 7-7 7M5 5l7 7-7 7" stroke-width="2.5"/></svg></button>
-                                    <button class="action-btn text-red-500" onclick="App.Agenda.clear('${key}')" title="Supprimer"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-width="2.5"/></svg></button>
+                                <span class="text-[9px] font-black ${isToday ? 'text-blue-400' : 'text-slate-600'} uppercase">${current.toLocaleDateString('fr-FR', {weekday:'short', day:'numeric'})}</span>
+                                <div class="card-actions flex gap-1">
+                                    <button onclick="Core.Agenda.importFromDraft('${key}')" class="action-icon" title="Importer"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 14l-7 7m0 0l-7-7m7 7V3" stroke-width="3"/></svg></button>
+                                    <button onclick="Core.Agenda.copyToClipboard('${key}')" class="action-icon" title="Copier"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2" stroke-width="2.5"/></svg></button>
+                                    <button onclick="Core.Agenda.pasteFromClipboard('${key}')" class="action-icon" title="Coller"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" stroke-width="2.5"/></svg></button>
+                                    <button onclick="Core.Agenda.pushToDraft('${key}')" class="action-icon" title="Extraire"><svg class="w-2.5 h-2.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 5l7 7-7 7M5 5l7 7-7 7" stroke-width="3"/></svg></button>
+                                    <button onclick="Core.Agenda.clear('${key}')" class="action-icon text-red-500/50" title="Vider"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-width="3"/></svg></button>
                                 </div>
                             </div>
-                            <div contenteditable="true" class="text-[0.85rem] text-slate-400 outline-none max-h-[8.5rem] overflow-y-auto custom-scrollbar" onblur="Store.Agenda.set('${key}', this.innerHTML)">${content}</div>`;
-                        list.appendChild(card);
+                            <div contenteditable="true" oninput="Core.Agenda.save('${key}', this.innerHTML)" class="agenda-editable text-slate-400 outline-none custom-scrollbar leading-relaxed" placeholder="..."> ${data ? data.content : ''}</div>
+                        `;
+                        container.appendChild(card);
+                    }
+                    this.renderFlashback();
+                },
+                renderFlashback: async function() {
+                    const zone = document.getElementById('ui-flashback-zone'); zone.innerHTML = '';
+                    const intervals = [30, 90, 365]; const now = new Date(); let match = null;
+                    for(let days of intervals) {
+                        const target = new Date(now.getTime() - days*86400000);
+                        const data = await Core.DB.agenda.get(Core.Utils.formatDate(target));
+                        if(data && data.content.trim()) { match = {d: target, c: data.content}; break; }
+                    }
+                    if(match) {
+                        const card = document.createElement('div'); card.className = 'agenda-card flashback p-5';
+                        card.innerHTML = `<div class="text-[9px] font-black text-purple-400 uppercase mb-2">FLASHBACK ANALYTIQUE</div><div class="text-[0.75rem] text-slate-500 italic line-clamp-4">${match.c}</div>`;
+                        zone.appendChild(card);
                     }
                 },
-                shift: (dir) => { App.state.monday = new Date(App.state.monday.getTime() + dir * 7 * 86400000); App.Agenda.render(); },
-                jumpToday: () => { App.state.monday = Utils.date.getMonday(new Date()); App.Agenda.render(); },
-                purge: async (key) => {
-                    const editor = document.getElementById('main-editor'); if(!editor.innerText.trim()) return;
-                    const old = await Store.Agenda.get(key);
-                    await Store.Agenda.set(key, (old ? old + '<br>' : '') + editor.innerHTML);
-                    editor.innerHTML = ''; Store.Editor.set(''); App.Agenda.render();
+                save: async (date, content) => { await Core.DB.agenda.put({date, content, ts: Date.now()}); },
+                shiftWeek: (dir) => { Core.State.currentMonday = new Date(Core.State.currentMonday.getTime() + (dir * 7 * 86400000)); Core.Agenda.render(); },
+                jumpToToday: () => { Core.State.currentMonday = Core.Utils.getMonday(new Date()); Core.Agenda.render(); },
+                importFromDraft: async (key) => {
+                    const draft = document.getElementById('main-editor').innerHTML; if(!draft.trim()) return;
+                    const entry = await Core.DB.agenda.get(key);
+                    const newContent = (entry ? entry.content : '') + '<br>' + draft;
+                    await Core.Agenda.save(key, newContent); Core.Agenda.render(); Core.Utils.toast("Importé");
                 },
-                restore: async (key) => {
-                    const content = await Store.Agenda.get(key);
-                    if(content) { document.getElementById('main-editor').innerHTML += `<br><br>${content}`; App.Editor.save(); Utils.dom.toast("Restauré"); }
+                copyToClipboard: async (key) => {
+                    const entry = await Core.DB.agenda.get(key);
+                    if(!entry) return;
+                    const text = entry.content.replace(/<[^>]*>/g, '');
+                    const t = document.createElement('textarea'); 
+                    t.style.position = 'fixed'; t.style.left = '-9999px';
+                    t.value = text; document.body.appendChild(t); 
+                    t.select(); 
+                    try { document.execCommand('copy'); Core.Utils.toast("Copié"); } catch (err) { Core.Utils.toast("Erreur copie"); }
+                    document.body.removeChild(t);
                 },
-                copy: async (key) => {
-                    const content = await Store.Agenda.get(key);
-                    if(content) { navigator.clipboard.writeText(content.replace(/<[^>]*>/g, '')); Utils.dom.toast("Copié"); }
+                pasteFromClipboard: async (key) => {
+                    try {
+                        const text = await navigator.clipboard.readText();
+                        if(!text) return;
+                        const entry = await Core.DB.agenda.get(key);
+                        const newContent = (entry ? entry.content : '') + '<br>' + text.replace(/\n/g, '<br>');
+                        await Core.Agenda.save(key, newContent);
+                        Core.Agenda.render();
+                        Core.Utils.toast("Collé");
+                    } catch (err) { Core.Utils.toast("Action bloquée par le navigateur"); }
                 },
-                clear: async (key) => { if(confirm("Supprimer ?")) { await Store.Agenda.delete(key); App.Agenda.render(); } }
-            },
-
-            Editor: {
-                load: async () => { document.getElementById('main-editor').innerHTML = await Store.Editor.get(); },
-                save: async () => { await Store.Editor.set(document.getElementById('main-editor').innerHTML); },
-                toggleReadMode: () => {
-                    App.state.readMode = !App.state.readMode;
-                    const el = document.getElementById('main-editor');
-                    const btn = document.getElementById('btn-readmode');
-                    el.contentEditable = !App.state.readMode;
-                    if(App.state.readMode) {
-                        el.innerHTML = el.innerHTML
-                            .replace(/\[\[(.*?)\]\]/g, '<span class="smart-link backlink" onclick="App.Modals.openConcept(\'$1\')">$1</span>')
-                            .replace(/#(\w+)/g, '<span class="smart-link hashtag" onclick="App.Search.quick(\'#$1\')">#$1</span>');
-                        btn.classList.add('text-blue-400');
-                    } else {
-                        btn.classList.remove('text-blue-400');
-                        App.Editor.load();
-                    }
+                pushToDraft: async (key) => {
+                    const entry = await Core.DB.agenda.get(key);
+                    if(entry) { document.getElementById('main-editor').innerHTML += `<br><br>${entry.content}`; Core.Storage.saveEditor(); Core.Utils.toast("Extrait"); }
                 },
-                toggleContrast: () => { document.getElementById('editor-container').classList.toggle('high-contrast'); },
-                insertLine: (pos) => {
-                    const el = document.getElementById('main-editor');
-                    const div = document.createElement('div'); div.innerHTML = '<br>';
-                    pos === 'start' ? el.prepend(div) : el.append(div);
-                },
-                handleSelection: () => {
-                    const sel = window.getSelection();
-                    const bar = document.getElementById('smart-toolbar');
-                    if(sel.rangeCount && !sel.isCollapsed && document.getElementById('main-editor').contains(sel.anchorNode)) {
-                        const rect = sel.getRangeAt(0).getBoundingClientRect();
-                        const days = document.getElementById('toolbar-days');
-                        days.innerHTML = '';
-                        ['L','M','M','J','V','S','D'].forEach((d, i) => {
-                            const date = new Date(App.state.monday); date.setDate(date.getDate() + i);
-                            const key = Utils.date.format(date);
-                            const btn = Utils.dom.el('button', 'px-2 py-1 text-[9px] hover:bg-blue-500 hover:text-white rounded text-slate-500 font-bold', d);
-                            btn.onmousedown = (e) => { e.preventDefault(); App.Agenda.purge(key); };
-                            days.appendChild(btn);
-                        });
-                        bar.style.top = `${rect.bottom + window.scrollY + 8}px`; bar.style.left = `${rect.left + window.scrollX}px`; bar.style.display = 'flex';
-                    } else { bar.style.display = 'none'; }
+                clear: (key) => { 
+                    Core.UI.askConfirm("Effacer les données de cette journée ?", async () => { await Core.DB.agenda.delete(key); Core.Agenda.render(); });
                 }
             },
-
-            Macros: {
-                buffer: (key) => {
-                    clearTimeout(App.state.macroTimer);
-                    App.state.macroBuffer.push(key.toLowerCase());
-                    document.getElementById('hud-buffer').textContent = App.state.macroBuffer.join('').toUpperCase();
-                    App.Macros.check();
-                    App.Macros.renderHUD();
-                    App.state.macroTimer = setTimeout(() => {
-                        App.state.macroBuffer = [];
-                        document.getElementById('hud-buffer').textContent = '_';
-                        App.Macros.renderHUD();
-                    }, 1200);
+            Editor: {
+                toggleMode: function() {
+                    const el = document.getElementById('main-editor'); Core.State.isReadMode = !Core.State.isReadMode; el.contentEditable = !Core.State.isReadMode;
+                    if(Core.State.isReadMode) { Core.State.rawCache = el.innerHTML; this.processLinks(el); document.getElementById('ui-mode-btn').classList.add('text-blue-400'); } 
+                    else { el.innerHTML = Core.State.rawCache || el.innerHTML; document.getElementById('ui-mode-btn').classList.remove('text-blue-400'); }
                 },
-                check: async () => {
-                    const seq = App.state.macroBuffer.join(',');
-                    const macros = await Store.Macros.getAll();
-                    const match = macros.find(m => m.trigger === seq);
-                    if(match) {
-                        document.execCommand('insertHTML', false, match.text);
-                        App.state.macroBuffer = [];
-                        document.getElementById('hud-buffer').textContent = 'OK';
-                    }
+                contrast: () => { document.execCommand('backColor', false, '#ffffff'); document.execCommand('foreColor', false, '#000000'); Core.Storage.saveEditor(); },
+                highlight: () => { document.execCommand('hiliteColor', false, '#fde047'); document.execCommand('foreColor', false, '#000'); Core.Storage.saveEditor(); },
+                addLine: (pos) => {
+                    const div = document.createElement('div'); div.innerHTML = '<br>'; const ed = document.getElementById('main-editor');
+                    pos === 'start' ? ed.prepend(div) : ed.append(div);
+                    const range = document.createRange(), sel = window.getSelection(); range.setStart(div, 0); range.collapse(true); sel.removeAllRanges(); sel.addRange(range); div.focus();
                 },
-                renderHUD: async () => {
-                    const list = document.getElementById('hud-content');
-                    const all = await Store.Macros.getAll();
-                    const current = App.state.macroBuffer.join(',');
-                    list.innerHTML = all.map(m => `
-                        <div class="hud-item ${m.trigger.startsWith(current) && current ? 'active' : ''}">
-                            <span class="hud-item-trigger">${m.trigger.replace(',','+').toUpperCase()}</span>
-                            <span class="hud-item-label">${m.text.replace(/<[^>]*>/g,'')}</span>
-                        </div>
-                    `).join('');
+                insertLine: () => {
+                    const ed = document.getElementById('main-editor'); ed.focus();
+                    document.execCommand('insertHTML', false, '<div><br></div>');
+                    Core.Storage.saveEditor();
                 },
-                renderManager: async () => {
-                    const list = document.getElementById('macro-list');
-                    const all = await Store.Macros.getAll();
-                    list.innerHTML = all.map(m => `<div class="flex justify-between items-center p-3 bg-white/5 rounded-xl"><span>${m.trigger.toUpperCase()} : ${m.text}</span><button onclick="App.Macros.remove('${m.trigger}')" class="text-red-500 text-xs font-bold">DEL</button></div>`).join('');
+                clear: () => { 
+                    Core.UI.askConfirm("Purger l'intégralité du brouillon ?", () => { document.getElementById('main-editor').innerHTML = ""; Core.Storage.saveEditor(); });
                 },
-                add: async () => {
-                    const t = document.getElementById('macro-new-trigger').value.toLowerCase();
-                    const v = document.getElementById('macro-new-text').value;
-                    if(t && v) { await Store.Macros.add(t, v); App.Macros.renderManager(); Utils.dom.toast("Protocole ajouté"); }
-                },
-                remove: async (t) => { await Store.Macros.remove(t); App.Macros.renderManager(); }
+                processLinks: (el) => {
+                    let html = el.innerHTML;
+                    html = html.replace(/\[\[(.*?)\]\]/g, '<span class="smart-link backlink" onclick="Core.UI.openConcept(\'$1\')">$1</span>');
+                    el.innerHTML = html;
+                }
             },
-
-            Search: {
-                run: async (q) => {
-                    const container = document.getElementById('search-results');
-                    container.innerHTML = '';
-                    if(!q || q.length < 2) return;
-                    q = q.toLowerCase();
-                    const draft = await Store.Editor.get();
-                    if(draft.toLowerCase().includes(q)) {
-                        const div = Utils.dom.el('div', 'p-4 bg-white/5 rounded-xl mb-2 cursor-pointer hover:bg-white/10');
-                        div.innerHTML = `<div class="text-[9px] text-blue-400 font-bold uppercase mb-1">Brouillon</div><div class="text-sm opacity-60">${Utils.dom.highlight(draft.replace(/<[^>]*>/g,''), q)}</div>`;
-                        div.onclick = () => App.Modals.close();
-                        container.appendChild(div);
+            Voice: {
+                init: function() {
+                    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+                    if(SR) {
+                        Core.State.recognition = new SR(); Core.State.recognition.lang = 'fr-FR';
+                        Core.State.recognition.onstart = () => { Core.State.isRecording = true; document.getElementById('ui-voice-btn').classList.add('text-red-500', 'animate-pulse'); };
+                        Core.State.recognition.onresult = (e) => { const t = e.results[0][0].transcript; document.execCommand('insertText', false, t); Core.Storage.saveEditor(); };
+                        Core.State.recognition.onend = () => { Core.State.isRecording = false; document.getElementById('ui-voice-btn').classList.remove('text-red-500', 'animate-pulse'); };
                     }
-                    const agenda = await Store.Agenda.getAll();
-                    agenda.filter(a => a.content.toLowerCase().includes(q)).forEach(a => {
-                        const div = Utils.dom.el('div', 'p-4 bg-white/5 rounded-xl mb-2 cursor-pointer hover:bg-white/10');
-                        div.innerHTML = `<div class="text-[9px] text-slate-500 font-bold uppercase mb-1">${a.date}</div><div class="text-sm opacity-60">${Utils.dom.highlight(a.content.replace(/<[^>]*>/g,''), q)}</div>`;
-                        div.onclick = () => { App.state.monday = Utils.date.getMonday(new Date(a.date)); App.Agenda.render(); App.Modals.close(); };
-                        container.appendChild(div);
+                },
+                toggle: function() { if(!Core.State.recognition) return; Core.State.isRecording ? Core.State.recognition.stop() : Core.State.recognition.start(); }
+            },
+            AI: {
+                challenge: async function() {
+                    const text = document.getElementById('main-editor').innerText; if(!text) return; Core.Utils.toast("IA Challenge...");
+                    setTimeout(() => { document.getElementById('main-editor').innerHTML += "<br><br>> 🧠 **IA Challenge** : Votre brouillon manque de structure objective."; Core.Storage.saveEditor(); }, 1200);
+                },
+                synthesize: async function() { if(!Core.State.activeConcept) return; Core.Utils.toast("Cristallisation..."); setTimeout(() => { document.getElementById('ui-concept-synthesis').innerHTML = "<b>Synthèse IA :</b> Concept identifié comme pivot sémantique."; }, 1000); }
+            },
+            Search: {
+                exec: async (query) => {
+                    const resContainer = document.getElementById('search-results');
+                    resContainer.innerHTML = '';
+                    if(!query || query.length < 2) {
+                        resContainer.innerHTML = `<div class="text-center py-20 text-slate-600 uppercase text-[10px] font-black tracking-widest">Saisissez un terme pour explorer vos archives</div>`;
+                        return;
+                    }
+
+                    const term = query.toLowerCase();
+                    const results = { agenda: [], concepts: [], draft: [] };
+
+                    const agendaData = await Core.DB.agenda.toArray();
+                    results.agenda = agendaData.filter(x => x.content.toLowerCase().includes(term));
+
+                    const conceptsData = await Core.DB.concepts.toArray();
+                    results.concepts = conceptsData.filter(x => x.title.toLowerCase().includes(term) || (x.synthesis && x.synthesis.toLowerCase().includes(term)));
+
+                    const editorText = Core.Utils.stripHTML(document.getElementById('main-editor').innerHTML);
+                    if(editorText.toLowerCase().includes(term)) { results.draft.push({ content: editorText }); }
+
+                    if(!results.agenda.length && !results.concepts.length && !results.draft.length) {
+                        resContainer.innerHTML = `<div class="text-center py-20 text-slate-400 uppercase text-[10px] font-black tracking-widest border border-dashed border-white/5 rounded-2xl">Aucune correspondance sémantique trouvée</div>`;
+                        return;
+                    }
+
+                    if(results.draft.length) {
+                        const label = document.createElement('div'); label.className = "search-category-label"; label.innerHTML = `<span>Brouillon Actuel</span>`;
+                        resContainer.appendChild(label);
+                        results.draft.forEach(() => {
+                            const item = Core.Search.createItem("Document Actif", "Contenu présent dans l'éditeur principal", () => Core.UI.closeModals());
+                            resContainer.appendChild(item);
+                        });
+                    }
+
+                    if(results.concepts.length) {
+                        const label = document.createElement('div'); label.className = "search-category-label"; label.innerHTML = `<span>Concepts Cristallisés</span>`;
+                        resContainer.appendChild(label);
+                        results.concepts.forEach(c => {
+                            const snippet = c.synthesis ? Core.Utils.stripHTML(c.synthesis).substring(0, 80) + '...' : "Aucune synthèse";
+                            const item = Core.Search.createItem(c.title, snippet, () => { Core.UI.openConcept(c.title); });
+                            resContainer.appendChild(item);
+                        });
+                    }
+
+                    if(results.agenda.length) {
+                        const label = document.createElement('div'); label.className = "search-category-label"; label.innerHTML = `<span>Archives Agenda</span>`;
+                        resContainer.appendChild(label);
+                        results.agenda.sort((a,b) => b.date.localeCompare(a.date)).forEach(a => {
+                            const snippet = Core.Utils.stripHTML(a.content).substring(0, 100) + '...';
+                            const item = Core.Search.createItem(a.date, snippet, () => {
+                                Core.State.currentMonday = Core.Utils.getMonday(new Date(a.date));
+                                Core.Agenda.render().then(() => { Core.UI.closeModals(); Core.Utils.toast(`Navigation vers ${a.date}`); });
+                            });
+                            resContainer.appendChild(item);
+                        });
+                    }
+                },
+                createItem: (title, subtitle, action) => {
+                    const div = document.createElement('div'); div.className = "search-result-item";
+                    div.innerHTML = `<div class="flex justify-between items-start"><div><div class="text-[10px] font-black text-blue-400 uppercase tracking-tighter mb-1">${title}</div><div class="text-xs text-slate-400 line-clamp-2 leading-relaxed">${subtitle}</div></div><svg class="w-4 h-4 text-slate-700 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" stroke-width="3"/></svg></div>`;
+                    div.onclick = action; return div;
+                }
+            },
+            IO: {
+                triggerImport: () => document.getElementById('import-input').click(),
+                importData: (e) => {
+                    const file = e.target.files[0]; if(!file) return;
+                    const reader = new FileReader(); reader.onload = async (ev) => {
+                        try { const data = JSON.parse(ev.target.result); if(data.agenda) for(let entry of data.agenda) await Core.DB.agenda.put(entry); location.reload(); } catch(err) { Core.Utils.toast("Erreur import"); }
+                    }; reader.readAsText(file);
+                },
+                exportMD: async () => {
+                    const agenda = await Core.DB.agenda.toArray(); const meta = await Core.DB.meta.get('editor');
+                    const blob = new Blob([JSON.stringify({ agenda, editor: meta ? meta.content : "" })], {type: 'application/json'});
+                    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `AgenData_Backup.json`; a.click();
+                }
+            },
+            UI: {
+                openSearch: () => { document.getElementById('modal-search').style.display = 'flex'; const input = document.getElementById('search-input'); input.value = ''; Core.Search.exec(''); input.focus(); },
+                openMacros: () => { document.getElementById('modal-macros').style.display = 'flex'; Core.Macros.renderManager(); },
+                askConfirm: (msg, action) => {
+                    document.getElementById('ui-confirm-msg').textContent = msg;
+                    const btn = document.getElementById('ui-confirm-btn');
+                    const newBtn = btn.cloneNode(true); btn.parentNode.replaceChild(newBtn, btn);
+                    newBtn.onclick = () => { action(); Core.UI.closeModals(); };
+                    document.getElementById('modal-confirm').style.display = 'flex';
+                },
+                openConcept: async (kw) => {
+                    Core.State.activeConcept = kw; document.getElementById('ui-concept-title').textContent = kw;
+                    const snippets = document.getElementById('ui-concept-snippets'); snippets.innerHTML = '';
+                    const all = await Core.DB.agenda.toArray();
+                    all.forEach(entry => { if(entry.content.toLowerCase().includes(kw.toLowerCase())) {
+                        const d = document.createElement('div'); d.className = "p-3 bg-white/[0.03] rounded-lg border border-white/5 text-[11px] text-slate-400";
+                        d.innerHTML = `<span class="text-violet-500 font-bold block mb-1 uppercase text-[8px]">${entry.date}</span>${entry.content}`; snippets.appendChild(d);
+                    }});
+                    const concept = await Core.DB.concepts.get(kw);
+                    document.getElementById('ui-concept-synthesis').innerHTML = concept ? concept.synthesis : "";
+                    document.getElementById('modal-concept').style.display = 'flex';
+                },
+                openHelp: () => { Core.UI.switchHelp('philosophy'); document.getElementById('modal-help').style.display = 'flex'; },
+                switchHelp: (tab) => {
+                    document.querySelectorAll('.help-tab').forEach(t => t.classList.remove('active'));
+                    const content = document.getElementById('ui-help-content');
+                    if(tab === 'philosophy') {
+                        document.querySelector('[onclick="Core.UI.switchHelp(\'philosophy\')"]').classList.add('active');
+                        content.innerHTML = `
+                            <div class="help-section-title">La Forge Cognitive</div>
+                            <p>Stocker des données est une perte de temps si elles ne sont pas transformées. AgenData n'est pas un bloc-notes passif. C'est un système de transformation.</p>
+                            <div class="help-step-box">
+                                <h3 class="text-white font-bold mb-2">L'Information est un passif</h3>
+                                <p>Toute note qui n'est pas qualifiée, liée ou synthétisée est un bruit mental. Le but d'AgenData est d'extraire la substance de votre quotidien pour la cristalliser en actifs de connaissance exploitables.</p>
+                            </div>
+                            <div class="help-section-title">La Rigueur de la Contrainte</div>
+                            <p>L'agenda limite chaque journée à 6 lignes. Si vous ne pouvez pas résumer votre journée en 6 lignes, vous n'en avez pas saisi l'essentiel. La contrainte force votre cerveau à prioriser.</p>
+                        `;
+                    } else if(tab === 'components') {
+                        document.querySelector('[onclick="Core.UI.switchHelp(\'components\')"]').classList.add('active');
+                        content.innerHTML = `
+                            <div class="help-section-title">Anatomie du Système</div>
+                            <div class="space-y-4">
+                                <div class="help-step-box">
+                                    <h4 class="text-blue-400 font-black text-[10px] uppercase mb-1">1. L'Inbox (Brouillon Central)</h4>
+                                    <p>C'est votre zone de décharge brute. Capturez tout ce qui traverse votre esprit. Utilisez la reconnaissance vocale (Alt+R) ou les macros pour structurer à la volée.</p>
+                                </div>
+                                <div class="help-step-box">
+                                    <h4 class="text-blue-400 font-black text-[10px] uppercase mb-1">2. L'Agenda (Chronos)</h4>
+                                    <p>C'est votre archive de synthèse. Transférez le contenu du brouillon vers une date spécifique pour archiver l'essentiel. L'agenda sert de mémoire factuelle.</p>
+                                </div>
+                                <div class="help-step-box">
+                                    <h4 class="text-blue-400 font-black text-[10px] uppercase mb-1">3. Le Zettelkasten (Logos)</h4>
+                                    <p>Le réseau sémantique. En utilisant [[Nom]], vous créez des ponts entre vos notes. Un clic sur un lien ouvre une vue transverse de tout ce que vous avez écrit sur ce sujet.</p>
+                                </div>
+                            </div>
+                        `;
+                    } else if(tab === 'syntax') {
+                        document.querySelector('[onclick="Core.UI.switchHelp(\'syntax\')"]').classList.add('active');
+                        content.innerHTML = `
+                            <div class="help-section-title">Commandes Opérationnelles</div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div class="help-step-box"><kbd class="text-blue-400">ALT + V</kbd><br><p class="text-[10px] uppercase">Mode Lecture / Edition</p></div>
+                                <div class="help-step-box"><kbd class="text-blue-400">ALT + M</kbd><br><p class="text-[10px] uppercase">Gestion des Macros</p></div>
+                                <div class="help-step-box"><kbd class="text-blue-400">ALT + R</kbd><br><p class="text-[10px] uppercase">Capture Vocale</p></div>
+                                <div class="help-step-box"><kbd class="text-blue-400">CTRL + F</kbd><br><p class="text-[10px] uppercase">Recherche Sémantique</p></div>
+                                <div class="help-step-box"><kbd class="text-blue-400">ALT + Séquence</kbd><br><p class="text-[10px] uppercase">Exécuter une Macro</p></div>
+                                <div class="help-step-box"><kbd class="text-blue-400">F1</kbd><br><p class="text-[10px] uppercase">Afficher ce manuel</p></div>
+                            </div>
+                        `;
+                    } else if(tab === 'example') {
+                        document.querySelector('[onclick="Core.UI.switchHelp(\'example\')"]').classList.add('active');
+                        content.innerHTML = `
+                            <div class="help-section-title">Scénario de Capture à la Cristallisation</div>
+                            <div class="space-y-4">
+                                <p>Voici comment un utilisateur expert utilise AgenData pour transformer une idée en actif stratégique.</p>
+                                <div class="help-step-box">
+                                    <h4 class="text-blue-500 font-black text-[10px] uppercase mb-2">Étape 1 : Capture brute</h4>
+                                    <p>Vous notez dans le brouillon : "Rendez-vous avec [[Dupont]] sur le projet [[Nexus]]. Il y a un blocage sur le budget."</p>
+                                </div>
+                                <div class="help-step-box">
+                                    <h4 class="text-blue-500 font-black text-[10px] uppercase mb-2">Étape 2 : Qualification rapide</h4>
+                                    <p>Vous utilisez votre macro <code>ALT+S,D</code> pour insérer 🌱 devant. C'est maintenant une "graine" à surveiller.</p>
+                                </div>
+                                <div class="help-step-box">
+                                    <h4 class="text-blue-500 font-black text-[10px] uppercase mb-2">Étape 3 : Archivage temporel</h4>
+                                    <p>Vous sélectionnez le texte. Dans le menu qui apparaît, vous cliquez sur "M" (Mardi). La note est transférée dans l'agenda à la date de mardi.</p>
+                                </div>
+                                <div class="help-step-box">
+                                    <h4 class="text-blue-500 font-black text-[10px] uppercase mb-2">Étape 4 : Analyse transverse</h4>
+                                    <p>Deux semaines plus tard, vous cliquez sur <code>[[Nexus]]</code>. AgenData affiche tous les snippets contenant ce mot. Vous voyez l'évolution du blocage. Vous utilisez l'IA pour synthétiser ces snippets en une stratégie claire.</p>
+                                </div>
+                            </div>
+                        `;
+                    }
+                },
+                closeModals: () => { document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none'); },
+                showToolbar: (rect) => {
+                    const bar = document.getElementById('smart-toolbar'); const container = document.getElementById('ui-toolbar-days'); container.innerHTML = '';
+                    ['L','M','M','J','V','S','D'].forEach((d, i) => {
+                        const target = new Date(Core.State.currentMonday); target.setDate(target.getDate() + i); const k = Core.Utils.formatDate(target);
+                        const btn = document.createElement('button'); btn.className = "px-2 py-1 text-[9px] hover:bg-blue-500 rounded text-slate-500 font-bold";
+                        btn.textContent = d; btn.onmousedown = (e) => { e.preventDefault(); Core.Agenda.importFromDraft(k); }; container.appendChild(btn);
+                    });
+                    bar.style.top = `${rect.bottom + window.scrollY + 8}px`; bar.style.left = `${rect.left + window.scrollX}px`; bar.style.display = 'flex';
+                }
+            },
+            Listeners: {
+                setup: function() {
+                    const editor = document.getElementById('main-editor');
+                    editor.addEventListener('input', Core.Utils.debounce(() => Core.Storage.saveEditor(), 1000));
+                    document.addEventListener('keydown', e => {
+                        if(e.key === 'Alt') { document.getElementById('macro-hud').style.display = 'block'; Core.Macros.renderHUD(); }
+                        if(e.altKey) {
+                            if(e.key.length === 1 && !['v','t','m','n','e','r'].includes(e.key)) Core.Macros.handle(e.key);
+                            if(e.key === 'v') Core.Editor.toggleMode();
+                            if(e.key === 'm') Core.UI.openMacros();
+                        }
+                        if((e.ctrlKey || e.metaKey) && e.key === 'f') { e.preventDefault(); Core.UI.openSearch(); }
+                        if(e.key === 'F1') { e.preventDefault(); Core.UI.openHelp(); }
+                    });
+                    document.addEventListener('keyup', e => { if(e.key === 'Alt') document.getElementById('macro-hud').style.display = 'none'; });
+                    document.addEventListener('selectionchange', () => {
+                        const sel = window.getSelection();
+                        if(sel.rangeCount && !sel.isCollapsed && editor.contains(sel.anchorNode)) Core.UI.showToolbar(sel.getRangeAt(0).getBoundingClientRect());
+                        else document.getElementById('smart-toolbar').style.display = 'none';
+                    });
+                }
+            },
+            Macros: {
+                handle: function(key) {
+                    clearTimeout(Core.State.macroTimeout); Core.State.macroBuffer.push(key.toLowerCase()); const seq = Core.State.macroBuffer.join(',');
+                    if(Core.State.macros[seq]) { document.execCommand('insertHTML', false, Core.State.macros[seq]); Core.State.macroBuffer = []; }
+                    Core.State.macroTimeout = setTimeout(() => { Core.State.macroBuffer = []; }, 800);
+                },
+                renderHUD: function() {
+                    const hud = document.getElementById('ui-macro-list-hud'); hud.innerHTML = '';
+                    for(let k in Core.State.macros) hud.innerHTML += `<div class="flex justify-between text-[10px] font-mono border-b border-white/5 pb-1"><span class="text-blue-500">${k.toUpperCase()}</span></div>`;
+                },
+                renderManager: async function() {
+                    const list = document.getElementById('ui-macro-manager-list'); list.innerHTML = '';
+                    const all = await Core.DB.macros.toArray();
+                    if(all.length === 0) { list.innerHTML = `<div class="text-center py-10 text-slate-600 italic text-xs uppercase tracking-widest">Aucun protocole configuré</div>`; return; }
+                    all.forEach(m => {
+                        const card = document.createElement('div'); card.className = "group bg-white/[0.03] border border-white/5 hover:border-blue-500/30 p-4 rounded-2xl flex justify-between items-center transition-all duration-300";
+                        const shortcut = m.trigger.split(',').map(s => `<span class="bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded border border-blue-500/20 text-[9px] font-black">${s.toUpperCase()}</span>`).join('<span class="text-slate-600 text-[8px] mx-1">+</span>');
+                        card.innerHTML = `<div class="flex flex-col gap-2"><div class="flex items-center"><span class="text-[8px] font-black text-slate-600 mr-2 uppercase">Alt</span>${shortcut}</div><div class="text-xs text-slate-300 font-medium">${m.text}</div></div><button onclick="Core.Macros.delete('${m.trigger}')" class="p-2 opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400 transition-all rounded-lg hover:bg-red-500/10"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-width="2"/></svg></button>`;
+                        list.appendChild(card);
                     });
                 },
-                filter: (char) => { const inp = document.getElementById('search-input'); inp.value = char; inp.focus(); App.Search.run(char); },
-                quick: (term) => { App.Modals.open('search'); App.Search.filter(term); }
-            },
-
-            AI: {
-                monitor: () => {
-                    const len = document.getElementById('main-editor').innerText.length;
-                    const dot = document.getElementById('ai-dot');
-                    const txt = document.getElementById('ai-status');
-                    if(len < 50) { dot.className = 'ai-status-dot idle'; txt.textContent = 'NEUTRE'; }
-                    else if(len < 300) { dot.className = 'ai-status-dot warning'; txt.textContent = 'FAIBLE'; }
-                    else { dot.className = 'ai-status-dot active'; txt.textContent = 'DENSE'; }
+                add: async function() {
+                    const triggerEl = document.getElementById('ui-new-macro-trigger');
+                    const textEl = document.getElementById('ui-new-macro-text');
+                    const trigger = triggerEl.value.trim().toLowerCase();
+                    const text = textEl.value.trim();
+                    if(!trigger || !text) { Core.Utils.toast("Champs requis"); return; }
+                    await Core.DB.macros.put({trigger, text});
+                    triggerEl.value = ''; textEl.value = '';
+                    await Core.Storage.loadAll(); this.renderManager(); Core.Utils.toast("Protocole initialisé");
                 },
-                surgicalTri: () => {
-                    const editor = document.getElementById('main-editor');
-                    const words = editor.innerText.toLowerCase().match(/\b\w{4,}\b/g) || [];
-                    const freq = {};
-                    words.forEach(w => freq[w] = (freq[w] || 0) + 1);
-                    const candidates = Object.keys(freq).filter(w => freq[w] >= 3);
-                    if(candidates.length > 0) {
-                        Utils.dom.toast(`Concept : ${candidates[0].toUpperCase()}`);
-                    }
-                },
-                challenge: async () => { Utils.dom.toast("Analyse Titan..."); },
-                synthesize: async () => { Utils.dom.toast("Cristallisation..."); }
-            },
-
-            IO: {
-                export: async () => {
-                    const data = { agenda: await Store.Agenda.getAll(), editor: await Store.Editor.get(), macros: await Store.Macros.getAll(), concepts: await Store.Concepts.getAll() };
-                    const blob = new Blob([JSON.stringify(data)], {type:'application/json'});
-                    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `AgenData.json`; a.click();
-                },
-                import: (e) => {
-                    const reader = new FileReader();
-                    reader.onload = async (ev) => {
-                        try {
-                            const d = JSON.parse(ev.target.result);
-                            if(d.agenda) await Store.db.agenda.bulkPut(d.agenda);
-                            if(d.editor) await Store.Editor.set(d.editor);
-                            if(d.macros) await Store.db.macros.bulkPut(d.macros);
-                            if(d.concepts) await Store.db.concepts.bulkPut(d.concepts);
-                            location.reload();
-                        } catch(err) { Utils.dom.toast("Erreur import"); }
-                    };
-                    reader.readAsText(e.target.files[0]);
-                }
-            },
-
-            Modals: {
-                open: (id) => {
-                    const m = document.getElementById(`modal-${id}`);
-                    if(m) { m.style.display = 'flex'; if(id === 'macros') App.Macros.renderManager(); }
-                    else console.error(`Modal ${id} introuvable`);
-                },
-                close: () => { document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none'); },
-                openConcept: async (title) => {
-                    App.state.activeConcept = title;
-                    document.getElementById('concept-title').textContent = title;
-                    App.Modals.open('concept');
-                }
-            },
-
-            Help: {
-                show: (tab) => {
-                    const content = document.getElementById('help-content');
-                    document.querySelectorAll('.help-tab').forEach(t => t.classList.remove('active'));
-                    const btn = document.querySelector(`button[onclick="App.Help.show('${tab}')"]`);
-                    if(btn) btn.classList.add('active');
-                    
-                    const sections = {
-                        doctrine: `
-                            <div class="help-section">
-                                <h3>L'Information est une Dette Tactique</h3>
-                                <div class="help-content space-y-4">
-                                    <p>AgenData n'est pas un système de stockage, c'est une <strong>infrastructure de transformation</strong>. Stocker une information sans la transformer en action est une erreur stratégique qui consomme de l'attention.</p>
-                                    <p><strong>Règle de Fer :</strong> Le Brouillon (Draft) doit être vide chaque soir. Un brouillon encombré est le signe d'un esprit qui refuse de décider.</p>
-                                    <p><strong>La Destruction par l'Action :</strong> Le but ultime d'une note est sa propre destruction. Une fois l'action effectuée, la trace devient "Froid" (Agenda) et ne doit plus encombrer ton "Présent" (Brouillon).</p>
-                                </div>
-                            </div>`,
-                        protocole: `
-                            <div class="help-section">
-                                <h3>Le Cycle de Traitement</h3>
-                                <div class="help-content space-y-6">
-                                    <div class="p-4 bg-white/5 rounded border border-white/5">
-                                        <strong>1. Capture Radical</strong>
-                                        <p class="opacity-70">Saisis tout dans le Brouillon central sans filtrer. C'est ton Inbox universel.</p>
-                                    </div>
-                                    <div class="p-4 bg-white/5 rounded border border-white/5">
-                                        <strong>2. Audit & Transfert</strong>
-                                        <p class="opacity-70">Surligne une ligne, utilise la barre flottante pour la projeter vers un jour précis (L, M, M, J, V, S, D). La ligne disparaît du brouillon.</p>
-                                    </div>
-                                    <div class="p-4 bg-white/5 rounded border border-white/5">
-                                        <strong>3. Purge (Bouton ↓)</strong>
-                                        <p class="opacity-70">Utilise l'icône de purge dans l'Agenda pour vider l'intégralité du Brouillon dans une journée spécifique (historique ou planning).</p>
-                                    </div>
-                                </div>
-                            </div>`,
-                        titan: `
-                            <div class="help-section">
-                                <h3>Tri Chirurgical Titan</h3>
-                                <div class="help-content space-y-4">
-                                    <p>Titan analyse tes saisies en temps réel pour forcer la décision sémantique.</p>
-                                    <p><strong>Identification de Graine (🌱) :</strong> Détection des verbes d'action au début de ligne (ex: "Appeler", "Faire"). Titan te signale que c'est une action qui doit être transférée.</p>
-                                    <p><strong>Induction de Concept ([[...]]) :</strong> Si un terme revient 3 fois, Titan exige la création d'un lien conceptuel pour fixer la connaissance.</p>
-                                    <p><strong>Délai de Maturité :</strong> Si une information stagne plus de 72h dans le brouillon, Titan considère cela comme un échec d'exécution.</p>
-                                </div>
-                            </div>`,
-                        exemple: `
-                            <div class="help-section">
-                                <h3>Scénario Tactique</h3>
-                                <div class="help-content space-y-4">
-                                    <p><strong>Étape 1 (Capture) :</strong> Tu tapes "Réviser le contrat X. Le contrat X est complexe. Envoyer un mail à Jean pour le contrat X."</p>
-                                    <div class="help-example">
-                                        Analyse Titan :<br>
-                                        - Concept "Contrat X" détecté (3 fois).<br>
-                                        - Graine "Envoyer un mail" détectée.
-                                    </div>
-                                    <p><strong>Étape 2 (Tri) :</strong> Tu marques "Contrat X" en lien [[Contrat X]]. Tu sélectionnes "Envoyer un mail" et tu cliques sur 'J' (Jeudi) dans la barre flottante.</p>
-                                    <p><strong>Étape 3 (Action) :</strong> Ton brouillon est allégé de l'action. Jeudi, tu verras ton rappel. Le concept est archivé pour plus tard.</p>
-                                </div>
-                            </div>`
-                    };
-                    content.innerHTML = sections[tab] || '';
-                }
+                delete: async function(trigger) { await Core.DB.macros.delete(trigger); await Core.Storage.loadAll(); this.renderManager(); Core.Utils.toast("Protocole supprimé"); }
             }
         };
-
-        window.onload = App.init;
+        window.onload = () => Core.Init();
     </script>
 </body>
 </html>
