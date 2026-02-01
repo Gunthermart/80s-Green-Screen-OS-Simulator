@@ -513,8 +513,27 @@
                 highlight: () => { if(Core.State.isReadMode) return; document.execCommand('hiliteColor', false, '#fde047'); document.execCommand('foreColor', false, '#000'); Core.Storage.saveEditor(); },
                 addLine: (pos) => {
                     if(Core.State.isReadMode) return;
-                    const div = document.createElement('div'); div.innerHTML = '<br>'; const ed = document.getElementById('main-editor');
-                    pos === 'start' ? ed.prepend(div) : ed.append(div); div.focus();
+                    const div = document.createElement('div'); 
+                    div.innerHTML = '<br>'; 
+                    const ed = document.getElementById('main-editor');
+                    
+                    pos === 'start' ? ed.prepend(div) : ed.append(div);
+                    
+                    // Force le focus visuel sur la nouvelle ligne
+                    const range = document.createRange();
+                    const sel = window.getSelection();
+                    range.selectNodeContents(div);
+                    range.collapse(true); // Place le curseur au début du div
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                    
+                    // Scroll vers la ligne si elle est hors champ
+                    div.scrollIntoView({behavior: "smooth", block: "nearest"});
+                    
+                    // Focus l'éditeur pour être sûr
+                    ed.focus();
+                    
+                    Core.Storage.saveEditor();
                 },
                 insertLine: () => { if(Core.State.isReadMode) return; document.execCommand('insertHTML', false, '<div><br></div>'); Core.Storage.saveEditor(); },
                 clear: () => { if(Core.State.isReadMode) return; document.getElementById('main-editor').innerHTML = ""; Core.Storage.saveEditor(); },
@@ -550,12 +569,17 @@
                     Core.Utils.toast(isRead ? "MODE LECTURE : LIENS ACTIFS" : "MODE ÉDITION : ACTIF");
                 },
                 autoLink: (html) => {
-                    // Remplace [[texte]] par span si pas déjà dans un span
-                    // Note: C'est une regex simple, attention au HTML complexe, mais suffisant pour le brouillon
-                    return html.replace(/\[\[([^\]]+)\]\]/g, (match, text) => {
-                        // Évite de wrapper doublement
-                        if(match.includes('concept-tag')) return match;
-                        return `<span class="concept-tag" data-link="${text}">[[${text}]]</span>`;
+                    // ÉTAPE 1 : Nettoyage (Strip)
+                    // On retire les balises span.concept-tag existantes pour revenir au texte brut [[...]]
+                    // Cela évite l'imbrication infinie <span...><span...>[[txt]]</span></span> qui casse le rendu
+                    let clean = html.replace(/<span class="concept-tag"[^>]*>(.*?)<\/span>/g, "$1");
+                    
+                    // ÉTAPE 2 : Génération (Wrap)
+                    // On détecte les motifs [[...]] et on les enveloppe proprement
+                    return clean.replace(/\[\[([^\]]+)\]\]/g, (match, text) => {
+                        // Sécurisation basique des guillemets pour l'attribut HTML
+                        const safeAttr = text.replace(/"/g, '&quot;'); 
+                        return `<span class="concept-tag" data-link="${safeAttr}">[[${text}]]</span>`;
                     });
                 }
             },
