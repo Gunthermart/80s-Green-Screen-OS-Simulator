@@ -1,0 +1,523 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { Activity, Zap, Wifi, WifiOff, Layers, Radio, Anchor, ShieldAlert, Volume2, VolumeX, Share2 } from 'lucide-react';
+
+// --- CONFIGURATION ---
+const SYMBOL = 'btcusdt';
+const WS_URL = `wss://stream.binance.com:9443/stream?streams=${SYMBOL}@aggTrade/${SYMBOL}@depth20@100ms`;
+
+const DUST_THRESHOLD = 0.05; 
+const WHALE_THRESHOLD = 2.0; 
+const MAX_PARTICLES = 200;
+const MAX_DEBRIS = 100;
+const BASE_RADIUS = 60;
+const TRAIL_LENGTH = 100;
+const NETWORK_DISTANCE = 120; // Distance max pour connecter deux particules
+
+export default function App() {
+  const canvasRef = useRef(null);
+  const wsRef = useRef(null);
+  
+  // Audio Refs
+  const audioCtxRef = useRef(null);
+  const droneOscRef = useRef(null);
+  const droneGainRef = useRef(null);
+  
+  const [price, setPrice] = useState(0);
+  const [vwapDisplay, setVwapDisplay] = useState(0);
+  const [isConnected, setIsConnected] = useState(false);
+  const [audioEnabled, setAudioEnabled] = useState(false);
+  const [networkEnabled, setNetworkEnabled] = useState(true); // Active par défaut pour l'effet "Cool"
+  const [stats, setStats] = useState({ vol: 0, trades: 0, whales: 0, erosion: 0 });
+
+  const systemRef = useRef({
+    particles: [],
+    debris: [],
+    impacts: [],
+    shockwaves: [],
+    depth: { bids: [], asks: [] },
+    core: {
+      radius: BASE_RADIUS,
+      targetRadius: BASE_RADIUS,
+      shake: { x: 0, y: 0 },
+      price: 0,
+      prevPrice: 0,
+      y: 0, 
+      anchorPrice: 0, 
+      trail: [] 
+    },
+    vwap: { cumPV: 0, cumVol: 0, current: 0, y: 0 },
+    width: 0,
+    height: 0
+  });
+
+  // --- AUDIO ENGINE ---
+  const initAudio = () => {
+    if (audioCtxRef.current) return;
+    
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AudioContext();
+    audioCtxRef.current = ctx;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    
+    osc.type = 'sine';
+    osc.frequency.value = 50; 
+    gain.gain.value = 0.05; 
+    
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    
+    droneOscRef.current = osc;
+    droneGainRef.current = gain;
+    setAudioEnabled(true);
+  };
+
+  const toggleAudio = () => {
+    if (!audioCtxRef.current) {
+        initAudio();
+    } else {
+        if (audioCtxRef.current.state === 'suspended') {
+            audioCtxRef.current.resume();
+            setAudioEnabled(true);
+        } else if (audioCtxRef.current.state === 'running') {
+            audioCtxRef.current.suspend();
+            setAudioEnabled(false);
+        }
+    }
+  };
+
+  const playSound = (type, intensity) => {
+      if (!audioCtxRef.current || audioCtxRef.current.state !== 'running') return;
+      const ctx = audioCtxRef.current;
+      const t = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      if (type === 'whale') {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(60, t);
+          osc.frequency.exponentialRampToValueAtTime(30, t + 1.5);
+          gain.gain.setValueAtTime(0.5, t); 
+          gain.gain.exponentialRampToValueAtTime(0.001, t + 1.5);
+          osc.start(t); osc.stop(t + 1.5);
+      } else if (type === 'buy') {
+          osc.type = 'triangle';
+          const freq = 800 + (Math.random() * 400); 
+          osc.frequency.setValueAtTime(freq, t);
+          gain.gain.setValueAtTime(0.1, t); 
+          gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+          osc.start(t); osc.stop(t + 0.1);
+      } else if (type === 'sell') {
+          osc.type = 'sawtooth'; 
+          const freq = 150 + (Math.random() * 50);
+          osc.frequency.setValueAtTime(freq, t);
+          gain.gain.setValueAtTime(0.08, t);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+          osc.start(t); osc.stop(t + 0.1);
+      }
+  };
+
+  // --- WEBSOCKET ---
+  useEffect(() => {
+    const connect = () => {
+      wsRef.current = new WebSocket(WS_URL);
+      wsRef.current.onopen = () => setIsConnected(true);
+      wsRef.current.onclose = () => {
+        setIsConnected(false);
+        setTimeout(connect, 3000);
+      };
+      wsRef.current.onmessage = (event) => {
+        const message = JSON.parse(event.data);
+        if (message.stream.includes('aggTrade')) handleTradeData(message.data);
+        else if (message.stream.includes('depth20')) handleDepthData(message.data);
+      };
+    };
+    connect();
+    return () => {
+        wsRef.current?.close();
+        if (audioCtxRef.current) audioCtxRef.current.close();
+    };
+  }, []);
+
+  // --- LOGIC ---
+  const handleDepthData = (data) => {
+    systemRef.current.depth = {
+      bids: data.bids.slice(0, 15),
+      asks: data.asks.slice(0, 15)
+    };
+  };
+
+  const handleTradeData = (data) => {
+    const currentPrice = parseFloat(data.p);
+    const quantity = parseFloat(data.q);
+    const isSell = data.m; 
+
+    setPrice(currentPrice);
+    setStats(prev => ({ 
+      ...prev,
+      vol: prev.vol + quantity, 
+      trades: prev.trades + 1,
+      whales: quantity >= WHALE_THRESHOLD ? prev.whales + 1 : prev.whales
+    }));
+
+    const system = systemRef.current;
+    
+    if (system.core.anchorPrice === 0) {
+      system.core.anchorPrice = currentPrice;
+      system.vwap.current = currentPrice;
+      system.vwap.cumPV = currentPrice * quantity;
+      system.vwap.cumVol = quantity;
+    } else {
+      system.vwap.cumPV += currentPrice * quantity;
+      system.vwap.cumVol += quantity;
+      system.vwap.current = system.vwap.cumPV / system.vwap.cumVol;
+    }
+    setVwapDisplay(system.vwap.current);
+
+    system.core.prevPrice = system.core.price || currentPrice;
+    system.core.price = currentPrice;
+
+    const isWhale = quantity >= WHALE_THRESHOLD;
+    const isDust = quantity < DUST_THRESHOLD;
+
+    if (isWhale) playSound('whale', 1.0);
+    else if (!isDust) playSound(isSell ? 'sell' : 'buy', 0.5);
+
+    if (droneOscRef.current && audioCtxRef.current.state === 'running') {
+        const targetFreq = 50 + (system.core.radius - BASE_RADIUS);
+        droneOscRef.current.frequency.setTargetAtTime(targetFreq, audioCtxRef.current.currentTime, 0.5);
+    }
+
+    if (isWhale) {
+      system.core.targetRadius = BASE_RADIUS + Math.min(quantity * 40, 100);
+      system.shockwaves.push({
+        x: system.width / 2, 
+        y: system.core.y,    
+        radius: 10, maxRadius: Math.max(system.width, system.height) * 0.8,
+        force: quantity * 5, life: 1.0, color: isSell ? '239, 68, 68' : '34, 197, 94'
+      });
+      system.core.shake = { x: (Math.random() - 0.5) * 20, y: (Math.random() - 0.5) * 20 };
+    } else {
+      system.core.targetRadius = BASE_RADIUS + Math.min(quantity * 20, 40); 
+    }
+
+    const spread = Math.PI / 2;
+    const baseAngle = isSell ? Math.PI / 2 : -Math.PI / 2;
+    const angle = baseAngle + (Math.random() - 0.5) * spread;
+
+    system.particles.push({
+      x: system.width / 2, y: system.core.y,
+      vx: Math.cos(angle) * (isWhale ? 3 : (isDust ? 10 : 5)),
+      vy: Math.sin(angle) * (isWhale ? 3 : (isDust ? 10 : 5)),
+      size: isWhale ? 20 : (isDust ? 1 : Math.max(2, quantity * 5)),
+      alpha: isWhale ? 1 : (isDust ? 0.3 : 0.8), 
+      color: isSell ? '#ef4444' : '#22c55e',
+      life: 1.0,
+      type: isSell ? 'sell' : 'buy',
+      isWhale: isWhale, isDust: isDust, hasHit: false
+    });
+
+    if (system.particles.length > MAX_PARTICLES) system.particles.shift();
+  };
+
+  // --- RENDER LOOP ---
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    let animationFrameId;
+
+    const resize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      systemRef.current.width = canvas.width;
+      systemRef.current.height = canvas.height;
+      systemRef.current.core.y = canvas.height / 2;
+    };
+    window.addEventListener('resize', resize);
+    resize();
+
+    const spawnDebris = (x, y, color, amount) => {
+        const system = systemRef.current;
+        for(let i=0; i<amount; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 3 + 1;
+            system.debris.push({
+                x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+                life: 1.0, color: color, size: Math.random() * 3
+            });
+        }
+        if (system.debris.length > MAX_DEBRIS) system.debris.splice(0, amount);
+    };
+
+    const render = () => {
+      const system = systemRef.current;
+      const { width, height } = canvas;
+      
+      if (system.core.anchorPrice === 0) system.core.anchorPrice = system.core.price;
+
+      const SCALE = 10;
+      const targetCoreY = (height / 2) - ((system.core.price - system.core.anchorPrice) * SCALE);
+      const targetVwapY = (height / 2) - ((system.vwap.current - system.core.anchorPrice) * SCALE);
+      system.core.y += (targetCoreY - system.core.y) * 0.1;
+      system.vwap.y += (targetVwapY - system.vwap.y) * 0.1;
+      system.core.anchorPrice += (system.core.price - system.core.anchorPrice) * 0.005;
+
+      system.core.shake.x *= 0.8; system.core.shake.y *= 0.8;
+      const coreX = (width / 2) + system.core.shake.x;
+      const coreY = system.core.y + system.core.shake.y;
+      const vwapY = system.vwap.y;
+
+      // Draw Background
+      ctx.fillStyle = 'rgba(17, 24, 39, 0.25)';
+      ctx.fillRect(0, 0, width, height);
+
+      // --- NEW: SYNAPTIC NETWORK (La partie "Cool") ---
+      // On connecte les particules proches pour visualiser la densité de l'activité (Essaim)
+      if (networkEnabled) {
+          ctx.beginPath();
+          // On évite la boucle O(n^2) totale en limitant la distance ou le nombre
+          // Ici on le fait sur toutes car n=200 est faible
+          for (let i = 0; i < system.particles.length; i++) {
+              for (let j = i + 1; j < system.particles.length; j++) {
+                  const p1 = system.particles[i];
+                  const p2 = system.particles[j];
+                  
+                  // On ne connecte pas les particules mortes ou explosées
+                  if (p1.hasHit || p2.hasHit) continue;
+
+                  const dx = p1.x - p2.x;
+                  const dy = p1.y - p2.y;
+                  const dist = Math.sqrt(dx*dx + dy*dy);
+
+                  if (dist < NETWORK_DISTANCE) {
+                      const opacity = 1 - (dist / NETWORK_DISTANCE);
+                      
+                      ctx.moveTo(p1.x, p1.y);
+                      ctx.lineTo(p2.x, p2.y);
+                      
+                      // Couleur dynamique : 
+                      // Si deux acheteurs (Vert) -> Vert
+                      // Si deux vendeurs (Rouge) -> Rouge
+                      // Si mixte -> Blanc/Bleu électrique (Friction)
+                      if (p1.type === p2.type) {
+                          ctx.strokeStyle = p1.type === 'buy' 
+                              ? `rgba(34, 197, 94, ${opacity * 0.3})`
+                              : `rgba(239, 68, 68, ${opacity * 0.3})`;
+                      } else {
+                          ctx.strokeStyle = `rgba(100, 200, 255, ${opacity * 0.2})`; // Electric
+                      }
+                  }
+              }
+          }
+          ctx.lineWidth = 1;
+          ctx.stroke();
+      }
+
+
+      // --- ELASTIC TENDON ---
+      const distVwap = Math.abs(coreY - vwapY);
+      const tension = Math.min(distVwap / (height/3), 1);
+      if (distVwap > 5) {
+          ctx.beginPath();
+          ctx.moveTo(coreX, coreY);
+          ctx.quadraticCurveTo(width / 2 + (Math.random()-0.5)*(tension*20), (coreY+vwapY)/2, width / 2, vwapY);
+          const r = Math.floor(34 + (205 * tension)), g = Math.floor(197 - (197 * tension)), b = Math.floor(94 - (94 * tension));
+          ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${0.5 + tension * 0.5})`;
+          ctx.lineWidth = Math.max(1, 4 * (1 - tension)); 
+          if (tension > 0.8) ctx.setLineDash([5, 5]); else ctx.setLineDash([]);
+          ctx.stroke(); ctx.setLineDash([]);
+          ctx.beginPath(); ctx.arc(width/2, vwapY, 4, 0, Math.PI*2);
+          ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.8)`; ctx.fill();
+      }
+
+      // --- WALLS & IMPACTS ---
+      const minRingRadius = system.core.radius + 20;
+      const ringStep = (Math.min(width,height)/2*0.8 - minRingRadius) / 10;
+      ctx.lineCap = 'round';
+      const drawRings = (orders, isAsks, colorBase) => {
+          orders.forEach((order, index) => {
+            const qty = parseFloat(order[1]);
+            const radius = minRingRadius + (index * ringStep);
+            const start = isAsks ? Math.PI+0.2 : 0.2, end = isAsks ? Math.PI*2-0.2 : Math.PI-0.2;
+            ctx.beginPath(); ctx.arc(coreX, coreY, radius, start, end);
+            ctx.strokeStyle = `rgba(${colorBase}, ${0.6 - (index * 0.04)})`;
+            ctx.lineWidth = Math.min(qty * 2, 8) + 1; ctx.stroke();
+            for (let imp of system.impacts) {
+                if (Math.abs(imp.radius - radius) < ringStep/2) {
+                    if ((imp.type === 'buy') === isAsks) {
+                         const safeAngle = imp.angle < 0 ? imp.angle + Math.PI*2 : imp.angle;
+                         ctx.beginPath(); 
+                         ctx.arc(coreX, coreY, radius, safeAngle - 0.3*imp.life, safeAngle + 0.3*imp.life);
+                         ctx.strokeStyle = `rgba(255, 255, 255, ${imp.life})`;
+                         ctx.lineWidth = (Math.min(qty * 2, 8) + 3) * imp.life; ctx.stroke();
+                    }
+                }
+            }
+          });
+      };
+      drawRings(system.depth.asks, true, '239, 68, 68'); 
+      drawRings(system.depth.bids, false, '34, 197, 94');
+
+      // --- PARTICLES ---
+      for (let i = system.particles.length - 1; i >= 0; i--) {
+        const p = system.particles[i];
+        p.x += p.vx; p.y += p.vy;
+        const dx = p.x - coreX, dy = p.y - coreY, dist = Math.sqrt(dx*dx + dy*dy);
+        
+        if (!p.hasHit && dist > minRingRadius) {
+            let targetType = '';
+            if (p.type === 'buy' && dy < 0) targetType = 'buy';
+            else if (p.type === 'sell' && dy > 0) targetType = 'sell';
+
+            if (targetType) {
+                p.hasHit = true; p.alpha = 0; p.life = 0;
+                system.impacts.push({ angle: Math.atan2(dy, dx), radius: minRingRadius, life: 1.0, type: targetType });
+                spawnDebris(p.x, p.y, targetType === 'buy' ? '#ef4444' : '#22c55e', Math.floor(p.size));
+                setStats(s => ({...s, erosion: s.erosion + 1}));
+                if (p.isWhale) { system.core.shake.x += (Math.random()-0.5)*5; system.core.shake.y += (Math.random()-0.5)*5; }
+            }
+        }
+        if (p.life <= 0 || dist > width) system.particles.splice(i, 1);
+      }
+
+      // --- DEBRIS ---
+      for (let i = system.debris.length - 1; i >= 0; i--) {
+          const d = system.debris[i];
+          d.x += d.vx; d.y += d.vy; d.life -= 0.05;
+          if(d.life <= 0) { system.debris.splice(i, 1); continue; }
+          ctx.globalAlpha = d.life; ctx.fillStyle = d.color;
+          ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.x+d.size, d.y+d.size); ctx.lineTo(d.x-d.size, d.y+d.size/2); ctx.fill();
+          ctx.globalAlpha = 1.0;
+      }
+      for (let i = system.impacts.length - 1; i >= 0; i--) {
+          system.impacts[i].life -= 0.1;
+          if(system.impacts[i].life <= 0) system.impacts.splice(i, 1);
+      }
+
+      // --- CORE ---
+      system.core.trail.push({ x: coreX, y: coreY, radius: system.core.radius, color: (system.core.price > system.core.prevPrice) ? '34, 197, 94' : '239, 68, 68' });
+      if (system.core.trail.length > TRAIL_LENGTH) system.core.trail.shift();
+      for (let i = 0; i < system.core.trail.length; i += 2) {
+          const pt = system.core.trail[i], age = i / system.core.trail.length; 
+          ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.radius*age*0.8, 0, Math.PI*2);
+          ctx.fillStyle = `rgba(${pt.color}, ${age*0.15})`; ctx.fill();
+      }
+      
+      system.core.radius += (system.core.targetRadius - system.core.radius) * 0.1;
+      system.core.targetRadius += (BASE_RADIUS - system.core.targetRadius) * 0.05;
+      const grad = ctx.createRadialGradient(coreX, coreY, system.core.radius*0.2, coreX, coreY, system.core.radius*2);
+      grad.addColorStop(0, `rgba(${system.core.price > system.core.prevPrice ? '34, 197, 94' : '239, 68, 68'}, 0.9)`);
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.beginPath(); ctx.arc(coreX, coreY, system.core.radius, 0, Math.PI*2); ctx.fillStyle = grad; ctx.fill();
+
+      // Shockwaves
+      for (let i = system.shockwaves.length - 1; i >= 0; i--) {
+        const sw = system.shockwaves[i]; sw.radius += 10; sw.life -= 0.02;
+        if (sw.life <= 0) { system.shockwaves.splice(i, 1); continue; }
+        ctx.beginPath(); ctx.arc(sw.x, sw.y, sw.radius, 0, Math.PI*2);
+        ctx.strokeStyle = `rgba(${sw.color}, ${sw.life*0.5})`; ctx.lineWidth = 4*sw.life; ctx.stroke();
+      }
+
+      ctx.font = 'bold 24px monospace'; ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(system.core.price.toFixed(2), coreX, coreY);
+      animationFrameId = requestAnimationFrame(render);
+    };
+
+    render();
+    return () => { window.removeEventListener('resize', resize); cancelAnimationFrame(animationFrameId); };
+  }, [networkEnabled]); // Re-bind if network toggled
+
+  return (
+    <div className="relative w-full h-screen bg-gray-900 overflow-hidden font-mono text-white">
+      <canvas ref={canvasRef} className="absolute top-0 left-0 w-full h-full block" />
+
+      <div className="absolute top-0 left-0 w-full h-full pointer-events-none p-6 flex flex-col justify-between">
+        
+        {/* Header */}
+        <div className="flex justify-between items-start pointer-events-auto">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tighter flex items-center gap-2">
+              <Activity className="w-6 h-6 text-blue-500" />
+              BIO-MIMETIC MARKET v7
+            </h1>
+            <p className="text-xs text-gray-400 mt-1">HFT NEURAL NETWORK ACTIVATED</p>
+          </div>
+          
+          <div className="flex items-center gap-4">
+             <button 
+                onClick={() => setNetworkEnabled(!networkEnabled)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full border transition-all duration-300 ${networkEnabled ? 'bg-purple-500/20 border-purple-500 text-purple-400' : 'bg-gray-800 border-gray-600 text-gray-400'}`}
+             >
+                <Share2 className="w-4 h-4" />
+                <span className="text-xs font-bold">{networkEnabled ? 'NETWORK ON' : 'NETWORK OFF'}</span>
+             </button>
+
+             <button 
+                onClick={toggleAudio}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full border transition-all duration-300 ${audioEnabled ? 'bg-blue-500/20 border-blue-500 text-blue-400' : 'bg-gray-800 border-gray-600 text-gray-400'}`}
+             >
+                {audioEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+                <span className="text-xs font-bold">{audioEnabled ? 'AUDIO LIVE' : 'INIT AUDIO'}</span>
+             </button>
+             
+             <div className={`flex items-center gap-2 px-3 py-1 rounded-full border ${isConnected ? 'border-green-500/30 bg-green-500/10 text-green-400' : 'border-red-500/30 bg-red-500/10 text-red-400'}`}>
+                {isConnected ? <Wifi className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
+                <span className="text-xs font-bold">{isConnected ? 'LIVE' : 'OFF'}</span>
+             </div>
+          </div>
+        </div>
+
+        {/* Stats Panel */}
+        <div className="pointer-events-auto w-full max-w-xs space-y-4">
+            <div className="bg-gray-800/60 backdrop-blur-md border border-gray-700/50 p-4 rounded-xl shadow-xl">
+                <div className="flex items-center justify-between mb-4">
+                    <span className="text-gray-400 text-xs uppercase tracking-wider font-bold">Tactical Feed</span>
+                    <Radio className={`w-4 h-4 ${stats.whales > 0 ? 'text-red-500 animate-pulse' : 'text-gray-600'}`} />
+                </div>
+                
+                <div className="space-y-3">
+                    <div className="flex justify-between items-end border-b border-gray-700 pb-2">
+                         <span className="text-sm text-gray-400">Wall Impacts</span>
+                         <span className="text-lg font-bold text-orange-500 animate-pulse">{stats.erosion}</span>
+                    </div>
+                    <div className="flex justify-between items-end border-b border-gray-700 pb-2">
+                        <span className="text-sm text-gray-400">Whale Activity</span>
+                        <span className="text-lg font-bold text-yellow-400">{stats.whales}</span>
+                    </div>
+                    <div className="flex justify-between items-end">
+                         <span className="text-sm text-gray-400">Session VWAP</span>
+                         <span className="text-lg font-bold text-teal-400">{vwapDisplay.toFixed(2)}</span>
+                    </div>
+                </div>
+            </div>
+
+            <div className="text-xs text-gray-500 bg-black/40 p-3 rounded-lg border border-gray-800 backdrop-blur-sm">
+                <p className="flex items-center gap-2 mb-2 font-bold text-gray-400">
+                    <ShieldAlert className="w-3 h-3" />
+                    <span>VISUAL KEY:</span>
+                </p>
+                <ul className="space-y-2">
+                    <li className="flex items-center gap-2">
+                        <span className="text-green-400 font-bold">●</span> 
+                        <span className="text-white">Buy Swarm</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                        <span className="text-red-400 font-bold">●</span> 
+                        <span className="text-white">Sell Swarm</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                         <div className="w-8 h-1 bg-blue-400/50 rounded-full"></div>
+                         <span className="text-white">Neural Link (HFT)</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}
