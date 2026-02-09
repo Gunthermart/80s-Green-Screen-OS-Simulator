@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AgenData v7.7 - Système Opérationnel</title>
+    <title>AgenData v8.9.3 - Design Data-Chip</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
@@ -11,14 +11,18 @@
     
     <style>
         :root {
-            --bg-dark: #070a13;
-            --bg-panel: #0f172a;
+            --bg-dark: #0f172a;
+            --bg-panel: #1e293b;
             --accent: #3b82f6;
-            --accent-glow: rgba(59, 130, 246, 0.5);
-            --warn: #ef4444; /* Rouge pour les biais */
-            --text-main: #f1f5f9;
+            --tag-bg: rgba(59, 130, 246, 0.1);
+            --tag-border: rgba(59, 130, 246, 0.3);
+            --tag-text: #93c5fd;
+            --audit: #f59e0b;
+            --entity: #10b981;
+            --signal: #8b5cf6;
+            --text-main: #f8fafc;
             --text-muted: #64748b;
-            --border: rgba(255, 255, 255, 0.06);
+            --border: rgba(255, 255, 255, 0.08);
             --font-main: 'Inter', sans-serif;
             --font-mono: 'JetBrains Mono', monospace;
         }
@@ -32,1033 +36,847 @@
             display: flex;
         }
 
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 10px; height: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 5px; border: 2px solid var(--bg-dark); }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
+        .custom-scrollbar::-webkit-scrollbar-corner { background: transparent; }
+
+        aside { transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease; }
+        aside.collapsed { width: 0 !important; opacity: 0; overflow: hidden; border-right: none; }
 
         .editor-layer {
             background: rgba(255, 255, 255, 0.01);
             border: 1px solid var(--border);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: border-color 0.2s;
+            display: flex;
+            flex-direction: column;
         }
-        .editor-layer:focus-within { border-color: var(--accent); transform: translateY(-2px); }
-
-        [contenteditable]:focus { outline: none; }
+        .editor-layer:focus-within { border-color: var(--accent); }
         
-        /* Styles spécifiques pour le mode lecture */
-        #main-editor.read-mode {
-            cursor: default;
-            color: #94a3b8; /* Texte légèrement plus terne */
+        #main-editor {
+            flex: 1;
+            overflow: auto;
+            white-space: pre-wrap;
+            outline: none;
+            word-wrap: break-word;
         }
-        #main-editor.read-mode ::selection {
-            background: rgba(196, 181, 253, 0.2); /* Selection violette en mode lecture */
-            color: #fff;
+        
+        #main-editor.read-mode { cursor: default; color: #94a3b8; }
+        #main-editor.read-mode ::selection { background: rgba(59, 130, 246, 0.2); color: #fff; }
+
+        #main-editor pre { white-space: pre; overflow-x: auto; }
+
+        /* --- NOUVEAU DESIGN DES INDEX (Data-Chip) --- */
+        .bracket-tag {
+            font-family: var(--font-mono);
+            font-size: 0.85em;
+            font-weight: 700;
+            color: var(--tag-text);
+            background: var(--tag-bg);
+            border: 1px solid var(--tag-border);
+            padding: 1px 6px;
+            border-radius: 4px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            margin: 0 3px;
+            vertical-align: middle;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 0 0 0 transparent;
+            letter-spacing: -0.5px;
         }
 
-        /* Styles des liens sémantiques - Version Élégante */
-        .concept-tag {
-            color: #c4b5fd; /* Violet Pastel (Violet-300) */
-            font-weight: 600;
-            cursor: pointer;
-            border-bottom: 1px dotted rgba(196, 181, 253, 0.4);
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-            padding: 0 2px;
+        .bracket-tag:hover {
+            border-color: #60a5fa;
+            background: rgba(59, 130, 246, 0.25);
+            color: #fff;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+            text-shadow: 0 0 8px rgba(96, 165, 250, 0.6);
         }
-        .concept-tag:hover {
-            color: #a78bfa; /* Violet-400 */
-            background: rgba(167, 139, 250, 0.1);
-            border-bottom-style: solid;
-            border-radius: 2px;
-            text-shadow: 0 0 8px rgba(167, 139, 250, 0.4);
+
+        .bracket-tag:active {
+            transform: translateY(0);
         }
 
         .agenda-card {
-            border-bottom: 1px solid var(--border);
-            border-left: 3px solid transparent;
-            transition: all 0.2s;
-            position: relative;
+            border-bottom: 1px solid var(--border); border-left: 3px solid transparent;
+            transition: all 0.2s; position: relative; background: rgba(255,255,255,0.01);
         }
-        .agenda-card.today { background: rgba(59, 130, 246, 0.03); border-left-color: var(--accent); }
+        .agenda-card:hover { background: rgba(255,255,255,0.03); }
+        .agenda-card.today { background: rgba(59, 130, 246, 0.05); border-left-color: var(--accent); }
         .agenda-card.flash-success { animation: flashHighlight 0.6s ease-out; }
         
-        @keyframes flashHighlight {
-            0% { background-color: rgba(59, 130, 246, 0.3); }
-            100% { background-color: transparent; }
-        }
+        @keyframes flashHighlight { 0% { background-color: rgba(59, 130, 246, 0.4); } 100% { background-color: transparent; } }
+
+        .agenda-editable { font-size: 0.8rem; line-height: 1.6; max-height: 8rem; overflow-y: auto; display: block; }
+        .agenda-separator { display: block; margin: 8px 0 4px 0; padding-top: 4px; border-top: 1px dashed var(--border); font-size: 0.6em; color: var(--text-muted); font-family: var(--font-mono); }
         
-        .agenda-editable {
-            font-size: 0.8rem;
-            line-height: 1.5;
-            max-height: 7.2rem;
-            overflow-y: auto;
-            overflow-x: auto;
-            white-space: nowrap;
-            display: block;
-            scrollbar-width: thin;
-            scrollbar-color: rgba(255,255,255,0.1) transparent;
+        /* Tactical Analysis Box V2 */
+        .analysis-box {
+            margin-bottom: 2rem; background: rgba(15, 23, 42, 0.95);
+            border: 1px solid var(--signal); border-radius: 8px; overflow: hidden;
+            box-shadow: 0 10px 40px rgba(139, 92, 246, 0.15);
+            animation: slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1);
         }
-        .agenda-editable::-webkit-scrollbar { width: 3px; height: 3px; }
-        .agenda-editable::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+        @keyframes slideDown { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
-        /* Marqueur de cristallisation */
-        .agenda-separator {
-            display: block;
-            margin: 8px 0 4px 0;
-            padding-top: 4px;
-            border-top: 1px dashed rgba(255,255,255,0.1);
-            font-size: 0.6em;
-            color: var(--accent);
-            font-family: var(--font-mono);
-            opacity: 0.7;
+        .ab-header {
+            background: rgba(139, 92, 246, 0.1); padding: 8px 16px; 
+            border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;
         }
+        .ab-title { font-family: var(--font-mono); font-size: 10px; font-weight: 800; color: var(--signal); text-transform: uppercase; letter-spacing: 1px; }
         
-        /* --- NOUVEAU STYLE PROFESSIONNEL POUR L'ANALYSE IA --- */
-        .ai-insight-panel {
-            margin-bottom: 3rem; /* Espace après le panel puisqu'il est au début */
-            background: rgba(15, 23, 42, 0.6);
-            border: 1px solid rgba(59, 130, 246, 0.2);
-            border-radius: 8px;
-            overflow: hidden;
-            backdrop-filter: blur(10px);
-            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-        }
-        .ai-insight-header {
-            background: rgba(59, 130, 246, 0.08);
-            padding: 12px 24px;
-            border-bottom: 1px solid rgba(59, 130, 246, 0.1);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .ai-title-group {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .ai-icon-box {
-            width: 20px;
-            height: 20px;
-            background: var(--accent);
-            border-radius: 4px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 10px;
-        }
-        .ai-panel-title {
-            font-family: var(--font-mono);
-            font-size: 11px;
-            font-weight: 700;
-            letter-spacing: 1px;
-            color: var(--accent);
-            text-transform: uppercase;
-        }
-        .ai-meta {
-            font-family: var(--font-mono);
-            font-size: 10px;
-            color: var(--text-muted);
-        }
-        .ai-insight-body {
-            padding: 0;
-        }
-        .ai-insight-row {
-            padding: 16px 24px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-            display: flex;
-            flex-direction: column; /* Changed to column to stack text and bias */
-            gap: 8px;
-            transition: background 0.2s;
-        }
-        .ai-insight-row:last-child { border-bottom: none; }
-        .ai-insight-row:hover { background: rgba(255, 255, 255, 0.02); }
+        .ab-grid { display: grid; grid-template-columns: 1fr; }
+        .ab-row { padding: 10px 16px; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; align-items: flex-start; gap: 12px; }
+        .ab-row:last-child { border-bottom: none; }
         
-        .ai-content-wrapper {
-            display: flex;
-            gap: 16px;
-            align-items: flex-start;
-            width: 100%;
-        }
-
-        .ai-index {
-            font-family: var(--font-mono);
-            color: var(--text-muted);
-            font-size: 10px;
-            font-weight: 700;
-            padding-top: 3px;
-            min-width: 20px;
-        }
-        .ai-text {
-            font-size: 0.9rem;
-            color: #e2e8f0;
-            line-height: 1.6;
-            flex: 1;
-        }
+        .ab-icon { color: var(--text-muted); font-size: 1.1em; padding-top: 2px; }
+        .ab-content { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+        .ab-label { font-size: 9px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .ab-value { font-size: 0.85rem; color: #e2e8f0; font-weight: 500; line-height: 1.4; }
+        .ab-highlight { color: var(--entity); font-weight: 700; }
         
-        /* Style des biais */
-        .ai-bias-box {
-            margin-top: 4px;
-            margin-left: 36px; /* Alignement sous le texte (20px index + 16px gap) */
-            padding: 8px 12px;
-            background: rgba(239, 68, 68, 0.1);
-            border-left: 2px solid var(--warn);
-            border-radius: 0 4px 4px 0;
-            font-family: var(--font-mono);
-            font-size: 0.75rem;
-            color: #fca5a5;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            width: fit-content;
-        }
-        .ai-bias-label {
-            font-weight: 800;
-            text-transform: uppercase;
-            color: var(--warn);
-        }
+        /* NEXUS STYLES */
+        .nexus-header { padding: 16px; border-bottom: 1px solid var(--border); background: rgba(59, 130, 246, 0.05); }
+        .nexus-title { font-size: 1.2rem; font-weight: 800; color: white; margin-bottom: 4px; }
+        .nexus-meta { font-size: 0.75rem; color: var(--text-muted); font-family: var(--font-mono); display: flex; gap: 12px; }
+        .nexus-section-title { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: var(--accent); margin: 16px 16px 8px 16px; letter-spacing: 1px; }
+        .heatmap-container { display: flex; gap: 2px; height: 40px; align-items: flex-end; padding: 0 16px; }
+        .heatmap-bar { flex: 1; background: var(--tag-bg); border-radius: 2px; min-height: 2px; transition: height 0.3s; }
+        .heatmap-bar.active { background: var(--accent); }
+        .network-item { padding: 8px 16px; border-bottom: 1px solid var(--border); cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: background 0.2s; }
+        .network-item:hover { background: rgba(255,255,255,0.05); }
+        .network-name { font-size: 0.85rem; color: var(--text-main); font-weight: 500; }
+        .network-score { font-size: 0.7rem; color: var(--tag-text); background: var(--tag-bg); padding: 1px 6px; border-radius: 4px; font-weight: 700; }
+        .context-item { padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 0.8rem; color: var(--text-muted); line-height: 1.5; }
+        .context-date { font-size: 0.7rem; color: var(--accent); font-weight: 700; margin-bottom: 4px; font-family: var(--font-mono); }
+        .context-snippet em { color: #fff; font-style: normal; font-weight: 600; background: rgba(255,255,255,0.1); }
 
-        /* Actions conformes : Visibles au focus et au survol */
-        .card-actions { 
-            opacity: 0; 
-            transform: translateY(3px); 
-            transition: all 0.2s; 
-            background: var(--bg-dark); /* Fond pour éviter transparence sur texte */
-            border-radius: 6px;
-            padding: 2px;
-            margin-right: -4px;
-        }
-        .agenda-card:hover .card-actions,
-        .agenda-card:focus-within .card-actions { 
-            opacity: 1; 
-            transform: translateY(0); 
-        }
+        .card-actions { opacity: 0; transform: translateY(2px); transition: all 0.2s; background: var(--bg-dark); border-radius: 4px; padding: 2px; position: absolute; right: 8px; top: 8px; border: 1px solid var(--border); }
+        .agenda-card:hover .card-actions, .agenda-card:focus-within .card-actions { opacity: 1; transform: translateY(0); }
+        .action-icon { padding: 4px; border-radius: 3px; color: #64748b; cursor: pointer; transition: all 0.1s; }
+        .action-icon:hover { color: var(--text-main); background: rgba(255,255,255,0.1); }
+        .action-icon.danger:hover { color: #ef4444; background: rgba(239, 68, 68, 0.1); }
         
-        /* Mobile: Toujours visible mais discret */
-        @media (max-width: 768px) {
-            .card-actions { opacity: 0.5; transform: none; }
-            .card-actions.active { opacity: 1; }
+        /* Updated Data-Chip Badge for Agenda Cards */
+        .card-tag-badge { 
+            font-size: 9px; 
+            font-family: var(--font-mono); 
+            font-weight: 700; 
+            background: rgba(59, 130, 246, 0.08); 
+            color: #93c5fd; 
+            padding: 1px 5px; 
+            border-radius: 3px; 
+            border: 1px solid rgba(59, 130, 246, 0.2); 
+            margin-left: 4px; 
+            display: inline-block; 
         }
 
-        .action-icon { padding: 4px; border-radius: 4px; color: #475569; cursor: pointer; background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; transition: all 0.1s; }
-        .action-icon:hover { background: #1e293b; color: white; border-color: var(--accent); }
-        .action-icon.active { background: var(--accent); color: white; }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(5px); z-index: 50; display: none; align-items: center; justify-content: center; }
+        .modal-box { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 12px; width: 90%; max-width: 600px; max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }
         
-        /* État Armé pour la suppression */
-        .action-icon.armed { background: #dc2626 !important; color: white !important; border-color: #ef4444 !important; }
+        .filter-banner { background: var(--tag-bg); border-bottom: 1px solid var(--accent); color: var(--tag-text); font-size: 0.75rem; font-weight: 700; font-family: var(--font-mono); padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; }
+        #macro-hud { position: fixed; bottom: 30px; right: 30px; background: #1e293b; border: 1px solid var(--border); padding: 16px; border-radius: 12px; display: none; z-index: 60; box-shadow: 0 10px 30px rgba(0,0,0,0.5); min-width: 200px; }
+        #macro-hud.visible { display: block; animation: slideUp 0.2s ease-out; }
+        .hud-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .hud-key { font-family: var(--font-mono); color: var(--accent); font-weight: 700; font-size: 0.7rem; }
+        .hud-val { color: var(--text-muted); font-size: 0.7rem; }
+        .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #1e293b; border: 1px solid var(--accent); padding: 8px 16px; border-radius: 8px; font-size: 0.8rem; font-weight: 600; opacity: 0; pointer-events: none; transition: opacity 0.3s; z-index: 100; }
+        .recording-pulse { animation: recordPulse 1.5s infinite; color: #ef4444; }
+        @keyframes recordPulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
 
-        .modal-overlay {
-            position: fixed; inset: 0; background: rgba(2, 6, 23, 0.8);
-            backdrop-filter: blur(12px); z-index: 100;
-            display: none; align-items: center; justify-content: center;
-        }
-        .modal-box { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 24px; width: 95%; max-width: 900px; max-height: 85vh; overflow: hidden; display: flex; flex-direction: column; }
-
-        #macro-hud {
-            position: fixed; bottom: 40px; right: 40px;
-            background: rgba(15, 23, 42, 0.9);
-            backdrop-filter: blur(20px);
-            border: 1px solid var(--border);
-            padding: 24px; border-radius: 20px;
-            display: none; z-index: 150; width: 320px;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.6);
-            transform: translateY(10px);
-            transition: transform 0.2s ease-out;
-        }
-        #macro-hud.visible { transform: translateY(0); display: block; }
-        
-        .hud-header { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
-        .hud-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); }
-        .hud-title { font-size: 10px; font-weight: 900; letter-spacing: 0.15em; color: var(--text-main); text-transform: uppercase; }
-
-        .hud-grid { display: grid; gap: 4px; }
-        .hud-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 8px; background: rgba(255,255,255,0.02); border: 1px solid transparent; transition: all 0.2s; }
-        .hud-row:hover { background: rgba(59, 130, 246, 0.05); border-color: rgba(59, 130, 246, 0.2); }
-        
-        .hud-key { font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: var(--accent); }
-        .hud-val { font-size: 11px; color: var(--text-muted); font-weight: 500; }
-
-        /* Correction positionnement menus contextuels : FIXED */
-        #smart-toolbar { 
-            position: fixed; /* Changé de absolute à fixed pour ignorer le scroll parent */
-            display: none; background: #0f172a; border: 1px solid var(--border); 
-            border-radius: 8px; padding: 4px; z-index: 200; box-shadow: 0 10px 25px rgba(0,0,0,0.4);
-        }
-
-        .search-category-title { font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.2em; color: var(--accent); margin: 20px 0 10px 0; display: flex; align-items: center; gap: 8px; }
-        .search-category-title::after { content: ''; flex: 1; height: 1px; background: rgba(59, 130, 246, 0.2); }
-        .search-item { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 16px; transition: all 0.2s; cursor: pointer; }
-        .search-item:hover { background: rgba(255,255,255,0.04); border-color: var(--accent); transform: scale(1.01); }
-        .search-meta { display: flex; justify-content: space-between; margin-bottom: 6px; }
-        .search-date { font-size: 10px; font-weight: 900; color: var(--accent); font-family: var(--font-mono); }
-        .search-body { font-size: 12px; color: var(--text-main); line-height: 1.5; opacity: 0.8; }
-
-        .help-tab { color: var(--text-muted); transition: all 0.2s; cursor: pointer; padding-bottom: 12px; border-bottom: 2px solid transparent; }
+        /* HELP MODAL SPECIFIC */
+        .help-tab { padding: 8px 16px; cursor: pointer; border-bottom: 2px solid transparent; color: var(--text-muted); font-weight: 600; font-size: 0.8rem; }
         .help-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
-        .help-section-title { font-family: var(--font-mono); font-weight: 900; letter-spacing: 0.1em; color: var(--accent); font-size: 11px; margin-top: 2rem; margin-bottom: 0.75rem; border-left: 3px solid var(--accent); padding-left: 10px; text-transform: uppercase; }
-        .help-step-box { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 1.25rem; margin-bottom: 1rem; }
-        .code-inline { font-family: var(--font-mono); background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 4px; color: #fff; font-size: 11px; }
-
-        /* Animation pour le statut IA */
-        @keyframes pulse-ring {
-            0% { transform: scale(0.8); opacity: 0.5; }
-            100% { transform: scale(2); opacity: 0; }
-        }
+        .help-content h3 { color: var(--accent); font-weight: 700; margin-top: 1.5rem; margin-bottom: 0.5rem; font-size: 0.9rem; text-transform: uppercase; }
+        .help-content p { color: #cbd5e1; margin-bottom: 0.8rem; font-size: 0.85rem; line-height: 1.5; }
+        .help-content ul { list-style: disc; padding-left: 1.2rem; margin-bottom: 0.8rem; color: #cbd5e1; font-size: 0.85rem; }
+        .help-content code { background: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 3px; font-family: var(--font-mono); font-size: 0.8em; color: #e2e8f0; }
     </style>
 </head>
 <body class="flex-col md:flex-row">
 
-    <aside class="w-full md:w-[380px] border-r border-white/5 flex flex-col shrink-0 bg-black/20">
-        <header class="h-14 flex items-center justify-between px-4 border-b border-white/5 bg-white/[0.02]">
-            <div class="flex items-center gap-2">
-                <button onclick="Core.Agenda.shiftWeek(-1)" class="p-1.5 hover:bg-white/5 rounded text-slate-500">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7" stroke-width="2.5"/></svg>
+    <aside id="main-sidebar" class="w-full md:w-[360px] border-r border-white/5 flex flex-col shrink-0 bg-[#0b1120]">
+        <header class="h-14 flex items-center justify-between px-4 border-b border-white/5">
+            <div id="date-controls" class="flex items-center gap-2">
+                <button onclick="Core.Binder.shiftWeek(-1)" class="p-1.5 hover:bg-white/5 rounded text-slate-500">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7" stroke-width="2"/></svg>
                 </button>
-                <span id="ui-week-range" class="text-[10px] font-mono font-black uppercase text-slate-400"></span>
-                <button onclick="Core.Agenda.shiftWeek(1)" class="p-1.5 hover:bg-white/5 rounded text-slate-500">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" stroke-width="2.5"/></svg>
+                <span id="ui-week-range" class="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wide"></span>
+                <button onclick="Core.Binder.shiftWeek(1)" class="p-1.5 hover:bg-white/5 rounded text-slate-500">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" stroke-width="2"/></svg>
                 </button>
+                <button onclick="Core.Binder.jumpToToday()" class="ml-2 text-[9px] font-bold bg-blue-500/10 text-blue-400 px-2 py-1 rounded hover:bg-blue-500/20">AUJ.</button>
             </div>
-            <button onclick="Core.Agenda.jumpToToday()" class="text-[9px] font-black bg-blue-500/10 text-blue-400 px-3 py-1.5 rounded border border-blue-500/20">AUJOURD'HUI</button>
+            <div class="flex bg-white/5 rounded p-0.5">
+                <button onclick="Core.UI.toggleSidebarView('pages')" id="btn-view-pages" class="px-2 py-1 rounded text-[10px] font-bold uppercase text-blue-400 bg-slate-800 shadow-sm transition-all">Pages</button>
+                <button onclick="Core.UI.toggleSidebarView('index')" id="btn-view-index" class="px-2 py-1 rounded text-[10px] font-bold uppercase text-slate-500 hover:text-slate-300 transition-all">Nexus</button>
+            </div>
         </header>
-        <div id="ui-agenda-list" class="flex-1 overflow-y-auto custom-scrollbar"></div>
-    </aside>
 
-    <main class="flex-1 flex flex-col relative overflow-hidden bg-white/[0.01]">
-        <header class="h-14 border-b border-white/5 flex items-center justify-between px-6 bg-black/20 shrink-0">
-            <div class="flex items-center gap-1">
-                <button onclick="Core.Editor.toggleMode()" id="ui-mode-btn" class="p-2 text-slate-400 hover:text-white" title="Basculer Mode Lecture/Édition (Alt+V)">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" stroke-width="2"/></svg>
-                </button>
-                <div class="h-5 w-px bg-white/10 mx-2"></div>
-                
-                <!-- GROUPE OUTILS ÉDITION -->
-                <div id="ui-editing-tools" class="flex items-center gap-1 transition-opacity duration-200">
-                    <button onclick="Core.Editor.contrast()" class="p-2 text-slate-300 hover:text-white" title="Contraste"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/><path d="M12 4v16c4.41 0 8-3.59 8-8s-3.59-8-8-8z"/></svg></button>
-                    <button onclick="Core.Editor.highlight()" class="p-2 text-yellow-500/60 hover:text-yellow-400" title="Surligner"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" stroke-width="2"/></svg></button>
-                    <button onclick="Core.Editor.addLine('start')" class="p-2 text-emerald-500/60 hover:text-emerald-400" title="Haut (Alt+N)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M7 11l5-5m0 0l5 5m-5-5v12" stroke-width="2"/></svg></button>
-                    <button onclick="Core.Editor.insertLine()" class="p-2 text-blue-500/60 hover:text-blue-400" title="Insérer ligne"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4" stroke-width="2.5"/></svg></button>
-                    <button onclick="Core.Editor.addLine('end')" class="p-2 text-emerald-500/60 hover:text-emerald-400" title="Bas (Alt+E)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M17 13l-5 5m0 0l-5-5m5 5V6" stroke-width="2"/></svg></button>
+        <div class="flex-1 overflow-y-auto custom-scrollbar relative">
+            <div id="view-pages">
+                <div id="ui-filter-banner" class="hidden filter-banner">
+                    <span id="ui-filter-text">[FILTRE]</span>
+                    <button onclick="Core.Binder.clearFilter()" class="hover:text-white font-bold">✕</button>
+                </div>
+                <div id="ui-binder-content"></div>
+            </div>
+            <div id="view-index" class="hidden">
+                <div id="ui-nexus-content">
+                    <!-- Default content loaded via JS -->
                 </div>
             </div>
+        </div>
+    </aside>
 
-            <div class="flex items-center gap-1">
-                <!-- NOUVEAU STATUT IA : SYSTEM.READY -->
-                <button id="ai-trigger" onclick="Core.AI.challenge()" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800/50 border border-slate-700 hover:border-violet-500/50 transition-all group mr-2">
-                    <div class="relative flex items-center justify-center">
-                        <div id="ai-pulse" class="w-1.5 h-1.5 rounded-full bg-slate-500 transition-colors duration-300 group-hover:bg-violet-400"></div>
-                    </div>
-                    <span id="ai-label" class="text-[9px] font-mono font-black text-slate-500 tracking-widest group-hover:text-violet-300">SYSTEM.READY</span>
+    <main class="flex-1 flex flex-col relative overflow-hidden bg-[#0f172a]">
+        <header class="h-14 border-b border-white/5 flex items-center justify-between px-6 shrink-0">
+            <div class="flex items-center gap-2">
+                <button onclick="Core.UI.toggleSidebar()" class="p-2 text-slate-500 hover:text-white" title="Basculer Sidebar (Alt+B)">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" stroke-width="2"/></svg>
+                </button>
+                <div class="h-4 w-px bg-white/10 mx-1"></div>
+                <button onclick="Core.Editor.toggleMode()" id="ui-mode-btn" class="p-2 text-slate-400 hover:text-white transition-colors" title="Lecture/Édition (Alt+V)">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" stroke-width="2"/></svg>
+                </button>
+                <div class="h-4 w-px bg-white/10 mx-1"></div>
+                
+                <button onclick="Core.Editor.format('bold')" class="p-1.5 text-slate-500 hover:text-white font-bold font-serif" title="Gras">B</button>
+                <button onclick="Core.Editor.highlight()" class="p-1.5 text-yellow-500/60 hover:text-yellow-400" title="Surligner"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" stroke-width="2"/></svg></button>
+                <button onclick="Core.Editor.insertTagManual()" class="p-1.5 text-blue-500/80 hover:text-blue-400 font-mono font-bold" title="Insérer Tag (Alt+T)">[]</button>
+                <button onclick="Core.Editor.addLine('end')" class="p-1.5 text-slate-500 hover:text-emerald-400" title="Ligne"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M17 13l-5 5m0 0l-5-5m5 5V6" stroke-width="2"/></svg></button>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <button id="ai-trigger" onclick="Core.AI.analyze()" class="flex items-center gap-2 px-3 py-1.5 rounded bg-violet-500/10 border border-violet-500/20 hover:border-violet-500/50 transition-all group">
+                    <span class="w-1.5 h-1.5 rounded-full bg-violet-500 group-hover:animate-pulse"></span>
+                    <span id="ai-label" class="text-[10px] font-mono font-bold text-violet-500/80 uppercase">Analyse</span>
                 </button>
 
-                <button onclick="Core.UI.openMacros()" class="p-2 text-slate-500 hover:text-purple-400" title="Macros"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" stroke-width="2"/></svg></button>
-                <button id="ui-voice-btn" onclick="Core.Voice.toggle()" class="p-2 text-slate-500" title="Vocal"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" stroke-width="2"/></svg></button>
-                <button onclick="Core.UI.openSearch()" class="p-2 text-slate-500" title="Recherche"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-width="2.5"/></svg></button>
-                <div class="h-5 w-px bg-white/10 mx-2"></div>
-                <button onclick="Core.IO.triggerImport()" class="p-2 text-slate-500 hover:text-blue-400" title="Importer"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" stroke-width="2"/></svg></button>
-                <button onclick="Core.IO.exportMD()" class="p-2 text-slate-500 hover:text-blue-400" title="Exporter"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" stroke-width="2"/></svg></button>
-                <button onclick="Core.Editor.clear()" class="p-2 text-slate-500 hover:text-red-400" title="Vider brouillon"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-width="2"/></svg></button>
-                <button onclick="Core.UI.openHelp()" class="p-2 text-slate-500 hover:text-yellow-500" title="Aide (F1)"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-width="2"/></svg></button>
+                <div class="h-4 w-px bg-white/10 mx-1"></div>
+                
+                <button id="ui-voice-btn" onclick="Core.Voice.toggle()" class="p-2 text-slate-500 hover:text-white" title="Dictée"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" stroke-width="2"/></svg></button>
+                <button onclick="Core.UI.openSearch()" class="p-2 text-slate-500 hover:text-white" title="Rechercher (Ctrl+F)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-width="2"/></svg></button>
+                
+                <!-- BOUTON AIDE -->
+                <button onclick="Core.UI.openHelp()" class="p-2 text-slate-500 hover:text-yellow-400" title="Manuel Opérationnel (F1)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-width="2"/></svg></button>
+                
+                <div class="h-4 w-px bg-white/10 mx-1"></div>
+
+                <!-- ICÔNES I/O -->
+                <button onclick="Core.IO.triggerImport()" class="p-2 text-slate-500 hover:text-blue-400" title="Restaurer Backup (Upload)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" stroke-width="2"/></svg></button>
+                <button onclick="Core.IO.export()" class="p-2 text-slate-500 hover:text-blue-400" title="Sauvegarder JSON (Download)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" stroke-width="2"/></svg></button>
+                
+                <button onclick="Core.Editor.clear()" class="p-2 text-slate-500 hover:text-red-400" title="Vider"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-width="2"/></svg></button>
             </div>
         </header>
 
-        <div class="flex-1 overflow-y-auto p-6 md:p-12 custom-scrollbar">
-            <div class="max-w-3xl mx-auto editor-layer rounded-2xl">
-                <div id="main-editor" contenteditable="true" class="p-12 md:p-16 min-h-[60vh] text-slate-300 outline-none" placeholder="Capture brute..."></div>
+        <div class="flex-1 overflow-hidden p-6 md:p-12 flex flex-col">
+            <div class="max-w-4xl mx-auto w-full editor-layer rounded-lg flex-1 overflow-hidden relative">
+                <div id="main-editor" contenteditable="true" class="p-12 md:p-16 text-slate-300 outline-none text-base leading-7 custom-scrollbar" placeholder="Flux de pensée..."></div>
             </div>
-        </div>
-
-        <div id="smart-toolbar" class="flex items-center">
-            <div id="ui-toolbar-days" class="flex gap-1 px-1"></div>
         </div>
         
         <input type="file" id="import-input" class="hidden" accept=".json" onchange="Core.IO.importData(event)">
     </main>
 
-    <!-- MODALES (Search, Macros, Help) -->
-    <div id="modal-search" class="modal-overlay" onclick="Core.UI.closeModals()">
-        <div class="modal-box !bg-[#0b0f19]" onclick="event.stopPropagation()">
-            <div class="p-8 border-b border-white/5">
-                <div class="flex items-center gap-4 bg-white/5 p-4 rounded-xl">
-                    <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-width="3"/></svg>
-                    <input type="text" id="search-input" class="w-full bg-transparent text-white text-xl outline-none font-medium" placeholder="Recherche profonde..." oninput="Core.Search.exec(this.value)">
-                </div>
-            </div>
-            <div id="search-results" class="p-6 overflow-y-auto custom-scrollbar h-[50vh] space-y-3"></div>
-        </div>
-    </div>
+    <!-- COMPONENTS -->
+    <div id="toast" class="toast">Action effectuée</div>
 
-    <div id="modal-macros" class="modal-overlay" onclick="Core.UI.closeModals()">
-        <div class="modal-box max-w-2xl !p-0" onclick="event.stopPropagation()">
-            <div class="p-6 bg-white/[0.02] border-b border-white/10 flex justify-between items-center">
-                <h2 class="text-lg font-black uppercase tracking-widest text-white">Gestionnaire Macros</h2>
-                <button onclick="Core.UI.closeModals()" class="p-2 hover:bg-white/5 rounded-full text-slate-500"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="2.5"/></svg></button>
-            </div>
-            <div id="ui-macro-manager-list" class="flex-1 overflow-y-auto p-6 space-y-3 custom-scrollbar max-h-[40vh]"></div>
-            <div class="p-6 border-t border-white/10 bg-white/[0.02]">
-                <div class="grid grid-cols-5 gap-3">
-                    <input type="text" id="ui-new-macro-trigger" placeholder="Seq (ex: s,d)" class="col-span-2 bg-black/40 border border-white/10 p-3 text-xs text-blue-400 font-mono rounded-xl outline-none">
-                    <input type="text" id="ui-new-macro-text" placeholder="Expansion..." class="col-span-3 bg-black/40 border border-white/10 p-3 text-xs text-white rounded-xl outline-none">
-                    <button onclick="Core.Macros.add()" class="col-span-5 py-3 bg-blue-500 text-white text-[10px] font-black uppercase rounded-xl">Enregistrer Protocole</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div id="modal-help" class="modal-overlay" onclick="Core.UI.closeModals()">
-        <div class="modal-box !max-w-4xl" onclick="event.stopPropagation()">
-            <div class="p-8 bg-black/40 flex flex-col gap-4">
-                <div class="flex justify-between items-start">
-                    <h2 class="text-xl font-black uppercase tracking-widest text-white">Manuel Opérationnel v7.7</h2>
-                    <button onclick="Core.UI.closeModals()" class="p-2 text-slate-500 bg-white/5 rounded-full"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="2.5"/></svg></button>
-                </div>
-                <div class="flex gap-6 border-b border-white/5 overflow-x-auto">
-                    <button id="tab-strat" onclick="Core.UI.switchHelp('strat')" class="help-tab active pb-3 text-[11px] font-black uppercase whitespace-nowrap">Philosophie</button>
-                    <button id="tab-comp" onclick="Core.UI.switchHelp('comp')" class="help-tab pb-3 text-[11px] font-black uppercase whitespace-nowrap">Composants</button>
-                    <button id="tab-syntax" onclick="Core.UI.switchHelp('syntax')" class="help-tab pb-3 text-[11px] font-black uppercase whitespace-nowrap">Syntaxe & Touches</button>
-                    <button id="tab-workflow" onclick="Core.UI.switchHelp('workflow')" class="help-tab pb-3 text-[11px] font-black uppercase whitespace-nowrap">Exemple de Flux</button>
-                </div>
-            </div>
-            <div id="ui-help-content" class="p-10 overflow-y-auto custom-scrollbar text-[13px] text-slate-400 space-y-8 leading-relaxed"></div>
-        </div>
-    </div>
-
-    <!-- HUD TACTIQUE -->
     <div id="macro-hud">
-        <div class="hud-header">
-            <div class="hud-dot"></div>
-            <div class="hud-title">Expansion Séquences (Alt)</div>
-        </div>
-        <div id="ui-macro-list-hud" class="hud-grid"></div>
+        <div class="text-[10px] font-bold text-slate-500 uppercase mb-3 border-b border-white/10 pb-2">Macros Système</div>
+        <div id="ui-macro-list-hud" class="flex flex-col gap-1"></div>
     </div>
 
-    <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 border border-white/10 px-6 py-3 rounded-xl text-xs font-bold transition-all opacity-0 pointer-events-none z-[200]"></div>
+    <!-- SEARCH MODAL -->
+    <div id="modal-search" class="modal-overlay" onclick="Core.UI.closeModals()">
+        <div class="modal-box bg-[#1e293b]" onclick="event.stopPropagation()">
+            <div class="p-4 border-b border-white/5">
+                <input type="text" id="search-input" class="w-full bg-transparent text-white text-lg outline-none font-medium" placeholder="Rechercher dans le classeur..." oninput="Core.Binder.search(this.value)">
+            </div>
+            <div id="search-results" class="p-4 overflow-y-auto custom-scrollbar h-[50vh] space-y-2"></div>
+        </div>
+    </div>
+
+    <!-- HELP MODAL -->
+    <div id="modal-help" class="modal-overlay" onclick="Core.UI.closeModals()">
+        <div class="modal-box bg-[#1e293b] max-w-[800px]" onclick="event.stopPropagation()">
+            <div class="flex border-b border-white/5 overflow-x-auto">
+                <div class="help-tab active" onclick="Core.UI.switchHelp('start', this)">Philosophie</div>
+                <div class="help-tab" onclick="Core.UI.switchHelp('nexus', this)">Le Nexus</div>
+                <div class="help-tab" onclick="Core.UI.switchHelp('shortcuts', this)">Contrôles</div>
+                <div class="help-tab" onclick="Core.UI.switchHelp('data', this)">Données</div>
+            </div>
+            <div id="ui-help-content" class="p-8 overflow-y-auto custom-scrollbar h-[60vh] help-content"></div>
+        </div>
+    </div>
 
     <script>
         const Core = {
-            State: { currentMonday: null, isReadMode: false, macroBuffer: [], macroTimeout: null, recognition: null, isRecording: false, macros: {}, activeConcept: null },
             DB: null,
+            State: { 
+                currentMonday: null, isReadMode: false, activeTagFilter: null,
+                macroBuffer: [], macroTimeout: null, recognition: null, isRecording: false,
+                macros: {'t,g': '[]', 't,o': '✅', 'i,m': '⚠️', 'n,t': '📝'}
+            },
+
             Init: async function() {
-                this.DB = new Dexie("AgenDataDB_v7");
-                this.DB.version(1).stores({ meta: "id", agenda: "date", macros: "trigger" });
+                this.DB = new Dexie("AgenData_V8");
+                this.DB.version(1).stores({ entries: "date", meta: "id" });
                 this.State.currentMonday = this.Utils.getMonday(new Date());
-                await this.Storage.loadAll();
-                this.Agenda.render();
+                await this.IO.loadDraft();
+                this.Binder.render();
                 this.Listeners.setup();
                 this.Voice.init();
-                this.Utils.toast("NOYAU V7.7 ACTIF");
+                this.Utils.toast("V8.9.3 : DATA-CHIP READY");
             },
+
             Utils: {
                 getMonday: d => { d = new Date(d); const day = d.getDay(), diff = d.getDate() - day + (day === 0 ? -6 : 1); return new Date(d.setDate(diff)).setHours(0,0,0,0); },
                 formatDate: d => d.toISOString().split('T')[0],
-                toast: msg => { const el = document.getElementById('toast'); if(el) { el.textContent = msg; el.style.opacity = "1"; el.style.transform = "translateX(-50%) translateY(-10px)"; setTimeout(() => { el.style.opacity = "0"; el.style.transform = "translateX(-50%) translateY(0px)"; }, 2000); } },
+                toast: msg => { const el = document.getElementById('toast'); el.textContent = msg; el.style.opacity = "1"; setTimeout(() => el.style.opacity = "0", 2000); },
                 debounce: (fn, ms) => { let timeout; return (...args) => { clearTimeout(timeout); timeout = setTimeout(() => fn.apply(this, args), ms); }; },
-                stripHTML: (html) => { const tmp = document.createElement("DIV"); tmp.innerHTML = html; return tmp.textContent || tmp.innerText || ""; }
-            },
-            Storage: {
-                saveEditor: async () => { if(Core.State.isReadMode) return; const html = document.getElementById('main-editor').innerHTML; await Core.DB.meta.put({id: 'editor', content: html, ts: Date.now()}); },
-                loadAll: async () => { 
-                    const ed = await Core.DB.meta.get('editor'); 
-                    if(ed) {
-                        ed.content = Core.Editor.autoLink(ed.content); // Apply auto-link on load
-                        document.getElementById('main-editor').innerHTML = ed.content;
-                    }
-                    const m = await Core.DB.macros.toArray(); 
-                    Core.State.macros = {}; m.forEach(x => Core.State.macros[x.trigger] = x.text);
-                    if(!m.length) { 
-                        const d = {'s,d': '🌱', 'g,r': '🌿', 'p,e': '🌳', 'c,o': '<span class="concept-tag">[[...]]</span>'};
-                        for(let k in d) { await Core.DB.macros.put({trigger: k, text: d[k]}); Core.State.macros[k] = d[k]; }
-                    }
+                stripHTML: (html) => { const tmp = document.createElement("DIV"); tmp.innerHTML = html; return tmp.textContent || tmp.innerText || ""; },
+                tagRegex: /\[([a-zA-Z0-9\u00C0-\u00FF\s_\-]+)\]/g,
+                extractTags: (html) => {
+                    const text = Core.Utils.stripHTML(html);
+                    const tags = [];
+                    let match;
+                    const regex = /\[([a-zA-Z0-9\u00C0-\u00FF\s_\-]+)\]/g;
+                    while ((match = regex.exec(text)) !== null) { tags.push(match[1]); }
+                    return tags;
                 }
             },
-            Search: {
-                exec: async (query) => {
-                    const res = document.getElementById('search-results'); if (!res) return;
-                    res.innerHTML = ''; 
-                    
-                    // Nettoyage de la requête (enlève les crochets si présents)
-                    const cleanQuery = query.replace(/[\[\]]/g, '').trim();
-                    if (!cleanQuery || cleanQuery.length < 2) return;
-                    
-                    const term = cleanQuery.toLowerCase();
-                    const allData = await Core.DB.agenda.toArray();
-                    const draftContent = Core.Utils.stripHTML(document.getElementById('main-editor').innerHTML);
-                    
-                    if (draftContent.toLowerCase().includes(term)) {
-                        res.innerHTML += `<div class="search-category-title">Brouillon Actuel</div><div class="search-item" onclick="Core.UI.closeModals()"><div class="search-body">${draftContent.substring(0, 200)}...</div></div>`;
+
+            Nexus: {
+                analyzeTag: async function(tag) {
+                    const cleanTag = tag.replace(/[\[\]]/g, '');
+                    const allEntries = await Core.DB.entries.toArray();
+                    const relevant = allEntries.filter(e => e.content.includes(cleanTag)).sort((a,b) => b.date.localeCompare(a.date));
+                    if(relevant.length === 0) return { tag: cleanTag, count: 0, relations: [], timeline: [], mentions: [] };
+                    const relationsMap = {};
+                    relevant.forEach(entry => {
+                        const tagsInEntry = Core.Utils.extractTags(entry.content);
+                        tagsInEntry.forEach(t => { if(t !== cleanTag) relationsMap[t] = (relationsMap[t] || 0) + 1; });
+                    });
+                    const relations = Object.entries(relationsMap).sort((a,b) => b[1] - a[1]).slice(0, 10); 
+                    const mentions = relevant.slice(0, 5).map(e => {
+                        const raw = Core.Utils.stripHTML(e.content);
+                        const idx = raw.indexOf(cleanTag);
+                        const start = Math.max(0, idx - 40);
+                        const end = Math.min(raw.length, idx + 40 + cleanTag.length);
+                        let snippet = raw.substring(start, end);
+                        if(start > 0) snippet = "..." + snippet; if(end < raw.length) snippet = snippet + "...";
+                        snippet = snippet.replace(cleanTag, `<em>${cleanTag}</em>`);
+                        return { date: e.date, text: snippet };
+                    });
+                    const timeline = []; const today = new Date();
+                    for(let i=29; i>=0; i--) {
+                        const d = new Date(); d.setDate(today.getDate() - i); const key = Core.Utils.formatDate(d);
+                        const hit = relevant.find(e => e.date === key); timeline.push({ date: key, count: hit ? 1 : 0 });
                     }
-                    const archiveResults = allData.filter(x => x.content.toLowerCase().includes(term)).sort((a,b) => b.date.localeCompare(a.date));
-                    if (archiveResults.length > 0) {
-                        res.innerHTML += `<div class="search-category-title">Archives Agenda</div>`;
-                        archiveResults.forEach(x => {
-                            const item = document.createElement('div'); item.className = 'search-item mb-3';
-                            item.innerHTML = `<div class="search-meta"><span class="search-date">${x.date}</span></div><div class="search-body">${Core.Utils.stripHTML(x.content).substring(0, 200)}...</div>`;
-                            item.onclick = () => { Core.State.currentMonday = Core.Utils.getMonday(new Date(x.date)); Core.Agenda.render().then(() => Core.UI.closeModals()); };
-                            res.appendChild(item);
-                        });
+                    return { tag: cleanTag, count: relevant.length, relations, timeline, mentions };
+                },
+
+                render: async function(tagName) {
+                    const container = document.getElementById('ui-nexus-content');
+                    container.innerHTML = '<div class="p-8 text-center text-xs text-slate-500">Analyse Neurale...</div>';
+                    const data = await this.analyzeTag(tagName);
+                    if(data.count === 0) {
+                        container.innerHTML = `<div class="nexus-header"><div class="nexus-title">${data.tag}</div><div class="nexus-meta">Concept Nouveau</div></div>`;
+                        return;
                     }
-                }
+                    let relationsHTML = ''; data.relations.forEach(([relTag, count]) => { relationsHTML += `<div class="network-item" onclick="Core.Nexus.open('${relTag}')"><span class="network-name">${relTag}</span><span class="network-score">${count}</span></div>`; });
+                    let mentionsHTML = ''; data.mentions.forEach(m => { mentionsHTML += `<div class="context-item" onclick="Core.Binder.goToDate('${m.date}')"><div class="context-date">${m.date}</div><div class="context-snippet">${m.text}</div></div>`; });
+                    let heatHTML = ''; data.timeline.forEach(t => { heatHTML += `<div class="heatmap-bar ${t.count > 0 ? 'active' : ''}" style="height:${t.count > 0 ? '100%' : '10%'}"></div>`; });
+                    const html = `
+                        <div class="nexus-header"><div class="nexus-title">${data.tag}</div><div class="nexus-meta"><span>${data.count} occurrences</span><span>Dernière: ${data.mentions[0]?.date || 'N/A'}</span></div></div>
+                        <div class="nexus-section-title">Activité (30j)</div><div class="heatmap-container">${heatHTML}</div>
+                        <div class="nexus-section-title">Réseau Neuronal (Co-occurrence)</div><div class="flex flex-col">${relationsHTML || '<div class="p-4 text-xs text-slate-600">Aucune corrélation trouvée.</div>'}</div>
+                        <div class="nexus-section-title">Contexte Récent</div><div class="flex flex-col">${mentionsHTML}</div>
+                    `;
+                    container.innerHTML = html;
+                },
+
+                open: function(tag) { Core.UI.toggleSidebarView('index'); this.render(tag); }
             },
-            Agenda: {
+
+            Binder: { 
                 render: async function() {
-                    const container = document.getElementById('ui-agenda-list'); if (!container) return;
+                    const container = document.getElementById('ui-binder-content');
                     container.innerHTML = '';
+                    if (Core.State.activeTagFilter) {
+                        const all = await Core.DB.entries.toArray();
+                        const relevant = all.filter(e => e.content.includes(Core.State.activeTagFilter));
+                        relevant.sort((a,b) => b.date.localeCompare(a.date));
+                        if(relevant.length === 0) container.innerHTML = `<div class="p-8 text-center text-xs text-slate-600">Aucune fiche avec ce tag.</div>`;
+                        relevant.forEach(entry => this.createCard(container, new Date(entry.date), entry));
+                        return;
+                    }
                     const start = new Date(Core.State.currentMonday);
-                    document.getElementById('ui-week-range').textContent = `${start.getDate()}/${start.getMonth()+1} - ${new Date(start.getTime() + 6*86400000).getDate()}/${start.getMonth()+1}`;
+                    const end = new Date(start.getTime() + 6*86400000);
+                    document.getElementById('ui-week-range').textContent = `${start.getDate()}/${start.getMonth()+1} - ${end.getDate()}/${end.getMonth()+1}`;
                     for(let i=0; i<7; i++) {
                         const current = new Date(start.getTime() + i*86400000);
                         const key = Core.Utils.formatDate(current);
-                        const isToday = key === Core.Utils.formatDate(new Date());
-                        const data = await Core.DB.agenda.get(key);
-                        const card = document.createElement('div'); card.className = `agenda-card px-5 py-4 ${isToday ? 'today' : ''}`;
-                        card.id = `agenda-card-${key}`; // ID pour animation
-                        card.innerHTML = `
-                            <div class="flex justify-between items-center mb-1">
-                                <span class="text-[9px] font-black text-slate-600 uppercase">${current.toLocaleDateString('fr-FR', {weekday:'short', day:'numeric'})}</span>
-                                <div class="card-actions flex gap-1">
-                                    <button onclick="Core.Agenda.importFromDraft('${key}')" class="action-icon" title="Cristalliser le brouillon ici"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 14l-7 7m0 0l-7-7m7 7V3" stroke-width="3"/></svg></button>
-                                    <button onclick="Core.Agenda.copyToClipboard('${key}')" class="action-icon" title="Copier"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2" stroke-width="2.5"/></svg></button>
-                                    <button onclick="Core.Agenda.returnToDraft('${key}')" class="action-icon" title="Renvoyer au brouillon"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 10l7-7m0 0l7 7m-7-7v18" stroke-width="3"/></svg></button>
-                                    <button onclick="Core.Agenda.clear(this, '${key}')" class="action-icon text-red-500/50 hover:text-red-400 hover:border-red-500/30" title="Effacer"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-width="3"/></svg></button>
-                                </div>
-                            </div>
-                            <div contenteditable="true" oninput="Core.Agenda.save('${key}', this.innerHTML)" class="agenda-editable text-slate-400 outline-none custom-scrollbar leading-relaxed"> ${data ? Core.Editor.autoLink(data.content) : ''}</div>
-                        `;
-                        container.appendChild(card);
+                        const data = await Core.DB.entries.get(key);
+                        this.createCard(container, current, data, true);
                     }
                 },
-                save: async (date, content) => { await Core.DB.agenda.put({date, content, ts: Date.now()}); },
-                shiftWeek: (dir) => { Core.State.currentMonday = new Date(Core.State.currentMonday.getTime() + (dir * 7 * 86400000)); Core.Agenda.render(); },
-                jumpToToday: () => { Core.State.currentMonday = Core.Utils.getMonday(new Date()); Core.Agenda.render(); },
-                importFromDraft: async (key) => {
+                createCard: function(container, dateObj, data, showControls = false) {
+                    const key = Core.Utils.formatDate(dateObj);
+                    const isToday = key === Core.Utils.formatDate(new Date());
+                    const card = document.createElement('div');
+                    card.className = `agenda-card px-4 py-3 ${isToday ? 'today' : ''}`;
+                    card.id = `card-${key}`;
+                    const tags = data ? Core.Utils.extractTags(data.content) : [];
+                    const tagsHTML = tags.map(t => `<span class="card-tag-badge">${t}</span>`).join('');
+                    const header = document.createElement('div');
+                    header.className = "flex justify-between items-start mb-1";
+                    header.innerHTML = `<div class="flex flex-col"><span class="text-[10px] font-bold text-slate-500 uppercase font-mono">${dateObj.toLocaleDateString('fr-FR', {weekday:'short', day:'numeric', month:'numeric'})}</span><div class="mt-1">${tagsHTML}</div></div>`;
+                    if (showControls) {
+                        const actions = document.createElement('div'); actions.className = "card-actions flex gap-1";
+                        actions.innerHTML = `<button onclick="Core.Binder.returnToDraft('${key}')" class="action-icon" title="Renvoyer au brouillon">⬆️</button><button onclick="Core.Binder.copyCard('${key}')" class="action-icon" title="Copier"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2" stroke-width="2"/></svg></button><button onclick="Core.Binder.importDraft('${key}')" class="action-icon" title="Archiver ici"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 14l-7 7m0 0l-7-7m7 7V3" stroke-width="2"/></svg></button><button onclick="Core.Binder.clearCard('${key}')" class="action-icon danger" title="Effacer"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-width="3"/></svg></button>`;
+                        header.appendChild(actions);
+                    }
+                    card.appendChild(header);
+                    const contentDiv = document.createElement('div');
+                    contentDiv.className = "agenda-editable text-slate-300 outline-none custom-scrollbar";
+                    contentDiv.contentEditable = showControls; 
+                    contentDiv.innerHTML = data ? Core.Editor.processContent(data.content) : '';
+                    if(showControls) {
+                        contentDiv.oninput = Core.Utils.debounce(() => {
+                            Core.DB.entries.put({date: key, content: contentDiv.innerHTML});
+                            const newTags = Core.Utils.extractTags(contentDiv.innerHTML);
+                            const tagContainer = header.querySelector('.mt-1');
+                            if(tagContainer) tagContainer.innerHTML = newTags.map(t => `<span class="card-tag-badge">${t}</span>`).join('');
+                        }, 1000);
+                    }
+                    card.appendChild(contentDiv); container.appendChild(card);
+                },
+                renderIndex: async function(filter = "") {
+                    const container = document.getElementById('ui-nexus-content');
+                    const all = await Core.DB.entries.toArray();
+                    const tagCounts = {};
+                    all.forEach(entry => {
+                        const matches = entry.content.match(Core.Utils.tagRegex);
+                        if(matches) matches.forEach(tag => { tagCounts[tag] = (tagCounts[tag] || 0) + 1; });
+                    });
+                    const sortedTags = Object.entries(tagCounts)
+                        .sort((a,b) => b[1] - a[1])
+                        .filter(([tag]) => tag.toLowerCase().includes(filter.toLowerCase()));
+                    if(sortedTags.length === 0) { container.innerHTML = `<div class="p-4 text-center text-xs text-slate-600">Aucun index.</div>`; return; }
+                    let listHTML = '<div class="nexus-section-title">Index Global</div><div class="flex flex-col">';
+                    sortedTags.forEach(([tag, count]) => {
+                        listHTML += `<div class="network-item" onclick="Core.Nexus.open('${tag.replace(/[\[\]]/g, '')}')"><span class="network-name">${tag}</span><span class="network-score">${count}</span></div>`;
+                    });
+                    listHTML += '</div>';
+                    container.innerHTML = listHTML;
+                },
+                importDraft: async function(key) {
                     const editor = document.getElementById('main-editor');
-                    let contentToMove = "";
-                    let isSelection = false;
-                    const selection = window.getSelection();
-
-                    // 1. Détecter si on déplace une sélection ou tout le bloc
-                    if (!selection.isCollapsed && editor.contains(selection.anchorNode)) {
-                        const range = selection.getRangeAt(0);
-                        const container = document.createElement('div');
-                        container.appendChild(range.cloneContents());
-                        contentToMove = container.innerHTML;
-                        range.deleteContents(); // RETRAIT IMMÉDIAT DU BROUILLON (Loi de Conservation)
-                        isSelection = true;
-                    } else {
-                        contentToMove = editor.innerHTML;
-                        if (!contentToMove.trim()) return;
-                        editor.innerHTML = ""; // VIDAGE DU BROUILLON
-                    }
-                    
-                    if (!contentToMove.trim()) return;
-
-                    // 2. Préparer le bloc pour l'agenda avec timestamp
-                    const now = new Date();
-                    const timeStr = now.toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'});
-                    const entry = await Core.DB.agenda.get(key);
-                    const currentContent = entry ? entry.content : '';
-                    
-                    // Ajout d'un séparateur si du contenu existe déjà
-                    const separator = currentContent ? `<span class="agenda-separator" contenteditable="false">${timeStr}</span>` : '';
-                    const newContent = currentContent + separator + contentToMove;
-
-                    // 3. Sauvegarde Atomique
-                    await Core.DB.agenda.put({date: key, content: newContent});
-                    await Core.Storage.saveEditor(); // Sauvegarde le brouillon vidé/modifié
-                    
-                    // 4. Feedback Visuel
-                    await Core.Agenda.render();
-                    const card = document.getElementById(`agenda-card-${key}`);
+                    const raw = editor.innerText.trim();
+                    if(!raw) return;
+                    const currentEntry = await Core.DB.entries.get(key);
+                    const time = new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+                    const sep = currentEntry && currentEntry.content ? `<div class="agenda-separator">${time}</div>` : '';
+                    const newContent = (currentEntry ? currentEntry.content : '') + sep + editor.innerHTML;
+                    await Core.DB.entries.put({date: key, content: newContent});
+                    editor.innerHTML = '';
+                    Core.IO.saveDraft();
+                    this.render(); 
+                    const card = document.getElementById(`card-${key}`);
                     if(card) card.classList.add('flash-success');
-                    
-                    Core.Utils.toast(isSelection ? "SÉLECTION CRISTALLISÉE" : "FLUX CRISTALLISÉ");
+                    Core.Utils.toast("ARCHIVÉ DANS LE CLASSEUR");
                 },
-                copyToClipboard: async (key) => {
-                    const entry = await Core.DB.agenda.get(key); if(!entry) return;
+                returnToDraft: async function(key) {
+                    const entry = await Core.DB.entries.get(key);
+                    if(!entry || !entry.content) return;
+                    const editor = document.getElementById('main-editor');
+                    const spacing = editor.innerHTML.trim() ? '<br><br>' : '';
+                    editor.innerHTML = editor.innerHTML + spacing + entry.content;
+                    Core.IO.saveDraft();
+                    Core.Utils.toast("CONTENU RENVOYÉ AU BROUILLON");
+                },
+                copyCard: async function(key) {
+                    const entry = await Core.DB.entries.get(key); if(!entry) return;
                     const t = document.createElement('textarea'); t.value = Core.Utils.stripHTML(entry.content); document.body.appendChild(t); t.select();
                     document.execCommand('copy'); document.body.removeChild(t); Core.Utils.toast("COPIÉ");
                 },
-                returnToDraft: async (key) => {
-                    const entry = await Core.DB.agenda.get(key);
-                    if (!entry) return; 
-
-                    const editor = document.getElementById('main-editor');
-                    const currentContent = editor.innerHTML;
-                    
-                    const newContent = entry.content + (currentContent ? '<br><br>' : '') + currentContent;
-                    
-                    editor.innerHTML = newContent;
-                    await Core.Storage.saveEditor(); 
-                    
-                    await Core.DB.agenda.delete(key); 
-                    Core.Agenda.render();
-                    Core.Utils.toast("RETOUR AU BROUILLON");
-                },
-                clear: (btn, key) => {
-                    if (btn.getAttribute('data-confirm') === 'true') {
-                        Core.DB.agenda.delete(key).then(() => {
-                            Core.Agenda.render();
-                            Core.Utils.toast("SUPPRESSION CONFIRMÉE");
-                        });
-                    } else {
-                        btn.setAttribute('data-confirm', 'true');
-                        btn.classList.add('armed'); // Utilise la classe CSS .armed
-                        
-                        Core.Utils.toast("CLIQUER À NOUVEAU POUR TUER");
-                        
-                        setTimeout(() => {
-                            if (btn) {
-                                btn.setAttribute('data-confirm', 'false');
-                                btn.classList.remove('armed');
-                            }
-                        }, 2000);
+                clearCard: async function(key) {
+                    if(confirm("Confirmer la suppression de cette fiche ?")) {
+                        await Core.DB.entries.delete(key);
+                        this.render();
+                        Core.Utils.toast("FICHE SUPPRIMÉE");
                     }
-                }
-            },
-            Editor: {
-                contrast: () => { if(Core.State.isReadMode) return; document.execCommand('backColor', false, '#ffffff'); document.execCommand('foreColor', false, '#000000'); Core.Storage.saveEditor(); },
-                highlight: () => { if(Core.State.isReadMode) return; document.execCommand('hiliteColor', false, '#fde047'); document.execCommand('foreColor', false, '#000'); Core.Storage.saveEditor(); },
-                addLine: (pos) => {
-                    if(Core.State.isReadMode) return;
-                    const div = document.createElement('div'); 
-                    div.innerHTML = '<br>'; 
-                    const ed = document.getElementById('main-editor');
-                    
-                    pos === 'start' ? ed.prepend(div) : ed.append(div);
-                    
-                    // Force le focus visuel sur la nouvelle ligne
-                    const range = document.createRange();
-                    const sel = window.getSelection();
-                    range.selectNodeContents(div);
-                    range.collapse(true); // Place le curseur au début du div
-                    sel.removeAllRanges();
-                    sel.addRange(range);
-                    
-                    // Scroll vers la ligne si elle est hors champ
-                    div.scrollIntoView({behavior: "smooth", block: "nearest"});
-                    
-                    // Focus l'éditeur pour être sûr
-                    ed.focus();
-                    
-                    Core.Storage.saveEditor();
                 },
-                insertLine: () => { if(Core.State.isReadMode) return; document.execCommand('insertHTML', false, '<div><br></div>'); Core.Storage.saveEditor(); },
-                clear: () => { if(Core.State.isReadMode) return; document.getElementById('main-editor').innerHTML = ""; Core.Storage.saveEditor(); },
-                toggleMode: () => {
-                    Core.State.isReadMode = !Core.State.isReadMode;
-                    const isRead = Core.State.isReadMode;
-                    const el = document.getElementById('main-editor');
-                    
-                    if (isRead) {
-                        // Scan et transforme les liens texte en objets cliquables
-                        el.innerHTML = Core.Editor.autoLink(el.innerHTML);
-                    }
-
-                    el.contentEditable = !isRead;
-                    el.classList.toggle('read-mode', isRead);
-                    
-                    const tools = document.getElementById('ui-editing-tools');
-                    if(tools) {
-                        if(isRead) tools.classList.add('opacity-30', 'pointer-events-none');
-                        else tools.classList.remove('opacity-30', 'pointer-events-none');
-                    }
-                    
-                    const btn = document.getElementById('ui-mode-btn');
-                    btn.innerHTML = isRead 
-                        ? `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" stroke-width="2"/></svg>`
-                        : `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" stroke-width="2"/></svg>`;
-                    
-                    btn.title = isRead ? "Retour ÉDITION (Alt+V)" : "Passer en LECTURE (Alt+V)";
-                    btn.classList.toggle('text-blue-500', isRead);
-
-                    if(!isRead) el.focus();
-                    
-                    Core.Utils.toast(isRead ? "MODE LECTURE : LIENS ACTIFS" : "MODE ÉDITION : ACTIF");
+                filterByTag: function(tag) {
+                    Core.State.activeTagFilter = tag; 
+                    document.getElementById('ui-filter-banner').classList.remove('hidden');
+                    document.getElementById('ui-filter-text').textContent = `${tag}`;
+                    Core.UI.toggleSidebarView('pages');
+                    this.render();
                 },
-                autoLink: (html) => {
-                    // ÉTAPE 1 : Nettoyage (Strip)
-                    // On retire les balises span.concept-tag existantes pour revenir au texte brut [[...]]
-                    // Cela évite l'imbrication infinie <span...><span...>[[txt]]</span></span> qui casse le rendu
-                    let clean = html.replace(/<span class="concept-tag"[^>]*>(.*?)<\/span>/g, "$1");
-                    
-                    // ÉTAPE 2 : Génération (Wrap)
-                    // On détecte les motifs [[...]] et on les enveloppe proprement
-                    return clean.replace(/\[\[([^\]]+)\]\]/g, (match, text) => {
-                        // Sécurisation basique des guillemets pour l'attribut HTML
-                        const safeAttr = text.replace(/"/g, '&quot;'); 
-                        return `<span class="concept-tag" data-link="${safeAttr}">[[${text}]]</span>`;
+                clearFilter: function() {
+                    Core.State.activeTagFilter = null;
+                    document.getElementById('ui-filter-banner').classList.add('hidden');
+                    this.render();
+                },
+                shiftWeek: (dir) => { 
+                    Core.State.currentMonday = new Date(Core.State.currentMonday.getTime() + (dir * 7 * 86400000)); 
+                    Core.State.activeTagFilter = null; 
+                    document.getElementById('ui-filter-banner').classList.add('hidden');
+                    Core.Binder.render(); 
+                },
+                jumpToToday: () => {
+                     Core.State.currentMonday = Core.Utils.getMonday(new Date());
+                     Core.State.activeTagFilter = null;
+                     document.getElementById('ui-filter-banner').classList.add('hidden');
+                     Core.Binder.render();
+                     Core.Utils.toast("RETOUR AUJOURD'HUI");
+                },
+                goToDate: (dateStr) => {
+                     Core.State.currentMonday = Core.Utils.getMonday(new Date(dateStr));
+                     Core.UI.toggleSidebarView('pages');
+                     setTimeout(() => { const card = document.getElementById(`card-${dateStr}`); if(card) card.classList.add('flash-success'); }, 300);
+                },
+                search: async function(query) {
+                    const container = document.getElementById('search-results');
+                    container.innerHTML = '';
+                    if(!query) return;
+                    const all = await Core.DB.entries.toArray();
+                    const q = query.toLowerCase();
+                    const results = all.filter(e => e.content.toLowerCase().includes(q));
+                    results.forEach(res => {
+                        const div = document.createElement('div');
+                        div.className = "bg-white/5 p-3 rounded cursor-pointer hover:bg-white/10";
+                        div.onclick = () => { 
+                            Core.State.currentMonday = Core.Utils.getMonday(new Date(res.date));
+                            Core.Binder.render();
+                            Core.UI.closeModals();
+                        };
+                        div.innerHTML = `<div class="text-[10px] font-mono text-blue-400 mb-1">${res.date}</div><div class="text-xs text-slate-300 line-clamp-2">${Core.Utils.stripHTML(res.content)}</div>`;
+                        container.appendChild(div);
                     });
                 }
             },
-            IO: {
-                triggerImport: () => document.getElementById('import-input').click(),
-                importData: (e) => {
-                    const file = e.target.files[0]; if(!file) return;
-                    const reader = new FileReader(); reader.onload = async (ev) => {
-                        try { 
-                            const data = JSON.parse(ev.target.result); 
-                            if(data.agenda) for(let entry of data.agenda) await Core.DB.agenda.put(entry); 
-                            if(data.editor) await Core.DB.meta.put({id: 'editor', content: data.editor, ts: Date.now()});
-                            Core.Utils.toast("RESTAURATION TERMINÉE"); setTimeout(() => location.reload(), 1000);
-                        } catch(err) { Core.Utils.toast("ERREUR STRUCTURE JSON"); }
-                    }; reader.readAsText(file);
+
+            Editor: {
+                toggleMode: () => {
+                    const el = document.getElementById('main-editor');
+                    Core.State.isReadMode = !Core.State.isReadMode;
+                    el.contentEditable = !Core.State.isReadMode;
+                    el.classList.toggle('read-mode', Core.State.isReadMode);
+                    if(Core.State.isReadMode) el.innerHTML = Core.Editor.processContent(el.innerHTML);
+                    Core.Utils.toast(Core.State.isReadMode ? "MODE LECTURE" : "MODE ÉDITION");
                 },
-                exportMD: async () => {
-                    const agenda = await Core.DB.agenda.toArray(); const meta = await Core.DB.meta.get('editor');
-                    const blob = new Blob([JSON.stringify({ agenda, editor: meta ? meta.content : "" })], {type: 'application/json'});
-                    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `AgenData_Backup.json`; a.click();
-                    Core.Utils.toast("DONNÉES EXPORTÉES");
+                processContent: (html) => {
+                    let clean = html.replace(/<span class="bracket-tag"[^>]*>(.*?)<\/span>/g, "$1");
+                    return clean.replace(Core.Utils.tagRegex, (match) => {
+                        const safeMatch = match.replace(/'/g, "\\'");
+                        return `<span class="bracket-tag" onclick="Core.Nexus.open('${safeMatch.replace(/[\[\]]/g, '')}')">${match}</span>`;
+                    });
+                },
+                insertTagManual: () => {
+                    const sel = window.getSelection();
+                    if (sel.getRangeAt && sel.rangeCount) {
+                        const range = sel.getRangeAt(0);
+                        const node = document.createTextNode("[]");
+                        range.insertNode(node);
+                        range.setStart(node, 1);
+                        range.setEnd(node, 1);
+                        sel.removeAllRanges();
+                        sel.addRange(range);
+                    }
+                    document.getElementById('main-editor').focus();
+                },
+                format: (cmd) => { document.execCommand(cmd, false, null); Core.IO.saveDraft(); },
+                highlight: () => { document.execCommand('hiliteColor', false, '#fde047'); document.execCommand('foreColor', false, '#000'); Core.IO.saveDraft(); },
+                contrast: () => { document.execCommand('backColor', false, '#ffffff'); document.execCommand('foreColor', false, '#000000'); Core.IO.saveDraft(); },
+                addLine: (pos) => {
+                     const div = document.createElement('div'); div.innerHTML = '<br>';
+                     const ed = document.getElementById('main-editor');
+                     pos === 'start' ? ed.prepend(div) : ed.append(div);
+                     div.scrollIntoView({behavior: "smooth", block: "nearest"});
+                     Core.IO.saveDraft();
+                },
+                clear: () => { 
+                    if(confirm('Tout effacer ?')) { document.getElementById('main-editor').innerHTML = ''; Core.IO.saveDraft(); }
                 }
             },
-            AI: { 
-                challenge: async function() { 
-                    const btn = document.getElementById('ai-trigger');
-                    const label = document.getElementById('ai-label');
-                    const pulse = document.getElementById('ai-pulse');
-                    const editor = document.getElementById('main-editor');
-                    
-                    // 1. État : Analyse (Visuel Tactique)
-                    btn.classList.add('border-violet-500', 'bg-violet-500/10');
-                    pulse.classList.add('bg-violet-400', 'shadow-[0_0_10px_#a78bfa]');
-                    
-                    const ripple = document.createElement('div');
-                    ripple.style.cssText = `position:absolute; inset:-2px; border-radius:50%; border:1px solid #a78bfa; animation:pulse-ring 1.5s infinite;`;
-                    pulse.appendChild(ripple);
 
-                    label.classList.add('text-violet-300');
-                    label.textContent = "EXTRACTING...";
-                    
-                    // 2. EXTRACTION ET ANALYSE (Simulation Sémantique)
-                    const rawText = Core.Utils.stripHTML(editor.innerHTML);
-                    
-                    const sentences = rawText.split(/[.!?\n]/).filter(s => s.trim().length > 15);
-
-                    // --- BIBLIOTHÈQUE DE BIAIS HEURISTIQUE (MODE CONSEILLER BRUTAL) ---
-                    const biasLibrary = [
-                        { label: "Biais de Confirmation", query: "Ne cherchez-vous que ce qui valide votre opinion ?" },
-                        { label: "Coût Irrécupérable", query: "Continuez-vous juste parce que vous avez déjà investi du temps ?" },
-                        { label: "Illusion de Contrôle", query: "Sous-estimez-vous la part de hasard dans ce résultat ?" },
-                        { label: "Pensée de Groupe", query: "Est-ce votre idée ou celle de la majorité ?" },
-                        { label: "Biais de Survivant", query: "Ignorez-vous les échecs invisibles dans cette analyse ?" },
-                        { label: "Ancrage", query: "Êtes-vous trop influencé par la première information reçue ?" },
-                        { label: "Angle Mort", query: "Quelle est la faille évidente que vous refusez de voir ?" },
-                        { label: "Dunning-Kruger", query: "Avez-vous vraiment la compétence pour affirmer cela ?" },
-                        { label: "Biais de Récence", query: "Donnez-vous trop d'importance aux derniers événements ?" }
-                    ];
-
-                    setTimeout(() => {
-                        if (sentences.length === 0) {
-                            label.textContent = "INSUFFICIENT DATA";
-                            label.classList.replace('text-violet-300', 'text-red-400');
-                            pulse.classList.replace('bg-violet-400', 'bg-red-500');
-                            pulse.classList.replace('shadow-[0_0_10px_#a78bfa]', 'shadow-[0_0_10px_#ef4444]');
-                            ripple.style.borderColor = '#ef4444';
-                            Core.Utils.toast("MATIÈRE BRUTE INSUFFISANTE");
-
-                            setTimeout(() => {
-                                btn.classList.remove('border-violet-500', 'bg-violet-500/10');
-                                pulse.classList.remove('bg-red-500', 'shadow-[0_0_10px_#ef4444]', 'bg-violet-400', 'shadow-[0_0_10px_#a78bfa]');
-                                label.classList.remove('text-red-400', 'text-violet-300');
-                                label.textContent = "SYSTEM.READY";
-                                ripple.remove();
-                            }, 2000);
-                            return;
-                        }
-
-                        // 3. ALGORYTHME DE "PESÉE" DYNAMIQUE (Ratio 1/3)
-                        let limit = Math.max(2, Math.ceil(sentences.length / 3));
-                        limit = Math.min(limit, 7); 
-                        
-                        if(sentences.length <= 3) limit = sentences.length;
-
-                        const topSentences = sentences
-                            .sort((a, b) => b.length - a.length)
-                            .slice(0, limit);
-                            
-                        const now = new Date();
-                        const timeID = `${now.getHours()}${now.getMinutes()}`;
-                        
-                        let synthesisHTML = `
-                            <div class="ai-insight-panel">
-                                <div class="ai-insight-header">
-                                    <div class="ai-title-group">
-                                        <div class="ai-icon-box">✨</div>
-                                        <div class="ai-panel-title">MATRICE DE SYNTHÈSE & CRITIQUE</div>
-                                    </div>
-                                    <div class="ai-meta">ID-${timeID} // V7.7</div>
-                                </div>
-                                <div class="ai-insight-body">
-                        `;
-                        
-                        topSentences.forEach((sentence, index) => {
-                            const trimmed = sentence.trim();
-                            
-                            const cleanSentence = trimmed.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"");
-                            const words = cleanSentence.split(/\s+/);
-                            
-                            const rawKeyword = words.reduce((a, b) => a.length > b.length ? a : b, "");
-                            
-                            const parts = rawKeyword.split("'");
-                            const coreConcept = parts[parts.length - 1]; 
-
-                            let processedLine = trimmed;
-                            if (coreConcept.length > 4) {
-                                const regex = new RegExp(rawKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-                                processedLine = processedLine.replace(regex, `[[${coreConcept}]]`);
-                            }
-                            
-                            const idx = (index + 1).toString().padStart(2, '0');
-                            
-                            // Sélection aléatoire d'un biais pour challenger l'idée
-                            const randomBias = biasLibrary[Math.floor(Math.random() * biasLibrary.length)];
-
-                            synthesisHTML += `
-                                <div class="ai-insight-row">
-                                    <div class="ai-content-wrapper">
-                                        <div class="ai-index">${idx}</div>
-                                        <div class="ai-text">${processedLine}</div>
-                                        <div class="ai-seed-tag"><span>🌱</span> IDÉE</div>
-                                    </div>
-                                    <div class="ai-bias-box">
-                                        <span class="ai-bias-label">⚠️ ${randomBias.label} :</span>
-                                        <span>${randomBias.query}</span>
-                                    </div>
-                                </div>
-                            `;
-                        });
-                        
-                        synthesisHTML += `</div></div><br>`; 
-                        
-                        editor.insertAdjacentHTML('afterbegin', synthesisHTML);
-                        
-                        editor.innerHTML = Core.Editor.autoLink(editor.innerHTML);
-                        Core.Storage.saveEditor();
-
-                        // 4. Feedback Succès
-                        label.textContent = "CRITICAL ANALYSIS DONE";
-                        pulse.classList.replace('bg-violet-400', 'bg-emerald-400');
-                        pulse.classList.replace('shadow-[0_0_10px_#a78bfa]', 'shadow-[0_0_10px_#34d399]');
-                        ripple.style.borderColor = '#34d399';
-                        label.classList.replace('text-violet-300', 'text-emerald-400');
-                        
-                        Core.Utils.toast(`${limit} POINTS CRITIQUES DÉTECTÉS`);
-
-                        setTimeout(() => {
-                            btn.classList.remove('border-violet-500', 'bg-violet-500/10');
-                            pulse.classList.remove('bg-emerald-400', 'shadow-[0_0_10px_#34d399]', 'bg-violet-400', 'shadow-[0_0_10px_#a78bfa]');
-                            label.classList.remove('text-emerald-400', 'text-violet-300');
-                            label.textContent = "SYSTEM.READY";
-                            ripple.remove();
-                        }, 2000);
-                    }, 1500); 
-                } 
+            Macros: {
+                handle: function(key) {
+                    if(Core.State.isReadMode) return;
+                    clearTimeout(Core.State.macroTimeout); 
+                    Core.State.macroBuffer.push(key.toLowerCase()); 
+                    const seq = Core.State.macroBuffer.join(',');
+                    if(Core.State.macros[seq]) { 
+                        document.execCommand('insertText', false, Core.State.macros[seq]); 
+                        Core.State.macroBuffer = []; 
+                    }
+                    Core.State.macroTimeout = setTimeout(() => { Core.State.macroBuffer = []; }, 800);
+                },
+                renderHUD: function() {
+                    const hudList = document.getElementById('ui-macro-list-hud');
+                    hudList.innerHTML = '';
+                    Object.entries(Core.State.macros).forEach(([k, v]) => {
+                        const row = document.createElement('div'); row.className = "hud-row";
+                        row.innerHTML = `<span class="hud-key">${k.toUpperCase().replace(',', '+')}</span><span class="hud-val">${v}</span>`;
+                        hudList.appendChild(row);
+                    });
+                }
             },
+
             Voice: {
                 init: function() {
                     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
                     if(SR) {
                         Core.State.recognition = new SR(); Core.State.recognition.lang = 'fr-FR';
-                        Core.State.recognition.onstart = () => { Core.State.isRecording = true; document.getElementById('ui-voice-btn').classList.add('text-red-500'); };
-                        Core.State.recognition.onresult = (e) => { if(!Core.State.isReadMode) { document.execCommand('insertText', false, e.results[0][0].transcript); Core.Storage.saveEditor(); } };
-                        Core.State.recognition.onend = () => { Core.State.isRecording = false; document.getElementById('ui-voice-btn').classList.remove('text-red-500'); };
+                        Core.State.recognition.onstart = () => { Core.State.isRecording = true; document.getElementById('ui-voice-btn').classList.add('recording-pulse'); };
+                        Core.State.recognition.onresult = (e) => { if(!Core.State.isReadMode) { document.execCommand('insertText', false, e.results[0][0].transcript); Core.IO.saveDraft(); } };
+                        Core.State.recognition.onend = () => { Core.State.isRecording = false; document.getElementById('ui-voice-btn').classList.remove('recording-pulse'); };
                     }
                 },
                 toggle: function() { if(!Core.State.recognition || Core.State.isReadMode) return; Core.State.isRecording ? Core.State.recognition.stop() : Core.State.recognition.start(); }
             },
-            Macros: {
-                handle: function(key) {
-                    if(Core.State.isReadMode) return;
-                    clearTimeout(Core.State.macroTimeout); Core.State.macroBuffer.push(key.toLowerCase()); const seq = Core.State.macroBuffer.join(',');
-                    if(Core.State.macros[seq]) { document.execCommand('insertHTML', false, Core.State.macros[seq]); Core.State.macroBuffer = []; }
-                    Core.State.macroTimeout = setTimeout(() => { Core.State.macroBuffer = []; }, 800);
-                },
-                renderHUD: function() {
-                    const hudList = document.getElementById('ui-macro-list-hud'); if(!hudList) return; hudList.innerHTML = '';
-                    Object.entries(Core.State.macros).forEach(([k, v]) => {
-                        const row = document.createElement('div'); row.className = "hud-row";
-                        row.innerHTML = `<span class="hud-key">${k.toUpperCase().replace(',', ' + ')}</span><span class="hud-val">${v.length <= 2 ? v : 'TEXT'}</span>`;
-                        hudList.appendChild(row);
-                    });
-                },
-                renderManager: async function() {
-                    const list = document.getElementById('ui-macro-manager-list'); if (!list) return; list.innerHTML = '';
-                    const all = await Core.DB.macros.toArray();
-                    all.forEach(m => {
-                        const div = document.createElement('div'); div.className = "flex justify-between items-center p-3 bg-white/5 rounded-xl text-xs";
-                        div.innerHTML = `<span class="text-blue-400 font-mono font-bold">${m.trigger}</span><span class="text-slate-400 truncate max-w-[150px] ml-4">${m.text}</span><button onclick="Core.Macros.delete('${m.trigger}')" class="text-red-500 font-bold ml-auto hover:bg-red-500/10 px-2 py-1 rounded">DEL</button>`;
-                        list.appendChild(div);
-                    });
-                },
-                add: async function() {
-                    const tr = document.getElementById('ui-new-macro-trigger').value.trim(); const tx = document.getElementById('ui-new-macro-text').value.trim();
-                    if(tr && tx) { await Core.DB.macros.put({trigger: tr, text: tx}); await Core.Storage.loadAll(); this.renderManager(); document.getElementById('ui-new-macro-trigger').value = ''; document.getElementById('ui-new-macro-text').value = ''; Core.Utils.toast("MACRO ENREGISTRÉE"); }
-                },
-                delete: async function(trigger) { await Core.DB.macros.delete(trigger); await Core.Storage.loadAll(); this.renderManager(); Core.Utils.toast("MACRO SUPPRIMÉE"); }
-            },
-            UI: {
-                openSearch: () => { document.getElementById('modal-search').style.display = 'flex'; document.getElementById('search-input').focus(); },
-                openMacros: () => { document.getElementById('modal-macros').style.display = 'flex'; Core.Macros.renderManager(); },
-                openHelp: () => { Core.UI.switchHelp('strat'); document.getElementById('modal-help').style.display = 'flex'; },
-                switchHelp: (tab) => {
-                    document.querySelectorAll('.help-tab').forEach(t => t.classList.remove('active'));
-                    document.getElementById(`tab-${tab}`).classList.add('active');
-                    const content = document.getElementById('ui-help-content');
-                    if(tab === 'strat') {
-                        content.innerHTML = `
-                            <div class="help-section-title">PHILOSOPHIE : LA FORGE COGNITIVE</div>
-                            <p>AgenData n'est pas un bloc-notes classique. C'est un <strong>système de cristallisation</strong>. Sa philosophie repose sur la séparation stricte entre le chaos de la pensée brute et l'ordre de la synthèse temporelle.</p>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                                <div class="help-step-box">
-                                    <h4 class="text-white font-bold mb-2">Le Chaos (Brouillon)</h4>
-                                    <p>La zone centrale est un espace "jetable". C'est ici que vous déchargez votre flux de conscience, vos notes de réunion en direct ou vos idées fugaces. Ne vous souciez pas de la structure, capturez la donnée.</p>
-                                </div>
-                                <div class="help-step-box">
-                                    <h4 class="text-white font-bold mb-2">L'Ordre (Agenda)</h4>
-                                    <p>La barre latérale est le registre immuable. On ne sauvegarde que ce qui a été "digéré". Transférer du Brouillon vers l'Agenda est un acte conscient de synthèse : vous décidez que cette information mérite d'être archivée.</p>
-                                </div>
-                            </div>
-                            <p class="mt-4 italic text-slate-500">Principe : "Si une information n'est pas cristallisée dans l'agenda à la fin de la journée, elle est considérée comme du bruit perdu."</p>
-                        `;
-                    } else if(tab === 'comp') {
-                        content.innerHTML = `
-                            <div class="help-section-title">LES COMPOSANTS DU NOYAU</div>
-                            <div class="space-y-6">
-                                <div class="help-step-box">
-                                    <h4 class="text-blue-400 font-bold mb-2">1. L'Éditeur de Flux (Draft)</h4>
-                                    <p>Supporte l'édition riche, les contrastes inversés pour le focus et les surlignages tactiques. C'est votre laboratoire de capture.</p>
-                                </div>
-                                <div class="help-step-box">
-                                    <h4 class="text-blue-400 font-bold mb-2">2. L'Agenda Sémantique</h4>
-                                    <p>Cartes temporelles persistantes. Chaque carte possède ses propres leviers : import du draft, déplacement entre jours, copie rapide et purge sécurisée.</p>
-                                </div>
-                                <div class="help-step-box">
-                                    <h4 class="text-blue-400 font-bold mb-2">3. Le HUD Macro</h4>
-                                    <p>Visible uniquement via la touche <span class="code-inline">Alt</span>. Il affiche vos séquences d'expansion pour transformer des abréviations complexes en symboles ou structures pré-établies.</p>
-                                </div>
-                                <div class="help-step-box">
-                                    <h4 class="text-blue-400 font-bold mb-2">4. L'Interrogateur (Recherche)</h4>
-                                    <p>Système de recherche bilatéral. Il scanne simultanément votre brouillon actif et l'intégralité de vos archives historiques avec une mise en avant sémantique des termes.</p>
-                                </div>
-                            </div>
-                        `;
-                    } else if(tab === 'syntax') {
-                        content.innerHTML = `
-                            <div class="help-section-title">COMMANDES ET PROTOCOLES</div>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                <div>
-                                    <h4 class="text-white font-bold mb-4">Raccourcis Systèmes</h4>
-                                    <ul class="space-y-2">
-                                        <li class="flex justify-between border-b border-white/5 pb-1"><span class="code-inline">Alt + V</span> <span>Lecture / Édition</span></li>
-                                        <li class="flex justify-between border-b border-white/5 pb-1"><span class="code-inline">Ctrl + F</span> <span>Recherche</span></li>
-                                        <li class="flex justify-between border-b border-white/5 pb-1"><span class="code-inline">F1</span> <span>Ce manuel</span></li>
-                                        <li class="flex justify-between border-b border-white/5 pb-1"><span class="code-inline">Alt</span> <span>Maintenir pour le HUD</span></li>
-                                    </ul>
-                                </div>
-                                <div>
-                                    <h4 class="text-white font-bold mb-4">Syntaxe Macros</h4>
-                                    <p class="mb-2 text-xs">Les macros se déclenchent en pressant <span class="code-inline">Alt</span> puis en saisissant la séquence (ex: s, d) rapidement.</p>
-                                    <ul class="space-y-2">
-                                        <li><span class="code-inline">s,d</span> &rarr; 🌱 (Semence de pensée)</li>
-                                        <li><span class="code-inline">g,r</span> &rarr; 🌿 (Germination)</li>
-                                        <li><span class="code-inline">c,o</span> &rarr; [[ ]] (Structure de lien)</li>
-                                    </ul>
-                                </div>
-                            </div>
-                        `;
-                    } else if(tab === 'workflow') {
-                        content.innerHTML = `
-                            <div class="help-section-title">EXEMPLE DE FLUX OPÉRATIONNEL</div>
-                            <div class="help-step-box">
-                                <h4 class="text-white font-bold mb-4">Scénario : Gestion d'une réunion stratégique</h4>
-                                <div class="space-y-4">
-                                    <div class="flex gap-4">
-                                        <div class="text-blue-500 font-mono font-bold">09:00</div>
-                                        <div>
-                                            <strong>Capture Brute :</strong> Vous ouvrez l'éditeur central. Vous tapez au kilomètre les points clés.
-                                            Vous utilisez <span class="code-inline">Alt + H</span> (Highlight) sur les décisions critiques.
-                                        </div>
-                                    </div>
-                                    <div class="flex gap-4">
-                                        <div class="text-blue-500 font-mono font-bold">09:45</div>
-                                        <div>
-                                            <strong>Qualification :</strong> La réunion finit. Vous repassez sur vos notes. 
-                                            Vous insérez <span class="code-inline">s,d</span> devant les idées à creuser plus tard.
-                                        </div>
-                                    </div>
-                                    <div class="flex gap-4">
-                                        <div class="text-blue-500 font-mono font-bold">10:00</div>
-                                        <div>
-                                            <strong>Cristallisation :</strong> Vous survolez la carte "Lundi" dans l'Agenda.
-                                            Vous cliquez sur l'icône <span class="text-blue-400 font-bold">&darr;</span> (Importer). 
-                                            Vos notes sont maintenant archivées et datées.
-                                        </div>
-                                    </div>
-                                    <div class="flex gap-4">
-                                        <div class="text-blue-500 font-mono font-bold">10:05</div>
-                                        <div>
-                                            <strong>Purge :</strong> Vous videz le Brouillon (Bouton Poubelle). 
-                                            Votre espace de travail central est de nouveau vierge, prêt pour la prochaine tâche.
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        `;
-                    }
-                },
-                closeModals: () => { document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none'); },
-                showToolbar: (rect) => {
-                    if(Core.State.isReadMode) return;
-                    const bar = document.getElementById('smart-toolbar'); const container = document.getElementById('ui-toolbar-days'); container.innerHTML = '';
-                    ['L','M','M','J','V','S','D'].forEach((d, i) => {
-                        const target = new Date(Core.State.currentMonday); target.setDate(target.getDate() + i); const k = Core.Utils.formatDate(target);
-                        const btn = document.createElement('button'); btn.className = "px-2 py-1 text-[9px] hover:bg-blue-500 rounded text-slate-500 font-bold";
-                        btn.textContent = d; btn.onmousedown = (e) => { e.preventDefault(); Core.Agenda.importFromDraft(k); }; container.appendChild(btn);
-                    });
+
+            AI: {
+                analyze: async function() {
+                    // 1. Force Regeneration (Destroy previous)
+                    const old = document.querySelector('.analysis-box');
+                    if(old) old.remove();
+
+                    const editor = document.getElementById('main-editor');
+                    let html = editor.innerHTML;
+                    const text = Core.Utils.stripHTML(html);
+                    if(text.length < 5) { Core.Utils.toast("DENSITÉ NULLE"); return; }
                     
-                    // Fixed positioning pour le smart toolbar aussi
-                    bar.style.top = `${rect.bottom + 8}px`; 
-                    bar.style.left = `${rect.left}px`; 
-                    bar.style.display = 'flex';
+                    const btn = document.getElementById('ai-trigger');
+                    const lbl = document.getElementById('ai-label');
+                    lbl.textContent = "CALCUL...";
+                    btn.classList.add('border-violet-500');
+
+                    // 2. Advanced Heuristics (Moteur Trident)
+                    
+                    // A. Keyword Frequency (Le Pivot)
+                    const words = text.toLowerCase().match(/\b\w{4,}\b/g) || [];
+                    const stopWords = ["avec", "pour", "dans", "sont", "cette", "aussi", "mais", "tout", "plus", "être", "avoir", "faire", "nous", "vous", "leur", "comme", "donc"];
+                    const freq = {};
+                    words.forEach(w => { if(!stopWords.includes(w)) freq[w] = (freq[w] || 0) + 1; });
+                    const topKeyword = Object.entries(freq).sort((a,b) => b[1] - a[1])[0];
+                    const topic = topKeyword ? topKeyword[0].toUpperCase() : "NON DÉFINI";
+
+                    // B. Sentence Analysis (Triangulation)
+                    const sentences = text.match(/[^\.!\?]+[\.!\?]+/g) || [text];
+                    
+                    let tensionPhrase = "Aucune friction détectée.";
+                    let actionPhrase = "Aucune directive claire.";
+                    
+                    sentences.forEach(s => {
+                        const clean = s.trim();
+                        // Detect Tension (Questions, Conditional)
+                        if(clean.includes('?') || clean.toLowerCase().includes('si ') || clean.toLowerCase().includes('problème') || clean.toLowerCase().includes('risque')) {
+                             if(tensionPhrase === "Aucune friction détectée." || clean.length < tensionPhrase.length) tensionPhrase = clean;
+                        }
+                        // Detect Order (Action Verbs, Imperative)
+                        if(clean.toLowerCase().includes('faut') || clean.toLowerCase().includes('doit') || clean.toLowerCase().includes('objectif') || clean.toLowerCase().includes('stratégie')) {
+                            if(actionPhrase === "Aucune directive claire." || clean.length > actionPhrase.length) actionPhrase = clean;
+                        }
+                    });
+
+                    // Formatting
+                    if(tensionPhrase.length > 80) tensionPhrase = tensionPhrase.substring(0, 77) + "...";
+                    if(actionPhrase.length > 80) actionPhrase = actionPhrase.substring(0, 77) + "...";
+
+                    setTimeout(() => {
+                        const reportHTML = `
+                            <div class="analysis-box">
+                                <div class="ab-header">
+                                    <span class="ab-title">DIAGNOSTIC TACTIQUE // T-${new Date().toLocaleTimeString()}</span>
+                                    <button onclick="this.closest('.analysis-box').remove()" class="text-xs text-violet-400 hover:text-white">Fermer</button>
+                                </div>
+                                <div class="ab-grid">
+                                    <div class="ab-row">
+                                        <div class="ab-icon">🎯</div>
+                                        <div class="ab-content">
+                                            <span class="ab-label">Centre de Gravité</span>
+                                            <span class="ab-value ab-highlight">${topic}</span>
+                                        </div>
+                                    </div>
+                                    <div class="ab-row">
+                                        <div class="ab-icon">⚠️</div>
+                                        <div class="ab-content">
+                                            <span class="ab-label">Facteur Limitant</span>
+                                            <span class="ab-value text-red-300">${tensionPhrase}</span>
+                                        </div>
+                                    </div>
+                                    <div class="ab-row">
+                                        <div class="ab-icon">⚡</div>
+                                        <div class="ab-content">
+                                            <span class="ab-label">Levier Identifié</span>
+                                            <span class="ab-value text-emerald-300">${actionPhrase}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                        
+                        editor.insertAdjacentHTML('afterbegin', reportHTML);
+                        
+                        lbl.textContent = "ANALYSE";
+                        btn.classList.remove('border-violet-500');
+                        Core.Utils.toast("DIAGNOSTIC GÉNÉRÉ");
+                    }, 400); // 400ms for "computing" feel
+                },
+                insertTag: (tag) => { document.execCommand('insertText', false, ` ${tag} `); Core.IO.saveDraft(); }
+            },
+
+            IO: {
+                saveDraft: async () => { const html = document.getElementById('main-editor').innerHTML; await Core.DB.meta.put({id: 'draft', content: html}); },
+                loadDraft: async () => { const draft = await Core.DB.meta.get('draft'); if(draft) { document.getElementById('main-editor').innerHTML = Core.Editor.processContent(draft.content); } },
+                
+                export: async () => {
+                    const entries = await Core.DB.entries.toArray();
+                    const draft = await Core.DB.meta.get('draft');
+                    const pack = {
+                        version: "v8.9.3",
+                        exportedAt: new Date().toISOString(),
+                        agenda: entries,
+                        draft: draft ? draft.content : ""
+                    };
+                    const blob = new Blob([JSON.stringify(pack, null, 2)], {type : 'application/json'});
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = `AgenData_FullBackup_${Core.Utils.formatDate(new Date())}.json`;
+                    a.click();
+                    Core.Utils.toast("BACKUP JSON COMPLET GÉNÉRÉ");
+                },
+                
+                triggerImport: () => document.getElementById('import-input').click(),
+                
+                importData: (e) => {
+                    const file = e.target.files[0]; if(!file) return;
+                    const reader = new FileReader(); reader.onload = async (ev) => {
+                        try { 
+                            const data = JSON.parse(ev.target.result);
+                            if(Array.isArray(data)) {
+                                for(let entry of data) await Core.DB.entries.put(entry);
+                                Core.Utils.toast("AGENDA RESTAURÉ");
+                            } else {
+                                if(data.agenda) { for(let entry of data.agenda) await Core.DB.entries.put(entry); }
+                                if(data.draft) { await Core.DB.meta.put({id: 'draft', content: data.draft}); }
+                                Core.Utils.toast("SYSTÈME INTÉGRAL RESTAURÉ");
+                            }
+                            setTimeout(() => location.reload(), 1500);
+                        } catch(err) { Core.Utils.toast("ERREUR: FICHIER CORROMPU"); }
+                    }; reader.readAsText(file);
                 }
             },
+
+            UI: {
+                toggleSidebarView: (view) => {
+                    const btnPages = document.getElementById('btn-view-pages'); const btnIndex = document.getElementById('btn-view-index');
+                    const divPages = document.getElementById('view-pages'); const divIndex = document.getElementById('view-index');
+                    const ctrls = document.getElementById('date-controls');
+                    if (view === 'pages') {
+                        divPages.classList.remove('hidden'); divIndex.classList.add('hidden'); ctrls.style.opacity = '1';
+                        btnPages.classList.add('bg-slate-800', 'text-blue-400', 'shadow-sm'); btnPages.classList.remove('text-slate-500');
+                        btnIndex.classList.remove('bg-slate-800', 'text-blue-400', 'shadow-sm'); btnIndex.classList.add('text-slate-500');
+                        Core.Binder.render();
+                    } else {
+                        divPages.classList.add('hidden'); divIndex.classList.remove('hidden'); ctrls.style.opacity = '0.3';
+                        btnIndex.classList.add('bg-slate-800', 'text-blue-400', 'shadow-sm'); btnIndex.classList.remove('text-slate-500');
+                        btnPages.classList.remove('bg-slate-800', 'text-blue-400', 'shadow-sm'); btnPages.classList.add('text-slate-500');
+                        const nexusContent = document.getElementById('ui-nexus-content');
+                        if(!nexusContent.innerHTML.trim() || nexusContent.innerHTML.includes('Default content')) { Core.Binder.renderIndex(); }
+                    }
+                },
+                toggleSidebar: () => {
+                    const sidebar = document.getElementById('main-sidebar');
+                    sidebar.classList.toggle('collapsed');
+                    Core.Utils.toast(sidebar.classList.contains('collapsed') ? "MODE FOCUS" : "MODE CLASSEUR");
+                },
+                openSearch: () => { document.getElementById('modal-search').style.display = 'flex'; document.getElementById('search-input').focus(); },
+                openHelp: () => { Core.UI.switchHelp('start'); document.getElementById('modal-help').style.display = 'flex'; },
+                switchHelp: (section, tabEl) => {
+                    const content = document.getElementById('ui-help-content');
+                    if(tabEl) {
+                         document.querySelectorAll('.help-tab').forEach(t => t.classList.remove('active'));
+                         tabEl.classList.add('active');
+                    }
+                    if (section === 'start') {
+                         content.innerHTML = `<h3>Philosophie</h3><p>AgenData n'est pas un bloc-notes. C'est un moteur de cristallisation. Le brouillon est le chaos (pensée rapide). L'agenda est l'ordre (pensée structurée).</p><h3>Le Protocole</h3><ul><li><strong>1. Capturer :</strong> Écrivez sans filtre dans le brouillon.</li><li><strong>2. Structurer :</strong> Utilisez le double-clic pour créer des [Index].</li><li><strong>3. Archiver :</strong> Glissez ou envoyez le contenu vers une carte de l'agenda pour le figer dans le temps.</li></ul>`;
+                    } else if (section === 'nexus') {
+                         content.innerHTML = `<h3>Le Nexus (Intelligence Liée)</h3><p>Votre pensée n'est pas linéaire, vos données ne devraient pas l'être non plus. Le Nexus analyse vos [Index].</p><ul><li><strong>Barre de Chaleur :</strong> Montre l'intensité d'un sujet sur les 30 derniers jours.</li><li><strong>Réseau :</strong> Montre avec quels autres concepts ce sujet est connecté (Co-occurrence).</li><li><strong>Accès :</strong> Cliquez simplement sur un [Tag] en mode lecture pour ouvrir son Nexus.</li></ul>`;
+                    } else if (section === 'shortcuts') {
+                         content.innerHTML = `<h3>Contrôles Clavier</h3><ul><li><code>Alt + V</code> : Basculer Lecture / Édition</li><li><code>Ctrl + F</code> : Recherche Globale</li><li><code>Alt + T</code> : Insérer Tag manuellement</li><li><code>Alt + B</code> : Basculer la barre latérale</li><li><code>F1</code> : Ouvrir cette aide</li></ul><h3>Souris</h3><ul><li><strong>Double Clic (Édition) :</strong> Transforme la sélection en [Index].</li><li><strong>Clic Simple (Lecture) :</strong> Active le Nexus du tag ciblé.</li></ul>`;
+                    } else if (section === 'data') {
+                         content.innerHTML = `<h3>Souveraineté des Données</h3><p>Tout est stocké localement dans votre navigateur (IndexedDB). Rien ne part dans le cloud.</p><h3>Backup (Json)</h3><ul><li><strong>Sauvegarder (Icône Flèche Bas) :</strong> Télécharge un fichier .json complet.</li><li><strong>Restaurer (Icône Flèche Haut) :</strong> Restaure un backup précédent. Attention, cela remplace les données actuelles.</li></ul>`;
+                    }
+                },
+                
+                openSearchWith: (term) => {
+                    Core.UI.openSearch();
+                    const input = document.getElementById('search-input');
+                    input.value = term;
+                    Core.Binder.search(term);
+                },
+
+                openMacros: () => { document.getElementById('macro-hud').classList.add('visible'); Core.Macros.renderHUD(); },
+                closeModals: () => { document.querySelectorAll('.modal-overlay').forEach(el => el.style.display = 'none'); document.getElementById('macro-hud').classList.remove('visible'); }
+            },
+
             Listeners: {
                 setup: function() {
                     const editor = document.getElementById('main-editor');
-                    editor.addEventListener('input', Core.Utils.debounce(() => Core.Storage.saveEditor(), 1000));
-                    document.addEventListener('keydown', e => {
-                        if(e.key === 'Alt') { const hud = document.getElementById('macro-hud'); if(hud) hud.classList.add('visible'); Core.Macros.renderHUD(); }
-                        if(e.altKey && e.key.length === 1 && e.key !== 'v') Core.Macros.handle(e.key);
-                        if(e.altKey && e.key === 'v') Core.Editor.toggleMode();
-                        if((e.ctrlKey || e.metaKey) && e.key === 'f') { e.preventDefault(); Core.UI.openSearch(); }
-                        if(e.key === 'F1') { e.preventDefault(); Core.UI.openHelp(); }
-                    });
-                    document.addEventListener('keyup', e => { if(e.key === 'Alt') { const hud = document.getElementById('macro-hud'); if(hud) hud.classList.remove('visible'); } });
-                    document.addEventListener('selectionchange', () => {
-                        const sel = window.getSelection();
-                        if(!Core.State.isReadMode && sel.rangeCount && !sel.isCollapsed && editor.contains(sel.anchorNode)) Core.UI.showToolbar(sel.getRangeAt(0).getBoundingClientRect());
-                        else { const bar = document.getElementById('smart-toolbar'); if(bar) bar.style.display = 'none'; }
-                    });
-                    document.addEventListener('mousedown', (e) => {
-                        if(!e.target.closest('.day-transfer-bar') && !e.target.closest('.action-icon')) {
-                            const d = document.getElementById('day-transfer-bar'); if(d) d.style.display = 'none';
+                    editor.addEventListener('input', Core.Utils.debounce(() => Core.IO.saveDraft(), 1000));
+                    
+                    let potentialMultiWord = null;
+                    let potentialMultiWordTime = 0;
+
+                    editor.addEventListener('mouseup', () => {
+                        const txt = window.getSelection().toString();
+                        if(txt.includes(' ') && txt.trim().length > 0) {
+                            potentialMultiWord = window.getSelection().getRangeAt(0);
+                            potentialMultiWordTime = Date.now();
                         }
                     });
-                    // Gestionnaire global pour les liens conceptuels
-                    document.addEventListener('click', (e) => {
-                        const tag = e.target.closest('.concept-tag');
-                        if (tag) {
-                            if (Core.State.isReadMode || (e.ctrlKey || e.metaKey)) {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                const term = tag.getAttribute('data-link') || tag.innerText.replace(/[\[\]]/g, '');
-                                Core.UI.openSearch();
-                                document.getElementById('search-input').value = term;
-                                Core.Search.exec(term);
+
+                    editor.addEventListener('dblclick', (e) => {
+                        if(Core.State.isReadMode) return;
+                        let sel = window.getSelection();
+                        let text = sel.toString();
+                        if (Date.now() - potentialMultiWordTime < 500 && potentialMultiWord) {
+                             text = potentialMultiWord.toString();
+                             sel.removeAllRanges();
+                             sel.addRange(potentialMultiWord);
+                        }
+                        if(text && text.trim().length > 0 && !text.startsWith('[') && !text.endsWith(']')) {
+                            if(/[a-zA-Z0-9]/.test(text)) {
+                                document.execCommand('insertText', false, `[${text}]`);
+                                Core.IO.saveDraft();
+                                Core.Nexus.open(text);
+                                Core.Utils.toast(`INDEX [${text.toUpperCase().substring(0, 20)}...] ACTIVÉ`);
                             }
                         }
+                    });
+
+                    document.addEventListener('keydown', e => {
+                        if(e.altKey && e.key === 'v') { e.preventDefault(); Core.Editor.toggleMode(); }
+                        if((e.ctrlKey || e.metaKey) && e.key === 'f') { e.preventDefault(); Core.UI.openSearch(); }
+                        if(e.altKey && e.key === 't') { e.preventDefault(); Core.Editor.insertTagManual(); }
+                        if(e.altKey && e.key === 'b') { e.preventDefault(); Core.UI.toggleSidebar(); }
+                        if(e.key === 'F1') { e.preventDefault(); Core.UI.openHelp(); }
+                        if(e.altKey && e.key.length === 1 && !['v','t','b'].includes(e.key)) Core.Macros.handle(e.key);
                     });
                 }
             }
         };
+
         window.onload = () => Core.Init();
     </script>
 </body>
