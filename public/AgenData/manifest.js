@@ -1,5 +1,5 @@
 {
-  "name": "AgenData v8.9.14",
+  "name": "AgenData v8.9.16",
   "short_name": "AgenData",
   "start_url": "./",
   "display": "standalone",
