@@ -1,5 +1,5 @@
 {
-    "name": "AgenData v9.0",
+    "name": "AgenData v9.1",
     "short_name": "AgenData",
     "description": "Système de Gestion Cognitive. Local. Sécurisé.",
     "start_url": "./index.html",
@@ -9,16 +9,30 @@
     "orientation": "portrait-primary",
     "icons": [
         {
-            "src": "icons/icon-192.png",
+            "src": "screenshot/icons-192x192.png",
             "sizes": "192x192",
             "type": "image/png",
             "purpose": "any maskable"
         },
         {
-            "src": "icons/icon-512.png",
+            "src": "screenshot/icons-512x512.png",
             "sizes": "512x512",
             "type": "image/png",
             "purpose": "any maskable"
+        }
+    ],
+    "screenshots": [
+        {
+            "src": "screenshot/AgenData-mobile.png",
+            "sizes": "390x844",
+            "type": "image/png",
+            "form_factor": "narrow"
+        },
+        {
+            "src": "screenshot/AgenData-desktop.png",
+            "sizes": "1920x1080",
+            "type": "image/png",
+            "form_factor": "wide"
         }
     ]
 }
