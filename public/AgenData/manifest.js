@@ -2,7 +2,7 @@
     "name": "AgenData v9.0",
     "short_name": "AgenData",
     "description": "Système de Gestion Cognitive. Local. Sécurisé.",
-    "start_url": "./agendata_v4.html",
+    "start_url": "./index.html",
     "display": "standalone",
     "background_color": "#0f172a",
     "theme_color": "#0f172a",
