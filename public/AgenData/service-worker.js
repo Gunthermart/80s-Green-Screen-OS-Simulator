@@ -1,10 +1,10 @@
 const CACHE_NAME = 'agendata-v9.21-social-cache';
 const URLS_TO_CACHE = [
-  './',
-  './index.html',
-  './manifest.json',
-  './icons-192x192.png',
-  './icons-512x512.png',
+  'https://leonce-equity.com/agendata/',
+  'https://leonce-equity.com/agendata/index.html',
+  'https://leonce-equity.com/agendata/manifest.json',
+  'https://leonce-equity.com/agendata/screenshot/icons-192x192.png',
+  'https://leonce-equity.com/agendata/screenshot/icons-512x512.png',
   // Dépendances critiques (CDNs)
   'https://cdn.tailwindcss.com',
   'https://unpkg.com/dexie/dist/dexie.js',
