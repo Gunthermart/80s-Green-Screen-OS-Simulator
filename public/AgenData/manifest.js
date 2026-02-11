@@ -8,13 +8,13 @@
   "orientation": "any",
   "icons": [
     {
-      "src": "icon-192x192.png",
+      "src": "icons-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "icon-512x512.png",
+      "src": "iconss-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
@@ -23,7 +23,7 @@
   "screenshots": [
     {
       "src": "screenshoot-mobile.png",
-      "sizes": "1170x2532",
+      "sizes": "390x844",
       "type": "image/png",
       "form_factor": "narrow",
       "label": "Interface Mobile Tactique"
