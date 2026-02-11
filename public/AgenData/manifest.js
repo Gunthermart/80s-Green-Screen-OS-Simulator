@@ -14,7 +14,7 @@
       "purpose": "any maskable"
     },
     {
-      "src": "https://leonce-equity.com/agendata/screenshot/iconss-512x512.png",
+      "src": "https://leonce-equity.com/agendata/screenshot/icons-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
