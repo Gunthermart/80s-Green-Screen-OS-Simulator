@@ -2,8 +2,8 @@ const CACHE_NAME = 'agendata-v9.21-bunker-assets';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
-  './icon-192x192.png',
-  './icon-512x512.png',
+  './icons-192x192.png',
+  './icons-512x512.png',
   'https://cdn.tailwindcss.com',
   'https://unpkg.com/dexie/dist/dexie.js',
   'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Inter:wght@300;400;500;600;700;900&display=swap'
