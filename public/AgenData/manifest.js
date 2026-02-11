@@ -1,7 +1,7 @@
 {
   "name": "AgenData v9.21",
   "short_name": "AgenData",
-  "start_url": "./index.html",
+  "start_url": "https://leonce-equity.com/agendata/index.html",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#0f172a",
