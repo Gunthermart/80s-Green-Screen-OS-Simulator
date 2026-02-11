@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     
     <!-- --- IDENTITÉ & METADONNÉES --- -->
-    <title>AgenData v9.18 - Système de Gestion Cognitive</title>
+    <title>AgenData v9.21 - Système de Gestion Cognitive</title>
     <meta name="description" content="Transformez le chaos en ordre. Système opérationnel de prise de note tactique et de cristallisation temporelle.">
     <meta name="author" content="LEONCE-EQUITY">
     
@@ -291,7 +291,7 @@
         <button id="btn-install-pwa" onclick="Core.System.installPWA()"><div class="pwa-status-dot"></div><span>INITIALISER LE SYSTÈME</span></button>
         <div class="relative mb-4">
             <div class="absolute -inset-1 bg-blue-500 rounded-lg blur opacity-20"></div>
-            <h1 class="relative text-4xl md:text-5xl font-black text-white tracking-tight">AgenData v9.18</h1>
+            <h1 class="relative text-4xl md:text-5xl font-black text-white tracking-tight">AgenData v9.21</h1>
         </div>
         <div class="text-xs md:text-sm font-mono font-bold text-blue-400 tracking-[0.3em] uppercase opacity-80">LEONCE-EQUITY</div>
         <div class="mt-8 flex gap-1">
@@ -354,6 +354,12 @@
                 <div class="h-4 w-px bg-white/10 mx-1"></div>
 
                 <button onclick="Core.Editor.highlight()" class="p-1.5 text-yellow-500/60 hover:text-yellow-400" title="Surligner"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" stroke-width="2"/></svg></button>
+                
+                <!-- NOUVEAU BOUTON CONTRASTE -->
+                <button onclick="Core.Editor.contrast()" class="p-1.5 text-white/70 hover:text-white border border-white/10 rounded ml-1" title="Contraste Fort (Fond Blanc)">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z M12 4v16c4.41 0 8-3.59 8-8s-3.59-8-8-8z" stroke-width="2" fill="currentColor"/></svg>
+                </button>
+
                 <button onclick="Core.Editor.insertIndexManual()" class="p-1.5 text-blue-500/80 hover:text-blue-400 font-mono font-bold" title="Insérer Index (Alt+T)">[]</button>
             </div>
 
@@ -481,7 +487,7 @@
                 this.Binder.render();
                 this.Listeners.setup();
                 this.Voice.init();
-                this.Utils.toast("V9.18 : FOCUS OPTIMISÉ");
+                this.Utils.toast("V9.21 : PROTOCOLE INJECTION");
                 window.addEventListener('beforeinstallprompt', (e) => {
                     e.preventDefault(); Core.State.installPrompt = e;
                     const btn = document.getElementById('btn-install-pwa');
@@ -601,6 +607,65 @@
             },
 
             AI: {
+                analyzeTag: async function(tag) {
+                    const data = await Core.Nexus.analyzeIndex(tag);
+                    const editor = document.getElementById('main-editor');
+                    
+                    let status = "ACTIF";
+                    let urgency = "NEUTRE";
+                    let advice = "Maintenir la surveillance.";
+                    
+                    // BRUTAL LOGIC
+                    if(data.count > 15 && data.relations.length < 2) {
+                        status = "OBSESSION STÉRILE";
+                        urgency = "CRITIQUE";
+                        advice = "Tu accumules des notes sans les connecter. Arrête d'écrire, commence à agir ou supprime.";
+                    } else if (data.count < 3 && data.timeline.filter(t => t.count > 0).length === 0) {
+                        status = "ARCHIVE MORTE";
+                        urgency = "BASSE";
+                        advice = "Ce sujet est un fantôme. Il encombre ton système. Archive ou réactive.";
+                    } else if (data.relations.length > 5) {
+                        status = "NOEUD STRATÉGIQUE";
+                        urgency = "HAUTE";
+                        advice = "Ce point est central. Si ce projet échoue, tout le reste tombe.";
+                    }
+
+                    const topRel = data.relations.slice(0,3).map(r => r[0]).join(', ') || "Aucun";
+                    const lastActive = data.mentions[0]?.date || "Inconnu";
+
+                    const reportHTML = `
+                        <div class="ai-insight-panel" style="border-color: #a78bfa;">
+                            <div class="ai-insight-header">
+                                <div class="ai-title-group">
+                                    <div class="ai-icon-box" style="background: #8b5cf6;">⚡</div>
+                                    <div class="ai-panel-title" style="color: #a78bfa;">RAPPORT TACTIQUE : [${tag}]</div>
+                                </div>
+                                <div class="ai-meta">AUTO-GENERATED</div>
+                            </div>
+                            <div class="p-4 space-y-2 text-sm text-slate-300 font-mono">
+                                <div class="flex justify-between border-b border-white/5 pb-2">
+                                    <span>STATUT : <strong class="${urgency === 'CRITIQUE' ? 'text-red-500' : 'text-blue-400'}">${status}</strong></span>
+                                    <span>VOL : ${data.count}</span>
+                                </div>
+                                <div>> DERNIÈRE ACTIVITÉ : <span class="text-white">${lastActive}</span></div>
+                                <div>> CONNEXIONS : <span class="text-slate-400">${topRel}</span></div>
+                                <div class="mt-4 pt-2 border-t border-white/10 text-violet-300 font-bold">
+                                    > CONSEIL : ${advice}
+                                </div>
+                            </div>
+                        </div>
+                        <br>
+                    `;
+                    
+                    // INSERT AT TOP
+                    editor.insertAdjacentHTML('afterbegin', reportHTML);
+                    Core.IO.saveDraft();
+                    Core.Utils.toast("RAPPORT GÉNÉRÉ DANS BROUILLON");
+                    
+                    // Close sidebar to show result
+                    if(window.innerWidth < 768) Core.UI.toggleSidebar();
+                },
+
                 challenge: async function() {
                     const btn = document.getElementById('ai-trigger');
                     const label = document.getElementById('ai-label');
@@ -803,8 +868,16 @@
                     let relationsHTML = ''; data.relations.forEach(([relTag, count]) => { relationsHTML += `<div class="network-item" onclick="Core.Nexus.open('${relTag}')"><span class="network-name">${relTag}</span><span class="network-score">${count}</span></div>`; });
                     let mentionsHTML = ''; data.mentions.forEach(m => { mentionsHTML += `<div class="context-item" onclick="Core.Binder.goToDate('${m.date}')"><div class="context-date">${m.date}</div><div class="context-snippet">${m.text}</div></div>`; });
                     let heatHTML = ''; data.timeline.forEach(t => { heatHTML += `<div class="heatmap-bar ${t.count > 0 ? 'active' : ''}" style="height:${t.count > 0 ? '100%' : '10%'}"></div>`; });
+                    
+                    // --- UPDATE V9.20 : BOUTON ANALYSE IA ---
                     const html = `
-                        <div class="nexus-header"><div class="nexus-title">${data.tag}</div><div class="nexus-meta"><span>${data.count} occurrences</span><span>Dernière: ${data.mentions[0]?.date || 'N/A'}</span></div></div>
+                        <div class="nexus-header">
+                            <div class="flex justify-between items-start mb-2">
+                                <div class="nexus-title">${data.tag}</div>
+                                <button onclick="Core.AI.analyzeTag('${data.tag}')" class="text-[9px] font-bold bg-violet-500/10 text-violet-400 px-2 py-1 rounded border border-violet-500/20 hover:bg-violet-500 hover:text-white transition-colors">⚡ ANALYSE</button>
+                            </div>
+                            <div class="nexus-meta"><span>${data.count} occurrences</span><span>Dernière: ${data.mentions[0]?.date || 'N/A'}</span></div>
+                        </div>
                         <div class="nexus-section-title">Activité (30j)</div><div class="heatmap-container">${heatHTML}</div>
                         <div class="nexus-section-title">Réseau Neuronal (Co-occurrence)</div><div class="flex flex-col">${relationsHTML || '<div class="p-4 text-xs text-slate-600">Aucune corrélation trouvée.</div>'}</div>
                         <div class="nexus-section-title">Contexte Récent</div><div class="flex flex-col">${mentionsHTML}</div>
@@ -1056,7 +1129,7 @@
                 loadDraft: async () => { const draft = await Core.DB.meta.get('draft'); if(draft) { document.getElementById('main-editor').innerHTML = Core.Editor.processContent(draft.content); } },
                 export: async () => {
                     const entries = await Core.DB.entries.toArray(); const draft = await Core.DB.meta.get('draft');
-                    const blob = new Blob([JSON.stringify({version: "v9.18", exportedAt: new Date().toISOString(), agenda: entries, draft: draft ? draft.content : ""}, null, 2)], {type : 'application/json'});
+                    const blob = new Blob([JSON.stringify({version: "v9.21", exportedAt: new Date().toISOString(), agenda: entries, draft: draft ? draft.content : ""}, null, 2)], {type : 'application/json'});
                     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `AgenData_Backup_${Core.Utils.formatDate(new Date())}.json`; a.click(); Core.Utils.toast("BACKUP COMPLET GÉNÉRÉ");
                 },
                 triggerImport: () => document.getElementById('import-input').click(),
@@ -1129,36 +1202,32 @@
                         `;
                     } else if (section === 'workflow') {
                         content.innerHTML = `
-                            <h3>PROTOCOLE OPÉRATIONNEL : EXEMPLE RÉEL</h3>
-                            <p>Scénario : <strong>"L'Appel Client Imprévu"</strong> (Gestion de crise)</p>
+                            <h3>PROTOCOLE : L'INJECTION EXTERNE (IMPORT)</h3>
+                            <p>Scénario : <strong>"L'Email Illisible"</strong>. Vous recevez un pavé de texte confus d'un collaborateur ou un brief client mal structuré.</p>
                             
                             <div class="help-step">
-                                <span class="help-step-num">PHASE 1 : CAPTURE (00:00 - 02:00)</span>
-                                <p>Le client parle vite. Vous ne réfléchissez pas, vous tapez dans le brouillon central.</p>
-                                <div class="p-2 bg-black/30 rounded font-mono text-xs text-slate-400 mb-2">
-                                    client furieux livraison retard projet alpha manque dossier technique x34
-                                </div>
-                                <p><em>Objectif : Ne rien perdre. Vitesse pure.</em></p>
+                                <span class="help-step-num">PHASE 1 : INJECTION (CTRL+V)</span>
+                                <p>Ne tentez pas de comprendre le texte dans sa source d'origine (Gmail, Slack, Teams). Copiez tout. Collez tout dans le <strong>Brouillon Central</strong>.</p>
+                                <p><em>Pourquoi ? Pour isoler la donnée du bruit visuel de l'outil source.</em></p>
                             </div>
 
                             <div class="help-step">
-                                <span class="help-step-num">PHASE 2 : STRUCTURATION (02:00 - 03:00)</span>
-                                <p>L'appel termine. Vous relisez. Vous utilisez vos <strong>Macros (Alt+A, Alt+W)</strong> pour qualifier l'info.</p>
+                                <span class="help-step-num">PHASE 2 : DISSECTION (NETTOYAGE)</span>
+                                <p>Supprimez impitoyablement les politesses, les signatures et le blabla. Ne gardez que les faits. Créez vos liens <code>[CLIENT_X]</code> immédiatement.</p>
                                 <div class="p-2 bg-black/30 rounded font-mono text-xs text-slate-400 mb-2">
-                                    ⚠️ Client furieux livraison retard [PROJET_ALPHA]<br>
-                                    [ACTION] Envoyer dossier technique X34
+                                    <span class="line-through opacity-50">Bonjour, j'espère que tu vas bien. Juste pour te dire que</span> le fichier est corrompu. <span class="line-through opacity-50">Bien à toi, Michel.</span>
                                 </div>
                             </div>
 
                             <div class="help-step">
-                                <span class="help-step-num">PHASE 3 : CRISTALLISATION (03:00 - 03:10)</span>
-                                <p>Ceci doit être traité aujourd'hui. Vous survolez la carte "AUJOURD'HUI" dans la colonne de gauche et cliquez sur l'icône d'import <strong>(Flèche Bas)</strong>.</p>
-                                <p><em>Résultat : L'info est sécurisée dans la base de données, horodatée.</em></p>
+                                <span class="help-step-num">PHASE 3 : QUALIFICATION TACTIQUE</span>
+                                <p>Le texte est maintenant brut. Ajoutez une Macro d'urgence (Alt+W) ou d'action (Alt+A). Si le texte est long, lancez l'<strong>Analyse IA</strong> pour extraire les actions clés.</p>
                             </div>
 
                             <div class="help-step">
-                                <span class="help-step-num">PHASE 4 : PURGE (03:10)</span>
-                                <p>Vous cliquez sur la <strong>Poubelle Rouge</strong> du brouillon. L'écran redevient vide. Vous êtes prêt pour la tâche suivante, l'esprit libre.</p>
+                                <span class="help-step-num">PHASE 4 : ARCHIVAGE (IMPORT)</span>
+                                <p>Le texte est propre et actionnable ? Cliquez sur la flèche d'import de la carte <strong>AUJOURD'HUI</strong> (Sidebar). Videz ensuite le brouillon.</p>
+                                <p><em>Résultat : Vous avez transformé 5 minutes de lecture confuse en 1 tâche précise et datée.</em></p>
                             </div>
                         `;
                     } else if (section === 'nexus') {
