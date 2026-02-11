@@ -1,20 +1,20 @@
 {
   "name": "AgenData v9.21",
   "short_name": "AgenData",
-  "start_url": "https://leonce-equity.com/agendata/index.html",
+  "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#0f172a",
   "orientation": "any",
   "icons": [
     {
-      "src": "https://leonce-equity.com/agendata/screenshot/icons-192x192.png",
+      "src": "./screenshot/icons-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "https://leonce-equity.com/agendata/screenshot/icons-512x512.png",
+      "src": "./screenshot/icons-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
@@ -22,14 +22,14 @@
   ],
   "screenshots": [
     {
-      "src": "https://leonce-equity.com/agendata/screenshot/AgenData-mobile.png",
+      "src": "./screenshot/AgenData-mobile.png",
       "sizes": "390x844",
       "type": "image/png",
       "form_factor": "narrow",
       "label": "Interface Mobile Tactique"
     },
     {
-      "src": "https://leonce-equity.com/agendata/screenshot/AgenData-desktop.png",
+      "src": "./screenshot/AgenData-desktop.png",
       "sizes": "1920x1080",
       "type": "image/png",
       "form_factor": "wide",
