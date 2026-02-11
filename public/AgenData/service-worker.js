@@ -1,10 +1,10 @@
-const CACHE_NAME = 'agendata-v9.21-social-cache';
+const CACHE_NAME = 'agendata-v9.21-social-cache-v2'; // Version incrémentée pour forcer la mise à jour
 const URLS_TO_CACHE = [
   './',
   './index.html',
   './manifest.json',
-  './icons-192x192.png', // Doit correspondre à l'emplacement réel
-  './icons-512x512.png', // Doit correspondre à l'emplacement réel
+  './screenshot/icons-192x192.png', // Chemin corrigé
+  './screenshot/icons-512x512.png', // Chemin corrigé
   // Dépendances critiques (CDNs)
   'https://cdn.tailwindcss.com',
   'https://unpkg.com/dexie/dist/dexie.js',
@@ -13,7 +13,7 @@ const URLS_TO_CACHE = [
 
 // 1. INSTALLATION
 self.addEventListener('install', (event) => {
-  self.skipWaiting(); // Force l'activation immédiate du nouveau SW
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
@@ -22,7 +22,7 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// 2. ACTIVATION (Nettoyage immédiat des anciens caches)
+// 2. ACTIVATION (Nettoyage immédiat)
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
@@ -35,29 +35,24 @@ self.addEventListener('activate', (event) => {
       );
     })
   );
-  self.clients.claim(); // Prend le contrôle des clients immédiatement
+  self.clients.claim();
 });
 
-// 3. INTERCEPTION (Cache First, Network Fallback)
+// 3. INTERCEPTION
 self.addEventListener('fetch', (event) => {
-  // On ignore les requêtes non-GET ou vers d'autres origines non gérées
   if (event.request.method !== 'GET') return;
 
   event.respondWith(
     caches.match(event.request)
       .then((response) => {
-        // Hit Cache
         if (response) {
           return response;
         }
-        // Miss Cache -> Réseau
         return fetch(event.request).then(
           (response) => {
-            // Vérification validité réponse
             if(!response || response.status !== 200 || response.type !== 'basic') {
               return response;
             }
-            // Mise en cache dynamique des nouvelles ressources
             const responseToCache = response.clone();
             caches.open(CACHE_NAME)
               .then((cache) => {
