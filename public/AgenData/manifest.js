@@ -22,14 +22,14 @@
   ],
   "screenshots": [
     {
-      "src": "https://leonce-equity.com/agendata/screenshot/screenshoot-mobile.png",
+      "src": "https://leonce-equity.com/agendata/screenshot/AgenData-mobile.png",
       "sizes": "390x844",
       "type": "image/png",
       "form_factor": "narrow",
       "label": "Interface Mobile Tactique"
     },
     {
-      "src": "https://leonce-equity.com/agendata/screenshot/screenshoot-desktop.png",
+      "src": "https://leonce-equity.com/agendata/screenshot/AgenData-desktop.png",
       "sizes": "1920x1080",
       "type": "image/png",
       "form_factor": "wide",
