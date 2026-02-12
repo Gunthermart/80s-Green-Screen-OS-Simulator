@@ -15,18 +15,18 @@
     
     <!-- Open Graph / Facebook / LinkedIn / Discord -->
     <meta property="og:type" content="website">
-    <meta property="og:url" content="https://leonce-equity.com/agendata/index.html"> 
+    <meta property="og:url" content="https://agendata.io/"> <!-- REMPLACER PAR L'URL REELLE -->
     <meta property="og:title" content="AgenData | L'Ordre dans le Chaos">
     <meta property="og:description" content="Système de cristallisation temporelle pour profils exigeants. Capturez, structurez, agissez.">
     <!-- Image : Doit être en 1200x630px pour un affichage optimal -->
-    <meta property="og:image" content="https://leonce-equity.com/agendata/screenshoot/AgenData-desktop.png>
+    <meta property="og:image" content="https://images.unsplash.com/photo-1555421689-491a97ff2040?ixlib=rb-1.2.1&auto=format&fit=crop&w=1200&h=630&q=80">
 
     <!-- Twitter -->
     <meta property="twitter:card" content="summary_large_image">
-    <meta property="twitter:url" content="https://leonce-equity.com/agendata/index.html"> 
+    <meta property="twitter:url" content="https://agendata.io/"> <!-- REMPLACER PAR L'URL REELLE -->
     <meta property="twitter:title" content="AgenData | Système de Gestion Cognitive">
     <meta property="twitter:description" content="Transformez le flux de pensées en actions cristallisées.">
-    <meta property="twitter:image" content="https://leonce-equity.com/agendata/screenshoot/AgenData-desktop.png">
+    <meta property="twitter:image" content="https://images.unsplash.com/photo-1555421689-491a97ff2040?ixlib=rb-1.2.1&auto=format&fit=crop&w=1200&h=630&q=80">
 
     <!-- Mobile App iOS/Android Capabilities -->
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1037,17 +1037,66 @@
                      setTimeout(() => { const card = document.getElementById(`card-${dateStr}`); if(card) card.classList.add('flash-success'); }, 300);
                 },
                 search: async function(query) {
-                    const container = document.getElementById('search-results'); container.innerHTML = ''; if(!query) return;
-                    const all = await Core.DB.entries.toArray();
-                    const q = query.toLowerCase();
-                    const results = all.filter(e => e.content.toLowerCase().includes(q));
-                    results.forEach(res => {
+                    const container = document.getElementById('search-results'); 
+                    container.innerHTML = ''; 
+                    if(!query || query.trim().length < 2) return;
+
+                    // Découpage en mots-clés et suppression des accents pour la tolérance
+                    const normalize = str => str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                    const terms = normalize(query).split(' ').filter(t => t);
+                    
+                    // 1. Recherche dans le SAS (Brouillon actuel)
+                    const draftHtml = document.getElementById('main-editor').innerHTML;
+                    const draftText = Core.Utils.stripHTML(draftHtml);
+                    const draftNorm = normalize(draftText);
+                    
+                    if (draftText.trim().length > 0 && terms.every(t => draftNorm.includes(t))) {
                         const div = document.createElement('div');
-                        div.className = "bg-white/5 p-3 rounded cursor-pointer hover:bg-white/10";
-                        div.onclick = () => { Core.State.currentMonday = Core.Utils.getMonday(new Date(res.date)); Core.Binder.render(); Core.UI.closeModals(); };
-                        div.innerHTML = `<div class="text-[10px] font-mono text-blue-400 mb-1">${res.date}</div><div class="text-xs text-slate-300 line-clamp-2">${Core.Utils.stripHTML(res.content)}</div>`;
+                        div.className = "bg-blue-500/10 border border-blue-500/30 p-3 rounded cursor-pointer hover:bg-blue-500/20 mb-3";
+                        div.onclick = () => { Core.UI.closeModals(); };
+                        
+                        let snippet = draftText;
+                        query.split(' ').filter(t=>t).forEach(t => {
+                            const regex = new RegExp(`(${t})`, 'gi');
+                            snippet = snippet.replace(regex, `<span class="bg-yellow-500/40 text-white rounded px-0.5">$1</span>`);
+                        });
+
+                        div.innerHTML = `<div class="text-[10px] font-mono text-blue-400 mb-1">BROUILLON ACTIF</div><div class="text-xs text-slate-300 line-clamp-3">${snippet}</div>`;
                         container.appendChild(div);
-                    });
+                    }
+
+                    // 2. Recherche dans les archives (Base de données)
+                    const all = await Core.DB.entries.toArray();
+                    const results = all.filter(e => {
+                        const contentNorm = normalize(Core.Utils.stripHTML(e.content));
+                        return terms.every(t => contentNorm.includes(t));
+                    }).sort((a,b) => b.date.localeCompare(a.date));
+
+                    // 3. Affichage avec contexte
+                    if (results.length > 0) {
+                        results.forEach(res => {
+                            const div = document.createElement('div');
+                            div.className = "bg-white/5 p-3 rounded cursor-pointer hover:bg-white/10 mb-2";
+                            div.onclick = () => { Core.State.currentMonday = Core.Utils.getMonday(new Date(res.date)); Core.Binder.render(); Core.UI.closeModals(); };
+                            
+                            let snippet = Core.Utils.stripHTML(res.content);
+                            
+                            // Centrage du snippet sur le premier terme trouvé pour éviter de lire le vide
+                            const firstTermIdx = normalize(snippet).indexOf(terms[0]);
+                            if (firstTermIdx > 40) snippet = "..." + snippet.substring(firstTermIdx - 30);
+                            
+                            // Surlignage basé sur la saisie brute
+                            query.split(' ').filter(t=>t).forEach(t => {
+                                const regex = new RegExp(`(${t})`, 'gi');
+                                snippet = snippet.replace(regex, `<span class="bg-yellow-500/40 text-white rounded px-0.5">$1</span>`);
+                            });
+
+                            div.innerHTML = `<div class="text-[10px] font-mono text-slate-500 mb-1">${res.date}</div><div class="text-xs text-slate-300 line-clamp-3">${snippet}</div>`;
+                            container.appendChild(div);
+                        });
+                    } else if (container.innerHTML === '') {
+                        container.innerHTML = '<div class="p-4 text-center text-xs text-slate-500">Aucun signal trouvé.</div>';
+                    }
                 }
             },
             Editor: {
