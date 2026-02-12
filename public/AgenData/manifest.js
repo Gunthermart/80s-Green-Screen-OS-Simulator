@@ -1,5 +1,5 @@
 {
-  "name": "AgenData v9.21",
+  "name": "AgenData v9.22",
   "short_name": "AgenData",
   "start_url": "./index.html",
   "display": "standalone",
@@ -22,14 +22,14 @@
   ],
   "screenshots": [
     {
-      "src": "./screenshot/AgenData-mobile.png",
+      "src": "./screenshot/screenshoot-mobile.png",
       "sizes": "390x844",
       "type": "image/png",
       "form_factor": "narrow",
       "label": "Interface Mobile Tactique"
     },
     {
-      "src": "./screenshot/AgenData-desktop.png",
+      "src": "./screenshot/screenshoot-desktop.png",
       "sizes": "1920x1080",
       "type": "image/png",
       "form_factor": "wide",
