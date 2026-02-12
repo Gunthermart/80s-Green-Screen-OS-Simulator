@@ -4,31 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     
-    <title>AgenData v9.25 | Système d'Extraction Financière</title>
+    <title>AgenData v9.30 | Système d'Extraction Financière</title>
     
-    <meta name="description" content="Ne laissez plus rien au hasard. Transformez le chaos en ordre avec ce système opérationnel de prise de note tactique. Pas de bruit, juste du signal.">
-    <meta name="author" content="LEONCE-EQUITY">
-    <meta name="keywords" content="productivité, pkm, finance, analyse, marché, tactique, minimalisme">
-    
-    <meta property="og:type" content="website">
-    <meta property="og:url" content="https://agendata.io/">
-    <meta property="og:title" content="AgenData | Extraction du Signal">
-    <meta property="og:description" content="Système de cristallisation temporelle pour l'analyse financière. Capturez, structurez, agissez.">
-    <meta property="og:image" content="https://images.unsplash.com/photo-1555421689-491a97ff2040?ixlib=rb-1.2.1&auto=format&fit=crop&w=1200&h=630&q=80">
-
-    <meta property="twitter:card" content="summary_large_image">
-    <meta property="twitter:url" content="https://agendata.io/">
-    <meta property="twitter:title" content="AgenData | Système d'Extraction Financière">
-    <meta property="twitter:description" content="Détruisez le narratif. Extrayez les métriques.">
-    <meta property="twitter:image" content="https://images.unsplash.com/photo-1555421689-491a97ff2040?ixlib=rb-1.2.1&auto=format&fit=crop&w=1200&h=630&q=80">
-
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="AgenData">
-    <meta name="theme-color" content="#0f172a">
+    <meta name="description" content="Système opérationnel de prise de note tactique. Signal contre Bruit.">
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
+    <!-- THREE.JS IMPORT -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Inter:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
     
     <style>
@@ -64,21 +48,36 @@
         aside { transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease; }
         aside.collapsed { width: 0 !important; opacity: 0; overflow: hidden; border-right: none; }
 
+        /* EDITOR LAYER & 3D BACKGROUND */
         .editor-layer {
-            background: rgba(255, 255, 255, 0.01);
+            background: rgba(15, 23, 42, 0.5); /* Semi-transparent pour voir le 3D */
             border: 1px solid var(--border);
             transition: border-color 0.2s;
             display: flex;
             flex-direction: column;
+            position: relative; /* Pour positionner le canvas absolute dedans */
         }
         .editor-layer:focus-within { border-color: var(--accent); }
         
+        #canvas-container {
+            position: absolute;
+            inset: 0;
+            z-index: 0;
+            opacity: 0.6; /* Subtil */
+            pointer-events: none; /* Laisser passer les clics vers l'éditeur */
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
         #main-editor {
             flex: 1;
             overflow: auto;
             white-space: pre-wrap;
             outline: none;
             word-wrap: break-word;
+            position: relative;
+            z-index: 10; /* Au-dessus du canvas */
+            background: transparent;
         }
         
         #main-editor.read-mode { cursor: default; color: #94a3b8; }
@@ -112,41 +111,21 @@
             color: #fff;
             transform: translateY(-2px);
             box-shadow: 0 4px 20px rgba(217, 70, 239, 0.5);
-            z-index: 10;
+            z-index: 20;
         }
 
-        .nexus-index::before {
-            content: '⚡'; 
-            font-size: 0.7em;
-            margin-right: 4px;
-            color: #e879f9;
-        }
+        .nexus-index::before { content: '⚡'; font-size: 0.7em; margin-right: 4px; color: #e879f9; }
 
         .ai-insight-panel .nexus-index {
-            display: inline !important;
-            padding: 0 2px !important;
-            margin: 0 1px !important;
-            font-size: inherit !important;
-            background: rgba(192, 38, 211, 0.15);
-            border: none !important;
-            box-shadow: none !important;
-            vertical-align: baseline !important;
-            transform: none !important;
-            letter-spacing: normal !important;
-            white-space: normal !important;
-            line-height: inherit !important;
+            display: inline !important; padding: 0 2px !important; margin: 0 1px !important; font-size: inherit !important;
+            background: rgba(192, 38, 211, 0.15); border: none !important; box-shadow: none !important;
+            vertical-align: baseline !important; transform: none !important; letter-spacing: normal !important;
+            white-space: normal !important; line-height: inherit !important;
         }
-        .ai-insight-panel .nexus-index:hover {
-            background: rgba(192, 38, 211, 0.3);
-            color: #fff;
-            text-decoration: underline;
-        }
+        .ai-insight-panel .nexus-index:hover { background: rgba(192, 38, 211, 0.3); color: #fff; text-decoration: underline; }
         .ai-insight-panel .nexus-index::before { display: none !important; }
 
-        .agenda-card {
-            border-bottom: 1px solid var(--border); border-left: 3px solid transparent;
-            transition: all 0.2s; position: relative; background: rgba(255,255,255,0.01);
-        }
+        .agenda-card { border-bottom: 1px solid var(--border); border-left: 3px solid transparent; transition: all 0.2s; position: relative; background: rgba(255,255,255,0.01); }
         .agenda-card:hover { background: rgba(255,255,255,0.03); }
         .agenda-card.today { background: rgba(59, 130, 246, 0.05); border-left-color: var(--accent); }
         .agenda-card.flash-success { animation: flashHighlight 0.6s ease-out; }
@@ -157,45 +136,21 @@
         .agenda-separator { display: block; margin: 8px 0 4px 0; padding-top: 4px; border-top: 1px dashed var(--border); font-size: 0.6em; color: var(--text-muted); font-family: var(--font-mono); }
         
         .card-tag-badge { 
-            font-size: 9px; 
-            font-family: var(--font-mono); 
-            font-weight: 700; 
-            background: rgba(192, 38, 211, 0.15);
-            color: #e879f9; 
-            padding: 2px 6px; 
-            border-radius: 4px; 
-            border: 1px solid rgba(232, 121, 249, 0.3); 
-            margin-left: 4px; 
-            display: inline-block;
-            cursor: pointer;
-            transition: all 0.2s ease;
+            font-size: 9px; font-family: var(--font-mono); font-weight: 700; background: rgba(192, 38, 211, 0.15);
+            color: #e879f9; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(232, 121, 249, 0.3); 
+            margin-left: 4px; display: inline-block; cursor: pointer; transition: all 0.2s ease;
         }
-        .card-tag-badge:hover {
-            background: #d946ef; color: #fff; border-color: #f0abfc;
-            transform: translateY(-1px); box-shadow: 0 2px 8px rgba(217, 70, 239, 0.4);
-        }
+        .card-tag-badge:hover { background: #d946ef; color: #fff; border-color: #f0abfc; transform: translateY(-1px); box-shadow: 0 2px 8px rgba(217, 70, 239, 0.4); }
 
         .ai-insight-panel {
-            margin-bottom: 3rem; 
-            background: rgba(15, 23, 42, 0.9);
-            border: 1px solid var(--border);
-            border-top: 3px solid var(--accent);
-            border-radius: 4px;
-            overflow: hidden;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-            animation: slideDown 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-            user-select: none;
+            margin-bottom: 3rem; background: rgba(15, 23, 42, 0.9); border: 1px solid var(--border);
+            border-top: 3px solid var(--accent); border-radius: 4px; overflow: hidden;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3); animation: slideDown 0.4s cubic-bezier(0.16, 1, 0.3, 1); user-select: none;
         }
         .ai-insight-panel * { user-select: text; } 
-
         @keyframes slideDown { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
-        .ai-insight-header {
-            background: rgba(255, 255, 255, 0.03);
-            padding: 8px 16px;
-            border-bottom: 1px solid var(--border);
-            display: flex; justify-content: space-between; align-items: center;
-        }
+        .ai-insight-header { background: rgba(255, 255, 255, 0.03); padding: 8px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
         .ai-title-group { display: flex; align-items: center; gap: 10px; }
         .ai-icon-box { color: var(--accent); font-size: 14px; }
         .ai-panel-title { font-family: var(--font-mono); font-size: 10px; font-weight: 800; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; }
@@ -293,7 +248,7 @@
         <button id="btn-install-pwa" onclick="Core.System.installPWA()"><div class="pwa-status-dot"></div><span>INITIALISER LE SYSTÈME</span></button>
         <div class="relative mb-4">
             <div class="absolute -inset-1 bg-blue-500 rounded-lg blur opacity-20"></div>
-            <h1 class="relative text-4xl md:text-5xl font-black text-white tracking-tight">AgenData v9.25</h1>
+            <h1 class="relative text-4xl md:text-5xl font-black text-white tracking-tight">AgenData v9.30</h1>
         </div>
         <div class="text-xs md:text-sm font-mono font-bold text-blue-400 tracking-[0.3em] uppercase opacity-80">LEONCE-EQUITY</div>
         <div class="mt-8 flex gap-1">
@@ -334,7 +289,7 @@
     </aside>
 
     <main class="flex-1 flex flex-col relative overflow-hidden bg-[#0f172a]">
-        <header class="h-14 border-b border-white/5 flex items-center justify-between px-6 shrink-0">
+        <header class="h-14 border-b border-white/5 flex items-center justify-between px-6 shrink-0 relative z-20 bg-[#0f172a]">
             <div class="flex items-center gap-2">
                 <button onclick="Core.UI.toggleSidebar()" class="p-2 text-slate-500 hover:text-white" title="Basculer Sidebar (Alt+B)">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" stroke-width="2"/></svg>
@@ -385,8 +340,11 @@
             </div>
         </header>
 
-        <div class="flex-1 overflow-hidden p-6 md:p-12 flex flex-col">
-            <div class="max-w-4xl mx-auto w-full editor-layer rounded-lg flex-1 overflow-hidden relative">
+        <div class="flex-1 overflow-hidden p-6 md:p-12 flex flex-col relative z-10">
+            <div class="max-w-4xl mx-auto w-full editor-layer rounded-lg flex-1 overflow-hidden">
+                <!-- 3D CANVAS CONTAINER -->
+                <div id="canvas-container"></div>
+                <!-- EDITOR -->
                 <div id="main-editor" contenteditable="true" class="p-12 md:p-16 text-slate-300 outline-none text-base leading-7 custom-scrollbar" placeholder="Copier-coller rapports financiers ici..."></div>
             </div>
         </div>
@@ -394,6 +352,7 @@
         <input type="file" id="import-input" class="hidden" accept=".json" onchange="Core.IO.importData(event)">
     </main>
 
+    <!-- UI COMPONENTS (Toast, HUD, Modals) -->
     <div id="toast" class="toast">Action effectuée</div>
 
     <div id="macro-hud">
@@ -475,6 +434,72 @@
                 lastSelection: { text: null, ts: 0 } 
             },
 
+            // --- THREE.JS MODULE FOR BACKGROUND ---
+            Background: {
+                scene: null, camera: null, renderer: null, particles: null,
+                init: function() {
+                    const container = document.getElementById('canvas-container');
+                    if (!container) return;
+
+                    // Scene & Camera
+                    this.scene = new THREE.Scene();
+                    this.scene.fog = new THREE.FogExp2(0x0f172a, 0.002); // Fog matches bg-dark
+
+                    this.camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+                    this.camera.position.z = 100;
+
+                    // Renderer
+                    this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+                    this.renderer.setSize(container.clientWidth, container.clientHeight);
+                    this.renderer.setPixelRatio(window.devicePixelRatio);
+                    container.appendChild(this.renderer.domElement);
+
+                    // Particles (The "Data Void")
+                    const geometry = new THREE.BufferGeometry();
+                    const particlesCount = 800;
+                    const posArray = new Float32Array(particlesCount * 3);
+
+                    for(let i = 0; i < particlesCount * 3; i++) {
+                        posArray[i] = (Math.random() - 0.5) * 400; // Spread
+                    }
+
+                    geometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+
+                    // Material (Blue accents)
+                    const material = new THREE.PointsMaterial({
+                        size: 1.5,
+                        color: 0x3b82f6, // Tailwind Blue-500
+                        transparent: true,
+                        opacity: 0.6,
+                        sizeAttenuation: true
+                    });
+
+                    this.particles = new THREE.Points(geometry, material);
+                    this.scene.add(this.particles);
+
+                    // Resize Handler
+                    window.addEventListener('resize', () => {
+                        this.camera.aspect = container.clientWidth / container.clientHeight;
+                        this.camera.updateProjectionMatrix();
+                        this.renderer.setSize(container.clientWidth, container.clientHeight);
+                    });
+
+                    // Start Loop
+                    this.animate();
+                },
+                animate: function() {
+                    requestAnimationFrame(Core.Background.animate.bind(Core.Background));
+                    
+                    // Slow rotation (The "Drift")
+                    if(Core.Background.particles) {
+                        Core.Background.particles.rotation.y += 0.0005;
+                        Core.Background.particles.rotation.x += 0.0002;
+                    }
+
+                    Core.Background.renderer.render(Core.Background.scene, Core.Background.camera);
+                }
+            },
+
             Init: async function() {
                 this.DB = new Dexie("AgenData_V8");
                 this.DB.version(2).stores({ entries: "date", meta: "id", macros: "trigger" });
@@ -484,7 +509,12 @@
                 this.Binder.render();
                 this.Listeners.setup();
                 this.Voice.init();
-                this.Utils.toast("V9.25 : MANUEL OPÉRATIONNEL À JOUR");
+                
+                // Init 3D Background
+                this.Background.init();
+
+                this.Utils.toast("V9.30 : DATA ENTROPY INITIALIZED");
+                
                 window.addEventListener('beforeinstallprompt', (e) => {
                     e.preventDefault(); Core.State.installPrompt = e;
                     const btn = document.getElementById('btn-install-pwa');
@@ -1233,7 +1263,7 @@
                 loadDraft: async () => { const draft = await Core.DB.meta.get('draft'); if(draft) { document.getElementById('main-editor').innerHTML = Core.Editor.processContent(draft.content); } },
                 export: async () => {
                     const entries = await Core.DB.entries.toArray(); const draft = await Core.DB.meta.get('draft');
-                    const blob = new Blob([JSON.stringify({version: "v9.25", exportedAt: new Date().toISOString(), agenda: entries, draft: draft ? draft.content : ""}, null, 2)], {type : 'application/json'});
+                    const blob = new Blob([JSON.stringify({version: "v9.30", exportedAt: new Date().toISOString(), agenda: entries, draft: draft ? draft.content : ""}, null, 2)], {type : 'application/json'});
                     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `AgenData_Backup_${Core.Utils.formatDate(new Date())}.json`; a.click(); Core.Utils.toast("BACKUP COMPLET GÉNÉRÉ");
                 },
                 triggerImport: () => document.getElementById('import-input').click(),
