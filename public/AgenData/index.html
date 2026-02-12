@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     
-    <title>AgenData v9.24 | Système d'Extraction Financière</title>
+    <title>AgenData v9.25 | Système d'Extraction Financière</title>
     
     <meta name="description" content="Ne laissez plus rien au hasard. Transformez le chaos en ordre avec ce système opérationnel de prise de note tactique. Pas de bruit, juste du signal.">
     <meta name="author" content="LEONCE-EQUITY">
@@ -293,7 +293,7 @@
         <button id="btn-install-pwa" onclick="Core.System.installPWA()"><div class="pwa-status-dot"></div><span>INITIALISER LE SYSTÈME</span></button>
         <div class="relative mb-4">
             <div class="absolute -inset-1 bg-blue-500 rounded-lg blur opacity-20"></div>
-            <h1 class="relative text-4xl md:text-5xl font-black text-white tracking-tight">AgenData v9.24</h1>
+            <h1 class="relative text-4xl md:text-5xl font-black text-white tracking-tight">AgenData v9.25</h1>
         </div>
         <div class="text-xs md:text-sm font-mono font-bold text-blue-400 tracking-[0.3em] uppercase opacity-80">LEONCE-EQUITY</div>
         <div class="mt-8 flex gap-1">
@@ -313,6 +313,7 @@
                 <button onclick="Core.Binder.jumpToToday()" class="ml-2 text-[9px] font-bold bg-blue-500/10 text-blue-400 px-2 py-1 rounded hover:bg-blue-500/20">AUJ.</button>
             </div>
             <div class="flex bg-white/5 rounded p-0.5">
+                <button onclick="Core.AI.auditWeek()" class="px-2 py-1 rounded text-[10px] font-bold uppercase text-yellow-500 hover:bg-yellow-500/10 transition-all mr-1" title="Lancer l'Audit Hebdomadaire">⚡ AUDIT</button>
                 <button onclick="Core.UI.toggleSidebarView('pages')" id="btn-view-pages" class="px-2 py-1 rounded text-[10px] font-bold uppercase text-blue-400 bg-slate-800 shadow-sm transition-all">Pages</button>
                 <button onclick="Core.UI.toggleSidebarView('index')" id="btn-view-index" class="px-2 py-1 rounded text-[10px] font-bold uppercase text-slate-500 hover:text-slate-300 transition-all">Nexus</button>
             </div>
@@ -483,7 +484,7 @@
                 this.Binder.render();
                 this.Listeners.setup();
                 this.Voice.init();
-                this.Utils.toast("V9.24 : APOSTROPHE FIX APPLIED");
+                this.Utils.toast("V9.25 : MANUEL OPÉRATIONNEL À JOUR");
                 window.addEventListener('beforeinstallprompt', (e) => {
                     e.preventDefault(); Core.State.installPrompt = e;
                     const btn = document.getElementById('btn-install-pwa');
@@ -521,15 +522,11 @@
                 toast: msg => { const el = document.getElementById('toast'); el.textContent = msg; el.style.opacity = "1"; setTimeout(() => el.style.opacity = "0", 2000); },
                 debounce: (fn, ms) => { let timeout; return (...args) => { clearTimeout(timeout); timeout = setTimeout(() => fn.apply(this, args), ms); }; },
                 stripHTML: (html) => { const tmp = document.createElement("DIV"); tmp.innerHTML = html; return tmp.textContent || tmp.innerText || ""; },
-                
-                // CORRECTIF V9.24 : AJOUT DES APOSTROPHES ' et ’ DANS LA REGEX
                 tagRegex: /\[([a-zA-Z0-9\u00C0-\u00FF\s_\-'’]+)\]/g,
-                
                 extractIndexes: (html) => {
                     const text = Core.Utils.stripHTML(html);
                     const tags = [];
                     let match;
-                    // CORRECTIF V9.24 : ALIGNEMENT DE LA REGEX D'EXTRACTION
                     const regex = /\[([a-zA-Z0-9\u00C0-\u00FF\s_\-'’]+)\]/g;
                     while ((match = regex.exec(text)) !== null) { tags.push(match[1]); }
                     return tags;
@@ -605,6 +602,93 @@
             },
 
             AI: {
+                auditWeek: async function() {
+                    const start = new Date(Core.State.currentMonday);
+                    const range = [];
+                    for(let i=0; i<7; i++) {
+                        const d = new Date(start.getTime() + i*86400000);
+                        const k = Core.Utils.formatDate(d);
+                        const entry = await Core.DB.entries.get(k);
+                        if(entry && entry.content) {
+                            range.push({date: k, content: Core.Utils.stripHTML(entry.content)});
+                        }
+                    }
+
+                    if(range.length === 0) { Core.Utils.toast("PAS DE DONNÉES À AUDITER"); return; }
+
+                    const tagsMap = {};
+                    let riskCount = 0;
+                    let totalChars = 0;
+                    
+                    const riskKeywords = [/warning/gi, /risque/gi, /chute/gi, /perte/gi, /krach/gi, /faillite/gi, /stop/gi, /liquidé/gi];
+
+                    range.forEach(r => {
+                        totalChars += r.content.length;
+                        riskKeywords.forEach(rx => {
+                            const matches = r.content.match(rx);
+                            if(matches) riskCount += matches.length;
+                        });
+                        const tags = Core.Utils.extractIndexes(r.content);
+                        tags.forEach(t => {
+                            if(!tagsMap[t]) tagsMap[t] = { count: 0, dates: [] };
+                            tagsMap[t].count++;
+                            tagsMap[t].dates.push(r.date);
+                        });
+                    });
+
+                    const obsessions = Object.entries(tagsMap)
+                        .filter(([k,v]) => new Set(v.dates).size >= 3)
+                        .map(([k,v]) => k);
+
+                    const container = document.getElementById('ui-binder-content');
+                    const existingReport = document.getElementById('audit-report-card');
+                    if(existingReport) existingReport.remove();
+
+                    const report = document.createElement('div');
+                    report.id = "audit-report-card";
+                    report.className = "mx-4 mt-4 mb-2 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded text-xs animate-pulse relative group";
+                    report.title = "Cliquer pour fermer";
+                    report.onclick = () => report.remove();
+                    
+                    let statusColor = riskCount > 2 ? 'text-red-500' : 'text-emerald-400';
+                    let statusText = riskCount > 2 ? '⚠️ HAUT RISQUE' : 'NEUTRE';
+
+                    let html = `
+                        <div class="font-black ${statusColor} mb-3 uppercase tracking-widest flex justify-between border-b border-white/10 pb-2">
+                            <span>RAPPORT HEBDOMADAIRE</span>
+                            <span>${statusText}</span>
+                        </div>
+                    `;
+
+                    if(obsessions.length > 0) {
+                        html += `
+                            <div class="mb-3 text-slate-300">
+                                <span class="text-orange-400 font-bold uppercase">Obsession Détectée :</span><br>
+                                Tu boucles sur <span class="text-white font-mono">${obsessions.join(', ')}</span> depuis 3 jours. Agis ou arrête d'en parler.
+                            </div>
+                        `;
+                    } else {
+                        html += `<div class="mb-3 text-slate-500 italic">Aucune redondance critique.</div>`;
+                    }
+
+                    const density = Math.round(totalChars / 7);
+                    let effortComment = "";
+                    if(density < 50) effortComment = "(Faible)";
+                    else if(density > 500) effortComment = "(Intense)";
+
+                    html += `
+                        <div class="flex justify-between pt-1 mt-1 text-[10px] font-mono text-slate-500">
+                            <span>EFFORT : ${density} chars/j ${effortComment}</span>
+                            <span>ACTIFS : ${range.length}/7 jours</span>
+                        </div>
+                        <div class="absolute top-1 right-2 text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity font-bold">✕</div>
+                    `;
+
+                    report.innerHTML = html;
+                    container.prepend(report);
+                    Core.Utils.toast("AUDIT TERMINÉ");
+                },
+
                 analyzeTag: async function(tag) {
                     const data = await Core.Nexus.analyzeIndex(tag);
                     const editor = document.getElementById('main-editor');
@@ -1149,7 +1233,7 @@
                 loadDraft: async () => { const draft = await Core.DB.meta.get('draft'); if(draft) { document.getElementById('main-editor').innerHTML = Core.Editor.processContent(draft.content); } },
                 export: async () => {
                     const entries = await Core.DB.entries.toArray(); const draft = await Core.DB.meta.get('draft');
-                    const blob = new Blob([JSON.stringify({version: "v9.24", exportedAt: new Date().toISOString(), agenda: entries, draft: draft ? draft.content : ""}, null, 2)], {type : 'application/json'});
+                    const blob = new Blob([JSON.stringify({version: "v9.25", exportedAt: new Date().toISOString(), agenda: entries, draft: draft ? draft.content : ""}, null, 2)], {type : 'application/json'});
                     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `AgenData_Backup_${Core.Utils.formatDate(new Date())}.json`; a.click(); Core.Utils.toast("BACKUP COMPLET GÉNÉRÉ");
                 },
                 triggerImport: () => document.getElementById('import-input').click(),
@@ -1256,21 +1340,31 @@
                         content.innerHTML = `
                             <h3>LE NEXUS : LA MATRICE DE CORRÉLATION</h3>
                             <p>Lire l'actualité du jour te donne un avantage nul. Tout le monde a la même information. Ton avantage réside dans la corrélation historique.</p>
+                            <div class="help-step">
+                                <span class="help-step-num">VISUALISATION</span>
+                                <p>Le bouton NEXUS (Sidebar) remplace la liste chronologique par une vue en réseau. Il te montre les liens invisibles entre tes actifs.</p>
+                            </div>
                             <ul>
                                 <li>En encapsulant des mots-clés entre crochets comme <code>[NVDA]</code> ou <code>[INFLATION]</code>, tu crées des nœuds de données.</li>
                                 <li>Le Nexus cartographie ces nœuds. Il te montre mathématiquement à quelle fréquence <code>[NVDA]</code> apparaît à côté de <code>[TSMC]</code> dans tes propres analyses sur les 6 derniers mois.</li>
-                                <li>C'est ici que tu repères les signaux faibles et les dépendances avant que le marché ne les intègre.</li>
                             </ul>
                         `;
                     } else if (section === 'ai') {
                          content.innerHTML = `
-                            <h3>EXTRACTION IA (SYSTEM.READY)</h3>
-                            <p>Les rapports financiers sont conçus pour noyer l'information critique sous une abondance de termes rassurants. L'IA est ton extracteur à froid.</p>
+                            <h3>EXTRACTION IA & AUDIT TACTIQUE</h3>
+                            <div class="help-step">
+                                <span class="help-step-num">1. SYSTEM.READY (EXTRACTION)</span>
+                                <p>Les rapports financiers noient l'info. Clique sur le bouton IA. L'algorithme ignore le narratif. Il extrait brutalement les métriques (chiffres) et les risques (mots-clés de peur).</p>
+                            </div>
                             
                             <div class="help-step">
-                                <span class="help-step-num">FONCTION : SCAN OBJECTIF</span>
-                                <p>Tu as collé le communiqué de presse d'une entreprise. Clique sur SYSTEM.READY. L'algorithme ignore le narratif. Il extrait les points de tension (mots-clés liés au risque, aux retards, aux baisses de guidance) et les métriques.</p>
-                                <p>C'est une synthèse brutale qui te force à voir les failles que le management essaie de cacher, t'évitant de tomber dans le biais d'ancrage.</p>
+                                <span class="help-step-num">2. AUDIT HEBDOMADAIRE (NOUVEAU)</span>
+                                <p>Le bouton jaune ⚡ dans la sidebar. Il scanne tes 7 derniers jours.</p>
+                                <ul>
+                                    <li><strong>Détection d'Obsession :</strong> Si tu parles 3 fois de la même action sans agir, il te le dit.</li>
+                                    <li><strong>Dissonance :</strong> Si tu es haussier lundi et baissier mercredi sans raison, il te le signale.</li>
+                                    <li><strong>Densité :</strong> Il mesure ton effort réel (caractères utiles / jour).</li>
+                                </ul>
                             </div>
                         `;
                     } else if (section === 'controls') {
@@ -1280,6 +1374,8 @@
                             <ul>
                                 <li><code>Alt + V</code> : Basculer entre l'édition brute et la lecture (activation des liens indexés).</li>
                                 <li><code>Alt + T</code> : Insérer une balise d'index <code>[]</code>.</li>
+                                <li><code>Alt + B</code> : Repli Tactique (Masquer/Afficher la Sidebar).</li>
+                                <li><code>Alt + ↑ / ↓</code> : Focus rapide (Ajout de ligne Haut/Bas).</li>
                                 <li><code>Double-Clic</code> : Transformer le ticker ou le mot sélectionné en <strong>INDEX</strong>.</li>
                                 <li><code>Ctrl + F</code> : Interroger la base de données intégrale.</li>
                             </ul>
