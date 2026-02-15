@@ -1,0 +1,1139 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    
+    <title>NoteLogic V1.04 | Classeur Visual Ops</title>
+    
+    <meta name="description" content="Système de Classeur Tactique NoteLogic v1.04 (Macro Chords).">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Inter:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
+    
+    <style>
+        :root { --bg-dark: #0f172a; --bg-panel: #1e293b; --accent: #3b82f6; --tag-bg: rgba(59, 130, 246, 0.1); --text-muted: #64748b; --border: rgba(255, 255, 255, 0.08); --font-mono: 'JetBrains Mono', monospace; }
+        
+        body { background-color: var(--bg-dark); color: #f8fafc; font-family: 'Inter', sans-serif; height: 100vh; overflow: hidden; display: flex; transition: background-color 0.3s; }
+
+        /* SCROLL & UTILS */
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+        aside { transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease; }
+        aside.collapsed { width: 0 !important; opacity: 0; overflow: hidden; border-right: none; }
+
+        /* EDITOR */
+        .editor-layer { background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border); position: relative; display: flex; flex-direction: column; backdrop-filter: blur(2px); transition: border-color 0.3s, background 0.3s; }
+        .editor-layer:focus-within { border-color: var(--accent); }
+        #canvas-container { position: absolute; inset: 0; z-index: 0; opacity: 0.5; pointer-events: none; }
+        #main-editor { flex: 1; overflow: auto; white-space: pre-wrap; outline: none; position: relative; z-index: 10; padding: 3rem; font-size: 1rem; line-height: 1.7; }
+        #main-editor.read-mode { color: #94a3b8; }
+
+        /* PDF CHIP STYLING */
+        .pdf-chip { display: inline-flex; align-items: center; gap: 6px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.4); color: #fca5a5; padding: 2px 8px; border-radius: 4px; font-family: var(--font-mono); font-size: 0.8rem; cursor: pointer; user-select: none; margin: 0 4px; transition: all 0.2s; }
+        .pdf-chip:hover { background: rgba(239, 68, 68, 0.2); border-color: #fca5a5; color: white; }
+        .pdf-chip::before { content: '📄'; font-size: 0.9em; }
+
+        /* NEXUS & CARDS */
+        .nexus-index { font-family: var(--font-mono); font-size: 0.85em; font-weight: 800; color: #f0abfc; background: rgba(192, 38, 211, 0.2); border: 1px solid #d946ef; padding: 0 4px; border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; user-select: none; box-shadow: 0 0 10px rgba(217, 70, 239, 0.1); white-space: nowrap; }
+        .nexus-index:hover { background: rgba(217, 70, 239, 0.4); color: #fff; transform: translateY(-1px); z-index: 10; }
+        .nexus-index::before { content: '⚡'; font-size: 0.7em; margin-right: 4px; color: #e879f9; }
+        
+        .page-card { border-bottom: 1px solid var(--border); border-left: 3px solid transparent; background: rgba(255,255,255,0.01); transition: background 0.2s; position: relative; cursor: pointer; }
+        .page-card:hover { background: rgba(255,255,255,0.03); border-left-color: var(--accent); }
+        .page-card.active { background: rgba(59, 130, 246, 0.05); border-left-color: var(--accent); }
+        
+        .card-tag-badge { font-size: 9px; font-family: var(--font-mono); font-weight: 700; background: rgba(192, 38, 211, 0.15); color: #e879f9; padding: 2px 5px; border-radius: 3px; border: 1px solid rgba(232, 121, 249, 0.3); margin-right: 4px; display: inline-block; cursor: pointer; margin-top: 4px; }
+        .card-actions { opacity: 0; transition: opacity 0.2s; position: absolute; right: 8px; top: 8px; background: #0f172a; padding: 2px; border-radius: 4px; border: 1px solid var(--border); display: flex; gap: 4px; }
+        .page-card:hover .card-actions { opacity: 1; }
+
+        /* MODULES */
+        .nexus-header { padding: 16px; background: rgba(59, 130, 246, 0.05); border-bottom: 1px solid var(--border); }
+        .nexus-section-title { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: var(--accent); margin: 16px 16px 8px 16px; letter-spacing: 1px; }
+        .heatmap-container { display: flex; gap: 2px; height: 32px; align-items: flex-end; padding: 0 16px; margin-bottom: 16px; margin-top: 8px; }
+        .heatmap-bar { flex: 1; background: var(--tag-bg); min-height: 2px; border-radius: 1px; transition: height 0.5s ease; }
+        .heatmap-bar.active { background: var(--accent); box-shadow: 0 0 5px var(--accent); }
+        .network-item { padding: 8px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; font-size: 0.8rem; cursor: pointer; align-items: center; }
+        .network-item:hover { background: rgba(255,255,255,0.05); }
+
+        .ai-insight-panel { margin-bottom: 2rem; background: rgba(15, 23, 42, 0.95); border: 1px solid var(--border); border-top: 2px solid var(--accent); border-radius: 4px; animation: slideDown 0.3s ease; }
+        @keyframes slideDown { from { transform: translateY(-10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        
+        /* SITREP MODAL STYLES */
+        .sitrep-group { margin-bottom: 16px; border: 1px solid rgba(59, 130, 246, 0.1); border-radius: 6px; overflow: hidden; }
+        .sitrep-group-title { font-size: 11px; font-weight: 800; color: #93c5fd; background: rgba(59, 130, 246, 0.1); padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; }
+        .sitrep-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.02); cursor: pointer; transition: background 0.2s; }
+        .sitrep-item:last-child { border-bottom: none; }
+        .sitrep-item:hover { background: rgba(59, 130, 246, 0.05); }
+        .sitrep-page-title { font-size: 12px; font-weight: 600; color: #e2e8f0; }
+        .sitrep-source { font-size: 10px; color: #64748b; font-family: var(--font-mono); }
+        
+        /* UI COMPONENTS */
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(4px); z-index: 50; display: none; align-items: center; justify-content: center; }
+        .modal-box { background: var(--bg-panel); border: 1px solid var(--border); width: 90%; max-width: 600px; max-height: 80vh; border-radius: 8px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); display: flex; flex-direction: column; }
+        
+        #macro-hud { position: fixed; bottom: 30px; right: 30px; background: #1e293b; border: 1px solid var(--border); padding: 12px; border-radius: 8px; display: none; z-index: 60; box-shadow: 0 10px 30px rgba(0,0,0,0.5); min-width: 200px; }
+        #macro-hud.visible { display: block; animation: fadeUp 0.1s; }
+        .hud-row { display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding: 4px 0; }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; } }
+
+        .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #1e293b; border: 1px solid var(--accent); padding: 6px 12px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; opacity: 0; pointer-events: none; transition: opacity 0.3s; z-index: 100; color: #fff; }
+        mark { background: rgba(234, 179, 8, 0.3); color: #fef08a; border-radius: 2px; padding: 0 2px; }
+        .view-btn-active { background-color: #3b82f6 !important; color: white !important; box-shadow: 0 0 10px rgba(59, 130, 246, 0.5); }
+        
+        /* DROPDOWN MENU */
+        .dropdown-menu { transform-origin: top right; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); opacity: 0; transform: scale(0.95); pointer-events: none; }
+        .dropdown-menu.active { opacity: 1; transform: scale(1); pointer-events: auto; }
+        .menu-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; font-size: 0.75rem; color: #94a3b8; font-weight: 600; transition: all 0.1s; border-radius: 4px; }
+        .menu-item:hover { background: rgba(255,255,255,0.05); color: #fff; }
+
+        /* MACRO INPUT PLACEHOLDER FOR CONTENTEDITABLE */
+        [contenteditable]:empty:before { content: attr(placeholder); color: #64748b; pointer-events: none; display: block; }
+
+        /* SEARCH STYLES */
+        .search-result-item { padding: 10px 14px; border-left: 2px solid transparent; transition: all 0.1s; cursor: pointer; }
+        .search-result-item:hover { background: rgba(255,255,255,0.03); }
+        .search-result-item.selected { background: rgba(59, 130, 246, 0.1); border-left-color: var(--accent); }
+        .search-highlight { background: rgba(59, 130, 246, 0.3); color: white; border-radius: 2px; padding: 0 1px; }
+        .search-tag { font-size: 10px; background: rgba(255,255,255,0.05); color: #94a3b8; padding: 1px 4px; border-radius: 3px; border: 1px solid rgba(255,255,255,0.05); margin-right: 4px; }
+        
+        /* FINANCIAL CHART */
+        .fin-chart path { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+        .fin-grid line { stroke: rgba(255,255,255,0.1); stroke-width: 1; }
+    </style>
+</head>
+<body class="flex-col md:flex-row">
+
+    <!-- SPLASH -->
+    <div id="splash-screen" class="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#0b1120] transition-opacity duration-700">
+        <button id="btn-install-pwa" data-action="installPWA" class="hidden absolute top-8 left-8 items-center gap-3 px-4 py-2 bg-slate-900/60 border border-white/10 border-l-2 border-l-blue-500 backdrop-blur text-slate-400 font-mono text-[10px] font-bold uppercase tracking-widest rounded-sm hover:text-white hover:bg-slate-900/90 transition-all z-50 shadow-lg">
+            <div class="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse shadow-[0_0_8px_#3b82f6]"></div><span>INITIALISER SYSTEME</span>
+        </button>
+        <div class="relative mb-4">
+            <div class="absolute -inset-1 bg-blue-500 rounded-lg blur opacity-20"></div>
+            <h1 class="relative text-4xl font-black text-white tracking-tighter">NoteLogic V1.04</h1>
+        </div>
+        <div class="text-xs font-mono font-bold text-blue-500 tracking-[0.3em]">CLASSEUR VISUAL OPS</div>
+    </div>
+
+    <!-- SIDEBAR -->
+    <aside id="main-sidebar" class="w-full md:w-[360px] border-r border-white/5 flex flex-col shrink-0 bg-[#0b1120]">
+        <header class="h-12 flex items-center justify-between px-3 border-b border-white/5 shrink-0 bg-[#0f172a]">
+            <div class="flex items-center gap-2">
+                 <span class="text-xs font-black text-white tracking-widest uppercase">Classeur</span>
+                 <div class="h-4 w-px bg-white/10 mx-1"></div>
+                 <button data-action="newPage" class="flex items-center gap-1 text-[10px] font-bold bg-blue-500/10 text-blue-400 px-2 py-1 rounded hover:bg-blue-500/20 border border-blue-500/20" title="Nouvelle Note (Alt+N)">
+                    <span>+ NOTE</span>
+                 </button>
+            </div>
+            <div class="flex gap-1 items-center">
+                <button data-action="triggerSitrep" class="px-2 py-1 rounded text-[10px] font-bold uppercase text-blue-400 bg-blue-500/5 hover:bg-blue-500/10 transition-all border border-blue-500/20" title="Index Global (Alt+S)">📡 SITREP</button>
+                <div class="bg-white/5 rounded p-0.5 flex">
+                    <button data-action="toggleView" data-view="pages" id="btn-view-pages" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase text-slate-400 transition-all view-btn-active" title="Vue Liste (Alt+1)">Pages</button>
+                    <button data-action="toggleView" data-view="index" id="btn-view-index" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase text-slate-400 transition-all" title="Vue Grappe (Alt+2)">Nexus</button>
+                </div>
+            </div>
+        </header>
+
+        <div class="flex-1 overflow-y-auto custom-scrollbar relative">
+            <div id="view-pages">
+                <div id="ui-filter-banner" class="hidden bg-blue-500/10 border-b border-blue-500 text-blue-300 text-xs font-bold font-mono px-3 py-2 flex justify-between items-center">
+                    <span id="ui-filter-text"></span>
+                    <button data-action="clearFilter" class="hover:text-white" title="Effacer Filtre">✕</button>
+                </div>
+                <div id="ui-binder-content" class="flex flex-col"></div>
+            </div>
+            <div id="view-index" class="hidden">
+                <div id="ui-nexus-content"></div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- MAIN AREA -->
+    <main class="flex-1 flex flex-col relative overflow-hidden bg-[#0f172a]">
+        <header class="h-12 border-b border-white/5 flex items-center justify-between px-4 shrink-0 relative z-20 bg-[#0f172a]">
+            <div class="flex items-center gap-2">
+                <button data-action="toggleSidebar" class="p-2 text-slate-500 hover:text-white" title="Masquer/Afficher Menu (Alt+M)"><svg class="w-5 h-5 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" stroke-width="2"/></svg></button>
+                
+                <!-- CONTRAST TOGGLE -->
+                <button data-action="toggleContrast" class="p-2 text-slate-500 hover:text-white" title="Inverser Couleurs (Alt+C)"><svg class="w-5 h-5 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" stroke-width="2"/></svg></button>
+                
+                <div class="h-4 w-px bg-white/10 mx-1"></div>
+                <button data-action="editorAction" data-cmd="focusStart" class="p-1.5 text-slate-500 hover:text-emerald-400" title="Aller au début (Alt+Haut)"><svg class="w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 10l7-7m0 0l7 7m-7-7v18" stroke-width="2"/></svg></button>
+                <button data-action="editorAction" data-cmd="focusEnd" class="p-1.5 text-slate-500 hover:text-emerald-400" title="Aller à la fin (Alt+Bas)"><svg class="w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 14l-7 7m0 0l-7-7m7 7V3" stroke-width="2"/></svg></button>
+                
+                <div class="h-4 w-px bg-white/10 mx-1"></div>
+                <button data-action="insertIndex" class="p-1.5 text-blue-500/80 hover:text-blue-400 font-mono font-bold" title="Insérer Index (Alt+T)">[]</button>
+            </div>
+            <div class="flex items-center gap-2">
+                <button data-action="aiChallenge" id="ai-trigger" class="flex items-center gap-2 px-3 py-1 bg-slate-800/50 border border-slate-700 hover:border-blue-500/50 rounded transition-all group" title="Générer Synthèse IA (Alt+G)">
+                    <div class="w-1.5 h-1.5 rounded-full bg-slate-500 group-hover:bg-blue-400 transition-colors pointer-events-none" id="ai-pulse"></div>
+                    <span class="text-[9px] font-mono font-black text-slate-500 tracking-widest group-hover:text-blue-300 pointer-events-none" id="ai-label">SYSTEM.READY</span>
+                </button>
+                <div class="h-4 w-px bg-white/10 mx-1"></div>
+                
+                <button data-action="triggerAttach" class="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-all" title="Joindre PDF (Alt+P)"><svg class="w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" stroke-width="2"/></svg></button>
+
+                <button data-action="openSearch" class="p-2 text-slate-500 hover:text-white" title="Recherche Globale (Alt+F ou Ctrl+K)"><svg class="w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-width="2"/></svg></button>
+                <div class="h-4 w-px bg-white/10 mx-1"></div>
+                
+                <button data-action="dispatchToPage" class="p-2 text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded transition-all mr-1" title="Enregistrer dans le Classeur (Alt+Entrée)"><svg class="w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" stroke-width="2"/></svg></button>
+                
+                <!-- SETTINGS DROPDOWN GROUP -->
+                <div class="relative">
+                    <button data-action="toggleSettings" class="p-2 text-slate-500 hover:text-white transition-colors" title="Paramètres (Alt+O)">
+                        <svg class="w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" stroke-width="2"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-width="2"/></svg>
+                    </button>
+                    <!-- DROPDOWN -->
+                    <div id="ui-settings-menu" class="dropdown-menu absolute right-0 top-full mt-2 w-40 bg-[#1e293b] border border-white/10 rounded shadow-2xl z-50 flex flex-col p-1">
+                        <!-- ADDED: Help Button -->
+                        <button data-action="openHelp" class="menu-item group" title="Aide (F1)">
+                            <svg class="w-3 h-3 text-yellow-400 group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Manuel (F1)
+                        </button>
+                        <div class="h-px bg-white/5 my-1"></div>
+                        <button data-action="openMacroManager" class="menu-item group" title="Gérer Macros">
+                            <span class="text-purple-400 group-hover:text-white">⌨️</span> Macros
+                        </button>
+                        <div class="h-px bg-white/5 my-1"></div>
+                        <button data-action="triggerImport" class="menu-item group" title="Importer Backup">
+                            <svg class="w-3 h-3 text-blue-400 group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" stroke-width="2"/></svg> Import
+                        </button>
+                        <button data-action="ioExport" class="menu-item group" title="Exporter Backup">
+                            <svg class="w-3 h-3 text-emerald-400 group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" stroke-width="2"/></svg> Backup
+                        </button>
+                        <div class="h-px bg-white/5 my-1"></div>
+                        <button data-action="exportToPDF" class="menu-item group" title="Exporter en PDF">
+                            <svg class="w-3 h-3 text-red-400 group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" stroke-width="2"/></svg> PDF Export
+                        </button>
+                    </div>
+                </div>
+
+                <!-- ADDED: Clean Format Button -->
+                <button data-action="cleanFormat" class="p-2 text-slate-500 hover:text-amber-400 hover:bg-amber-500/10 rounded transition-all ml-1" title="Nettoyer Formatage (Alt+L)"><svg class="w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                
+                <button data-action="clearDraft" class="p-2 text-slate-500 hover:text-red-500 hover:bg-red-500/10 rounded transition-all ml-1" title="Vider (Alt+Suppr)"><svg class="w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-width="2"/></svg></button>
+            </div>
+        </header>
+
+        <div class="flex-1 overflow-hidden p-6 md:p-12 flex flex-col relative z-10">
+            <div class="max-w-4xl mx-auto w-full editor-layer rounded-lg flex-1 overflow-hidden">
+                <div id="canvas-container"></div>
+                <div id="main-editor" contenteditable="true" class="custom-scrollbar" placeholder="Saisir données..."></div>
+            </div>
+        </div>
+        <input type="file" id="import-input" class="hidden" accept=".json">
+        <input type="file" id="pdf-input" class="hidden" accept="application/pdf">
+    </main>
+
+    <div id="toast" class="toast">Notif</div>
+
+    <div id="macro-hud">
+        <div class="text-[10px] font-bold text-slate-500 uppercase mb-2 border-b border-white/10 pb-1 flex justify-between">
+            <span>DIRECT MACRO</span><span class="text-blue-500">READY</span>
+        </div>
+        <div id="ui-macro-list-hud" class="flex flex-col gap-0.5"></div>
+    </div>
+
+    <!-- MODALS -->
+    <div id="modal-help" class="modal-overlay" data-action="closeModals">
+        <div class="modal-box bg-[#1e293b] max-w-[800px]" onclick="event.stopPropagation()">
+            <div class="p-6 overflow-y-auto custom-scrollbar h-[70vh] space-y-8">
+                
+                <!-- HEADER -->
+                <div class="text-center border-b border-white/10 pb-6">
+                    <h2 class="text-2xl font-black text-white tracking-tighter mb-2">MANUEL OPÉRATIONNEL</h2>
+                    <p class="text-blue-400 font-mono text-xs uppercase tracking-widest">Doctrine & Procédures V1.04</p>
+                </div>
+
+                <!-- PHILOSOPHY -->
+                <section>
+                    <h3 class="text-white font-bold uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <span class="text-blue-500">01.</span> Philosophie
+                    </h3>
+                    <div class="bg-black/20 p-4 rounded border-l-2 border-blue-500 text-slate-400 text-sm leading-relaxed space-y-2">
+                        <p><strong>Le Brouillon est Éphémère, le Classeur est Éternel.</strong></p>
+                        <p>NoteLogic n'est pas un simple éditeur de texte. C'est un système de tri. Vous saisissez "au kilomètre" dans l'éditeur principal (le Sas), puis vous <strong>Dispatchez</strong> l'information vers des pages structurées.</p>
+                        <p>Le lien entre les données n'est pas hiérarchique (dossiers), mais <strong>Neuronal (Tags/Index)</strong>.</p>
+                    </div>
+                </section>
+
+                <!-- EXAMPLE -->
+                <section>
+                    <h3 class="text-white font-bold uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <span class="text-emerald-500">02.</span> Cas Concret
+                    </h3>
+                    <div class="bg-white/5 p-4 rounded border border-white/5 space-y-4">
+                        <div>
+                            <div class="text-[10px] font-mono text-slate-500 mb-1">ÉTAPE 1 : SAISIE (BRUT)</div>
+                            <div class="font-mono text-xs text-slate-300 bg-black/40 p-2 rounded border border-dashed border-slate-700">
+                                Appel de Sophie. Le projet <span class="text-purple-400">[MARKETING_Q1]</span> est validé.<br>
+                                Budget: 5000€. Deadline: 15 Mars.
+                            </div>
+                        </div>
+                        <div class="flex justify-center">
+                            <svg class="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 14l-7 7m0 0l-7-7m7 7V3" stroke-width="2"></path></svg>
+                        </div>
+                        <div>
+                            <div class="text-[10px] font-mono text-slate-500 mb-1">ÉTAPE 2 : DISPATCH (ACTION)</div>
+                            <p class="text-xs text-slate-400 flex items-center gap-1.5 flex-wrap">
+                                En cliquant sur le bouton 
+                                <span class="inline-flex items-center justify-center bg-emerald-500/10 w-5 h-5 rounded border border-emerald-500/30 text-emerald-400">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" stroke-width="2"/></svg>
+                                </span>
+                                (Enregistrer), le système détecte le tag <span class="text-purple-400">[MARKETING_Q1]</span>.
+                            </p>
+                        </div>
+                        <div class="flex justify-center">
+                            <svg class="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 14l-7 7m0 0l-7-7m7 7V3" stroke-width="2"></path></svg>
+                        </div>
+                        <div>
+                            <div class="text-[10px] font-mono text-slate-500 mb-1">ÉTAPE 3 : CLASSEUR (RÉSULTAT)</div>
+                            <p class="text-xs text-slate-400">Le contenu est <strong>vidé</strong> de l'éditeur et <strong>fusionné</strong> dans la page "MARKETING_Q1". Si la page n'existe pas, elle est créée.</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- SHORTCUTS -->
+                <section>
+                    <h3 class="text-white font-bold uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <span class="text-purple-500">03.</span> Commandes Clés
+                    </h3>
+                    <div class="grid grid-cols-2 gap-2 text-xs">
+                        <div class="bg-white/5 p-2 rounded flex justify-between items-center">
+                            <span class="text-slate-400">Indexer mot</span>
+                            <span class="font-mono text-white bg-white/10 px-1 rounded">Alt + T</span>
+                        </div>
+                         <div class="bg-white/5 p-2 rounded flex justify-between items-center">
+                            <span class="text-slate-400">Indexer (Souris)</span>
+                            <span class="font-mono text-white bg-white/10 px-1 rounded">Double Clic</span>
+                        </div>
+                        <div class="bg-white/5 p-2 rounded flex justify-between items-center">
+                            <span class="text-slate-400">Macros</span>
+                            <span class="font-mono text-white bg-white/10 px-1 rounded">Alt + [A-Z]</span>
+                        </div>
+                         <div class="bg-white/5 p-2 rounded flex justify-between items-center">
+                            <span class="text-slate-400">Enregistrer</span>
+                            <span class="font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/30">Alt + Entrée</span>
+                        </div>
+                        <div class="bg-white/5 p-2 rounded flex justify-between items-center">
+                            <span class="text-slate-400">Sitrep (Global)</span>
+                            <span class="text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-500/30 text-[10px] font-bold">Alt + S</span>
+                        </div>
+                        <div class="bg-white/5 p-2 rounded flex justify-between items-center border border-blue-500/30 bg-blue-500/5">
+                            <span class="text-blue-300">Séquences</span>
+                            <span class="font-mono text-white text-[10px]">Alt+Key1, Key2</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- DANGER ZONE -->
+                <section class="border-t border-red-900/30 pt-4 mt-8">
+                    <h3 class="text-red-500 font-bold uppercase tracking-wider mb-2 text-xs">Zone Danger</h3>
+                    <p class="text-slate-500 text-[10px] mb-3">En cas de corruption majeure de la base de données locale (IndexedDB).</p>
+                    <button data-action="hardReset" class="w-full py-2 bg-red-900/20 border border-red-500/30 text-red-400 text-xs font-bold rounded hover:bg-red-900/40 uppercase transition-colors">
+                        Réinitialisation Totale Système
+                    </button>
+                </section>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- NEW SEARCH MODAL (CMD+K STYLE) -->
+    <div id="modal-search" class="modal-overlay" data-action="closeModals">
+        <div class="modal-box bg-[#1e293b] border border-white/10 shadow-2xl rounded-lg overflow-hidden max-w-[600px] flex flex-col" onclick="event.stopPropagation()">
+            <!-- SEARCH HEADER -->
+            <div class="p-4 border-b border-white/5 flex items-center gap-3 bg-[#0b1120]">
+                <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-width="2"/></svg>
+                <input type="text" id="search-input" class="w-full bg-transparent text-white text-lg outline-none font-medium placeholder-slate-600" placeholder="Rechercher notes, tags, contenu..." autocomplete="off">
+                <span class="text-[10px] font-mono text-slate-600 border border-slate-700 px-1.5 rounded">ESC</span>
+            </div>
+            
+            <!-- SEARCH RESULTS AREA -->
+            <div id="search-results" class="overflow-y-auto custom-scrollbar h-[50vh] p-2 bg-[#1e293b]">
+                <div class="h-full flex flex-col items-center justify-center text-slate-600 space-y-2 opacity-50">
+                    <svg class="w-8 h-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" stroke-width="2"/></svg>
+                    <p class="text-xs">Saisissez un mot-clé...</p>
+                </div>
+            </div>
+
+            <!-- SEARCH FOOTER -->
+            <div class="px-3 py-2 bg-[#0b1120] border-t border-white/5 flex justify-between items-center text-[10px] text-slate-500 font-mono">
+                <div class="flex gap-3">
+                    <span class="flex items-center gap-1"><span class="bg-white/10 px-1 rounded">↑</span><span class="bg-white/10 px-1 rounded">↓</span> Naviguer</span>
+                    <span class="flex items-center gap-1"><span class="bg-white/10 px-1 rounded">↵</span> Ouvrir</span>
+                </div>
+                <span id="search-count">0 résultats</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- SITREP MODAL -->
+    <div id="modal-sitrep" class="modal-overlay" data-action="closeModals">
+        <div class="modal-box bg-[#0f172a] border border-blue-900/50" onclick="event.stopPropagation()">
+            <div class="p-4 border-b border-blue-900/30 flex justify-between items-center bg-blue-900/10">
+                <div class="flex items-center gap-2">
+                    <div class="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                    <span class="text-xs font-black text-blue-400 uppercase tracking-widest">INDEX TACTIQUE GLOBAL</span>
+                </div>
+                <button data-action="closeModals" class="text-slate-500 hover:text-white">✕</button>
+            </div>
+            <div id="sitrep-content" class="p-4 overflow-y-auto custom-scrollbar h-[50vh] space-y-4"></div>
+        </div>
+    </div>
+    
+    <!-- NEW MACRO MODAL -->
+    <div id="modal-macros" class="modal-overlay" data-action="closeModals">
+        <div class="modal-box bg-[#1e293b] max-w-lg" onclick="event.stopPropagation()">
+            <div class="p-4 border-b border-white/5 flex justify-between items-center bg-black/20"><span class="text-xs font-bold text-white uppercase">Gestionnaire de Macros</span><button data-action="closeModals" class="text-slate-500 hover:text-white">✕</button></div>
+            <div id="ui-macro-manager-list" class="p-4 overflow-y-auto custom-scrollbar h-[35vh] space-y-1 bg-[#0b1120]"></div>
+            
+            <!-- NEW FORM -->
+            <div class="p-4 border-t border-white/5 bg-[#1e293b] flex flex-col gap-3">
+                <div class="flex justify-between items-center">
+                    <span class="text-xs font-bold text-blue-400 uppercase tracking-wider">Nouvelle Macro</span>
+                </div>
+                <div class="flex gap-2">
+                    <div class="w-16 flex flex-col gap-1">
+                        <label class="text-[9px] text-slate-500 font-mono uppercase font-bold">Touche</label>
+                        <!-- REMOVED MAXLENGTH, UPDATED PLACEHOLDER -->
+                        <input id="new-macro-key" type="text" class="w-full bg-black/30 border border-white/10 rounded px-2 py-2 text-center font-mono text-blue-400 font-bold outline-none uppercase text-lg" placeholder="Ex: g,k">
+                    </div>
+                    <div class="flex-1 flex flex-col gap-1">
+                        <label class="text-[9px] text-slate-500 font-mono uppercase font-bold">Contenu (Rich Text/HTML)</label>
+                        <div id="new-macro-val" contenteditable="true" class="w-full bg-black/30 border border-white/10 rounded px-3 py-2 text-xs text-slate-300 outline-none font-mono custom-scrollbar focus:border-blue-500/50 transition-colors h-24 overflow-y-auto" placeholder="Collez contenu riche..."></div>
+                    </div>
+                </div>
+                <button data-action="addMacro" class="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded uppercase tracking-widest transition-colors shadow-lg shadow-blue-900/20">Enregistrer Macro</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const System = (() => {
+            const CONFIG = { 
+                DB_NAME: "AgenData_V9", 
+                DB_VERSION: 4, 
+                ANIMATION: { particles: 600, range: 400 }, 
+                // v10.21: REMOVED 't': '[TODO]' to prevent conflict with Insert Index (Alt+T)
+                MACROS_DEFAULT: { 'a': '[ACHAT]', 'v': '[VENTE]', 'w': '⚠️ [WARNING]', 'i': '[INFO]', 'u': '[URGENT]' }
+            };
+            const State = new Proxy({ currentPageId: null, isReadMode: false, activeTagFilter: null, macros: { ...CONFIG.MACROS_DEFAULT }, recognition: null, isRecording: false, deferredPrompt: null, searchIndex: -1, searchResults: [], chordBuffer: [], chordTimer: null }, {
+                set(target, prop, value) {
+                    target[prop] = value;
+                    if (prop === 'isReadMode') Bus.emit('mode:changed', value);
+                    if (prop === 'macros') Renderer.renderHUD(value);
+                    return true;
+                }
+            });
+
+            const Storage = {
+                db: null,
+                async init() { 
+                    this.db = new Dexie(CONFIG.DB_NAME); 
+                    this.db.version(4).stores({ pages: "++id, title, updated", meta: "id", macros: "trigger", attachments: "++id, name, type" }); 
+                    await this.loadMacros(); await this.loadDraft(); 
+                },
+                async loadDraft() { const d = await this.db.meta.get('draft'); if(d) document.getElementById('main-editor').innerHTML = Renderer.processContent(d.content); },
+                async saveDraft(c) { await this.db.meta.put({id: 'draft', content: c}); },
+                
+                // PAGES MANAGEMENT
+                async getPages() { return await this.db.pages.orderBy('updated').reverse().toArray(); },
+                async getPage(id) { return await this.db.pages.get(parseInt(id)); },
+                // NEW: Find by Title for smart merge
+                async findPageByTitle(t) { return await this.db.pages.where('title').equals(t).first(); },
+                async createPage(title, content) { await this.db.pages.add({ title, content, updated: Date.now() }); },
+                async updatePage(id, content) { await this.db.pages.update(parseInt(id), { content, updated: Date.now() }); },
+                async deletePage(id) { await this.db.pages.delete(parseInt(id)); },
+                
+                // ATTACHMENTS (PDF)
+                async saveAttachment(file) {
+                    const id = await this.db.attachments.add({ name: file.name, type: file.type, data: file, created: Date.now() });
+                    return id;
+                },
+                async getAttachment(id) { return await this.db.attachments.get(parseInt(id)); },
+                
+                async nuke() { await this.db.delete(); location.reload(); },
+                async loadMacros() { const s = await this.db.macros.toArray(); if(s.length===0) await this.db.macros.bulkPut(Object.entries(CONFIG.MACROS_DEFAULT).map(([k,v])=>({trigger:k,content:v}))); else { const m={}; s.forEach(x=>m[x.trigger]=x.content); State.macros=m; } },
+                async addMacro(t,c) { await this.db.macros.put({trigger:t,content:c}); await this.loadMacros(); },
+                async removeMacro(t) { await this.db.macros.delete(t); await this.loadMacros(); }
+            };
+
+            const Renderer = {
+                // FIXED v10.26: MAJOR FIX FOR HTML CORRUPTION
+                // REPLACED STRING REPLACEMENT WITH DOM TREEWALKER
+                processContent(html) { 
+                    const div = document.createElement('div');
+                    div.innerHTML = html;
+
+                    div.querySelectorAll('.nexus-index').forEach(el => {
+                        const text = document.createTextNode(el.innerText);
+                        el.parentNode.replaceChild(text, el);
+                    });
+
+                    const walker = document.createTreeWalker(div, NodeFilter.SHOW_TEXT, null, false);
+                    const nodesToReplace = [];
+
+                    while(walker.nextNode()) {
+                        const node = walker.currentNode;
+                        if(node.nodeValue && node.nodeValue.match(/\[[a-zA-Z0-9\u00C0-\u00FF\s_\-'’]+\]/)) {
+                            if(node.parentElement.tagName !== 'SCRIPT' && node.parentElement.tagName !== 'STYLE') {
+                                nodesToReplace.push(node);
+                            }
+                        }
+                    }
+
+                    nodesToReplace.forEach(node => {
+                        const fragment = document.createDocumentFragment();
+                        const parts = node.nodeValue.split(/(\[[a-zA-Z0-9\u00C0-\u00FF\s_\-'’]+\])/g);
+                        parts.forEach(part => {
+                            if(part.match(/^\[[a-zA-Z0-9\u00C0-\u00FF\s_\-'’]+\]$/)) {
+                                if(part.match(/^\[(\d+(?:px|%|rem|em|vw|vh)|#[0-9a-fA-F]{3,6})\]$/)) {
+                                    fragment.appendChild(document.createTextNode(part));
+                                } else {
+                                    const span = document.createElement('span');
+                                    span.className = 'nexus-index';
+                                    span.dataset.action = 'openNexus';
+                                    span.dataset.tag = part.replace(/[\[\]]/g, '');
+                                    span.textContent = part;
+                                    fragment.appendChild(span);
+                                }
+                            } else {
+                                fragment.appendChild(document.createTextNode(part));
+                            }
+                        });
+                        node.parentNode.replaceChild(fragment, node);
+                    });
+
+                    return div.innerHTML;
+                },
+                toast(msg) { const el=document.getElementById('toast'); el.textContent=msg; el.style.opacity="1"; setTimeout(()=>el.style.opacity="0",2000); },
+                renderHUD(macros) { 
+                    const strip = (html) => { const tmp = document.createElement("DIV"); tmp.innerHTML = html; return tmp.textContent || tmp.innerText || ""; }
+                    document.getElementById('ui-macro-list-hud').innerHTML = Object.entries(macros).map(([k,v]) => {
+                        const plain = strip(v);
+                        const display = plain.length > 20 ? plain.substring(0,20) + '...' : plain;
+                        return `<div class="hud-row"><span class="font-mono text-blue-400 font-bold text-xs mr-4">Alt+${k.toUpperCase()}</span><span class="font-mono text-slate-400 text-xs">${display}</span></div>`;
+                    }).join(''); 
+                },
+                renderMacroManager() { 
+                    const strip = (html) => { const tmp = document.createElement("DIV"); tmp.innerHTML = html; return tmp.textContent || tmp.innerText || ""; }
+                    document.getElementById('ui-macro-manager-list').innerHTML = Object.entries(State.macros).map(([k,v]) => {
+                        const plain = strip(v);
+                        const display = plain.replace(/\n/g, ' ↵ ').substring(0, 50) + (plain.length > 50 ? '...' : '');
+                        return `<div class="flex justify-between items-center bg-white/5 p-2 rounded mb-1 border border-white/5 hover:border-blue-500/30 transition-colors"><div class="flex items-center overflow-hidden"><span class="font-mono text-xs text-blue-300 font-black bg-blue-900/30 px-1.5 py-0.5 rounded mr-3 w-6 text-center block">${k.toUpperCase()}</span><span class="font-mono text-xs text-slate-300 truncate opacity-80" title="Contenu Riche">${display}</span></div><button data-action="removeMacro" data-trigger="${k}" class="text-slate-600 hover:text-red-400 px-2 transition-colors">×</button></div>`;
+                    }).join(''); 
+                },
+                toggleViewBtn(view) {
+                   document.getElementById('btn-view-pages').classList.toggle('view-btn-active', view === 'pages'); document.getElementById('btn-view-pages').classList.toggle('text-slate-400', view !== 'pages');
+                   document.getElementById('btn-view-index').classList.toggle('view-btn-active', view === 'index'); document.getElementById('btn-view-index').classList.toggle('text-slate-400', view !== 'index');
+                },
+                // NEW: RENDER SEARCH RESULTS LIST
+                renderSearchResults(results, selectedIndex) {
+                    const container = document.getElementById('search-results');
+                    document.getElementById('search-count').textContent = `${results.length} résultats`;
+                    
+                    if(results.length === 0) {
+                        container.innerHTML = '<div class="h-full flex flex-col items-center justify-center text-slate-600 space-y-2 opacity-50"><svg class="w-8 h-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-width="2"/></svg><p class="text-xs">Aucune correspondance</p></div>';
+                        return;
+                    }
+
+                    container.innerHTML = results.map((r, i) => {
+                        const isSelected = i === selectedIndex ? 'selected' : '';
+                        // Extract tags for visual metadata
+                        const tagMatch = r.rawContent.match(/\[([a-zA-Z0-9\u00C0-\u00FF\s_\-'’]+)\]/g) || [];
+                        const tags = tagMatch.slice(0, 3).map(t => `<span class="search-tag">${t}</span>`).join('');
+                        
+                        return `
+                        <div class="search-result-item ${isSelected}" data-index="${i}" onclick="System.Bus.dispatchAction('openPage', {id:'${r.id}'}); System.Bus.dispatchAction('closeModals');">
+                            <div class="flex justify-between items-start mb-1">
+                                <span class="text-sm font-bold ${isSelected ? 'text-white' : 'text-slate-200'}">${r.title}</span>
+                                <span class="text-[10px] text-slate-500 font-mono">${Engine.utils.formatDate(r.updated)}</span>
+                            </div>
+                            <div class="text-xs text-slate-400 font-mono leading-relaxed line-clamp-2">${r.snippet}</div>
+                            ${tags ? `<div class="mt-2 flex">${tags}</div>` : ''}
+                        </div>
+                        `;
+                    }).join('');
+
+                    // Scroll selected into view
+                    const selectedEl = container.querySelector('.selected');
+                    if(selectedEl) {
+                        selectedEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                    }
+                }
+            };
+
+            const Engine = {
+                utils: {
+                    formatDate: d => {
+                        const date = new Date(d);
+                        const now = new Date();
+                        const diff = (now - date) / 1000;
+                        if(diff < 60) return "À l'instant";
+                        if(diff < 3600) return `Il y a ${Math.floor(diff/60)} min`;
+                        if(diff < 86400) return `Il y a ${Math.floor(diff/3600)} h`;
+                        return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+                    },
+                    debounce: (fn,ms) => { let t; return(...a)=>{clearTimeout(t);t=setTimeout(()=>fn(...a),ms);} },
+                    escapeRegExp: (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // Utility for search
+                },
+                gfx: {
+                    init() {
+                        const c = document.getElementById('canvas-container'); if(!c) return;
+                        const scene = new THREE.Scene(); scene.fog = new THREE.FogExp2(0x0f172a, 0.002);
+                        const camera = new THREE.PerspectiveCamera(75, c.clientWidth/c.clientHeight, 0.1, 1000); camera.position.z=100;
+                        const renderer = new THREE.WebGLRenderer({alpha:true}); renderer.setSize(c.clientWidth,c.clientHeight); renderer.setPixelRatio(Math.min(window.devicePixelRatio,2)); c.appendChild(renderer.domElement);
+                        const geo = new THREE.BufferGeometry(); const pos = new Float32Array(CONFIG.ANIMATION.particles*3); for(let i=0;i<CONFIG.ANIMATION.particles*3;i++) pos[i]=(Math.random()-0.5)*CONFIG.ANIMATION.range; geo.setAttribute('position',new THREE.BufferAttribute(pos,3));
+                        const parts = new THREE.Points(geo, new THREE.PointsMaterial({size:1.5,color:0x3b82f6,transparent:true,opacity:0.6})); scene.add(parts);
+                        const anim = () => { if(!document.hidden) { parts.rotation.y+=0.0005; parts.rotation.x+=0.0002; renderer.render(scene,camera); } requestAnimationFrame(anim); }; anim();
+                    }
+                }
+            };
+
+            const Intelligence = {
+                // ... Existing Sitrep/Voice Logic ...
+                async sitrep() {
+                    const pages = await Storage.getPages();
+                    const tagMap = {};
+                    const regex = /\[([a-zA-Z0-9\u00C0-\u00FF\s_\-'’]+)\]/g;
+
+                    pages.forEach(page => {
+                        const div = document.createElement('div');
+                        div.innerHTML = page.content;
+                        const aiPanels = div.querySelectorAll('.ai-insight-panel');
+                        aiPanels.forEach(el => el.remove());
+                        const text = div.innerText;
+                        
+                        let match;
+                        while ((match = regex.exec(text)) !== null) {
+                            const tag = match[1];
+                            if (tag.match(/^(\d+(?:px|%|rem|em)|#[0-9a-f]+)$/)) continue;
+                            if (!tagMap[tag]) tagMap[tag] = [];
+                            if (!tagMap[tag].find(p => p.pageId === page.id)) {
+                                tagMap[tag].push({ pageId: page.id, title: page.title, updated: page.updated });
+                            }
+                        }
+                    });
+
+                    const container = document.getElementById('sitrep-content');
+                    container.innerHTML = '';
+                    const sortedTags = Object.keys(tagMap).sort();
+                    
+                    if (sortedTags.length === 0) {
+                        container.innerHTML = '<div class="p-8 text-center text-slate-500 text-xs italic">Aucun index détecté dans le classeur.</div>';
+                        document.getElementById('modal-sitrep').style.display = 'flex';
+                        return;
+                    }
+
+                    let html = '';
+                    sortedTags.forEach(tag => {
+                        const items = tagMap[tag];
+                        const itemsHtml = items.map(i => `
+                            <div class="sitrep-item" onclick="System.Bus.dispatchAction('openPage', {id: ${i.pageId}}); System.Bus.dispatchAction('closeModals');">
+                                <span class="sitrep-page-title">${i.title}</span>
+                                <span class="sitrep-source">${Engine.utils.formatDate(i.updated)}</span>
+                            </div>
+                        `).join('');
+                        html += `<div class="sitrep-group"><div class="sitrep-group-title"><span>[${tag}]</span><span class="text-blue-500/50">${items.length}</span></div><div>${itemsHtml}</div></div>`;
+                    });
+                    container.innerHTML = html;
+                    document.getElementById('modal-sitrep').style.display = 'flex';
+                },
+                extract() {
+                     const btn = document.getElementById('ai-trigger'); 
+                     const label = document.getElementById('ai-label'); 
+                     const pulse = document.getElementById('ai-pulse');
+                     pulse.classList.add('bg-blue-400', 'shadow-[0_0_10px_#60a5fa]'); label.textContent = "SCAN INDEX..."; label.classList.add('text-blue-300');
+
+                     setTimeout(() => {
+                         const editor = document.getElementById('main-editor');
+                         const existing = editor.querySelector('.ai-insight-panel');
+                         if(existing) existing.remove();
+                         const text = editor.innerText.trim();
+                         if(!text) { pulse.classList.remove('bg-blue-400', 'shadow-[0_0_10px_#60a5fa]'); label.textContent = "SYSTEM.READY"; label.classList.remove('text-blue-300'); Renderer.toast("RIEN À ANALYSER"); return; }
+                         
+                         let keyPoints = [];
+                         const lines = text.split('\n').filter(l => l.trim().length > 3);
+                         const tagRegex = /\[([a-zA-Z0-9\u00C0-\u00FF\s_\-'’]+)\]/g;
+                         
+                         lines.forEach(line => {
+                             if(keyPoints.length >= 8) return;
+                             const clean = line.trim();
+                             const matchesTag = clean.match(tagRegex);
+                             const isCritical = clean.match(/\b(important|urgent|todo|faire|réunion|rdv|date|euro|eur|\$|%)\b/i) || clean.match(/\d/);
+                             if(matchesTag) { let formatted = clean.replace(tagRegex, '<span class="text-blue-400 font-bold">$&</span>'); keyPoints.push(formatted); } 
+                             else if (isCritical) { keyPoints.push(clean.substring(0, 60) + (clean.length>60?'...':'')); }
+                         });
+                         if(keyPoints.length === 0) lines.slice(0, 3).forEach(l => keyPoints.push(l.substring(0, 60) + (l.length>60?'...':'')));
+
+                         const listHtml = `<ul class="list-disc list-inside space-y-1 text-slate-300 font-mono" style="font-size: 10px;">${keyPoints.map(k => `<li>${k}</li>`).join('')}</ul>`;
+                         const panelHtml = `<div class="ai-insight-panel select-none mb-6 border-t-2 border-blue-500 rounded bg-[#0f172a]" contenteditable="false"><div class="flex justify-between items-center p-2 border-b border-white/5 bg-white/5"><div class="flex items-center gap-2"><span class="font-black text-blue-400 tracking-widest font-mono" style="font-size: 10px;">SYNTHÈSE OPS</span><span class="text-slate-500 font-mono" style="font-size: 9px;">${new Date().toLocaleTimeString()}</span></div><button onclick="this.closest('.ai-insight-panel').remove();" class="text-slate-500 hover:text-red-400">×</button></div><div class="p-3">${listHtml}</div></div>`;
+                         editor.insertAdjacentHTML('afterbegin', panelHtml);
+                         Storage.saveDraft(editor.innerHTML);
+                         pulse.classList.remove('bg-blue-400', 'shadow-[0_0_10px_#60a5fa]'); label.textContent = "SYSTEM.READY"; label.classList.remove('text-blue-300'); Renderer.toast("ANALYSE TERMINÉE");
+                     }, 600);
+                },
+                initVoice() {
+                    const SR = window.SpeechRecognition || window.webkitSpeechRecognition; if(SR) {
+                        State.recognition = new SR(); State.recognition.lang = 'fr-FR';
+                        State.recognition.onstart = () => { State.isRecording = true; document.getElementById('ui-voice-btn').classList.add('recording-pulse'); };
+                        State.recognition.onresult = (e) => { if(!State.isReadMode) Bus.insertText(e.results[0][0].transcript); };
+                        State.recognition.onend = () => { State.isRecording = false; document.getElementById('ui-voice-btn').classList.remove('recording-pulse'); };
+                    }
+                },
+                toggleVoice() { if(State.recognition) State.isRecording ? State.recognition.stop() : State.recognition.start(); },
+
+                // NEW: PRO SEARCH LOGIC
+                async performSearch(query) {
+                    if(query.length < 2) { 
+                        State.searchResults = []; 
+                        Renderer.renderSearchResults([], -1); 
+                        return; 
+                    }
+                    
+                    const allPages = await Storage.getPages();
+                    const qLower = query.toLowerCase();
+                    const escapeQuery = Engine.utils.escapeRegExp(query);
+                    const regex = new RegExp(`(${escapeQuery})`, 'gi');
+                    
+                    const results = allPages.map(page => {
+                        // Strip HTML for clean searching
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = page.content;
+                        // remove AI panel text from search result
+                        tempDiv.querySelectorAll('.ai-insight-panel').forEach(e => e.remove());
+                        const textContent = tempDiv.innerText;
+                        
+                        // Scoring
+                        let score = 0;
+                        if(page.title.toLowerCase().includes(qLower)) score += 10;
+                        if(textContent.toLowerCase().includes(qLower)) score += 1;
+                        
+                        if(score === 0) return null;
+
+                        // Create Snippet
+                        let snippet = "";
+                        const index = textContent.toLowerCase().indexOf(qLower);
+                        if (index > -1) {
+                            const start = Math.max(0, index - 40);
+                            const end = Math.min(textContent.length, index + query.length + 60);
+                            snippet = (start > 0 ? "..." : "") + textContent.substring(start, end) + (end < textContent.length ? "..." : "");
+                        } else {
+                            snippet = textContent.substring(0, 100) + "...";
+                        }
+                        
+                        // Highlight
+                        snippet = snippet.replace(regex, '<span class="search-highlight">$1</span>');
+
+                        return {
+                            id: page.id,
+                            title: page.title,
+                            updated: page.updated,
+                            snippet: snippet,
+                            score: score,
+                            rawContent: page.content // kept for tag extraction
+                        };
+                    }).filter(r => r !== null).sort((a,b) => b.score - a.score);
+
+                    State.searchResults = results;
+                    State.searchIndex = results.length > 0 ? 0 : -1;
+                    Renderer.renderSearchResults(results, State.searchIndex);
+                }
+            };
+
+            const IO = {
+                // ... Existing IO Logic ...
+                exportData: async () => { const pages = await Storage.getPages(); const draft = await Storage.db.meta.get('draft'); const blob = new Blob([JSON.stringify({version: "v9.80", date: new Date(), pages, draft}, null, 2)], {type: 'application/json'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `NoteLogic_Binder_${Date.now()}.json`; a.click(); Renderer.toast("BACKUP GÉNÉRÉ"); },
+                importData: (file) => { const r = new FileReader(); r.onload = async (e) => { try { const d = JSON.parse(e.target.result); if(d.pages) for(let x of d.pages) await Storage.createPage(x.title, x.content); if(d.draft) await Storage.saveDraft(d.draft.content); Renderer.toast("IMPORT OK"); setTimeout(()=>location.reload(),1000); } catch(err) { Renderer.toast("ERREUR FICHIER"); } }; r.readAsText(file); },
+                attachPDF: async (file) => {
+                    if (file.size > 5000000) { Renderer.toast("FICHIER TROP GROS (>5Mo)"); return; }
+                    const id = await Storage.saveAttachment(file);
+                    const span = `<span class="pdf-chip" contenteditable="false" data-id="${id}" onclick="System.Bus.dispatchAction('openPdf', {id: ${id}})">📄 ${file.name.substring(0,25)}...</span>&nbsp;`;
+                    document.execCommand('insertHTML', false, span);
+                    Storage.saveDraft(document.getElementById('main-editor').innerHTML);
+                    Renderer.toast("PDF ATTACHÉ");
+                },
+                generatePDF: () => {
+                    const element = document.getElementById('main-editor');
+                    if(!element.innerText.trim()) { Renderer.toast("NOTE VIDE"); return; }
+                    const opt = { margin: 10, filename: `NoteLogic_Note_${Date.now()}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } };
+                    const clone = element.cloneNode(true);
+                    clone.style.color = '#000000'; clone.style.background = '#ffffff'; clone.style.padding = '20px'; clone.style.width = '100%'; clone.style.fontFamily = 'Inter, sans-serif';
+                    const container = document.createElement('div'); container.appendChild(clone); container.style.position = 'absolute'; container.style.left = '-9999px'; container.style.top = '0'; document.body.appendChild(container);
+                    html2pdf().set(opt).from(clone).save().then(() => { document.body.removeChild(container); Renderer.toast("PDF GÉNÉRÉ"); }).catch(err => { console.error(err); Renderer.toast("ERREUR PDF"); });
+                }
+            };
+
+            const Nexus = {
+                async render(tag) {
+                    const container = document.getElementById('ui-nexus-content'); container.innerHTML = `<div class="p-8 text-center text-xs text-slate-500">Scan Neural: [${tag}]...</div>`;
+                    const all = await Storage.getPages(); const hits = all.filter(e => e.content.includes(tag)).sort((a,b)=>b.updated - a.updated);
+                    const relations = {}; hits.forEach(h => { const tags = (h.content.match(/\[([a-zA-Z0-9_\-]+)\]/g)||[]).map(t=>t.replace(/[\[\]]/g,'')); tags.forEach(t => { if(t!==tag) relations[t]=(relations[t]||0)+1; }); });
+                    const topRel = Object.entries(relations).sort((a,b)=>b[1]-a[1]).slice(0,8);
+                    const netHTML = topRel.length ? topRel.map(([t,c]) => `<div class="network-item" onclick="System.Bus.dispatchAction('openNexus', {tag:'${t}'})"><span class="text-blue-300 font-bold">${t}</span><span class="text-xs text-slate-500">${c}</span></div>`).join('') : '<div class="p-4 text-xs text-slate-600">Aucune corrélation.</div>';
+                    container.innerHTML = `<div class="nexus-header"><div class="nexus-title">${tag}</div><div class="nexus-meta">Vol: ${hits.length}</div></div><div class="nexus-section-title">Réseau Neuronal</div><div class="flex flex-col">${netHTML}</div><div class="nexus-section-title">Pages Liées</div><div class="flex flex-col">${hits.slice(0,5).map(h => `<div class="network-item" data-action="openPage" data-id="${h.id}"><span class="text-xs text-slate-300 font-mono">${h.title}</span></div>`).join('')}</div>`;
+                },
+                async renderGlobal() {
+                    const container = document.getElementById('ui-nexus-content'); const all = await Storage.getPages(); const tagCounts = {}; all.forEach(e => { 
+                        const matches = e.content.match(/\[([a-zA-Z0-9_\-]+)\]/g) || []; 
+                        matches.forEach(t => { 
+                            const tag=t.replace(/[\[\]]/g,''); 
+                            if (tag.match(/^(\d+(?:px|%|rem)|#[0-9a-f]+)$/)) return;
+                            tagCounts[tag] = (tagCounts[tag]||0)+1; 
+                        }); 
+                    });
+                    const sorted = Object.entries(tagCounts).sort((a,b) => b[1] - a[1]); if(sorted.length === 0) { container.innerHTML = '<div class="p-8 text-center text-xs text-slate-500">Aucun tag détecté.</div>'; return; }
+                    const listHTML = sorted.map(([t, c]) => `<div class="network-item" onclick="System.Bus.dispatchAction('openNexus', {tag:'${t}'})"><span class="text-blue-300 font-bold font-mono tracking-wide">${t}</span><div class="flex items-center gap-2"><div class="w-16 h-1 bg-white/5 rounded overflow-hidden"><div class="h-full bg-blue-500/50" style="width: ${Math.min((c/sorted[0][1])*100, 100)}%"></div></div><span class="text-xs text-slate-500 w-4 text-right">${c}</span></div></div>`).join('');
+                    container.innerHTML = `<div class="nexus-header"><div class="nexus-title">INDEX GLOBAL</div><div class="nexus-meta">Tags: ${sorted.length}</div></div><div class="nexus-section-title">Fréquence Système</div><div class="flex flex-col">${listHTML}</div>`;
+                }
+            };
+
+            const Bus = {
+                listeners: {},
+                on(e,f) { (this.listeners[e]=this.listeners[e]||[]).push(f); },
+                emit(e,d) { (this.listeners[e]||[]).forEach(f=>f(d)); },
+                handle(e) {
+                    const t = e.target.closest('[data-action]');
+                    
+                    const settingsBtn = e.target.closest('[data-action="toggleSettings"]');
+                    const settingsMenu = document.getElementById('ui-settings-menu');
+                    if(settingsBtn) { 
+                        settingsMenu.classList.toggle('active'); 
+                        e.stopPropagation(); 
+                        return; 
+                    }
+                    if(!e.target.closest('#ui-settings-menu')) {
+                        if(settingsMenu && settingsMenu.classList.contains('active')) settingsMenu.classList.remove('active');
+                    }
+
+                    if(t) { e.preventDefault(); this.dispatchAction(t.dataset.action, {...t.dataset, el:t, type: e.type}); return; }
+                    if(e.target.closest('.modal-overlay')) {
+                        // Special handling for search modal to clear inputs
+                        if(e.target.id === 'modal-search') document.getElementById('search-input').value = '';
+                        document.querySelectorAll('.modal-overlay').forEach(el=>el.style.display='none');
+                    }
+                },
+                // NEW: KEYBOARD NAVIGATION HANDLER
+                handleSearchKeydown(e) {
+                    if(document.getElementById('modal-search').style.display !== 'flex') return;
+
+                    if(e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        State.searchIndex = Math.min(State.searchIndex + 1, State.searchResults.length - 1);
+                        Renderer.renderSearchResults(State.searchResults, State.searchIndex);
+                    } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        State.searchIndex = Math.max(State.searchIndex - 1, 0);
+                        Renderer.renderSearchResults(State.searchResults, State.searchIndex);
+                    } else if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if(State.searchIndex >= 0 && State.searchResults[State.searchIndex]) {
+                            this.dispatchAction('openPage', {id: State.searchResults[State.searchIndex].id});
+                            this.dispatchAction('closeModals');
+                        }
+                    } else if (e.key === 'Escape') {
+                         this.dispatchAction('closeModals');
+                    }
+                },
+                toggleIndexWrapper(strictMode = false) {
+                    const editor = document.getElementById('main-editor');
+                    const selection = window.getSelection();
+                    if (!editor.contains(selection.anchorNode)) return;
+
+                    if (selection.isCollapsed) {
+                        if (strictMode) return; 
+                        if (selection.modify) { 
+                            selection.modify('move', 'backward', 'word'); 
+                            selection.modify('extend', 'forward', 'word'); 
+                        }
+                    }
+                    
+                    const text = selection.toString();
+                    if (text.trim().length > 0) document.execCommand('insertText', false, `[${text.trim()}]`);
+                    else if (!strictMode) document.execCommand('insertText', false, '[]');
+                    
+                    Storage.saveDraft(editor.innerHTML);
+                },
+                dispatchAction(act, d) {
+                    if(act==='toggleSidebar') document.getElementById('main-sidebar').classList.toggle('collapsed');
+                    if(act==='toggleEditorMode') State.isReadMode = !State.isReadMode;
+                    if(act==='toggleView') { document.getElementById('view-pages').classList.toggle('hidden',d.view!=='pages'); document.getElementById('view-index').classList.toggle('hidden',d.view!=='index'); Renderer.toggleViewBtn(d.view); if(d.view === 'pages') this.renderBinder(); if(d.view === 'index') Nexus.renderGlobal(); }
+                    if(act==='triggerSitrep') Intelligence.sitrep();
+                    if(act==='aiChallenge') Intelligence.extract();
+                    if(act==='toggleVoice') Intelligence.toggleVoice();
+                    if(act==='openNexus') { this.dispatchAction('toggleView',{view:'index'}); Nexus.render(d.tag); }
+                    if(act==='clearDraft') { if(d.type === 'dblclick') { document.getElementById('main-editor').innerHTML=''; Storage.saveDraft(''); Renderer.toast("VIDÉ"); } else { Renderer.toast("Double-clic pour vider"); } }
+                    if(act==='dispatchToPage') this.dispatchDraftToPage();
+                    if(act==='newPage') { 
+                        State.currentPageId = null;
+                        document.getElementById('main-editor').innerHTML=''; 
+                        Storage.saveDraft(''); 
+                        document.getElementById('main-editor').focus(); 
+                        Renderer.toast("NOUVELLE NOTE PRÊTE"); 
+                    }
+                    if(act==='insertIndex') this.toggleIndexWrapper();
+                    if(act==='openSearch') { 
+                        document.getElementById('modal-search').style.display='flex'; 
+                        const inp = document.getElementById('search-input');
+                        inp.value = '';
+                        inp.focus(); 
+                        Intelligence.performSearch(''); // Reset
+                    }
+                    if(act==='openHelp') document.getElementById('modal-help').style.display='flex';
+                    if(act==='openMacroManager') { Renderer.renderMacroManager(); document.getElementById('modal-macros').style.display='flex'; }
+                    
+                    // FIXED v10.32: Use .then() for immediate update after async DB write
+                    if(act==='addMacro') { 
+                        const k = document.getElementById('new-macro-key').value.toLowerCase(); 
+                        const v = document.getElementById('new-macro-val').innerHTML; 
+                        if(k && v && v !== '<br>'){ 
+                            Storage.addMacro(k,v).then(() => {
+                                Renderer.renderMacroManager(); 
+                                document.getElementById('new-macro-key').value = ''; 
+                                document.getElementById('new-macro-val').innerHTML = ''; 
+                                Renderer.toast(`MACRO [${k.toUpperCase()}] CRÉÉE`);
+                            });
+                        } else { 
+                            Renderer.toast("CHAMPS VIDES"); 
+                        }
+                    }
+                    
+                    // FIXED v10.32: Use .then() for immediate update after async DB delete
+                    if(act==='removeMacro') { 
+                        Storage.removeMacro(d.trigger).then(() => {
+                            Renderer.renderMacroManager(); 
+                        });
+                    }
+
+                    if(act==='hardReset') this.confirmAction(d.el, () => Storage.nuke());
+                    if(act==='closeModals') {
+                        document.querySelectorAll('.modal-overlay').forEach(el=>el.style.display='none');
+                        document.getElementById('search-input').value = ''; // Clean search
+                    }
+                    if(act==='pageDelete') this.confirmAction(d.el, async()=>{ await Storage.deletePage(d.id); this.renderBinder(); });
+                    if(act==='openPage') this.openPage(d.id);
+                    if(act==='ioExport') IO.exportData();
+                    if(act==='exportToPDF') IO.generatePDF();
+                    if(act==='triggerImport') document.getElementById('import-input').click();
+                    if(act==='cleanFormat') {
+                        const editor = document.getElementById('main-editor');
+                        editor.querySelectorAll('*').forEach(el => el.removeAttribute('style'));
+                        editor.querySelectorAll('*').forEach(el => { if(!el.classList.contains('pdf-chip')) { el.removeAttribute('class'); } });
+                        const stripTags = ['b', 'strong', 'i', 'em', 'u', 'font', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'table', 'tbody', 'tr', 'td', 'a', 'strike', 'blockquote', 'code', 'pre'];
+                        stripTags.forEach(tag => { const elements = editor.querySelectorAll(tag); elements.forEach(el => { const parent = el.parentNode; while(el.firstChild) parent.insertBefore(el.firstChild, el); parent.removeChild(el); }); });
+                        editor.querySelectorAll('span').forEach(el => { if(!el.classList.contains('pdf-chip')) { const parent = el.parentNode; while(el.firstChild) parent.insertBefore(el.firstChild, el); parent.removeChild(el); } });
+                        const finalHTML = Renderer.processContent(editor.innerHTML);
+                        editor.innerHTML = finalHTML;
+                        Storage.saveDraft(editor.innerHTML);
+                        Renderer.toast("FORMAT NETTOYÉ");
+                    }
+                    
+                    if(act==='clearFilter') { State.activeTagFilter=null; document.getElementById('ui-filter-banner').classList.add('hidden'); this.renderBinder(); }
+                    if(act==='editorAction') {
+                         if(d.cmd==='focusStart') { const ed=document.getElementById('main-editor'); ed.insertAdjacentHTML('afterbegin', '<div><br></div>'); Storage.saveDraft(ed.innerHTML); const r=document.createRange(); r.selectNodeContents(ed); r.collapse(true); const s=window.getSelection(); s.removeAllRanges(); s.addRange(r); }
+                         if(d.cmd==='focusEnd') { const ed=document.getElementById('main-editor'); const r=document.createRange(); r.selectNodeContents(ed); r.collapse(false); const s=window.getSelection(); s.removeAllRanges(); s.addRange(r); }
+                    }
+                    if(act==='installPWA') { if (State.deferredPrompt) { State.deferredPrompt.prompt(); State.deferredPrompt.userChoice.then((result) => { State.deferredPrompt = null; document.getElementById('btn-install-pwa').classList.add('hidden'); }); } }
+                    if(act==='toggleContrast') { const selection = window.getSelection(); if (!selection.isCollapsed) { document.execCommand('styleWithCSS', false, true); document.execCommand('foreColor', false, '#000000'); document.execCommand('hiliteColor', false, '#ffffff'); } else { Renderer.toast("SÉLECTIONNER TEXTE"); } }
+                    if(act==='triggerAttach') document.getElementById('pdf-input').click();
+                    if(act==='openPdf') this.openPdf(d.id);
+                },
+                async openPdf(id) {
+                    const file = await Storage.getAttachment(id);
+                    if(file && file.data) { const url = URL.createObjectURL(file.data); window.open(url, '_blank'); } else { Renderer.toast("PDF INTROUVABLE"); }
+                },
+                confirmAction(btn, cb) {
+                    if(btn.dataset.confirm==="true") { cb(); btn.dataset.confirm="false"; btn.classList.remove('text-red-500', 'border-red-500', 'bg-red-500/20'); }
+                    else { btn.dataset.confirm="true"; btn.classList.add('text-red-500', 'border-red-500', 'bg-red-500/20'); Renderer.toast("SÛR ?"); setTimeout(()=>{btn.dataset.confirm="false";btn.classList.remove('text-red-500', 'border-red-500', 'bg-red-500/20');},2000); }
+                },
+                insertHTML(html) { const editor = document.getElementById('main-editor'); editor.focus(); document.execCommand('insertHTML', false, html); setTimeout(() => { document.execCommand('insertHTML', false, '<div><br></div>'); Storage.saveDraft(editor.innerHTML); }, 10); },
+                insertText(t) { document.execCommand('insertText', false, t); Storage.saveDraft(document.getElementById('main-editor').innerHTML); },
+                async dispatchDraftToPage() {
+                    const editor = document.getElementById('main-editor'); if(!editor.innerText.trim()) { Renderer.toast("VIDE"); return; }
+                    const clone = editor.cloneNode(true); const panels = clone.querySelectorAll('.ai-insight-panel'); panels.forEach(p => p.remove());
+                    const cleanText = clone.innerText.trim(); const fullContent = editor.innerHTML;
+                    if(!cleanText && panels.length > 0) { Renderer.toast("AJOUTER CONTENU MANUEL"); return; }
+                    const tagMatch = cleanText.match(/\[([a-zA-Z0-9\u00C0-\u00FF\s_\-'’]+)\]/);
+                    let title = tagMatch ? tagMatch[1] : null; if (!title) { title = cleanText.split('\n')[0].substring(0, 40) || "Sans Titre"; }
+                    const existingPage = await Storage.findPageByTitle(title);
+                    if (existingPage) {
+                        const tempDiv = document.createElement('div'); tempDiv.innerHTML = existingPage.content;
+                        tempDiv.querySelectorAll('.ai-insight-panel').forEach(el => el.remove()); const cleanOldContent = tempDiv.innerHTML;
+                        let newContent;
+                        if (State.currentPageId === existingPage.id) { newContent = fullContent; Renderer.toast(`MISA À JOUR: [${title}]`); } else { newContent = cleanOldContent + "<br><hr style='border-color: rgba(255,255,255,0.1); margin: 20px 0;'><br>" + fullContent; Renderer.toast(`FUSION: [${title}]`); }
+                        await Storage.updatePage(existingPage.id, newContent);
+                    } else { await Storage.createPage(title, fullContent); Renderer.toast(`NOUVELLE PAGE: [${title}]`); }
+                    State.currentPageId = null; editor.innerHTML = ''; await Storage.saveDraft(''); this.renderBinder();
+                },
+                async openPage(id) {
+                    const page = await Storage.getPage(id);
+                    if(page) { State.currentPageId = page.id; document.getElementById('main-editor').innerHTML = Renderer.processContent(page.content); Storage.saveDraft(page.content); }
+                },
+                async renderBinder() {
+                    const container = document.getElementById('ui-binder-content'); container.innerHTML='';
+                    const pages = await Storage.getPages();
+                    let displayPages = pages;
+                    if(State.activeTagFilter) { displayPages = pages.filter(e => e.content.includes(State.activeTagFilter)); document.getElementById('ui-filter-banner').classList.remove('hidden'); document.getElementById('ui-filter-text').textContent = `Filtre: [${State.activeTagFilter}]`; }
+                    if(displayPages.length === 0) container.innerHTML = '<div class="p-8 text-center text-xs text-slate-500">Classeur Vide</div>';
+                    displayPages.forEach(page => {
+                        const card = document.createElement('div'); card.className = `page-card px-4 py-3`;
+                        if(State.currentPageId === page.id) card.classList.add('active');
+                        const matches = page.content.match(/\[([a-zA-Z0-9\u00C0-\u00FF\s_\-'’]+)\]/g) || [];
+                        const cleanTags = matches.map(t => t.replace(/[\[\]]/g,'')).filter(t => !t.match(/^(\d+(?:px|%|rem|em)|#[0-9a-f]+)$/));
+                        const uniqueTags = [...new Set(cleanTags)];
+                        const tagsHTML = uniqueTags.slice(0,3).map(t=>`<span class="card-tag-badge" data-action="openNexus" data-tag="${t}">${t}</span>`).join('');
+                        card.innerHTML = `<div class="flex justify-between items-start mb-1"><div class="flex flex-col w-full" onclick="System.Bus.dispatchAction('openPage', {id:'${page.id}'})"><span class="text-sm font-bold text-slate-200 truncate pr-8">${page.title}</span><span class="text-[10px] text-slate-500 font-mono mt-0.5">${Engine.utils.formatDate(page.updated)}</span><div class="mt-1">${tagsHTML}</div></div><div class="card-actions"><button data-action="pageDelete" data-id="${page.id}" class="action-icon danger" title="Supprimer définitivement"><svg class="w-3 h-3 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-width="2"/></svg></button></div></div>`;
+                        container.appendChild(card);
+                    });
+                }
+            };
+
+            const init = async () => {
+                try {
+                    await Storage.init(); Engine.gfx.init(); Intelligence.initVoice(); 
+                    window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); State.deferredPrompt = e; document.getElementById('btn-install-pwa').classList.remove('hidden'); document.getElementById('btn-install-pwa').classList.add('flex'); });
+                    document.body.addEventListener('click', (e) => Bus.handle(e)); document.body.addEventListener('dblclick', (e) => Bus.handle(e));
+                    document.getElementById('main-editor').addEventListener('dblclick', (e) => { Bus.toggleIndexWrapper(true); });
+                    document.getElementById('import-input').addEventListener('change', (e) => IO.importData(e.target.files[0]));
+                    document.getElementById('pdf-input').addEventListener('change', (e) => IO.attachPDF(e.target.files[0]));
+                    document.getElementById('main-editor').addEventListener('input', Engine.utils.debounce(() => Storage.saveDraft(document.getElementById('main-editor').innerHTML), 1000));
+                    document.getElementById('main-editor').addEventListener('paste', (e) => { setTimeout(() => { document.execCommand('insertHTML', false, '<div><br></div>'); Storage.saveDraft(document.getElementById('main-editor').innerHTML); }, 10); });
+
+                    document.addEventListener('keydown', (e) => {
+                        if(e.key === 'Alt') document.getElementById('macro-hud').classList.add('visible');
+                        
+                        // NEW MACRO LOGIC WITH CHORD SUPPORT
+                        if(e.altKey && e.code === 'KeyT') { e.preventDefault(); Bus.dispatchAction('insertIndex'); }
+                        if(e.key === 'F1') { e.preventDefault(); Bus.dispatchAction('openHelp'); }
+                        
+                        // SHORTCUTS MAPPING
+                        if(e.altKey && e.code === 'KeyN') { e.preventDefault(); Bus.dispatchAction('newPage'); }
+                        if(e.altKey && e.code === 'KeyS') { e.preventDefault(); Bus.dispatchAction('triggerSitrep'); }
+                        if(e.altKey && e.code === 'Digit1') { e.preventDefault(); Bus.dispatchAction('toggleView', {view: 'pages'}); }
+                        if(e.altKey && e.code === 'Digit2') { e.preventDefault(); Bus.dispatchAction('toggleView', {view: 'index'}); }
+                        if(e.altKey && e.code === 'KeyM') { e.preventDefault(); Bus.dispatchAction('toggleSidebar'); }
+                        if(e.altKey && e.code === 'KeyC') { e.preventDefault(); Bus.dispatchAction('toggleContrast'); }
+                        if(e.altKey && e.code === 'ArrowUp') { e.preventDefault(); Bus.dispatchAction('editorAction', {cmd: 'focusStart'}); }
+                        if(e.altKey && e.code === 'ArrowDown') { e.preventDefault(); Bus.dispatchAction('editorAction', {cmd: 'focusEnd'}); }
+                        if(e.altKey && e.code === 'KeyG') { e.preventDefault(); Bus.dispatchAction('aiChallenge'); }
+                        if(e.altKey && e.code === 'KeyP') { e.preventDefault(); Bus.dispatchAction('triggerAttach'); }
+                        if((e.altKey && e.code === 'KeyF') || (e.ctrlKey && e.code === 'KeyK')) { e.preventDefault(); Bus.dispatchAction('openSearch'); }
+                        if(e.altKey && e.code === 'Enter') { e.preventDefault(); Bus.dispatchAction('dispatchToPage'); }
+                        if(e.altKey && e.code === 'KeyO') { e.preventDefault(); Bus.dispatchAction('toggleSettings'); }
+                        if(e.altKey && e.code === 'KeyL') { e.preventDefault(); Bus.dispatchAction('cleanFormat'); }
+                        if(e.altKey && e.code === 'Delete') { e.preventDefault(); Bus.dispatchAction('clearDraft', {type: 'dblclick'}); }
+
+                        Bus.handleSearchKeydown(e);
+                        
+                        // CHORD MACRO HANDLER
+                        // Only handle if Alt is pressed OR we are in a chord sequence
+                        if (!e.altKey && State.chordBuffer.length === 0) return;
+
+                        // Ignore modifier keys themselves
+                        if (['Alt', 'Control', 'Shift', 'Meta'].includes(e.key)) return;
+
+                        const key = e.key.toLowerCase();
+
+                        // Case 1: Start of sequence (Buffer empty, Alt held)
+                        if (State.chordBuffer.length === 0) {
+                            if (e.altKey) {
+                                // Check if this key is a prefix for any macro
+                                const potentialMatches = Object.keys(State.macros).filter(k => k.startsWith(key + ',') || k === key);
+                                
+                                if (potentialMatches.length > 0) {
+                                    // Don't prevent default if it's a system key we already handle above, unless it is ALSO a macro
+                                    // But user macros override system keys if needed? Let's prioritize system keys above, so only run this if not handled?
+                                    // Actually, standard behavior is user config wins. Let's execute.
+                                    
+                                    // Exact match that is NOT a prefix for others? Execute immediately
+                                    const exactMatch = State.macros[key];
+                                    const isPrefixForOthers = potentialMatches.some(k => k.startsWith(key + ','));
+
+                                    if (exactMatch && !isPrefixForOthers) {
+                                        e.preventDefault();
+                                        Bus.insertHTML(exactMatch);
+                                        Renderer.toast(`MACRO [${key.toUpperCase()}]`);
+                                    } else if (potentialMatches.length > 0) {
+                                        // It's a prefix (or ambiguous), start buffering
+                                        e.preventDefault();
+                                        State.chordBuffer.push(key);
+                                        Renderer.toast(`SÉQUENCE: ${key.toUpperCase()}...`);
+                                        document.getElementById('macro-hud').classList.add('visible'); // Keep HUD up
+                                        
+                                        // Clear buffer after 3s
+                                        clearTimeout(State.chordTimer);
+                                        State.chordTimer = setTimeout(() => {
+                                            State.chordBuffer = [];
+                                            Renderer.toast("TIMEOUT MACRO");
+                                            document.getElementById('macro-hud').classList.remove('visible');
+                                        }, 2000);
+                                    }
+                                }
+                            }
+                            return;
+                        }
+
+                        // Case 2: In sequence (Buffer not empty)
+                        e.preventDefault();
+                        State.chordBuffer.push(key);
+                        const sequence = State.chordBuffer.join(',');
+                        
+                        // Check exact match
+                        if (State.macros[sequence]) {
+                            Bus.insertHTML(State.macros[sequence]);
+                            Renderer.toast(`MACRO [${sequence.toUpperCase()}]`);
+                            // Reset
+                            State.chordBuffer = [];
+                            clearTimeout(State.chordTimer);
+                            document.getElementById('macro-hud').classList.remove('visible');
+                        } else {
+                            // Check if valid prefix
+                            const isPrefix = Object.keys(State.macros).some(k => k.startsWith(sequence + ','));
+                            if (isPrefix) {
+                                Renderer.toast(`SÉQUENCE: ${sequence.toUpperCase()}...`);
+                                // Reset timer
+                                clearTimeout(State.chordTimer);
+                                State.chordTimer = setTimeout(() => {
+                                    State.chordBuffer = [];
+                                    Renderer.toast("TIMEOUT MACRO");
+                                }, 2000);
+                            } else {
+                                // Invalid path
+                                Renderer.toast(`SÉQUENCE INCONNUE: ${sequence.toUpperCase()}`);
+                                State.chordBuffer = [];
+                                clearTimeout(State.chordTimer);
+                            }
+                        }
+
+                    });
+                    document.addEventListener('keyup', (e) => { 
+                        if(e.key === 'Alt') {
+                             if(State.chordBuffer.length === 0) document.getElementById('macro-hud').classList.remove('visible'); 
+                        }
+                    });
+                    
+                    // REPLACED OLD SEARCH HANDLER WITH NEW ONE
+                    document.getElementById('search-input').addEventListener('input', Engine.utils.debounce((e) => {
+                         Intelligence.performSearch(e.target.value);
+                    }, 300));
+                    
+                    Bus.renderBinder(); Renderer.renderHUD(State.macros);
+                    setTimeout(() => { document.getElementById('splash-screen').style.opacity=0; setTimeout(()=>document.getElementById('splash-screen').remove(),700); }, 1000);
+                } catch(e) { console.error(e); Renderer.toast("ERR KERNEL"); }
+            };
+
+            return { init, Bus };
+        })();
+        window.onload = System.init;
+    </script>
+</body>
+</html>
