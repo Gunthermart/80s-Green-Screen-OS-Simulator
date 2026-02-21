@@ -1,23 +1,32 @@
+/**
+ * Web Worker pour Stockfish
+ * Ce fichier doit se trouver dans le même répertoire que index.html
+ */
 
-// Résolution du chemin pour le fichier WASM (si requis par la compilation du CDN)
-var Module = {
-    locateFile: function(path) {
-        return 'https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.0/' + path;
+try {
+    // Configuration pour charger les fichiers WASM depuis le CDN
+    var Module = {
+        locateFile: function(path) {
+            return 'https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.0/' + path;
+        }
+    };
+    
+    // Importation du moteur Stockfish
+    importScripts('https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.0/stockfish.js');
+    
+    // Initialisation selon l'exposition de la librairie
+    if (typeof Stockfish === 'function') {
+        var engine = Stockfish();
+        self.onmessage = function(e) { engine.postMessage(e.data); };
+        engine.onmessage = function(msg) { self.postMessage(msg); };
+    } else if (typeof STOCKFISH === 'function') {
+        var engine = STOCKFISH();
+        self.onmessage = function(e) { engine.postMessage(e.data); };
+        engine.onmessage = function(msg) { self.postMessage(msg); };
+    } else {
+        throw new Error("Impossible d'initialiser le moteur Stockfish.");
     }
-};
-
-// Importation du script Stockfish
-importScripts('https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.0/stockfish.js');
-
-// Selon la façon dont le script a été packagé, il peut nécessiter une instanciation manuelle
-if (typeof Stockfish === 'function') {
-    var engine = Stockfish();
-    self.onmessage = function(e) { engine.postMessage(e.data); };
-    engine.onmessage = function(msg) { self.postMessage(msg); };
-} else if (typeof STOCKFISH === 'function') {
-    var engine = STOCKFISH();
-    self.onmessage = function(e) { engine.postMessage(e.data); };
-    engine.onmessage = function(msg) { self.postMessage(msg); };
+} catch (e) {
+    // Communication de l'erreur fatale au thread principal
+    self.postMessage('CRITICAL_ERROR:' + e.message);
 }
-// Si aucune de ces fonctions n'est trouvée, Emscripten a déjà automatiquement
-// lié le moteur aux événements self.onmessage et self.postMessage du Worker.
