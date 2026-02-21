@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jeu d'échecs vs Stockfish</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cm-chessboard@8.5.1/assets/chessboard.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-gray-200 min-h-screen m-0 p-4 font-sans flex items-center justify-center">
+
+    <div class="w-full max-w-6xl flex flex-col md:flex-row gap-6">
+        
+        <!-- Colonne Gauche : L'échiquier -->
+        <div class="flex-1 max-w-lg mx-auto w-full">
+            <div class="mb-4 flex justify-between items-end">
+                <h1 class="text-3xl font-bold text-white tracking-tight">Chess v10.0</h1>
+                <div id="status" class="text-sm font-bold bg-yellow-900 text-yellow-400 px-3 py-1 rounded animate-pulse border border-yellow-700">Téléchargement du moteur...</div>
+            </div>
+            <!-- Ajout d'une opacité réduite par défaut pour signifier le verrouillage -->
+            <div id="board" class="w-full aspect-square shadow-2xl rounded overflow-hidden border border-gray-700 bg-gray-800 opacity-50 transition-opacity duration-500"></div>
+        </div>
+
+        <!-- Colonne Droite : Panneaux de contrôle -->
+        <div class="w-full md:w-96 flex flex-col gap-4">
+            
+            <!-- Configuration Moteur -->
+            <div class="bg-gray-800 border border-gray-700 rounded p-4 flex flex-col gap-4">
+                <h2 class="text-lg font-semibold text-white border-b border-gray-700 pb-2">Moteur UCI</h2>
+                
+                <select id="mode-select" disabled class="w-full bg-gray-900 text-white rounded p-2 border border-gray-600 focus:outline-none focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <option value="play">Mode : Jouer contre l'IA</option>
+                    <option value="analyze">Mode : Analyse Libre</option>
+                </select>
+
+                <!-- Réglage de la difficulté -->
+                <div id="difficulty-container" class="flex flex-col gap-2">
+                    <label class="text-sm text-gray-400 flex justify-between">
+                        <span>Niveau (Skill Level)</span>
+                        <span id="skill-val" class="font-bold text-gray-500">10</span>
+                    </label>
+                    <input type="range" id="skill-level" min="0" max="20" value="10" disabled class="w-full cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                </div>
+
+                <!-- Télémétrie d'analyse -->
+                <div id="analysis-container" class="hidden flex-col gap-2">
+                    <div class="flex justify-between items-center bg-gray-900 p-2 rounded border border-gray-700">
+                        <span class="text-gray-400 text-sm">Évaluation</span>
+                        <span id="eval-display" class="font-mono font-bold text-white">0.00</span>
+                    </div>
+                    <div class="bg-gray-900 p-2 rounded border border-gray-700 flex flex-col gap-1">
+                        <span class="text-gray-500 text-xs uppercase tracking-wider">Meilleure Ligne (PV)</span>
+                        <span id="pv-display" class="text-xs font-mono text-gray-300 break-words leading-relaxed min-h-[40px]">
+                            En attente...
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="bg-gray-800 border border-gray-700 rounded p-4 flex flex-col gap-3">
+                <button id="undo-btn" class="w-full bg-gray-700 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                    Annuler le coup
+                </button>
+                <button id="reset-btn" disabled class="w-full bg-blue-900 hover:bg-blue-800 text-white font-medium py-2 px-4 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                    Nouvelle Partie
+                </button>
+            </div>
+
+            <!-- Historique (PGN) -->
+            <div class="bg-gray-800 border border-gray-700 rounded p-4 flex-1 flex flex-col min-h-[150px]">
+                <h2 class="text-lg font-semibold text-white border-b border-gray-700 pb-2 mb-2">Historique</h2>
+                <div id="pgn-history" class="text-sm font-mono text-gray-400 overflow-y-auto flex-1 break-words">
+                    En attente du moteur...
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script type="module">
+        try {
+            const { Chess } = await import("https://esm.sh/chess.js@1.0.0-beta.6");
+            const { Chessboard, COLOR, INPUT_EVENT_TYPE } = await import("https://esm.sh/cm-chessboard@8.5.1");
+
+            const UI = {
+                status: document.getElementById('status'),
+                boardContainer: document.getElementById('board'),
+                undoBtn: document.getElementById('undo-btn'),
+                resetBtn: document.getElementById('reset-btn'),
+                history: document.getElementById('pgn-history'),
+                modeSelect: document.getElementById('mode-select'),
+                diffContainer: document.getElementById('difficulty-container'),
+                skillLevel: document.getElementById('skill-level'),
+                skillVal: document.getElementById('skill-val'),
+                analysisContainer: document.getElementById('analysis-container'),
+                evalDisplay: document.getElementById('eval-display'),
+                pvDisplay: document.getElementById('pv-display')
+            };
+            
+            let game = new Chess();
+            let board;
+            let aiWorker;
+            let currentMode = 'play';
+            let isEngineReady = false;
+
+            function updateStatus(text, type = 'normal') {
+                UI.status.innerText = text;
+                UI.status.className = "text-sm font-mono px-3 py-1 rounded border " + 
+                    (type === 'error' ? "bg-red-900 text-red-200 border-red-700" : 
+                     type === 'success' ? "bg-green-900 text-green-400 border-green-700" : 
+                     type === 'loading' ? "bg-yellow-900 text-yellow-400 border-yellow-700 animate-pulse" : 
+                     "bg-gray-800 text-gray-300 border-gray-600");
+            }
+
+            function updateHistory() {
+                const pgn = game.pgn();
+                UI.history.innerText = pgn ? pgn : "Aucun coup joué.";
+                if (isEngineReady) {
+                    UI.undoBtn.disabled = game.history().length === 0;
+                }
+            }
+
+            function setBoardInput() {
+                if (!isEngineReady) return;
+                if (currentMode === 'play') {
+                    board.enableMoveInput(inputHandler, COLOR.white);
+                } else {
+                    board.enableMoveInput(inputHandler, game.turn() === 'w' ? COLOR.white : COLOR.black);
+                }
+            }
+
+            // --- GESTION DU WORKER UCI ET CYCLE DE VIE ---
+            const workerCode = `
+                try {
+                    var Module = {
+                        locateFile: function(path) {
+                            return 'https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.0/' + path;
+                        }
+                    };
+                    
+                    importScripts('https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.0/stockfish.js');
+                    
+                    if (typeof Stockfish === 'function') {
+                        var engine = Stockfish();
+                        self.onmessage = function(e) { engine.postMessage(e.data); };
+                        engine.onmessage = function(msg) { self.postMessage(msg); };
+                    } else if (typeof STOCKFISH === 'function') {
+                        var engine = STOCKFISH();
+                        self.onmessage = function(e) { engine.postMessage(e.data); };
+                        engine.onmessage = function(msg) { self.postMessage(msg); };
+                    } else {
+                        throw new Error("Moteur non détecté après import.");
+                    }
+                } catch (e) {
+                    self.postMessage('CRITICAL_ERROR:' + e.message);
+                }
+            `;
+            
+            aiWorker = new Worker(URL.createObjectURL(new Blob([workerCode], { type: 'application/javascript' })));
+            
+            // Timeout de sécurité : si le moteur ne répond pas en 15 secondes, on coupe.
+            const engineLoadTimeout = setTimeout(() => {
+                if (!isEngineReady) {
+                    updateStatus("Échec réseau : Moteur injoignable", 'error');
+                    UI.history.innerText = "Erreur de chargement. Vérifiez votre connexion.";
+                    aiWorker.terminate();
+                }
+            }, 15000);
+
+            // Début du Handshake UCI
+            aiWorker.postMessage('uci');
+
+            aiWorker.onmessage = function(e) {
+                const msg = typeof e.data === 'string' ? e.data : (e.data && e.data.data ? e.data.data : "");
+                if (!msg) return;
+
+                // Gestion des erreurs fatales du Worker
+                if (msg.startsWith('CRITICAL_ERROR')) {
+                    clearTimeout(engineLoadTimeout);
+                    updateStatus("Erreur fatale du script distant", 'error');
+                    console.error(msg);
+                    return;
+                }
+
+                // Phase 1 : Confirmation UCI
+                if (msg === 'uciok') {
+                    aiWorker.postMessage('isready');
+                    return;
+                }
+
+                // Phase 2 : Moteur prêt
+                if (msg === 'readyok' && !isEngineReady) {
+                    isEngineReady = true;
+                    clearTimeout(engineLoadTimeout);
+                    
+                    // Déverrouillage de l'UI
+                    UI.boardContainer.classList.remove('opacity-50');
+                    UI.modeSelect.disabled = false;
+                    UI.resetBtn.disabled = false;
+                    UI.skillLevel.disabled = false;
+                    UI.skillVal.classList.remove('text-gray-500');
+                    UI.skillVal.classList.add('text-white');
+                    
+                    aiWorker.postMessage('setoption name Skill Level value ' + UI.skillLevel.value);
+                    
+                    updateHistory(); // Enlève le texte d'attente
+                    setBoardInput();
+                    updateStatus("Moteur prêt. À vous (Blancs)", 'success');
+                    return;
+                }
+
+                if (!isEngineReady) return; // Ignorer les autres messages tant que pas prêt
+
+                // 1. Extraction des données d'analyse
+                if (currentMode === 'analyze' && msg.startsWith('info') && msg.includes('score')) {
+                    const scoreMatch = msg.match(/score (cp|mate) (-?\d+)/);
+                    if (scoreMatch) {
+                        let type = scoreMatch[1];
+                        let val = parseInt(scoreMatch[2], 10);
+                        let evalText = "";
+                        let multiplier = game.turn() === 'w' ? 1 : -1;
+                        
+                        if (type === 'cp') {
+                            evalText = ((val * multiplier) / 100).toFixed(2);
+                            if (evalText > 0) evalText = "+" + evalText;
+                        } else {
+                            let mateIn = val * multiplier;
+                            evalText = mateIn > 0 ? "+M" + mateIn : "-M" + Math.abs(mateIn);
+                        }
+                        UI.evalDisplay.innerText = evalText;
+                    }
+
+                    const pvMatch = msg.match(/pv (.+)/);
+                    if (pvMatch) {
+                        UI.pvDisplay.innerText = pvMatch[1];
+                    }
+                }
+
+                // 2. Extraction du meilleur coup
+                if (currentMode === 'play') {
+                    const match = String(msg).match(/^bestmove ([a-h][1-8][a-h][1-8][qrbn]?)/);
+                    if (match) {
+                        const moveStr = match[1];
+                        game.move({ 
+                            from: moveStr.substring(0, 2), 
+                            to: moveStr.substring(2, 4), 
+                            promotion: moveStr.length > 4 ? moveStr[4] : undefined 
+                        });
+                        board.setPosition(game.fen());
+                        updateHistory();
+                        
+                        if (!checkEndGame()) {
+                            setBoardInput();
+                            updateStatus("À vous (Blancs)", 'success');
+                        }
+                    }
+                }
+            };
+
+            // --- TRIGGERS ---
+            function triggerAI() {
+                updateStatus("Stockfish réfléchit...", 'normal');
+                board.disableMoveInput();
+                aiWorker.postMessage('position fen ' + game.fen());
+                aiWorker.postMessage('go depth 12'); 
+            }
+
+            function triggerAnalysis() {
+                updateStatus("Analyse continue...", 'success');
+                aiWorker.postMessage('stop');
+                aiWorker.postMessage('position fen ' + game.fen());
+                aiWorker.postMessage('go infinite');
+                setBoardInput();
+            }
+
+            function checkEndGame() {
+                if (game.isCheckmate()) {
+                    updateStatus("Échec et mat.", 'error');
+                    aiWorker.postMessage('stop');
+                    return true;
+                } else if (game.isDraw() || game.isStalemate() || game.isThreefoldRepetition()) {
+                    updateStatus("Match nul.", 'normal');
+                    aiWorker.postMessage('stop');
+                    return true;
+                }
+                return false;
+            }
+
+            function inputHandler(event) {
+                if (event.type === INPUT_EVENT_TYPE.moveInputFinished) {
+                    try {
+                        const move = game.move({
+                            from: event.squareFrom,
+                            to: event.squareTo,
+                            promotion: 'q'
+                        });
+
+                        if (move) {
+                            board.setPosition(game.fen());
+                            updateHistory();
+                            
+                            if (checkEndGame()) return true;
+
+                            if (currentMode === 'play') {
+                                triggerAI();
+                            } else {
+                                triggerAnalysis();
+                            }
+                            return true;
+                        }
+                    } catch (e) {
+                        return false; 
+                    }
+                }
+                return true;
+            }
+
+            // --- ÉCOUTEURS D'ÉVÉNEMENTS UI ---
+            UI.modeSelect.addEventListener('change', (e) => {
+                currentMode = e.target.value;
+                aiWorker.postMessage('stop');
+                
+                if (currentMode === 'analyze') {
+                    UI.diffContainer.classList.add('hidden');
+                    UI.analysisContainer.classList.remove('hidden');
+                    UI.analysisContainer.classList.add('flex');
+                    UI.evalDisplay.innerText = "0.00";
+                    UI.pvDisplay.innerText = "Calcul...";
+                    triggerAnalysis();
+                } else {
+                    UI.diffContainer.classList.remove('hidden');
+                    UI.analysisContainer.classList.add('hidden');
+                    UI.analysisContainer.classList.remove('flex');
+                    aiWorker.postMessage('setoption name Skill Level value ' + UI.skillLevel.value);
+                    if (game.turn() === 'b') triggerAI();
+                    else setBoardInput();
+                }
+            });
+
+            UI.skillLevel.addEventListener('input', (e) => {
+                UI.skillVal.innerText = e.target.value;
+            });
+            UI.skillLevel.addEventListener('change', (e) => {
+                aiWorker.postMessage('setoption name Skill Level value ' + e.target.value);
+            });
+
+            UI.resetBtn.addEventListener('click', () => {
+                aiWorker.postMessage('stop');
+                game.reset();
+                board.setPosition(game.fen());
+                updateHistory();
+                
+                if (currentMode === 'play') {
+                    updateStatus("À vous (Blancs)", 'success');
+                    setBoardInput();
+                } else {
+                    triggerAnalysis();
+                }
+            });
+
+            UI.undoBtn.addEventListener('click', () => {
+                if (game.history().length === 0) return;
+
+                aiWorker.postMessage('stop');
+
+                game.undo(); 
+                if (currentMode === 'play' && game.turn() === 'b') {
+                    game.undo();
+                }
+
+                board.setPosition(game.fen());
+                updateHistory();
+                
+                if (currentMode === 'play') {
+                    updateStatus("À vous (Blancs)", 'success');
+                    setBoardInput();
+                } else {
+                    triggerAnalysis();
+                }
+            });
+
+            // --- INITIALISATION DE L'ÉCHIQUIER ---
+            // L'échiquier s'affiche visuellement, mais le code d'interaction (setBoardInput) 
+            // ne sera appelé que lorsque readyok sera reçu.
+            board = new Chessboard(document.getElementById("board"), {
+                position: game.fen(),
+                assetsUrl: "https://cdn.jsdelivr.net/npm/cm-chessboard@8.5.1/assets/",
+                sprite: { url: "https://cdn.jsdelivr.net/npm/cm-chessboard@8.5.1/assets/images/chessboard-sprite.svg", cache: false },
+                style: { cssClass: "default" }
+            });
+
+        } catch (error) {
+            document.getElementById('status').innerText = "Erreur d'architecture.";
+            document.getElementById('status').className = "text-sm font-mono px-3 py-1 rounded border bg-red-900 text-red-200 border-red-700";
+            console.error(error);
+        }
+    </script>
+</body>
+</html>
