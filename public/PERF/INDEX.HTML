@@ -7,7 +7,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-    <!-- PDF Generation Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
     
@@ -22,6 +21,9 @@
         select { background-color: #334155; color: white; border: 1px solid #475569; padding: 0.5rem; border-radius: 0.25rem; width: 100%; }
         .btn-primary { background-color: #3b82f6; color: white; padding: 0.5rem 1rem; border-radius: 0.25rem; font-weight: 600; transition: background 0.2s; }
         .btn-primary:hover { background-color: #2563eb; }
+        .help-icon { cursor: pointer; color: #94a3b8; transition: color 0.2s; display: inline-block; vertical-align: middle; margin-left: 0.25rem; }
+        .help-icon:hover { color: #38bdf8; }
+        .modal-overlay { background-color: rgba(0, 0, 0, 0.8); backdrop-filter: blur(4px); }
     </style>
 </head>
 <body class="p-4 md:p-8">
@@ -43,7 +45,6 @@
 
         <!-- Input Section -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <!-- Zone Positions -->
             <div id="drop-zone-pos" class="drop-zone rounded-lg p-6 text-center cursor-pointer hover:bg-slate-800">
                 <input type="file" id="csvInputPos" accept=".csv" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
                 <div class="text-sm font-medium text-slate-300 pointer-events-none">
@@ -51,8 +52,6 @@
                     <span id="label-pos" class="text-slate-400">Glisse 'portefeuille.csv' ici</span>
                 </div>
             </div>
-
-            <!-- Zone Historique -->
             <div id="drop-zone-hist" class="drop-zone rounded-lg p-6 text-center cursor-pointer hover:bg-slate-800">
                 <input type="file" id="csvInputHist" accept=".csv" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
                 <div class="text-sm font-medium text-slate-300 pointer-events-none">
@@ -69,7 +68,10 @@
                 <div class="text-2xl font-bold mt-2 text-white" id="total-valeur">--</div>
             </div>
             <div class="card">
-                <div class="text-slate-400 text-xs uppercase font-bold tracking-wider">P&L Latent (€)</div>
+                <div class="text-slate-400 text-xs uppercase font-bold tracking-wider">
+                    P&L Latent (€)
+                    <svg onclick="showHelp('pnl_latent')" class="w-4 h-4 help-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                </div>
                 <div class="text-2xl font-bold mt-2" id="total-pnl">--</div>
             </div>
             <div class="card">
@@ -95,7 +97,10 @@
                 <div class="text-2xl font-bold mt-2 text-red-400" id="total-fees">--</div>
             </div>
             <div class="card">
-                <div class="text-slate-400 text-xs uppercase font-bold tracking-wider">Ratio Efficacité</div>
+                <div class="text-slate-400 text-xs uppercase font-bold tracking-wider">
+                    Ratio Efficacité
+                    <svg onclick="showHelp('efficacite')" class="w-4 h-4 help-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                </div>
                 <div class="text-xl font-bold mt-2 text-white" id="efficiency-ratio">--</div>
                 <div class="text-xs text-slate-500">Dividendes / Frais</div>
             </div>
@@ -108,10 +113,412 @@
 
         <!-- Global Charts Grid -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6" id="charts-container" style="display:none;">
-            <!-- Treemap (Positions) -->
             <div class="card min-h-[450px] flex flex-col lg:col-span-2" id="chart-treemap-box">
                 <h3 class="text-lg font-semibold mb-4 text-white">Carte Thermique d'Allocation</h3>
                 <div id="treemap" class="flex-grow w-full h-full"></div>
+            </div>
+        </div>
+
+        <!-- RISK MANAGEMENT SECTION -->
+        <div id="risk-section" style="display:none;" class="space-y-6 mt-8 pt-8 border-t border-red-900">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-4">
+                <div>
+                    <h2 class="text-2xl font-bold text-red-500">Exposition au Désastre (Risques)</h2>
+                    <p class="text-slate-400 text-sm mt-1">Un gain sur un portefeuille mal diversifié n'est pas une compétence, c'est un accident en sursis.</p>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="card border-red-900/50">
+                    <div class="text-slate-400 text-xs uppercase font-bold tracking-wider mb-4">
+                        Concentration Toxique (>10%)
+                        <svg onclick="showHelp('concentration')" class="w-4 h-4 help-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                    <div id="risk-concentration-list" class="space-y-3"></div>
+                </div>
+                
+                <div class="card border-red-900/50">
+                    <div class="text-slate-400 text-xs uppercase font-bold tracking-wider mb-4">Pires Drawdowns Latents</div>
+                    <div id="risk-drawdown-list" class="space-y-3"></div>
+                </div>
+
+                <div class="card border-red-900/50">
+                    <div class="text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">
+                        Max Drawdown Historique
+                        <svg onclick="showHelp('max_dd')" class="w-4 h-4 help-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                    <div class="text-3xl font-bold text-red-500 mt-2" id="risk-max-dd">--</div>
+                    <div class="text-xs text-slate-500 mt-2">La plus grande chute de cash consécutive subie historiquement.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SECTOR EXPOSURE SECTION -->
+        <div id="sector-section" style="display:none;" class="space-y-6 mt-8 pt-8 border-t border-yellow-900">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-4">
+                <div>
+                    <h2 class="text-2xl font-bold text-yellow-500">
+                        Exposition Sectorielle (La Fausse Diversification)
+                        <svg onclick="showHelp('secteurs')" class="w-5 h-5 help-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </h2>
+                    <p class="text-slate-400 text-sm mt-1">Si un secteur sous-performe, toutes les lignes associées s'effondrent. C'est ici que se cache ton risque systémique.</p>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="card lg:col-span-2 overflow-x-auto border-yellow-900/50">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="border-b border-slate-600 text-slate-400 text-xs uppercase tracking-wider">
+                                <th class="p-3 font-bold">Secteur</th>
+                                <th class="p-3 font-bold text-right">Valeur Actuelle</th>
+                                <th class="p-3 font-bold text-right">Poids Global</th>
+                                <th class="p-3 font-bold">Titres Détenus</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sector-tbody" class="text-sm"></tbody>
+                    </table>
+                </div>
+
+                <div class="card lg:col-span-1 min-h-[350px] flex flex-col border-yellow-900/50">
+                    <h3 class="text-sm uppercase font-bold text-slate-400 tracking-wider mb-2 text-center">Répartition du Capital</h3>
+                    <div id="sector-chart" class="flex-grow w-full h-full"></div>
+                </div>
+            </div>
+
+            <div class="card bg-slate-800 border-slate-600">
+                <div class="text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">Diagnostic de Corrélation</div>
+                <div id="sector-diagnostic" class="text-white text-sm">--</div>
+            </div>
+        </div>
+
+        <!-- PSYCHOLOGY & EXECUTION SECTION -->
+        <div id="psychology-section" style="display:none;" class="space-y-6 mt-8 pt-8 border-t border-blue-900">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-4">
+                <div>
+                    <h2 class="text-2xl font-bold text-blue-500">Psychologie et Exécution (Positions Clôturées)</h2>
+                    <p class="text-slate-400 text-sm mt-1">Les chiffres réels de ton comportement face aux gains et aux pertes.</p>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="card border-blue-900/50">
+                    <div class="text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">
+                        Taux de Succès (Win Rate)
+                        <svg onclick="showHelp('winrate_payoff')" class="w-4 h-4 help-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                    <div class="text-3xl font-bold text-white mt-2" id="psy-winrate">--</div>
+                    <div class="text-xs text-slate-500 mt-2">% de trades clôturés en gain.</div>
+                </div>
+                
+                <div class="card border-blue-900/50">
+                    <div class="text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">Gain Moyen</div>
+                    <div class="text-2xl font-bold text-emerald-400 mt-2" id="psy-avg-win">--</div>
+                    <div class="text-xs text-slate-500 mt-2">Ce que tu gagnes quand tu as raison.</div>
+                </div>
+
+                <div class="card border-blue-900/50">
+                    <div class="text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">Perte Moyenne</div>
+                    <div class="text-2xl font-bold text-red-500 mt-2" id="psy-avg-loss">--</div>
+                    <div class="text-xs text-slate-500 mt-2">Ce que tu perds quand tu as tort.</div>
+                </div>
+
+                <div class="card border-blue-900/50">
+                    <div class="text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">Ratio Gain/Perte (Payoff)</div>
+                    <div class="text-3xl font-bold text-white mt-2" id="psy-payoff">--</div>
+                    <div class="text-xs text-slate-500 mt-2">Gain moyen / Perte moyenne.</div>
+                </div>
+            </div>
+
+            <div class="mt-6 border-t border-blue-900/50 pt-6">
+                <h3 class="text-lg font-bold text-slate-300 mb-4">
+                    Moyennes à la Baisse (Attraper le couteau qui tombe)
+                    <svg onclick="showHelp('moyenne_baisse')" class="w-5 h-5 help-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="card border-blue-900/50">
+                        <div class="text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">Renforcements en Perte</div>
+                        <div class="text-2xl font-bold text-white mt-2" id="psy-avg-down-count">--</div>
+                        <div class="text-xs text-slate-500 mt-2">Actes d'achats sous le PMP.</div>
+                    </div>
+                    <div class="card border-blue-900/50">
+                        <div class="text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">Capital Injecté</div>
+                        <div class="text-2xl font-bold text-orange-400 mt-2" id="psy-avg-down-capital">--</div>
+                        <div class="text-xs text-slate-500 mt-2">Argent bloqué pour "sauver" la ligne.</div>
+                    </div>
+                    <div class="card border-blue-900/50">
+                        <div class="text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">Taux d'Échec du Sauvetage</div>
+                        <div class="text-2xl font-bold text-red-500 mt-2" id="psy-avg-down-fail">--</div>
+                        <div class="text-xs text-slate-500 mt-2">Dossiers moyennés terminant en perte.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-6 border-t border-blue-900/50 pt-6">
+                <h3 class="text-lg font-bold text-slate-300 mb-4">
+                    Biais d'Ancrage Temporel (Le Temps c'est de l'Ego)
+                    <svg onclick="showHelp('ancrage_temporel')" class="w-5 h-5 help-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="card border-blue-900/50">
+                        <div class="text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">Durée Moyenne Gains</div>
+                        <div class="text-2xl font-bold text-emerald-400 mt-2" id="psy-time-win">--</div>
+                        <div class="text-xs text-slate-500 mt-2">Jours de détention avant prise de profit.</div>
+                    </div>
+                    <div class="card border-blue-900/50">
+                        <div class="text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">Durée Moyenne Pertes</div>
+                        <div class="text-2xl font-bold text-red-500 mt-2" id="psy-time-loss">--</div>
+                        <div class="text-xs text-slate-500 mt-2">Jours de détention en espérant un miracle.</div>
+                    </div>
+                    <div class="card border-blue-900/50">
+                        <div class="text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">Ratio Temporel (Pertes/Gains)</div>
+                        <div class="text-2xl font-bold text-white mt-2" id="psy-time-ratio">--</div>
+                        <div class="text-xs text-slate-500 mt-2">Indice d'anxiété (Si > 1 = Tu conserves tes erreurs).</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card bg-slate-800 border-slate-600 mt-6">
+                <div class="text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">Diagnostic Brutal d'Exécution</div>
+                <div id="psy-diagnostic" class="text-white text-sm space-y-2">--</div>
+            </div>
+        </div>
+
+        <!-- LIQUIDITY & OPPORTUNITY COST SECTION -->
+        <div id="liquidity-section" style="display:none;" class="space-y-6 mt-8 pt-8 border-t border-teal-900">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-4">
+                <div>
+                    <h2 class="text-2xl font-bold text-teal-500">
+                        Destruction de la Réserve Tactique (Ego vs Liquidité)
+                        <svg onclick="showHelp('reserve_tactique')" class="w-5 h-5 help-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </h2>
+                    <p class="text-slate-400 text-sm mt-1">Le cash est une arme pour acheter le sang des autres, pas pour diluer tes propres erreurs.</p>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="card border-teal-900/50">
+                    <div class="text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">Total Capital Déployé</div>
+                    <div class="text-2xl font-bold text-white mt-2" id="liq-total-deployed">--</div>
+                    <div class="text-xs text-slate-500 mt-2">Somme de tous tes achats historiques.</div>
+                </div>
+                <div class="card border-teal-900/50">
+                    <div class="text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">Munitions Brûlées (Sauvetage)</div>
+                    <div class="text-2xl font-bold text-orange-400 mt-2" id="liq-rescue-capital">--</div>
+                    <div class="text-xs text-slate-500 mt-2">Cash injecté sous le PMP pour moyenner.</div>
+                </div>
+                <div class="card border-teal-900/50">
+                    <div class="text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">Ratio de Destruction Tactique</div>
+                    <div class="text-2xl font-bold text-red-500 mt-2" id="liq-rescue-ratio">--</div>
+                    <div class="text-xs text-slate-500 mt-2">% de ta force de frappe gaspillée par ego.</div>
+                </div>
+            </div>
+
+            <div class="card bg-slate-800 border-slate-600 mt-2">
+                <div class="text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">Diagnostic de Gestion des Munitions</div>
+                <div id="liq-diagnostic" class="text-white text-sm space-y-2">--</div>
+            </div>
+        </div>
+
+        <!-- DYNAMIC TRENDS SECTION -->
+        <div id="trends-section" style="display:none;" class="space-y-6 mt-8 pt-8 border-t border-indigo-900">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-4">
+                <div>
+                    <h2 class="text-2xl font-bold text-indigo-500">Dynamique Comportementale (Tendances)</h2>
+                    <p class="text-slate-400 text-sm mt-1">Le marché est un flux. Ces courbes tracent la dégradation de ton système et tes pertes de contrôle temporelles.</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Chart 1: Revenge Trading -->
+                <div class="card min-h-[350px] flex flex-col border-indigo-900/50">
+                    <h3 class="text-sm uppercase font-bold text-slate-400 tracking-wider mb-2 text-center">
+                        Volume d'Ordres vs Résultat Net Mensuel
+                        <svg onclick="showHelp('revenge_trading')" class="w-4 h-4 help-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </h3>
+                    <div id="trend-activity-chart" class="flex-grow w-full h-full"></div>
+                </div>
+
+                <div class="card min-h-[350px] flex flex-col border-indigo-900/50">
+                    <h3 class="text-sm uppercase font-bold text-slate-400 tracking-wider mb-2 text-center">Taux de Succès Roulant (10 derniers trades)</h3>
+                    <div id="trend-winrate-chart" class="flex-grow w-full h-full"></div>
+                </div>
+
+                <div class="card lg:col-span-2 min-h-[350px] flex flex-col border-indigo-900/50">
+                    <h3 class="text-sm uppercase font-bold text-slate-400 tracking-wider mb-2 text-center">Dérive de Concentration (Poids de la plus grosse ligne en capital engagé)</h3>
+                    <div id="trend-creep-chart" class="flex-grow w-full h-full"></div>
+                </div>
+            </div>
+
+            <div class="card bg-slate-800 border-slate-600 mt-2">
+                <div class="text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">Diagnostic de Trajectoire</div>
+                <div id="trend-diagnostic" class="text-white text-sm space-y-2">--</div>
+            </div>
+        </div>
+
+        <!-- TRADE ANALYSIS SECTION -->
+        <div id="trade-analysis-section" style="display:none;" class="space-y-6 mt-8 pt-8 border-t border-fuchsia-900">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-4">
+                <div>
+                    <h2 class="text-2xl font-bold text-fuchsia-500">Analyse Chirurgicale des Trades (Bruit vs Signal)</h2>
+                    <p class="text-slate-400 text-sm mt-1">Examen de tes actes isolés. La majorité des investisseurs détruisent leur performance en bougeant trop.</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Chart 1: Interventionnisme -->
+                <div class="card min-h-[350px] flex flex-col border-fuchsia-900/50">
+                    <h3 class="text-sm uppercase font-bold text-slate-400 tracking-wider mb-2 text-center">
+                        Test d'Interventionnisme (Actif vs Passif)
+                        <svg onclick="showHelp('interventionnisme')" class="w-4 h-4 help-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </h3>
+                    <div id="trade-active-passive-chart" class="flex-grow w-full h-full"></div>
+                </div>
+
+                <!-- Chart 2: Matrice de Conviction -->
+                <div class="card min-h-[350px] flex flex-col border-fuchsia-900/50">
+                    <h3 class="text-sm uppercase font-bold text-slate-400 tracking-wider mb-2 text-center">
+                        Matrice d'Inversion (Conviction vs Résultat)
+                        <svg onclick="showHelp('matrice_conviction')" class="w-4 h-4 help-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </h3>
+                    <div id="trade-conviction-chart" class="flex-grow w-full h-full"></div>
+                </div>
+
+                <!-- Chart 3: Nuage Bagholder -->
+                <div class="card lg:col-span-2 min-h-[400px] flex flex-col border-fuchsia-900/50">
+                    <h3 class="text-sm uppercase font-bold text-slate-400 tracking-wider mb-2 text-center">
+                        Nuage de Dispersion (L'Anatomie du Bagholder)
+                        <svg onclick="showHelp('bagholder')" class="w-4 h-4 help-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </h3>
+                    <div id="trade-scatter-chart" class="flex-grow w-full h-full"></div>
+                </div>
+            </div>
+
+            <div class="card bg-slate-800 border-slate-600 mt-2">
+                <div class="text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">Diagnostic de l'Activité</div>
+                <div id="trade-diagnostic" class="text-white text-sm space-y-2">--</div>
+            </div>
+        </div>
+
+        <!-- RECOVERY WALL SECTION -->
+        <div id="recovery-section" style="display:none;" class="space-y-6 mt-8 pt-8 border-t border-orange-900">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-4">
+                <div>
+                    <h2 class="text-2xl font-bold text-orange-500">
+                        Le Mur de Récupération (Asymétrie des Pertes)
+                        <svg onclick="showHelp('mur_recuperation')" class="w-5 h-5 help-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </h2>
+                    <p class="text-slate-400 text-sm mt-1">Les mathématiques ne pardonnent pas. Plus tu laisses une perte se creuser, plus l'effort pour revenir à zéro devient irréaliste.</p>
+                </div>
+            </div>
+
+            <div class="card border-orange-900/50 overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="border-b border-slate-600 text-slate-400 text-xs uppercase tracking-wider">
+                            <th class="p-3 font-bold">Valeur</th>
+                            <th class="p-3 font-bold text-right">Perte Latente</th>
+                            <th class="p-3 font-bold text-right">Capital Bloqué</th>
+                            <th class="p-3 font-bold text-right text-orange-400">Hausse Requise (Break-Even)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recovery-tbody" class="text-sm"></tbody>
+                </table>
+            </div>
+
+            <div class="card bg-slate-800 border-slate-600 mt-2">
+                <div class="text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">Diagnostic de Récupération</div>
+                <div id="recovery-diagnostic" class="text-white text-sm space-y-2">--</div>
+            </div>
+        </div>
+
+        <!-- MONEY MANAGEMENT SECTION -->
+        <div id="money-management-section" style="display:none;" class="space-y-6 mt-8 pt-8 border-t border-cyan-900">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-4">
+                <div>
+                    <h2 class="text-2xl font-bold text-cyan-500">
+                        Calibrage par le Risque (Money Management)
+                        <svg onclick="showHelp('money_management')" class="w-5 h-5 help-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </h2>
+                    <p class="text-slate-400 text-sm mt-1">La taille de ta position ne dépend pas de ta conviction, mais du capital que tu as le droit de perdre.</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div class="card border-red-900/50 bg-red-900/10">
+                    <div class="text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">
+                        Chaleur Globale (Portfolio Heat)
+                        <svg onclick="showHelp('chaleur_globale')" class="w-4 h-4 help-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                    <div class="text-3xl font-bold text-red-500 mt-2" id="mm-heat-total">--</div>
+                    <div class="text-xs text-slate-400 mt-2">La somme en euros programmée pour disparaître si tous tes stops sont touchés.</div>
+                </div>
+                <div class="card border-orange-900/50 bg-orange-900/10">
+                    <div class="text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">Stress Test (Flash Crash -20%)</div>
+                    <div class="text-3xl font-bold text-orange-500 mt-2" id="mm-flash-crash">--</div>
+                    <div class="text-xs text-slate-400 mt-2">Évaporation instantanée en cas d'ouverture chaotique de l'ensemble du marché.</div>
+                </div>
+            </div>
+
+            <div class="card border-cyan-900/50 mb-4 bg-slate-800/50">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">Risque Max Accepté (% du Portefeuille Total)</label>
+                        <input type="number" id="mm-risk-pct" value="1.0" step="0.1" min="0.1" class="w-full bg-slate-900 text-white border border-slate-700 p-2 rounded">
+                    </div>
+                    <div>
+                        <label class="block text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">Distance du Stop Loss (Perte estimée en %)</label>
+                        <input type="number" id="mm-stop-pct" value="15" step="1" min="1" class="w-full bg-slate-900 text-white border border-slate-700 p-2 rounded">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card border-cyan-900/50 overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="border-b border-slate-600 text-slate-400 text-xs uppercase tracking-wider">
+                            <th class="p-3 font-bold">Valeur</th>
+                            <th class="p-3 font-bold text-right">Taille Actuelle</th>
+                            <th class="p-3 font-bold text-right">Perte si Stop Touché</th>
+                            <th class="p-3 font-bold text-right text-cyan-400">Taille Max Autorisée</th>
+                            <th class="p-3 font-bold text-right">Sur-exposition</th>
+                        </tr>
+                    </thead>
+                    <tbody id="mm-tbody" class="text-sm"></tbody>
+                </table>
+            </div>
+
+            <div class="card bg-slate-800 border-slate-600 mt-2">
+                <div class="text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">Diagnostic de Dimensionnement</div>
+                <div id="mm-diagnostic" class="text-white text-sm space-y-2">--</div>
+            </div>
+        </div>
+
+        <!-- CAPITAL EFFICIENCY (CAGR) SECTION -->
+        <div id="cagr-section" style="display:none;" class="space-y-6 mt-8 pt-8 border-t border-purple-900">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-4">
+                <div>
+                    <h2 class="text-2xl font-bold text-purple-500">
+                        Efficacité du Capital (Rendement Annualisé)
+                        <svg onclick="showHelp('cagr')" class="w-5 h-5 help-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </h2>
+                    <p class="text-slate-400 text-sm mt-1">Le temps détruit la valeur. Tout ce qui rapporte moins que l'inflation est un actif mort.</p>
+                </div>
+            </div>
+            
+            <div class="card border-purple-900/50 overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="border-b border-slate-600 text-slate-400 text-xs uppercase tracking-wider">
+                            <th class="p-3 font-bold">Valeur</th>
+                            <th class="p-3 font-bold text-center">Statut</th>
+                            <th class="p-3 font-bold text-right">Durée (Années)</th>
+                            <th class="p-3 font-bold text-right">Capital Total Engagé</th>
+                            <th class="p-3 font-bold text-right">CAGR (Rendement Annuel)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cagr-tbody" class="text-sm"></tbody>
+                </table>
             </div>
         </div>
 
@@ -156,13 +563,11 @@
 
                 <!-- Charts Column -->
                 <div class="lg:col-span-2 space-y-4">
-                    <!-- Execution Chart -->
                     <div class="card min-h-[350px] flex flex-col">
                         <h3 class="text-lg font-semibold mb-2 text-white">1. Historique d'Exécution</h3>
                         <div id="execution-chart" class="flex-grow w-full h-full"></div>
                     </div>
                     
-                    <!-- Cumulative PnL Chart -->
                     <div class="card min-h-[300px] flex flex-col">
                         <h3 class="text-lg font-semibold mb-2 text-white">2. Évolution Gains/Pertes Cumulés</h3>
                         <p class="text-xs text-slate-400">Cash net généré (Dividendes + Gains Cessions - Frais)</p>
@@ -177,10 +582,114 @@
         </div>
     </div>
 
+    <!-- MODAL D'AIDE BRUTALE -->
+    <div id="help-modal" class="fixed inset-0 modal-overlay hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-lg max-w-lg w-full p-6 shadow-2xl relative">
+            <button onclick="closeHelp()" class="absolute top-4 right-4 text-slate-400 hover:text-white">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+            <h3 id="help-title" class="text-xl font-bold text-white mb-4 pr-8">Titre</h3>
+            <div id="help-content" class="text-slate-300 text-sm leading-relaxed space-y-4">
+                Contenu
+            </div>
+        </div>
+    </div>
+
     <script>
         // --- Globals ---
         let globalPortfolio = [];
         let globalHistory = [];
+
+        // --- Help System ---
+        const helpContent = {
+            "pnl_latent": {
+                title: "P&L Latent : L'illusion monétaire",
+                text: "Ce chiffre ne veut rien dire tant que la position n'est pas vendue. C'est du vent. Ne te réjouis pas d'un gain latent, le marché peut le reprendre demain. Ne panique pas sur une perte latente si la thèse est intacte. Évalue ton portefeuille sur le cash réellement généré."
+            },
+            "efficacite": {
+                title: "Ratio d'Efficacité : Le coût du mouvement",
+                text: "Ce ratio divise tes dividendes encaissés par tes frais payés. S'il est sous 1, ton activité transactionnelle te coûte plus cher que ce que tes investissements te rapportent de manière passive. Tu travailles pour enrichir ton courtier. Arrête de sur-trader."
+            },
+            "concentration": {
+                title: "Concentration Toxique : Le risque de ruine",
+                text: "Détenir plus de 10% de ton capital sur une seule action n'est pas une preuve de conviction, c'est un aveuglement. Une fraude comptable ou un retournement de cycle détruira des années d'efforts en une séance. Limite ton ego, diversifie ton risque spécifique."
+            },
+            "max_dd": {
+                title: "Max Drawdown : Ta limite psychologique",
+                text: "C'est la chute de valeur la plus violente subie par ton portefeuille depuis son sommet. C'est la seule mesure réelle de ta capacité à supporter la douleur financière. Si ce montant te semble intolérable, ton exposition globale est mal calibrée."
+            },
+            "secteurs": {
+                title: "Exposition Sectorielle : La fausse diversification",
+                text: "Posséder dix actions du même secteur, c'est faire un seul et unique pari macroéconomique. Quand le cycle se retourne, l'intégralité de cette poche s'effondre en même temps. Observe tes corrélations en face."
+            },
+            "winrate_payoff": {
+                title: "Taux de Succès & Ratio Payoff : L'anatomie du système",
+                text: "Si tu as souvent raison (Win Rate > 50%) mais que tu perds de l'argent, c'est que ton Payoff (Gain/Perte) est catastrophique. Cela prouve un comportement dysfonctionnel. Tu coupes tes gains très vite par anxiété, et tu conserves tes pertes indéfiniment par ego."
+            },
+            "moyenne_baisse": {
+                title: "Moyenne à la baisse : Le couteau qui tombe",
+                text: "Acheter un actif qui baisse pour réduire artificiellement ton prix de revient est une tentative de sauver ton ego, pas ton capital. Jeter de l'argent frais sur une thèse d'investissement invalidée est la première cause de destruction de patrimoine chez les particuliers."
+            },
+            "ancrage_temporel": {
+                title: "Ratio Temporel : L'hypocrisie de l'horizon de placement",
+                text: "Si tu conserves tes pertes des mois en espérant un miracle, mais que tu vends tes gains en quelques jours pour sécuriser un profit, tu n'es pas un investisseur long terme. Tu es un trader qui subit les mouvements du marché par peur."
+            },
+            "reserve_tactique": {
+                title: "Réserve Tactique : L'usage des munitions",
+                text: "La liquidité sert à acheter des dislocations de marché, pas à diluer des lignes perdantes. Ce ratio montre la part de ton capital gaspillée pour masquer tes erreurs initiales de timing. Ne jette pas de l'argent neuf sur de mauvais choix."
+            },
+            "revenge_trading": {
+                title: "Volume vs Résultat : Le Revenge Trading",
+                text: "L'hyperactivité suit très souvent une période de perte. Tu augmentes ton volume de transactions pour tenter de 'te refaire'. Le marché ne te doit rien. Quand tes résultats plongent, réduis ta taille de position ou arrête de trader pour briser le cycle émotionnel."
+            },
+            "cagr": {
+                title: "Rendement Annualisé (CAGR) : L'efficacité du capital",
+                text: "Une plus-value absolue ne signifie rien sans la notion de temps. Un gain de 20% sur 5 ans équivaut à un rendement composé inférieur à 4% par an. Si ton rendement est sous l'inflation ou sous l'indice mondial, ton capital se détruit en silence. Vends les actifs morts."
+            },
+            "interventionnisme": {
+                title: "Test d'Interventionnisme",
+                text: "Compare ton résultat réel avec ce que tu aurais gagné en achetant la ligne le premier jour et en ne touchant plus à rien. Si la barre grise (passif) est plus haute que la barre bleue (actif), ton trading est destructeur de valeur. Tu t'agites pour appauvrir ton compte."
+            },
+            "matrice_conviction": {
+                title: "Matrice de Conviction",
+                text: "L'axe vertical montre la rentabilité, l'axe horizontal montre le capital maximum risqué. La logique exige que tes plus gros points soient en haut à droite. S'ils sont en bas à droite, tu sur-finances tes erreurs (ego). S'ils sont en haut à gauche, tu sous-finances tes succès (peur)."
+            },
+            "bagholder": {
+                title: "Nuage de Dispersion (Bagholder)",
+                text: "Chaque point est un trade clôturé. À gauche : court terme. À droite : long terme. En haut : gain. En bas : perte. Si tes points rouges s'étalent vers la droite alors que tes verts s'amassent à gauche, c'est la preuve visuelle que tu refuses d'accepter tes échecs."
+            },
+            "mur_recuperation": {
+                title: "Le Mur de Récupération",
+                text: "Une perte de 20% nécessite un gain de 25% pour revenir à zéro. Une perte de 50% nécessite 100%. Garder une action détruite en espérant qu'elle fasse +66% juste pour 'sortir flat' est un délire statistique. Coupe tes pertes avant que le mur ne devienne infranchissable."
+            },
+            "money_management": {
+                title: "Calibrage par le Risque",
+                text: "Un professionnel ne risque jamais plus de 1% à 2% de son capital total sur une seule idée. Si tu mets un stop loss à -15%, la taille de ta position doit être mathématiquement calculée pour que ces -15% ne représentent que 1% de ton portefeuille global. Tout euro investi au-delà de cette limite est un risque non professionnel."
+            },
+            "chaleur_globale": {
+                title: "Chaleur Globale (Portfolio Heat)",
+                text: "C'est l'addition de tout le risque ouvert sur ton compte. Si toutes tes actions chutent en même temps, voici le montant exact qui disparaît. Les professionnels maintiennent cette chaleur globale sous les 6%. Au-delà, une simple correction de marché suffit à paralyser ton portefeuille et à déclencher des appels de marge ou des liquidations forcées en panique."
+            }
+        };
+
+        function showHelp(key) {
+            const data = helpContent[key];
+            if (!data) return;
+            document.getElementById('help-title').textContent = data.title;
+            document.getElementById('help-content').textContent = data.text;
+            document.getElementById('help-modal').classList.remove('hidden');
+        }
+
+        function closeHelp() {
+            document.getElementById('help-modal').classList.add('hidden');
+        }
+
+        // Fermer le modal en cliquant à l'extérieur
+        document.getElementById('help-modal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeHelp();
+            }
+        });
 
         // --- Utils ---
         const parseFrenchNumber = (str) => {
@@ -214,7 +723,19 @@
             if (hasPos) renderPortfolio(globalPortfolio);
             if (hasHist) renderHistory(globalHistory);
             
+            if (hasPos) {
+                renderRiskMetrics(globalPortfolio, globalHistory);
+                renderSectorMatrix(globalPortfolio);
+                renderRecoveryMetrics(globalPortfolio);
+            }
+
             if (hasHist) {
+                renderPsychologyMetrics(globalPortfolio, globalHistory);
+                renderLiquidityMetrics(globalHistory);
+                renderTrendMetrics(globalHistory);
+                renderTradeAnalysisMetrics(globalPortfolio, globalHistory);
+                renderMoneyManagementMetrics(globalPortfolio);
+                renderCAGRMetrics(globalPortfolio, globalHistory);
                 populateStockSelector();
                 document.getElementById('detail-section').style.display = 'block';
                 document.getElementById('pdf-btn').classList.remove('hidden');
@@ -225,7 +746,6 @@
             document.getElementById('kpi-pos-container').style.display = 'grid';
             document.getElementById('charts-container').style.display = 'grid';
             
-            // Clean Data
             let portfolio = data.map(row => {
                 if (!row['Titre'] || !row['valeur actuelle']) return null;
                 return {
@@ -240,7 +760,6 @@
 
             if (portfolio.length === 0) return;
 
-            // KPIs
             const totalValue = portfolio.reduce((sum, item) => sum + item.currentVal, 0);
             const totalPnL = portfolio.reduce((sum, item) => sum + item.pnlEuro, 0);
             const sortedByPerf = [...portfolio].sort((a, b) => b.pnlPercent - a.pnlPercent);
@@ -285,8 +804,8 @@
                 if (!date) return null;
                 return {
                     date: date,
-                    type: row['Opération'], // Achat, Vente, Dividende
-                    stock: row['Valeur'], // Stock Name
+                    type: row['Opération'],
+                    stock: row['Valeur'],
                     price: parseFrenchNumber(row['Prix']),
                     qty: parseFrenchNumber(row['Quantité']),
                     fees: parseFrenchNumber(row['Frais']),
@@ -295,7 +814,1156 @@
             }).filter(d => d !== null && d.date !== null).sort((a, b) => a.date - b.date);
         }
 
-        // --- Chart Functions ---
+        function renderRiskMetrics(portfolioData, historyData) {
+            document.getElementById('risk-section').style.display = 'block';
+
+            let portfolio = portfolioData.map(row => ({
+                name: row['Titre'],
+                currentVal: parseFrenchNumber(row['valeur actuelle']),
+                pnlPercent: parseFrenchNumber(row['gain ou perte en pourcentage']),
+                pnlEuro: parseFrenchNumber(row['gain ou perte en euros'])
+            })).filter(item => item.currentVal > 0);
+
+            const totalValue = portfolio.reduce((sum, item) => sum + item.currentVal, 0);
+            
+            const concentrationList = document.getElementById('risk-concentration-list');
+            concentrationList.innerHTML = '';
+            let hasConcentrationRisk = false;
+
+            portfolio.sort((a, b) => b.currentVal - a.currentVal).forEach(item => {
+                const weight = item.currentVal / totalValue;
+                if (weight > 0.10) {
+                    hasConcentrationRisk = true;
+                    const isCritical = weight > 0.15;
+                    const colorClass = isCritical ? 'text-red-500 font-bold' : 'text-orange-400';
+                    const borderClass = isCritical ? 'border-red-500' : 'border-orange-500';
+                    
+                    concentrationList.innerHTML += `
+                        <div class="flex justify-between items-center p-2 border-l-2 ${borderClass} bg-slate-800/50">
+                            <span class="${colorClass}">${item.name}</span>
+                            <span class="text-white">${formatPercent(weight * 100)}</span>
+                        </div>
+                    `;
+                }
+            });
+
+            if (!hasConcentrationRisk) {
+                concentrationList.innerHTML = '<div class="text-emerald-400 text-sm">Exposition maîtrisée. Aucun actif ne dépasse 10% du portefeuille.</div>';
+            }
+
+            const drawdownList = document.getElementById('risk-drawdown-list');
+            drawdownList.innerHTML = '';
+            
+            const worstDrawdowns = [...portfolio]
+                .filter(item => item.pnlPercent < 0)
+                .sort((a, b) => a.pnlPercent - b.pnlPercent)
+                .slice(0, 3);
+
+            if (worstDrawdowns.length > 0) {
+                worstDrawdowns.forEach(item => {
+                    drawdownList.innerHTML += `
+                        <div class="flex justify-between items-center p-2 border-l-2 border-red-900 bg-slate-800/50">
+                            <span class="text-slate-300">${item.name}</span>
+                            <span class="text-red-500 font-bold">${formatPercent(item.pnlPercent)}</span>
+                        </div>
+                    `;
+                });
+            } else {
+                drawdownList.innerHTML = '<div class="text-emerald-400 text-sm">Aucune ligne en perte latente.</div>';
+            }
+
+            if (historyData && historyData.length > 0) {
+                const txs = parseHistory(historyData);
+                let cumulativeNetPnL = 0;
+                let peak = 0;
+                let maxDrawdown = 0;
+                const stockState = {}; 
+
+                txs.forEach(t => {
+                    const stock = t.stock;
+                    if (!stockState[stock]) stockState[stock] = { qty: 0, totalCost: 0 };
+
+                    cumulativeNetPnL -= t.fees;
+
+                    if (t.type === 'Dividende') {
+                        cumulativeNetPnL += t.amount;
+                    } 
+                    else if (t.type === 'Achat') {
+                        stockState[stock].totalCost += (t.price * t.qty);
+                        stockState[stock].qty += t.qty;
+                    } 
+                    else if (t.type === 'Vente') {
+                        const pmp = stockState[stock].qty > 0 ? (stockState[stock].totalCost / stockState[stock].qty) : 0;
+                        const gain = (t.price - pmp) * t.qty;
+                        cumulativeNetPnL += gain;
+
+                        stockState[stock].qty -= t.qty;
+                        stockState[stock].totalCost -= (pmp * t.qty);
+                        if (stockState[stock].qty <= 0) { stockState[stock].qty = 0; stockState[stock].totalCost = 0; }
+                    }
+
+                    if (cumulativeNetPnL > peak) {
+                        peak = cumulativeNetPnL;
+                    }
+                    
+                    const currentDrawdown = cumulativeNetPnL - peak;
+                    if (currentDrawdown < maxDrawdown) {
+                        maxDrawdown = currentDrawdown;
+                    }
+                });
+
+                document.getElementById('risk-max-dd').textContent = formatCurrency(maxDrawdown);
+            } else {
+                document.getElementById('risk-max-dd').textContent = "Historique requis";
+            }
+        }
+
+        function renderSectorMatrix(portfolioData) {
+            document.getElementById('sector-section').style.display = 'block';
+
+            const sectorMapping = {
+                "FDJ United": "Consommation Discrétionnaire",
+                "L'oreal": "Consommation de Base",
+                "EssilorLuxottica": "Santé / Biens de Consommation",
+                "Gl Events": "Médias / Événementiel",
+                "Ipsos": "Médias / Événementiel",
+                "Vivendi": "Médias / Événementiel",
+                "Metropole Tv": "Médias / Événementiel",
+                "ID Logistics": "Industrie / Transport",
+                "Nexans": "Industrie / Matériaux",
+                "OPmobility": "Industrie / Automobile",
+                "Saint Gobain": "Industrie / Matériaux",
+                "TotalEnergies": "Énergie",
+                "GTT": "Énergie",
+                "Rubis": "Énergie",
+                "Seche Environnement": "Services aux Collectivités",
+                "Argan": "Immobilier",
+                "Nexity": "Immobilier",
+                "Ayvens": "Services Financiers"
+            };
+
+            const sectorAgg = {};
+            let totalPortfolioValue = 0;
+
+            portfolioData.forEach(row => {
+                const stockName = row['Titre'];
+                const currentVal = parseFrenchNumber(row['valeur actuelle']);
+                
+                if (currentVal <= 0) return;
+
+                const sector = sectorMapping[stockName] || "Non Classé / Autres";
+
+                if (!sectorAgg[sector]) {
+                    sectorAgg[sector] = { value: 0, stocks: [] };
+                }
+
+                sectorAgg[sector].value += currentVal;
+                sectorAgg[sector].stocks.push(stockName);
+                totalPortfolioValue += currentVal;
+            });
+
+            const sectorArray = Object.keys(sectorAgg).map(sector => {
+                return {
+                    sector: sector,
+                    value: sectorAgg[sector].value,
+                    weight: sectorAgg[sector].value / totalPortfolioValue,
+                    stocks: sectorAgg[sector].stocks
+                };
+            });
+
+            sectorArray.sort((a, b) => b.weight - a.weight);
+
+            const tbody = document.getElementById('sector-tbody');
+            tbody.innerHTML = '';
+
+            let maxWeight = 0;
+            let dominantSector = "";
+
+            sectorArray.forEach(item => {
+                if (item.weight > maxWeight) {
+                    maxWeight = item.weight;
+                    dominantSector = item.sector;
+                }
+
+                const tr = document.createElement('tr');
+                tr.className = "border-b border-slate-700/50 hover:bg-slate-800/50";
+                
+                const weightClass = item.weight > 0.30 ? 'text-red-500 font-bold' : (item.weight > 0.15 ? 'text-yellow-500' : 'text-slate-300');
+
+                tr.innerHTML = `
+                    <td class="p-3 font-medium ${weightClass}">${item.sector}</td>
+                    <td class="p-3 text-right text-slate-300">${formatCurrency(item.value)}</td>
+                    <td class="p-3 text-right ${weightClass}">${formatPercent(item.weight)}</td>
+                    <td class="p-3 text-slate-400 text-xs">${item.stocks.join(', ')}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            let diagnostic = "";
+            if (maxWeight > 0.40) {
+                diagnostic = `DANGER : Ton portefeuille est un pari massif sur un seul secteur (${dominantSector} à ${formatPercent(maxWeight)}). Ce n'est pas de la diversification, c'est du casino. Si ce secteur subit un retournement macroéconomique ou réglementaire, ton capital entier sera détruit simultanément, peu importe la qualité intrinsèque des entreprises que tu as sélectionnées.`;
+                document.getElementById('sector-diagnostic').className = "text-red-500 font-bold text-sm";
+            } else if (maxWeight > 0.25) {
+                diagnostic = `AVERTISSEMENT : Forte concentration sur ${dominantSector} (${formatPercent(maxWeight)}). Vérifie que tu es conscient d'être surexposé à cette thématique. La corrélation entre ces actifs va amplifier la volatilité de ton portefeuille lors du prochain choc sur ce secteur.`;
+                document.getElementById('sector-diagnostic').className = "text-yellow-500 text-sm";
+            } else {
+                diagnostic = "RÉPARTITION CORRECTE : Pas de dépendance critique à un seul secteur macroéconomique. Le risque de corrélation sectorielle semble structurellement limité.";
+                document.getElementById('sector-diagnostic').className = "text-emerald-400 text-sm";
+            }
+            document.getElementById('sector-diagnostic').textContent = diagnostic;
+
+            const trace = {
+                labels: sectorArray.map(s => s.sector),
+                values: sectorArray.map(s => s.value),
+                type: 'pie',
+                hole: 0.5,
+                textinfo: 'label+percent',
+                textposition: 'inside',
+                hoverinfo: 'label+value+percent',
+                marker: {
+                    colors: [
+                        '#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899', '#64748b'
+                    ]
+                }
+            };
+
+            const layout = {
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                margin: { t: 10, l: 10, r: 10, b: 10 },
+                showlegend: false,
+                font: { family: 'Inter', color: '#e2e8f0' }
+            };
+
+            Plotly.newPlot('sector-chart', [trace], layout, {displayModeBar: false, responsive: true});
+        }
+
+        function renderPsychologyMetrics(portfolioData, historyData) {
+            if (!historyData || historyData.length === 0) return;
+            document.getElementById('psychology-section').style.display = 'block';
+
+            const txs = parseHistory(historyData);
+            const inventory = {};
+            const trades = [];
+
+            let avgDownCount = 0;
+            let avgDownCapital = 0;
+            const averagedStocks = new Set();
+            const stockPMP = {};
+
+            let totalWinDays = 0;
+            let winTradeCountForTime = 0;
+            let totalLossDays = 0;
+            let lossTradeCountForTime = 0;
+
+            txs.forEach(t => {
+                const stock = t.stock;
+                if (!inventory[stock]) inventory[stock] = { qty: 0, cost: 0, avgDate: null };
+                if (!stockPMP[stock]) stockPMP[stock] = { qty: 0, cost: 0, pmp: 0 };
+
+                if (t.type === 'Achat') {
+                    let currentQty = inventory[stock].qty;
+                    let currentAvgDate = inventory[stock].avgDate || t.date.getTime();
+                    inventory[stock].avgDate = ((currentAvgDate * currentQty) + (t.date.getTime() * t.qty)) / (currentQty + t.qty);
+                    
+                    inventory[stock].cost += (t.price * t.qty) + t.fees;
+                    inventory[stock].qty += t.qty;
+
+                    if (stockPMP[stock].qty > 0 && t.price < stockPMP[stock].pmp) {
+                        avgDownCount++;
+                        avgDownCapital += (t.price * t.qty);
+                        averagedStocks.add(stock);
+                    }
+                    
+                    stockPMP[stock].cost += (t.price * t.qty);
+                    stockPMP[stock].qty += t.qty;
+                    stockPMP[stock].pmp = stockPMP[stock].cost / stockPMP[stock].qty;
+
+                } else if (t.type === 'Vente') {
+                    if (inventory[stock].qty > 0) {
+                        const pmp = inventory[stock].cost / inventory[stock].qty;
+                        const proceeds = (t.price * t.qty) - t.fees; 
+                        const costBasis = pmp * t.qty;
+                        const realizedGain = proceeds - costBasis;
+                        
+                        trades.push(realizedGain);
+
+                        const holdingDays = (t.date.getTime() - inventory[stock].avgDate) / (1000 * 3600 * 24);
+                        if (realizedGain > 0) {
+                            totalWinDays += holdingDays;
+                            winTradeCountForTime++;
+                        } else {
+                            totalLossDays += holdingDays;
+                            lossTradeCountForTime++;
+                        }
+
+                        inventory[stock].qty -= t.qty;
+                        inventory[stock].cost -= costBasis;
+                        if (inventory[stock].qty <= 0) {
+                            inventory[stock].qty = 0;
+                            inventory[stock].cost = 0;
+                            inventory[stock].avgDate = null;
+                        }
+                    }
+
+                    if (stockPMP[stock].qty > 0) {
+                        const costBasisPMP = stockPMP[stock].pmp * t.qty;
+                        stockPMP[stock].qty -= t.qty;
+                        stockPMP[stock].cost -= costBasisPMP;
+                        if (stockPMP[stock].qty <= 0) {
+                            stockPMP[stock].qty = 0; stockPMP[stock].cost = 0; stockPMP[stock].pmp = 0;
+                        }
+                    }
+                }
+            });
+
+            let failedRescues = 0;
+            let totalAveragedStocks = averagedStocks.size;
+
+            averagedStocks.forEach(stock => {
+                const stockTxs = txs.filter(t => t.stock === stock);
+                let netCash = 0;
+                
+                stockTxs.forEach(t => {
+                    netCash -= t.fees;
+                    if (t.type === 'Dividende') netCash += t.amount;
+                    else if (t.type === 'Vente') netCash += (t.price * t.qty);
+                    else if (t.type === 'Achat') netCash -= (t.price * t.qty);
+                });
+
+                let latentValue = 0;
+                if (portfolioData && portfolioData.length > 0) {
+                    const rawRow = portfolioData.find(row => row['Titre'] === stock);
+                    if (rawRow) {
+                        latentValue = parseFrenchNumber(rawRow['valeur actuelle']);
+                    }
+                }
+
+                const ultimatePnL = netCash + latentValue;
+                if (ultimatePnL < 0) {
+                    failedRescues++;
+                }
+            });
+
+            const failureRate = totalAveragedStocks > 0 ? (failedRescues / totalAveragedStocks) : 0;
+
+            document.getElementById('psy-avg-down-count').textContent = avgDownCount;
+            document.getElementById('psy-avg-down-capital').textContent = formatCurrency(avgDownCapital);
+            document.getElementById('psy-avg-down-fail').textContent = formatPercent(failureRate);
+            document.getElementById('psy-avg-down-fail').className = `text-2xl font-bold mt-2 ${failureRate > 0.5 ? 'text-red-500' : 'text-orange-400'}`;
+
+            const avgWinDays = winTradeCountForTime > 0 ? totalWinDays / winTradeCountForTime : 0;
+            const avgLossDays = lossTradeCountForTime > 0 ? totalLossDays / lossTradeCountForTime : 0;
+            const timeRatio = avgWinDays > 0 ? avgLossDays / avgWinDays : (avgLossDays > 0 ? 999 : 0);
+
+            document.getElementById('psy-time-win').textContent = Math.round(avgWinDays);
+            document.getElementById('psy-time-loss').textContent = Math.round(avgLossDays);
+            document.getElementById('psy-time-ratio').textContent = timeRatio.toFixed(2);
+            document.getElementById('psy-time-ratio').className = `text-2xl font-bold mt-2 ${timeRatio > 1.5 ? 'text-red-500' : (timeRatio > 1 ? 'text-orange-400' : 'text-emerald-400')}`;
+
+            const totalTrades = trades.length;
+            if (totalTrades === 0) {
+                document.getElementById('psy-diagnostic').innerHTML = "<p>Aucune position clôturée trouvée. Impossible d'analyser ton exécution.</p>";
+                return;
+            }
+
+            const winningTrades = trades.filter(t => t > 0);
+            const losingTrades = trades.filter(t => t <= 0);
+
+            const winRate = winningTrades.length / totalTrades;
+            const avgWin = winningTrades.length > 0 ? winningTrades.reduce((a,b)=>a+b,0) / winningTrades.length : 0;
+            const avgLoss = losingTrades.length > 0 ? Math.abs(losingTrades.reduce((a,b)=>a+b,0)) / losingTrades.length : 0;
+            const payoffRatio = avgLoss > 0 ? avgWin / avgLoss : (avgWin > 0 ? 999 : 0);
+
+            document.getElementById('psy-winrate').textContent = formatPercent(winRate);
+            document.getElementById('psy-winrate').className = `text-3xl font-bold mt-2 ${winRate > 0.5 ? 'text-emerald-400' : 'text-orange-400'}`;
+            
+            document.getElementById('psy-avg-win').textContent = formatCurrency(avgWin);
+            document.getElementById('psy-avg-loss').textContent = formatCurrency(avgLoss);
+            
+            document.getElementById('psy-payoff').textContent = payoffRatio.toFixed(2);
+            document.getElementById('psy-payoff').className = `text-3xl font-bold mt-2 ${payoffRatio >= 1.5 ? 'text-emerald-400' : (payoffRatio >= 1 ? 'text-white' : 'text-red-500')}`;
+
+            let diagnosticHTML = "";
+            
+            if (timeRatio > 1.5) {
+                diagnosticHTML += `<p class="text-red-400 mb-2">HYPOCRISIE TEMPORELLE : Tu gardes tes pertes ${timeRatio.toFixed(1)} fois plus longtemps que tes gains. Tu n'es pas un investisseur long terme, tu es un trader qui refuse d'accepter l'échec. Ta conviction s'évapore dès que tu es dans le vert, mais ton ego te force à porter des actifs morts pendant des mois.</p>`;
+            } else if (timeRatio < 0.5 && winRate < 0.5) {
+                diagnosticHTML += `<p class="text-orange-400 mb-2">PANIQUE : Tu jettes tes pertes très vite, ce qui est bien en théorie, mais tu ne laisses aucune chance à tes gains de se développer. Ton exécution est guidée par l'anxiété.</p>`;
+            }
+
+            if (failureRate > 0.5 && avgDownCount > 0) {
+                diagnosticHTML += `<p class="text-red-400 mb-2">DESTRUCTION DE CAPITAL : Tu moyennes à la baisse systématiquement, et ça échoue dans ${formatPercent(failureRate)} des cas. Tu jettes du bon capital (${formatCurrency(avgDownCapital)}) sur de mauvaises décisions de timing. Arrête d'acheter ce qui baisse.</p>`;
+            }
+
+            if (winRate > 0.5 && payoffRatio < 1) {
+                diagnosticHTML += "<p>ESPÉRANCE NÉGATIVE : Tu as souvent raison, mais ta peur te dirige. Tu coupes tes gains par manque de conviction et laisses tes pertes se creuser. Mathématiquement, ton compte va se vider.</p>";
+            } else if (winRate < 0.5 && payoffRatio < 1) {
+                diagnosticHTML += "<p class='text-red-500 font-bold'>DANGER CRITIQUE : Ton système est une hémorragie. Tort sur la direction, tort sur la gestion du risque. Stoppe tout et revois ton processus de A à Z.</p>";
+            } else if (winRate <= 0.5 && payoffRatio >= 1.5) {
+                diagnosticHTML += "<p class='text-emerald-400'>SYSTÈME VIABLE : Profil asymétrique sain. Tes pertes sont fréquentes mais contrôlées, et tes gains compensent largement. Maintiens ta discipline de coupe.</p>";
+            } else if (winRate > 0.5 && payoffRatio >= 1) {
+                diagnosticHTML += "<p class='text-emerald-400'>EXÉCUTION SAINE : Ratio gain/perte maîtrisé et bon taux de réussite. Reste systématique, n'ajoute pas de biais émotionnel.</p>";
+            }
+
+            if (diagnosticHTML === "") {
+                diagnosticHTML = "<p>Profil intermédiaire. Aligne ta durée de détention sur ta stratégie réelle pour améliorer ton espérance de gain.</p>";
+            }
+
+            document.getElementById('psy-diagnostic').innerHTML = diagnosticHTML;
+        }
+
+        function renderLiquidityMetrics(historyData) {
+            if (!historyData || historyData.length === 0) return;
+            document.getElementById('liquidity-section').style.display = 'block';
+
+            const txs = parseHistory(historyData);
+            
+            let totalDeployed = 0;
+            let rescueCapital = 0;
+            const stockPMP = {};
+
+            txs.forEach(t => {
+                const stock = t.stock;
+                if (!stockPMP[stock]) stockPMP[stock] = { qty: 0, cost: 0, pmp: 0 };
+
+                if (t.type === 'Achat') {
+                    const amount = t.price * t.qty;
+                    totalDeployed += amount;
+
+                    if (stockPMP[stock].qty > 0 && t.price < stockPMP[stock].pmp) {
+                        rescueCapital += amount;
+                    }
+                    
+                    stockPMP[stock].cost += amount;
+                    stockPMP[stock].qty += t.qty;
+                    stockPMP[stock].pmp = stockPMP[stock].cost / stockPMP[stock].qty;
+
+                } else if (t.type === 'Vente') {
+                    if (stockPMP[stock].qty > 0) {
+                        const costBasisPMP = stockPMP[stock].pmp * t.qty;
+                        stockPMP[stock].qty -= t.qty;
+                        stockPMP[stock].cost -= costBasisPMP;
+                        if (stockPMP[stock].qty <= 0) {
+                            stockPMP[stock].qty = 0; stockPMP[stock].cost = 0; stockPMP[stock].pmp = 0;
+                        }
+                    }
+                }
+            });
+
+            const rescueRatio = totalDeployed > 0 ? rescueCapital / totalDeployed : 0;
+
+            document.getElementById('liq-total-deployed').textContent = formatCurrency(totalDeployed);
+            document.getElementById('liq-rescue-capital').textContent = formatCurrency(rescueCapital);
+            document.getElementById('liq-rescue-ratio').textContent = formatPercent(rescueRatio);
+            
+            let ratioColor = 'text-emerald-400';
+            if (rescueRatio > 0.20) ratioColor = 'text-red-500';
+            else if (rescueRatio > 0.10) ratioColor = 'text-orange-400';
+            document.getElementById('liq-rescue-ratio').className = `text-3xl font-bold mt-2 ${ratioColor}`;
+
+            let diagnosticHTML = "";
+            if (rescueRatio > 0.20) {
+                diagnosticHTML = `<p class="text-red-400 font-bold">DÉSASTRE TACTIQUE : Tu as brûlé ${formatPercent(rescueRatio)} de ton capital d'investissement global pour essayer de réparer tes erreurs initiales de timing. Cet argent (${formatCurrency(rescueCapital)}) n'était plus disponible pour acheter des entreprises de qualité bradées lors des corrections. Ton cash ne te sert pas d'opportunité, il te sert de pansement.</p>`;
+            } else if (rescueRatio > 0.10) {
+                diagnosticHTML = `<p class="text-orange-400">GÂCHIS : Une part trop importante de tes liquidités (${formatCurrency(rescueCapital)}) sert à diluer des pertes. Règle absolue : on n'envoie pas de bons soldats (ton cash) sauver de mauvais soldats (tes positions rouges).</p>`;
+            } else {
+                diagnosticHTML = `<p class="text-emerald-400">DISCIPLINE MAINTENUE : Ratio de sauvetage faible. Tu réserves majoritairement tes liquidités pour de nouvelles idées ou des renforcements à la hausse. Continue de protéger ta réserve tactique.</p>`;
+            }
+
+            document.getElementById('liq-diagnostic').innerHTML = diagnosticHTML;
+        }
+
+        function renderTrendMetrics(historyData) {
+            if (!historyData || historyData.length === 0) return;
+            document.getElementById('trends-section').style.display = 'block';
+
+            const txs = parseHistory(historyData);
+            
+            const monthlyStats = {};
+            const inventory = {};
+            const trades = [];
+            const creepData = { dates: [], maxWeight: [] };
+
+            txs.forEach(t => {
+                const month = `${t.date.getFullYear()}-${String(t.date.getMonth() + 1).padStart(2, '0')}`;
+                if (!monthlyStats[month]) {
+                    monthlyStats[month] = { date: new Date(t.date.getFullYear(), t.date.getMonth(), 1), count: 0, netCash: 0 };
+                }
+                
+                monthlyStats[month].count++;
+                monthlyStats[month].netCash -= t.fees;
+
+                const stock = t.stock;
+                if (!inventory[stock]) inventory[stock] = { qty: 0, costBasis: 0 };
+
+                if (t.type === 'Dividende') {
+                    monthlyStats[month].netCash += t.amount;
+                } else if (t.type === 'Achat') {
+                    const amount = t.price * t.qty;
+                    inventory[stock].costBasis += amount;
+                    inventory[stock].qty += t.qty;
+                } else if (t.type === 'Vente') {
+                    if (inventory[stock].qty > 0) {
+                        const pmp = inventory[stock].costBasis / inventory[stock].qty;
+                        const proceeds = (t.price * t.qty) - t.fees;
+                        const costBasisSold = pmp * t.qty;
+                        const realizedGain = proceeds - costBasisSold;
+
+                        monthlyStats[month].netCash += realizedGain;
+                        trades.push({ date: t.date, pnl: realizedGain });
+
+                        inventory[stock].qty -= t.qty;
+                        inventory[stock].costBasis -= costBasisSold;
+                        if (inventory[stock].qty <= 0) {
+                            inventory[stock].qty = 0;
+                            inventory[stock].costBasis = 0;
+                        }
+                    }
+                }
+
+                let currentTotalBasis = 0;
+                let currentMaxBasis = 0;
+                Object.values(inventory).forEach(inv => {
+                    if (inv.qty > 0) {
+                        currentTotalBasis += inv.costBasis;
+                        if (inv.costBasis > currentMaxBasis) {
+                            currentMaxBasis = inv.costBasis;
+                        }
+                    }
+                });
+
+                const maxWeight = currentTotalBasis > 0 ? (currentMaxBasis / currentTotalBasis) : 0;
+                creepData.dates.push(t.date);
+                creepData.maxWeight.push(maxWeight * 100);
+            });
+
+            const sortedMonths = Object.values(monthlyStats).sort((a, b) => a.date - b.date);
+            
+            const traceActivity = {
+                x: sortedMonths.map(m => m.date),
+                y: sortedMonths.map(m => m.count),
+                name: "Volume d'Ordres",
+                type: 'bar',
+                marker: { color: '#64748b' },
+                yaxis: 'y'
+            };
+
+            const tracePnL = {
+                x: sortedMonths.map(m => m.date),
+                y: sortedMonths.map(m => m.netCash),
+                name: "Résultat Net (€)",
+                type: 'scatter',
+                mode: 'lines+markers',
+                line: { color: '#38bdf8', width: 3 },
+                yaxis: 'y2'
+            };
+
+            const layoutActivity = {
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                margin: { t: 20, l: 40, r: 40, b: 40 },
+                legend: { orientation: 'h', y: 1.1, font: { color: 'white' } },
+                xaxis: { gridcolor: '#334155', tickfont: { color: '#94a3b8' } },
+                yaxis: { title: 'Transactions', gridcolor: '#334155', tickfont: { color: '#e2e8f0' } },
+                yaxis2: { title: 'Résultat (€)', overlaying: 'y', side: 'right', tickfont: { color: '#38bdf8' } },
+                font: { family: 'Inter' }
+            };
+
+            Plotly.newPlot('trend-activity-chart', [traceActivity, tracePnL], layoutActivity, {displayModeBar: false, responsive: true});
+
+            const rollingWinRate = { x: [], y: [] };
+            const windowSize = 10;
+            
+            for (let i = 0; i < trades.length; i++) {
+                const startIdx = Math.max(0, i - windowSize + 1);
+                const windowTrades = trades.slice(startIdx, i + 1);
+                const wins = windowTrades.filter(tr => tr.pnl > 0).length;
+                const rate = (wins / windowTrades.length) * 100;
+                rollingWinRate.x.push(trades[i].date);
+                rollingWinRate.y.push(rate);
+            }
+
+            const traceWinRate = {
+                x: rollingWinRate.x,
+                y: rollingWinRate.y,
+                type: 'scatter',
+                mode: 'lines',
+                line: { color: '#22c55e', width: 2 },
+                fill: 'tozeroy',
+                fillcolor: 'rgba(34, 197, 94, 0.1)'
+            };
+
+            const layoutWinRate = {
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                margin: { t: 20, l: 40, r: 20, b: 40 },
+                xaxis: { gridcolor: '#334155', tickfont: { color: '#94a3b8' } },
+                yaxis: { title: 'Taux de Succès (%)', range: [0, 100], gridcolor: '#334155', tickfont: { color: '#e2e8f0' } },
+                font: { family: 'Inter' }
+            };
+
+            Plotly.newPlot('trend-winrate-chart', [traceWinRate], layoutWinRate, {displayModeBar: false, responsive: true});
+
+            const traceCreep = {
+                x: creepData.dates,
+                y: creepData.maxWeight,
+                type: 'scatter',
+                mode: 'lines',
+                line: { color: '#ef4444', width: 2 },
+                fill: 'tozeroy',
+                fillcolor: 'rgba(239, 68, 68, 0.1)'
+            };
+
+            const layoutCreep = {
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                margin: { t: 20, l: 40, r: 20, b: 40 },
+                xaxis: { gridcolor: '#334155', tickfont: { color: '#94a3b8' } },
+                yaxis: { title: 'Poids Capital Engagé (%)', range: [0, 100], gridcolor: '#334155', tickfont: { color: '#e2e8f0' } },
+                font: { family: 'Inter' }
+            };
+
+            Plotly.newPlot('trend-creep-chart', [traceCreep], layoutCreep, {displayModeBar: false, responsive: true});
+
+            let diagnosticHTML = "";
+            
+            const startWeight = creepData.maxWeight.length > 0 ? creepData.maxWeight[0] : 0;
+            const endWeight = creepData.maxWeight.length > 0 ? creepData.maxWeight[creepData.maxWeight.length - 1] : 0;
+
+            if (endWeight > startWeight + 15 && endWeight > 30) {
+                diagnosticHTML += `<p class="text-red-400 mb-2">RISK CREEP ACTIF : Ta concentration maximale est passée en dérive. Tu laisses tes convictions se transformer en paris dogmatiques. Ce n'est plus un portefeuille, c'est une exposition systémique à une seule entreprise.</p>`;
+            }
+
+            if (rollingWinRate.y.length > windowSize) {
+                const firstHalf = rollingWinRate.y.slice(0, Math.floor(rollingWinRate.y.length / 2));
+                const secondHalf = rollingWinRate.y.slice(Math.floor(rollingWinRate.y.length / 2));
+                const avgFirst = firstHalf.reduce((a,b)=>a+b,0) / firstHalf.length;
+                const avgSecond = secondHalf.reduce((a,b)=>a+b,0) / secondHalf.length;
+
+                if (avgSecond < avgFirst - 15 && avgSecond < 50) {
+                    diagnosticHTML += `<p class="text-orange-400 mb-2">DÉGRADATION DU SYSTÈME : Ton taux de succès chute brutalement sur la période récente. Tu ne comprends plus la structure du marché actuel. Tu dois réduire drastiquement la taille de tes nouvelles positions jusqu'à prouver une reconnexion avec le flux.</p>`;
+                }
+            }
+
+            if (diagnosticHTML === "") {
+                diagnosticHTML = "<p>Trajectoire stable. Tes paramètres comportementaux ne montrent pas de dérive destructrice critique sur la période récente.</p>";
+            }
+
+            document.getElementById('trend-diagnostic').innerHTML = diagnosticHTML;
+        }
+
+        function renderTradeAnalysisMetrics(portfolioData, historyData) {
+            if (!historyData || historyData.length === 0) return;
+            document.getElementById('trade-analysis-section').style.display = 'block';
+
+            const txs = parseHistory(historyData);
+            
+            const stockData = {};
+            const tradesList = [];
+
+            // Analyse historique par titre
+            txs.forEach(t => {
+                const stock = t.stock;
+                if (!stockData[stock]) {
+                    stockData[stock] = {
+                        firstTrade: null,
+                        txCount: 0,
+                        maxCapital: 0,
+                        currentQty: 0,
+                        currentCost: 0,
+                        realizedPnL: 0,
+                        totalFees: 0,
+                        totalDivs: 0,
+                        avgDate: null
+                    };
+                }
+
+                stockData[stock].txCount++;
+                stockData[stock].totalFees += t.fees;
+
+                if (t.type === 'Achat') {
+                    if (!stockData[stock].firstTrade) {
+                        stockData[stock].firstTrade = { qty: t.qty, price: t.price, fees: t.fees, date: t.date };
+                    }
+
+                    let currentQty = stockData[stock].currentQty;
+                    let currentAvgDate = stockData[stock].avgDate || t.date.getTime();
+                    stockData[stock].avgDate = ((currentAvgDate * currentQty) + (t.date.getTime() * t.qty)) / (currentQty + t.qty);
+
+                    stockData[stock].currentCost += (t.price * t.qty) + t.fees;
+                    stockData[stock].currentQty += t.qty;
+
+                    if (stockData[stock].currentCost > stockData[stock].maxCapital) {
+                        stockData[stock].maxCapital = stockData[stock].currentCost;
+                    }
+
+                } else if (t.type === 'Dividende') {
+                    stockData[stock].totalDivs += t.amount;
+                } else if (t.type === 'Vente') {
+                    if (stockData[stock].currentQty > 0) {
+                        const pmp = stockData[stock].currentCost / stockData[stock].currentQty;
+                        const proceeds = (t.price * t.qty) - t.fees;
+                        const costBasisSold = pmp * t.qty;
+                        const pnl = proceeds - costBasisSold;
+
+                        stockData[stock].realizedPnL += pnl;
+
+                        const holdingDays = (t.date.getTime() - stockData[stock].avgDate) / (1000 * 3600 * 24);
+                        const roi = pmp > 0 ? (t.price - pmp) / pmp : 0;
+
+                        tradesList.push({
+                            stock: stock,
+                            days: holdingDays,
+                            roi: roi * 100,
+                            pnl: pnl,
+                            date: t.date
+                        });
+
+                        stockData[stock].currentQty -= t.qty;
+                        stockData[stock].currentCost -= costBasisSold;
+                        if (stockData[stock].currentQty <= 0) {
+                            stockData[stock].currentQty = 0;
+                            stockData[stock].currentCost = 0;
+                            stockData[stock].avgDate = null;
+                        }
+                    }
+                }
+            });
+
+            // Consolidation avec le portefeuille actuel
+            Object.keys(stockData).forEach(stock => {
+                let currentPrice = 0;
+                let latentPnL = 0;
+                
+                if (portfolioData && portfolioData.length > 0) {
+                    const row = portfolioData.find(r => r['Titre'] === stock);
+                    if (row) {
+                        const currentVal = parseFrenchNumber(row['valeur actuelle']);
+                        currentPrice = parseFrenchNumber(row['cours actuel']);
+                        latentPnL = currentVal - stockData[stock].currentCost;
+                    }
+                }
+
+                // Fallback prix
+                if (currentPrice === 0 && stockData[stock].currentQty > 0) {
+                    currentPrice = stockData[stock].currentCost / stockData[stock].currentQty; 
+                } else if (currentPrice === 0) {
+                    const lastTx = txs.slice().reverse().find(t => t.stock === stock && (t.type === 'Vente' || t.type === 'Achat'));
+                    if (lastTx) currentPrice = lastTx.price;
+                }
+
+                stockData[stock].totalNetPnL = stockData[stock].realizedPnL + stockData[stock].totalDivs + latentPnL;
+                
+                // Calcul Passif (Achat J1, conservation jusqu'à aujourd'hui)
+                let passivePnL = 0;
+                if (stockData[stock].firstTrade && currentPrice > 0) {
+                    const ft = stockData[stock].firstTrade;
+                    passivePnL = (ft.qty * currentPrice) - (ft.qty * ft.price) - ft.fees;
+                }
+                stockData[stock].passivePnL = passivePnL;
+                stockData[stock].roiTotal = stockData[stock].maxCapital > 0 ? (stockData[stock].totalNetPnL / stockData[stock].maxCapital) * 100 : 0;
+            });
+
+            // --- Chart 1: Interventionnisme ---
+            const topTraded = Object.keys(stockData)
+                .map(k => ({ stock: k, txs: stockData[k].txCount, active: stockData[k].totalNetPnL, passive: stockData[k].passivePnL }))
+                .filter(item => item.txs > 2)
+                .sort((a, b) => b.txs - a.txs)
+                .slice(0, 5); 
+
+            if (topTraded.length > 0) {
+                const traceActive = {
+                    x: topTraded.map(t => t.stock),
+                    y: topTraded.map(t => t.active),
+                    name: "Gestion Active (Réel)",
+                    type: 'bar',
+                    marker: { color: '#38bdf8' }
+                };
+
+                const tracePassive = {
+                    x: topTraded.map(t => t.stock),
+                    y: topTraded.map(t => t.passive),
+                    name: "Buy & Hold (Simulé)",
+                    type: 'bar',
+                    marker: { color: '#94a3b8' }
+                };
+
+                Plotly.newPlot('trade-active-passive-chart', [traceActive, tracePassive], {
+                    barmode: 'group',
+                    paper_bgcolor: 'rgba(0,0,0,0)',
+                    plot_bgcolor: 'rgba(0,0,0,0)',
+                    margin: { t: 20, l: 40, r: 20, b: 40 },
+                    legend: { orientation: 'h', y: 1.1, font: { color: 'white' } },
+                    xaxis: { gridcolor: '#334155', tickfont: { color: '#e2e8f0' } },
+                    yaxis: { title: 'P&L (€)', gridcolor: '#334155', tickfont: { color: '#e2e8f0' } },
+                    font: { family: 'Inter' }
+                }, {displayModeBar: false, responsive: true});
+            } else {
+                document.getElementById('trade-active-passive-chart').innerHTML = '<div class="text-slate-500 text-center mt-10">Pas assez de transactions pour simuler.</div>';
+            }
+
+            // --- Chart 2: Matrice Inversion ---
+            const convictionData = Object.keys(stockData).map(k => ({
+                stock: k,
+                maxCap: stockData[k].maxCapital,
+                roi: stockData[k].roiTotal,
+                pnl: stockData[k].totalNetPnL
+            })).filter(d => d.maxCap > 0);
+
+            const traceConviction = {
+                x: convictionData.map(d => d.maxCap),
+                y: convictionData.map(d => d.roi),
+                text: convictionData.map(d => d.stock),
+                mode: 'markers+text',
+                textposition: 'top center',
+                textfont: { color: '#94a3b8', size: 10 },
+                marker: {
+                    size: convictionData.map(d => Math.max(10, Math.min(40, Math.sqrt(Math.abs(d.pnl))))),
+                    color: convictionData.map(d => d.roi >= 0 ? '#22c55e' : '#ef4444'),
+                    opacity: 0.7,
+                    line: { width: 1, color: '#ffffff' }
+                }
+            };
+
+            Plotly.newPlot('trade-conviction-chart', [traceConviction], {
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                margin: { t: 20, l: 40, r: 20, b: 40 },
+                xaxis: { title: 'Capital Max Engagé (€)', gridcolor: '#334155', tickfont: { color: '#e2e8f0' } },
+                yaxis: { title: 'Rentabilité Nette (%)', gridcolor: '#334155', tickfont: { color: '#e2e8f0' }, zeroline: true, zerolinecolor: '#475569' },
+                font: { family: 'Inter' }
+            }, {displayModeBar: false, responsive: true});
+
+            // --- Chart 3: Nuage Bagholder ---
+            if (tradesList.length > 0) {
+                const traceBagholder = {
+                    x: tradesList.map(t => t.days),
+                    y: tradesList.map(t => t.roi),
+                    text: tradesList.map(t => `${t.stock}<br>P&L: ${formatCurrency(t.pnl)}<br>Durée: ${Math.round(t.days)} j`),
+                    mode: 'markers',
+                    hoverinfo: 'text',
+                    marker: {
+                        size: 8,
+                        color: tradesList.map(t => t.roi >= 0 ? '#22c55e' : '#ef4444'),
+                        opacity: 0.6
+                    }
+                };
+
+                Plotly.newPlot('trade-scatter-chart', [traceBagholder], {
+                    paper_bgcolor: 'rgba(0,0,0,0)',
+                    plot_bgcolor: 'rgba(0,0,0,0)',
+                    margin: { t: 20, l: 40, r: 20, b: 40 },
+                    xaxis: { title: 'Durée de détention (Jours)', gridcolor: '#334155', tickfont: { color: '#e2e8f0' } },
+                    yaxis: { title: 'Gain/Perte (%)', gridcolor: '#334155', tickfont: { color: '#e2e8f0' }, zeroline: true, zerolinecolor: '#475569' },
+                    font: { family: 'Inter' }
+                }, {displayModeBar: false, responsive: true});
+            } else {
+                document.getElementById('trade-scatter-chart').innerHTML = '<div class="text-slate-500 text-center mt-10">Aucun trade clôturé pour générer le nuage.</div>';
+            }
+
+            // --- Diagnostic Logic ---
+            let diagnosticHTML = "";
+            let destructionCount = 0;
+            let totalAnalyzed = 0;
+
+            topTraded.forEach(t => {
+                totalAnalyzed++;
+                if (t.passive > t.active) destructionCount++;
+            });
+
+            if (totalAnalyzed > 0 && (destructionCount / totalAnalyzed) >= 0.5) {
+                diagnosticHTML += `<p class="text-red-400 mb-2">AGITATION DESTRUCTRICE : Sur tes titres les plus tradés, la gestion passive bat ta gestion active. Tes achats/ventes successifs détruisent de la valeur au lieu d'en créer. Ton interventionnisme est nuisible, tu aurais gagné plus d'argent en éteignant ton écran.</p>`;
+            }
+
+            const longLosers = tradesList.filter(t => t.days > 90 && t.roi < 0).length;
+            const shortWinners = tradesList.filter(t => t.days < 30 && t.roi > 0).length;
+            
+            if (longLosers > shortWinners && longLosers > 3) {
+                diagnosticHTML += `<p class="text-orange-400 mb-2">SYNDROME DU BAGHOLDER DÉTECTÉ : Le nuage de dispersion montre que tu accumules des pertes sur de longues durées tout en prenant des gains très rapides. Tu es prisonnier de tes erreurs.</p>`;
+            }
+
+            let worstConviction = null;
+            convictionData.forEach(d => {
+                if (d.pnl < 0 && (!worstConviction || d.maxCap > worstConviction.maxCap)) {
+                    worstConviction = d;
+                }
+            });
+
+            if (worstConviction && worstConviction.maxCap > (stockData[Object.keys(stockData)[0]].maxCap * 0.5)) {
+                 diagnosticHTML += `<p class="text-red-500 font-bold">INVERSION DE CONVICTION : Ton plus gros capital engagé (${formatCurrency(worstConviction.maxCap)} sur ${worstConviction.stock}) génère un retour négatif. Tu as financé ta pire idée avec la plus grande partie de ton capital.</p>`;
+            }
+
+            if (diagnosticHTML === "") {
+                diagnosticHTML = "<p class='text-emerald-400'>Gestion rationnelle constatée. Les mouvements actifs créent de la valeur par rapport au buy & hold, et le capital suit les positions rentables.</p>";
+            }
+
+            document.getElementById('trade-diagnostic').innerHTML = diagnosticHTML;
+        }
+
+        function renderRecoveryMetrics(portfolioData) {
+            if (!portfolioData || portfolioData.length === 0) return;
+
+            let losers = portfolioData.map(row => {
+                const currentVal = parseFrenchNumber(row['valeur actuelle']);
+                const pru = parseFrenchNumber(row['prix de revient']);
+                const price = parseFrenchNumber(row['cours actuel']);
+                const pnlPercent = parseFrenchNumber(row['gain ou perte en pourcentage']);
+                const pnlEuro = parseFrenchNumber(row['gain ou perte en euros']);
+                
+                if (currentVal <= 0 || pnlPercent >= 0) return null;
+
+                const requiredGain = price > 0 ? ((pru - price) / price) : 0;
+
+                return {
+                    name: row['Titre'],
+                    currentVal: currentVal,
+                    pnlPercent: pnlPercent,
+                    pnlEuro: pnlEuro,
+                    requiredGain: requiredGain
+                };
+            }).filter(item => item !== null);
+
+            const section = document.getElementById('recovery-section');
+            if (losers.length === 0) {
+                section.style.display = 'none';
+                return;
+            }
+
+            section.style.display = 'block';
+
+            losers.sort((a, b) => b.requiredGain - a.requiredGain);
+
+            const tbody = document.getElementById('recovery-tbody');
+            tbody.innerHTML = '';
+
+            let impossibleCount = 0;
+            let hardCount = 0;
+            let worstCase = losers[0];
+
+            losers.forEach(item => {
+                if (item.requiredGain > 0.50) impossibleCount++;
+                else if (item.requiredGain > 0.25) hardCount++;
+
+                const tr = document.createElement('tr');
+                tr.className = "border-b border-slate-700/50 hover:bg-slate-800/50";
+                
+                let reqColor = 'text-orange-400';
+                if (item.requiredGain > 0.50) reqColor = 'text-red-500 font-bold';
+                else if (item.requiredGain > 0.25) reqColor = 'text-orange-500 font-bold';
+
+                tr.innerHTML = `
+                    <td class="p-3 text-slate-300 font-medium">${item.name}</td>
+                    <td class="p-3 text-right text-red-400">${formatPercent(item.pnlPercent)} (${formatCurrency(item.pnlEuro)})</td>
+                    <td class="p-3 text-right text-slate-300">${formatCurrency(item.currentVal)}</td>
+                    <td class="p-3 text-right ${reqColor}">+${formatPercent(item.requiredGain * 100)}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            let diagnosticHTML = "";
+            if (impossibleCount > 0) {
+                diagnosticHTML += `<p class="text-red-500 font-bold mb-2">DÉLIRE STATISTIQUE : Tu as ${impossibleCount} position(s) nécessitant plus de +50% de hausse juste pour revenir à l'équilibre. Espérer qu'un actif détruit réalise une performance exceptionnelle simplement pour te sauver est de l'aveuglement. Liquide ce qui est mort.</p>`;
+            }
+            if (hardCount > 0) {
+                diagnosticHTML += `<p class="text-orange-400 mb-2">MUR CRITIQUE : ${hardCount} ligne(s) demandent entre +25% et +50% de hausse pour effacer ta perte. Ce capital est pris en otage par ton refus de couper.</p>`;
+            }
+
+            if (worstCase) {
+                 diagnosticHTML += `<p class="text-slate-300 mt-2">Pose-toi la question sur ${worstCase.name} : Tu exiges de cette action qu'elle fasse +${formatPercent(worstCase.requiredGain * 100)}. Si tu avais ${formatCurrency(worstCase.currentVal)} en cash aujourd'hui, les mettrais-tu sur cette entreprise avec cet objectif de rendement ? Si la réponse est non, vends immédiatement.</p>`;
+            }
+
+            document.getElementById('recovery-diagnostic').innerHTML = diagnosticHTML;
+        }
+
+        function renderMoneyManagementMetrics(portfolioData) {
+            if (!portfolioData || portfolioData.length === 0) return;
+            document.getElementById('money-management-section').style.display = 'block';
+
+            const riskInput = document.getElementById('mm-risk-pct');
+            const stopInput = document.getElementById('mm-stop-pct');
+
+            function updateMM() {
+                const globalRiskPct = parseFloat(riskInput.value) / 100;
+                const stopLossPct = parseFloat(stopInput.value) / 100;
+
+                if (isNaN(globalRiskPct) || isNaN(stopLossPct) || stopLossPct <= 0 || globalRiskPct <= 0) return;
+
+                let portfolio = portfolioData.map(row => ({
+                    name: row['Titre'],
+                    currentVal: parseFrenchNumber(row['valeur actuelle'])
+                })).filter(item => item.currentVal > 0);
+
+                const totalValue = portfolio.reduce((sum, item) => sum + item.currentVal, 0);
+                
+                // Calcul Chaleur Globale et Stress Test
+                const totalPotentialLoss = totalValue * stopLossPct;
+                const flashCrashLoss = totalValue * 0.20;
+
+                document.getElementById('mm-heat-total').textContent = `-${formatCurrency(totalPotentialLoss)}`;
+                document.getElementById('mm-flash-crash').textContent = `-${formatCurrency(flashCrashLoss)}`;
+
+                const maxLossEuro = totalValue * globalRiskPct;
+                const maxPositionSize = maxLossEuro / stopLossPct;
+
+                const tbody = document.getElementById('mm-tbody');
+                tbody.innerHTML = '';
+
+                let totalOverExposure = 0;
+                let overExposedCount = 0;
+                let worstOverExposed = null;
+
+                portfolio.sort((a, b) => b.currentVal - a.currentVal).forEach(item => {
+                    const potentialLoss = item.currentVal * stopLossPct;
+                    let overExposure = item.currentVal - maxPositionSize;
+                    
+                    if (overExposure > 0) {
+                        totalOverExposure += overExposure;
+                        overExposedCount++;
+                        if (!worstOverExposed || overExposure > worstOverExposed.over) {
+                            worstOverExposed = { name: item.name, val: item.currentVal, over: overExposure };
+                        }
+                    } else {
+                        overExposure = 0;
+                    }
+
+                    const tr = document.createElement('tr');
+                    tr.className = "border-b border-slate-700/50 hover:bg-slate-800/50";
+                    
+                    const overClass = overExposure > 0 ? 'text-red-500 font-bold' : 'text-slate-400';
+
+                    tr.innerHTML = `
+                        <td class="p-3 text-slate-300 font-medium">${item.name}</td>
+                        <td class="p-3 text-right text-slate-300">${formatCurrency(item.currentVal)}</td>
+                        <td class="p-3 text-right text-orange-400">-${formatCurrency(potentialLoss)}</td>
+                        <td class="p-3 text-right text-cyan-400 font-bold">${formatCurrency(maxPositionSize)}</td>
+                        <td class="p-3 text-right ${overClass}">${overExposure > 0 ? '+' : ''}${formatCurrency(overExposure)}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+
+                let diagnosticHTML = "";
+                if (overExposedCount > 0) {
+                    diagnosticHTML += `<p class="text-red-500 font-bold">DANGER DE SUR-EXPOSITION : ${overExposedCount} lignes dépassent la taille maximale autorisée par ton budget de risque. Tu as ${formatCurrency(totalOverExposure)} de capital alloué hors de tout cadre professionnel.</p>`;
+                    if (worstOverExposed) {
+                        diagnosticHTML += `<p class="text-red-400 mt-1">Le cas le plus critique est ${worstOverExposed.name}. Ta position est trop grosse de ${formatCurrency(worstOverExposed.over)}. Si ton stop théorique est touché, l'impact dépassera largement ton budget global (${globalRiskPct*100}%). Tu ne gères pas ce risque, tu le subis.</p>`;
+                    }
+                } else {
+                    diagnosticHTML = `<p class="text-emerald-400">DIMENSIONNEMENT CONTRÔLÉ : Toutes tes positions respectent ton budget de risque. Si tes stops sont exécutés rigoureusement, aucune action ne peut détruire le capital global de façon systémique.</p>`;
+                }
+                document.getElementById('mm-diagnostic').innerHTML = diagnosticHTML;
+            }
+
+            updateMM();
+            riskInput.addEventListener('input', updateMM);
+            stopInput.addEventListener('input', updateMM);
+        }
+
+        function renderCAGRMetrics(portfolioData, historyData) {
+            if (!historyData || historyData.length === 0) return;
+            document.getElementById('cagr-section').style.display = 'block';
+
+            const txs = parseHistory(historyData);
+            const stockStats = {};
+
+            txs.forEach(t => {
+                const stock = t.stock;
+                if (!stockStats[stock]) {
+                    stockStats[stock] = { firstDate: t.date, lastDate: t.date, totalBought: 0, totalSold: 0, totalDivs: 0, totalFees: 0 };
+                }
+                if (t.date < stockStats[stock].firstDate) stockStats[stock].firstDate = t.date;
+                if (t.date > stockStats[stock].lastDate) stockStats[stock].lastDate = t.date;
+
+                if (t.type === 'Achat') stockStats[stock].totalBought += (t.price * t.qty);
+                if (t.type === 'Vente') stockStats[stock].totalSold += (t.price * t.qty);
+                if (t.type === 'Dividende') stockStats[stock].totalDivs += t.amount;
+                stockStats[stock].totalFees += t.fees;
+            });
+
+            const cagrResults = [];
+            const now = new Date();
+
+            Object.keys(stockStats).forEach(stock => {
+                const stats = stockStats[stock];
+                let currentVal = 0;
+                let isActif = false;
+
+                if (portfolioData && portfolioData.length > 0) {
+                    const rawRow = globalPortfolio.find(row => row['Titre'] === stock);
+                    if (rawRow) {
+                        currentVal = parseFrenchNumber(rawRow['valeur actuelle']);
+                        if (currentVal > 0) isActif = true;
+                    }
+                }
+
+                const endingDate = isActif ? now : stats.lastDate;
+                let daysHeld = (endingDate - stats.firstDate) / (1000 * 60 * 60 * 24);
+                if (daysHeld < 1) daysHeld = 1;
+                const yearsHeld = daysHeld / 365.25;
+
+                if (stats.totalBought === 0) return;
+
+                const netValue = currentVal + stats.totalSold + stats.totalDivs - stats.totalFees;
+                const roi = (netValue - stats.totalBought) / stats.totalBought;
+
+                let cagr = null;
+                if (yearsHeld >= 1) {
+                    if (1 + roi > 0) {
+                        cagr = Math.pow(1 + roi, 1 / yearsHeld) - 1;
+                    } else {
+                        cagr = -1;
+                    }
+                }
+
+                cagrResults.push({
+                    stock: stock,
+                    years: yearsHeld,
+                    roi: roi,
+                    cagr: cagr,
+                    totalBought: stats.totalBought,
+                    isActif: isActif
+                });
+            });
+
+            cagrResults.sort((a, b) => {
+                const valA = a.cagr !== null ? a.cagr : a.roi;
+                const valB = b.cagr !== null ? b.cagr : b.roi;
+                return valA - valB;
+            });
+
+            const tbody = document.getElementById('cagr-tbody');
+            tbody.innerHTML = '';
+
+            cagrResults.forEach(res => {
+                const tr = document.createElement('tr');
+                tr.className = "border-b border-slate-700/50 hover:bg-slate-800/50";
+                
+                let cagrDisplay = "";
+                let cagrColor = "";
+
+                if (res.cagr !== null) {
+                    cagrDisplay = formatPercent(res.cagr);
+                    if (res.cagr < 0) cagrColor = 'text-red-500';
+                    else if (res.cagr < 0.05) cagrColor = 'text-orange-400';
+                    else cagrColor = 'text-emerald-400';
+                } else {
+                    cagrDisplay = `<span class="text-slate-500 text-xs">Non ann. (${formatPercent(res.roi)})</span>`;
+                    cagrColor = res.roi < 0 ? 'text-red-500' : 'text-slate-400';
+                }
+                
+                const status = res.isActif ? '<span class="px-2 py-1 bg-blue-900/50 text-blue-400 text-xs rounded">Ouvert</span>' : '<span class="px-2 py-1 bg-slate-700 text-slate-400 text-xs rounded">Fermé</span>';
+
+                tr.innerHTML = `
+                    <td class="p-3 text-slate-300 font-medium">${res.stock}</td>
+                    <td class="p-3 text-center">${status}</td>
+                    <td class="p-3 text-right text-slate-400">${res.years.toFixed(1)}</td>
+                    <td class="p-3 text-right text-slate-400">${formatCurrency(res.totalBought)}</td>
+                    <td class="p-3 text-right font-bold ${cagrColor}">${cagrDisplay}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
         function renderTreemap(data) {
             const labels = data.map(d => `<b>${d.name}</b><br>${formatPercent(d.pnlPercent)}`);
             const parents = data.map(() => "Portfolio");
@@ -326,8 +1994,6 @@
                 font: { family: 'Inter' }
             }, {displayModeBar: false, responsive: true});
         }
-
-        // --- Detail View Logic ---
 
         function populateStockSelector() {
             const selector = document.getElementById('stock-selector');
@@ -361,30 +2027,26 @@
                  }
             }
 
-            // --- Advanced FIFO/PMP Calculation ---
             let totalDivs = 0;
             let realizedPnL = 0;
             let totalFees = 0;
-            let cumulativeNetPnL = 0; // The curve data
+            let cumulativeNetPnL = 0;
 
             let heldQty = 0;
-            let totalCost = 0; // For PMP calc
+            let totalCost = 0;
             let pmp = 0;
 
             const buys = { x: [], y: [], text: [], size: [] };
             const sells = { x: [], y: [], text: [], size: [] };
             const pnlCurve = { x: [], y: [] };
 
-            // Initial Point
             if (histTxs.length > 0) {
-                pnlCurve.x.push(new Date(histTxs[0].date.getTime() - 86400000)); // Day before first tx
+                pnlCurve.x.push(new Date(histTxs[0].date.getTime() - 86400000));
                 pnlCurve.y.push(0);
             }
 
             histTxs.forEach(t => {
                 totalFees += t.fees;
-                
-                // Impact of Fees on Net PnL is immediate
                 cumulativeNetPnL -= t.fees;
 
                 if (t.type === 'Dividende') {
@@ -392,7 +2054,6 @@
                     cumulativeNetPnL += t.amount;
                 } 
                 else if (t.type === 'Achat') {
-                    // Update PMP
                     totalCost += (t.price * t.qty);
                     heldQty += t.qty;
                     pmp = heldQty > 0 ? totalCost / heldQty : 0;
@@ -403,14 +2064,12 @@
                     buys.size.push(Math.sqrt(t.qty) * 2 + 5);
                 } 
                 else if (t.type === 'Vente') {
-                    // Realized Gain based on current PMP
                     const gainOnSale = (t.price - pmp) * t.qty;
                     realizedPnL += gainOnSale;
                     cumulativeNetPnL += gainOnSale;
 
-                    // Reduce position
                     heldQty -= t.qty;
-                    totalCost -= (pmp * t.qty); // Remove cost proportional to qty sold
+                    totalCost -= (pmp * t.qty);
                     if (heldQty <= 0) { heldQty = 0; totalCost = 0; pmp = 0; }
 
                     sells.x.push(t.date);
@@ -419,16 +2078,13 @@
                     sells.size.push(Math.sqrt(t.qty) * 2 + 5);
                 }
 
-                // Push point to curve
                 pnlCurve.x.push(t.date);
                 pnlCurve.y.push(cumulativeNetPnL);
             });
 
-            // Add current day projection for PnL curve
             pnlCurve.x.push(new Date());
             pnlCurve.y.push(cumulativeNetPnL);
 
-            // Update DOM metrics
             document.getElementById('detail-divs').textContent = formatCurrency(totalDivs);
             document.getElementById('detail-fees').textContent = formatCurrency(totalFees);
             
@@ -508,7 +2164,7 @@
                 y: data.y,
                 mode: 'lines+markers',
                 name: 'P&L Cumulé',
-                line: { color: '#fbbf24', width: 3 }, // Amber-400
+                line: { color: '#fbbf24', width: 3 },
                 marker: { size: 4 },
                 fill: 'tozeroy',
                 fillcolor: 'rgba(251, 191, 36, 0.1)'
@@ -532,7 +2188,6 @@
             Plotly.newPlot('pnl-chart', [trace], layout, {displayModeBar: false, responsive: true});
         }
 
-        // --- PDF Generation Logic ---
         function generateYearlyPDF() {
             if (globalHistory.length === 0) {
                 alert("Charger l'historique d'abord.");
@@ -540,17 +2195,15 @@
             }
 
             const { jsPDF } = window.jspdf;
-            const doc = new jsPDF();
+            const doc = new jsPDF('landscape'); // Format paysage pour la lisibilité
             const txs = parseHistory(globalHistory);
 
-            // 1. Process Data Matrix (Year x Stock)
-            const stats = {}; // stock -> year -> value
+            const stats = {};
             const allYears = new Set();
             const allStocks = new Set();
-            
-            // Reconstruct PMP state for each stock to calc realized gains
-            const stockState = {}; // name -> { qty, totalCost }
+            const stockState = {};
 
+            // 1. Calcul du Cash Réalisé (Gains + Dividendes - Frais)
             txs.forEach(t => {
                 const year = t.date.getFullYear();
                 const stock = t.stock;
@@ -562,14 +2215,12 @@
                 if (!stats[stock][year]) stats[stock][year] = 0;
                 if (!stockState[stock]) stockState[stock] = { qty: 0, totalCost: 0 };
 
-                // Apply Fees (Immediate loss in that year)
                 stats[stock][year] -= t.fees;
 
                 if (t.type === 'Dividende') {
                     stats[stock][year] += t.amount;
                 }
                 else if (t.type === 'Achat') {
-                    // Update PMP
                     stockState[stock].totalCost += (t.price * t.qty);
                     stockState[stock].qty += t.qty;
                 }
@@ -579,7 +2230,6 @@
                     
                     stats[stock][year] += gain;
 
-                    // Reduce State
                     stockState[stock].qty -= t.qty;
                     stockState[stock].totalCost -= (pmp * t.qty);
                     if (stockState[stock].qty <= 0) {
@@ -589,52 +2239,68 @@
                 }
             });
 
+            // 2. Intégration du Latent (Mark-to-Market)
+            const latentByStock = {};
+            if (globalPortfolio && globalPortfolio.length > 0) {
+                globalPortfolio.forEach(row => {
+                    const stock = row['Titre'];
+                    const latent = parseFrenchNumber(row['gain ou perte en euros']);
+                    if (stock && !isNaN(latent)) {
+                        latentByStock[stock] = latent;
+                        allStocks.add(stock);
+                    }
+                });
+            }
+
             const sortedYears = Array.from(allYears).sort();
             const sortedStocks = Array.from(allStocks).sort();
 
-            // 2. Build Table Body
             const tableBody = [];
+            let grandTotalRealized = 0;
+            let grandTotalLatent = 0;
+            let grandTotalMtM = 0;
             
+            // 3. Construction du Tableau
             sortedStocks.forEach(stock => {
                 const row = [stock];
-                let stockTotal = 0;
+                let stockTotalRealized = 0;
+                
                 sortedYears.forEach(year => {
-                    const val = stats[stock][year] || 0;
-                    stockTotal += val;
-                    row.push(val); // Raw value for formatting later
+                    const val = (stats[stock] && stats[stock][year]) || 0;
+                    stockTotalRealized += val;
+                    row.push(val);
                 });
-                row.push(stockTotal);
+                
+                const latent = latentByStock[stock] || 0;
+                const mtm = stockTotalRealized + latent;
+                
+                row.push(stockTotalRealized);
+                row.push(latent);
+                row.push(mtm);
                 tableBody.push(row);
+
+                grandTotalRealized += stockTotalRealized;
+                grandTotalLatent += latent;
+                grandTotalMtM += mtm;
             });
 
-            // Footer (Totals per year)
-            const footerRow = ['TOTAL (Titres + Liquidité générée)'];
-            const yearTotals = [];
-            let grandTotal = 0;
-
-            sortedYears.forEach(year => {
-                let yearSum = 0;
-                sortedStocks.forEach(stock => {
-                    yearSum += (stats[stock][year] || 0);
-                });
-                footerRow.push(yearSum);
-                yearTotals.push(yearSum);
-                grandTotal += yearSum;
+            // 4. Calcul des Totaux (Lignes de bas de tableau)
+            const colSumsRealized = sortedYears.map(year => {
+                let sum = 0;
+                sortedStocks.forEach(stock => { sum += ((stats[stock] && stats[stock][year]) || 0); });
+                return sum;
             });
-            footerRow.push(grandTotal);
 
-            // Progression Row (Year over Year %) on TOTAL
+            const footerRealizedRow = ['TOTAL RÉALISÉ (Cash encaissé)', ...colSumsRealized, grandTotalRealized, '-', '-'];
+            
             const progressionRow = ['Progression N vs N-1 (%)'];
             for (let i = 0; i < sortedYears.length; i++) {
                 if (i === 0) {
                     progressionRow.push("-");
                 } else {
-                    const prev = yearTotals[i - 1];
-                    const curr = yearTotals[i];
+                    const prev = colSumsRealized[i - 1];
+                    const curr = colSumsRealized[i];
                     
-                    // Simple growth: (Curr - Prev) / |Prev| ? 
-                    // Or change in absolute terms? 
-                    // Let's use standard % growth.
                     if (Math.abs(prev) < 0.01) { 
                         progressionRow.push("-");
                     } else {
@@ -643,62 +2309,55 @@
                     }
                 }
             }
-            progressionRow.push("-");
+            progressionRow.push("-", "-", "-");
 
-            // Cumulative Total Row (Wealth View)
-            const cumRow = ['CUMUL Historique'];
-            let runningSum = 0;
-            for (let i = 0; i < sortedYears.length; i++) {
-                runningSum += yearTotals[i];
-                cumRow.push(runningSum);
-            }
-            cumRow.push(runningSum); // Grand total is same as running sum at end
+            const footerLatentRow = ['P&L LATENT ACTUEL (Valeur bloquée)', ...sortedYears.map(()=>'-'), '-', grandTotalLatent, '-'];
+            const footerMtMRow = ['PERFORMANCE RÉELLE (Mark-to-Market)', ...sortedYears.map(()=>'-'), grandTotalRealized, grandTotalLatent, grandTotalMtM];
 
-            // 3. Draw PDF
+            // 5. Rendu PDF Page 1 (Mark-to-Market)
             doc.setFontSize(18);
-            doc.text("Rapport de Performance Réalisée", 14, 20);
+            doc.text("Audit de Performance Réelle (Mark-to-Market)", 14, 20);
             doc.setFontSize(10);
-            doc.text("Total inclut: Gains Cessions + Dividendes - Frais", 14, 28);
+            doc.text("Règle : Une perte latente est une destruction immédiate de capital. Ne juge pas ton système uniquement sur tes encaissements.", 14, 28);
             doc.text(`Généré le: ${new Date().toLocaleDateString('fr-FR')}`, 14, 34);
 
             doc.autoTable({
                 startY: 40,
-                head: [['Valeur', ...sortedYears, 'TOTAL']],
+                head: [['Valeur', ...sortedYears, 'Total Réalisé', 'Latent Actuel', 'TOTAL RÉEL (MtM)']],
                 body: tableBody,
-                foot: [footerRow, progressionRow, cumRow],
+                foot: [footerRealizedRow, progressionRow, footerLatentRow, footerMtMRow],
                 theme: 'grid',
-                styles: { fontSize: 8, cellPadding: 2 },
+                styles: { fontSize: 7, cellPadding: 2, overflow: 'linebreak' }, // Taille réduite et wrap de sécurité
+                horizontalPageBreak: true, // Fix pour le dépassement avec trop d'années
                 headStyles: { fillColor: [15, 23, 42], textColor: 255, halign: 'center' }, 
                 footStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold' },
                 columnStyles: { 0: { halign: 'left' } },
                 didParseCell: function(data) {
                     if (data.section === 'body' || data.section === 'foot') {
-                        // Align numeric columns
                         if (data.column.index > 0) {
                             data.cell.styles.halign = 'right';
                         }
 
-                        // Specific row checks (row index depends on section)
-                        const isProgression = (data.section === 'foot' && data.row.index === 1);
-                        const isCumul = (data.section === 'foot' && data.row.index === 2);
-
                         if (typeof data.cell.raw === 'number') {
                             const val = data.cell.raw;
+                            const isProgression = (data.section === 'foot' && data.row.index === 1);
                             
                             if (isProgression) {
-                                // Percent formatting
                                 data.cell.text = (val > 0 ? "+" : "") + val.toFixed(1) + "%";
-                                // Colors for progression
                                 if (val < 0) data.cell.styles.textColor = [220, 38, 38]; 
                                 if (val > 0) data.cell.styles.textColor = [22, 163, 74]; 
                             } else {
-                                // Currency formatting
                                 data.cell.text = val.toFixed(2) + " €"; 
-                                // Colors for currency values
                                 if (data.column.index > 0) { 
                                     if (val < 0) data.cell.styles.textColor = [220, 38, 38];
                                     if (val > 0) data.cell.styles.textColor = [22, 163, 74];
-                                    if (isCumul) data.cell.styles.textColor = [255, 255, 255]; // Keep cumulative white/neutral to distinguish
+                                    
+                                    // Mise en évidence brutale de la Performance Réelle (MtM)
+                                    if (data.section === 'foot' && data.row.index === 3) {
+                                        data.cell.styles.textColor = [255, 255, 255];
+                                        if (val < 0) data.cell.styles.fillColor = [127, 29, 29]; // Rouge sombre
+                                        if (val > 0) data.cell.styles.fillColor = [20, 83, 45]; // Vert sombre
+                                    }
                                 }
                             }
                         }
@@ -706,11 +2365,164 @@
                 }
             });
 
-            doc.save('rapport_performance_annuel.pdf');
+            // 6. Rendu PDF Page 2 (Le Hall of Shame - Bilan d'Exécution)
+            doc.addPage();
+            doc.setFontSize(22);
+            doc.setTextColor(220, 38, 38); // Red-600
+            doc.text("Le Hall of Shame (Bilan d'Exécution)", 14, 25);
+            
+            doc.setFontSize(11);
+            doc.setTextColor(71, 85, 105); // Slate-600
+            doc.text("La trace écrite de tes biais cognitifs et de tes erreurs de gestion des risques.", 14, 35);
+            doc.text("À relire impérativement avant d'allouer de nouveaux capitaux au marché.", 14, 42);
+
+            // Re-calcul des métriques comportementales pour le PDF
+            let totalWin = 0, winCount = 0;
+            let totalLoss = 0, lossCount = 0;
+            let avgDownCap = 0;
+            const pdfStockPMP = {};
+            const pdfTrades = [];
+
+            txs.forEach(t => {
+                const stock = t.stock;
+                if (!pdfStockPMP[stock]) pdfStockPMP[stock] = { qty: 0, cost: 0, pmp: 0 };
+
+                if (t.type === 'Achat') {
+                    const amount = t.price * t.qty;
+                    if (pdfStockPMP[stock].qty > 0 && t.price < pdfStockPMP[stock].pmp) {
+                        avgDownCap += amount;
+                    }
+                    pdfStockPMP[stock].cost += amount;
+                    pdfStockPMP[stock].qty += t.qty;
+                    pdfStockPMP[stock].pmp = pdfStockPMP[stock].cost / pdfStockPMP[stock].qty;
+                } else if (t.type === 'Vente') {
+                    if (pdfStockPMP[stock].qty > 0) {
+                        const costBasis = pdfStockPMP[stock].pmp * t.qty;
+                        const pnl = (t.price * t.qty) - t.fees - costBasis;
+                        pdfTrades.push(pnl);
+                        if (pnl > 0) { totalWin += pnl; winCount++; }
+                        else { totalLoss += Math.abs(pnl); lossCount++; }
+
+                        pdfStockPMP[stock].qty -= t.qty;
+                        pdfStockPMP[stock].cost -= costBasis;
+                        if (pdfStockPMP[stock].qty <= 0) { pdfStockPMP[stock].qty = 0; pdfStockPMP[stock].cost = 0; pdfStockPMP[stock].pmp = 0; }
+                    }
+                }
+            });
+
+            const winRate = pdfTrades.length > 0 ? (winCount / pdfTrades.length) * 100 : 0;
+            const avgW = winCount > 0 ? totalWin / winCount : 0;
+            const avgL = lossCount > 0 ? totalLoss / lossCount : 0;
+            const payoff = avgL > 0 ? avgW / avgL : (avgW > 0 ? 999 : 0);
+
+            // Recherche du Pire Trade (La plus grande destruction de valeur MTM)
+            let worstStock = "Aucun";
+            let worstMTM = 0;
+            sortedStocks.forEach(stock => {
+                let stockTotalRealized = 0;
+                sortedYears.forEach(year => { stockTotalRealized += ((stats[stock] && stats[stock][year]) || 0); });
+                const latent = latentByStock[stock] || 0;
+                const mtm = stockTotalRealized + latent;
+                
+                if (mtm < worstMTM) {
+                    worstMTM = mtm;
+                    worstStock = stock;
+                }
+            });
+
+            const diagWinRate = winRate < 50 
+                ? "Tu as tort plus d'une fois sur deux. Ton processus de sélection d'actifs est défaillant." 
+                : "Tu as souvent raison sur la direction. Si tu perds de l'argent, c'est ta gestion de sortie qui est coupable.";
+            
+            const diagPayoff = payoff < 1 
+                ? "HÉMORRAGIE MATHÉMATIQUE. Tu coupes tes gains trop tôt par peur, et tu conserves tes pertes par ego. Espérance négative." 
+                : "Exécution asymétrique correcte. Tes gains couvrent tes pertes.";
+            
+            const diagAvgDown = avgDownCap > 0 
+                ? "Capital frais jeté sur des thèses d'investissement invalidées uniquement pour sauver ton ego." 
+                : "Discipline respectée. Aucun capital n'a été utilisé pour moyenner à la baisse.";
+
+            const diagWorstTrade = worstMTM < 0 
+                ? "Le monument de ton entêtement. Le marché t'a donné tort, tu as refusé de l'accepter, voici l'addition." 
+                : "Aucune perte systémique critique détectée.";
+
+            // --- NOUVEAU : Test de l'Inaction (Benchmark 8%) ---
+            const now = new Date();
+            let simFutureValue = 0;
+            let netCapitalInvested = 0;
+
+            txs.forEach(t => {
+                const daysToNow = (now - t.date) / (1000 * 3600 * 24);
+                const yearsToNow = daysToNow / 365.25;
+                const growthFactor = Math.pow(1.08, yearsToNow);
+
+                if (t.type === 'Achat') {
+                    const amount = (t.price * t.qty) + t.fees;
+                    simFutureValue += amount * growthFactor;
+                    netCapitalInvested += amount;
+                } else if (t.type === 'Vente') {
+                    const amount = (t.price * t.qty) - t.fees;
+                    simFutureValue -= amount * growthFactor;
+                    netCapitalInvested -= amount;
+                } else if (t.type === 'Dividende') {
+                    const amount = t.amount;
+                    simFutureValue -= amount * growthFactor;
+                    netCapitalInvested -= amount;
+                }
+            });
+
+            const simulatedProfit = simFutureValue - netCapitalInvested;
+            const actualProfit = grandTotalMtM;
+            const opportunityCost = actualProfit - simulatedProfit;
+
+            const diagInaction = opportunityCost < 0
+                ? `DESTRUCTION. Un simple ETF Monde (8%) aurait généré ${simulatedProfit.toFixed(2)} €. Ton agitation t'a coûté ${Math.abs(opportunityCost).toFixed(2)} €. Ton trading appauvrit ton compte.`
+                : `SURPERFORMANCE. Tu bats l'ETF Monde théorique de ${opportunityCost.toFixed(2)} €. Ton temps passé à gérer ce portefeuille est mathématiquement validé.`;
+
+            doc.autoTable({
+                startY: 55,
+                head: [['Métrique Comportementale', 'Résultat Brut', 'Diagnostic Sans Filtre']],
+                body: [
+                    ['Taux de Succès (Win Rate)', `${winRate.toFixed(1)}%`, diagWinRate],
+                    ['Ratio Gain/Perte (Payoff)', `${payoff.toFixed(2)}`, diagPayoff],
+                    ['Capital Noyé (Moyennage Baisse)', `${avgDownCap.toFixed(2)} €`, diagAvgDown],
+                    ['Pire Destruction de Valeur', `${worstStock} (${worstMTM.toFixed(2)} €)`, diagWorstTrade],
+                    ["Test de l'Inaction (vs ETF 8%)", `${opportunityCost > 0 ? '+' : ''}${opportunityCost.toFixed(2)} €`, diagInaction]
+                ],
+                theme: 'grid',
+                headStyles: { fillColor: [153, 27, 27], textColor: 255 }, // Dark Red
+                styles: { fontSize: 10, cellPadding: 4, textColor: [30, 41, 59], overflow: 'linebreak' }, // Padding réduit pour éviter le débordement
+                columnStyles: { 
+                    0: { fontStyle: 'bold', cellWidth: 55 }, // Largeur fixe un peu réduite
+                    1: { fontStyle: 'bold', cellWidth: 35, halign: 'center' },
+                    2: { cellWidth: 'auto' } // "auto" permet au tableau de s'adapter sans dépasser la marge
+                },
+                didParseCell: function(data) {
+                    if (data.section === 'body' && data.column.index === 1) {
+                        if (data.row.index === 0) data.cell.styles.textColor = winRate < 50 ? [220, 38, 38] : [22, 163, 74];
+                        if (data.row.index === 1) data.cell.styles.textColor = payoff < 1 ? [220, 38, 38] : [22, 163, 74];
+                        if (data.row.index === 2) data.cell.styles.textColor = avgDownCap > 0 ? [249, 115, 22] : [22, 163, 74];
+                        if (data.row.index === 3) data.cell.styles.textColor = worstMTM < 0 ? [220, 38, 38] : [22, 163, 74];
+                        if (data.row.index === 4) data.cell.styles.textColor = opportunityCost < 0 ? [220, 38, 38] : [22, 163, 74];
+                    }
+                }
+            });
+
+            // Conclusion
+            const finalY = doc.lastAutoTable.finalY || 150;
+            doc.setFontSize(14);
+            doc.setTextColor(15, 23, 42); // Slate-900
+            doc.text("Bilan Stratégique :", 14, finalY + 20);
+            
+            doc.setFontSize(11);
+            doc.setTextColor(71, 85, 105);
+            doc.text("Ce document n'a pas été généré pour ménager tes émotions. L'argent ne ment pas.", 14, finalY + 30);
+            doc.text("Si la ligne 'Pire Destruction de Valeur' représente plus de 5% de ton capital, ton problème n'est pas le marché, c'est ton refus", 14, finalY + 37);
+            doc.text("de couper une perte. Imprime cette page et garde-la sous les yeux avant de racheter une action qui baisse.", 14, finalY + 44);
+
+            doc.save('audit_performance_reelle_mtm.pdf');
         }
 
-
-        // --- Event Listeners ---
         function setupDropZone(zoneId, inputId, labelId, isHistory) {
             const zone = document.getElementById(zoneId);
             const input = document.getElementById(inputId);
