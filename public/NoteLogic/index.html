@@ -990,7 +990,7 @@ Plan de Trade tactique :
 
                     const systemPrompt = "Tu es NoteLogic Intelligence, un analyste tactique expert. Analyse le texte fourni. Tu DOIS générer une réponse en HTML léger (strictement AUCUN markdown) contenant DEUX éléments : 1. Les points clés ultra-synthétiques sous forme de liste à puces avec <ul class='list-disc pl-5 space-y-1 text-slate-300 mb-2'> et <li>. 2. Une proposition de 3 à 5 tags pertinents (formatés ainsi: [TAG]) encapsulés dans une <div class='flex flex-wrap gap-2 text-[11px] font-mono font-bold text-purple-400 mt-2 pt-2 border-t border-white/10'>. Sois direct, opérationnel, sans aucune phrase d'introduction ou de conclusion.";
                     
-                    let delay = 1000;
+                    let delay = 2000; // On augmente le délai de base à 2 secondes pour laisser souffler l'API
                     for (let i = 0; i < 5; i++) {
                         try {
                             const response = await fetch(url, {
@@ -1001,7 +1001,11 @@ Plan de Trade tactique :
                                     systemInstruction: { parts: [{ text: systemPrompt }] }
                                 })
                             });
+                            
                             if (!response.ok) {
+                                // Détection spécifique du blocage pour "Trop de requêtes"
+                                if (response.status === 429) throw new Error("RATE_LIMIT");
+                                
                                 let errDetails = `HTTP ${response.status}`;
                                 try {
                                     const errData = await response.json();
@@ -1009,11 +1013,17 @@ Plan de Trade tactique :
                                 } catch(e) {}
                                 throw new Error(errDetails);
                             }
+                            
                             const result = await response.json();
                             return result.candidates?.[0]?.content?.parts?.[0]?.text || "Aucun contenu généré.";
                         } catch (err) {
-                            if (i === 4) throw err;
-                            await new Promise(r => setTimeout(r, delay));
+                            if (i === 4) {
+                                // Message clair et "Ops" au lieu de l'erreur technique brute
+                                if (err.message === "RATE_LIMIT") throw new Error("QUOTA GOOGLE DÉPASSÉ. Attendez 1 min.");
+                                throw err;
+                            }
+                            // Si c'est un 429, on patiente encore plus longtemps avant de réessayer
+                            await new Promise(r => setTimeout(r, err.message === "RATE_LIMIT" ? delay * 1.5 : delay));
                             delay *= 2;
                         }
                     }
