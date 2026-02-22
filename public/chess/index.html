@@ -23,10 +23,12 @@
             
             <div class="bg-gray-800 border border-gray-700 rounded p-4 flex flex-col gap-4">
                 <h2 class="text-lg font-semibold text-white border-b border-gray-700 pb-2">Moteur UCI</h2>
+                
                 <select id="mode-select" disabled class="w-full bg-gray-900 text-white rounded p-2 border border-gray-600 focus:outline-none focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed">
                     <option value="play">Mode : Jouer contre l'IA</option>
                     <option value="analyze">Mode : Analyse Libre</option>
                 </select>
+
                 <div id="difficulty-container" class="flex flex-col gap-2">
                     <label class="text-sm text-gray-400 flex justify-between">
                         <span>Niveau (Skill Level)</span>
@@ -34,6 +36,7 @@
                     </label>
                     <input type="range" id="skill-level" min="0" max="20" value="10" disabled class="w-full cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
                 </div>
+
                 <div id="analysis-container" class="hidden flex-col gap-2">
                     <div class="flex justify-between items-center bg-gray-900 p-2 rounded border border-gray-700">
                         <span class="text-gray-400 text-sm">Évaluation</span>
@@ -47,22 +50,35 @@
             </div>
 
             <div class="bg-gray-800 border border-gray-700 rounded p-4 flex flex-col gap-3">
-                <button id="undo-btn" class="w-full bg-gray-700 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>Annuler le coup</button>
-                <button id="reset-btn" disabled class="w-full bg-blue-900 hover:bg-blue-800 text-white font-medium py-2 px-4 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed">Nouvelle Partie</button>
+                <button id="undo-btn" class="w-full bg-gray-700 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                    Annuler le coup
+                </button>
+                <button id="reset-btn" disabled class="w-full bg-blue-900 hover:bg-blue-800 text-white font-medium py-2 px-4 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                    Nouvelle Partie
+                </button>
             </div>
 
-            <div class="bg-gray-800 border border-gray-700 rounded p-4 flex-1 flex flex-col min-h-[150px]">
-                <h2 class="text-lg font-semibold text-white border-b border-gray-700 pb-2 mb-2">Historique</h2>
-                <div id="pgn-history" class="text-sm font-mono text-gray-400 overflow-y-auto flex-1 break-words">En attente du moteur...</div>
+            <div class="bg-gray-800 border border-gray-700 rounded p-4 flex-1 flex flex-col min-h-[150px] max-h-[250px]">
+                <h2 class="text-lg font-semibold text-white border-b border-gray-700 pb-2 mb-2">Historique Interactif</h2>
+                <div id="pgn-history" class="text-sm font-mono overflow-y-auto flex-1 pr-2 custom-scrollbar">
+                    <span class="text-gray-500">En attente du moteur...</span>
+                </div>
             </div>
 
         </div>
     </div>
 
+    <style>
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #1f2937; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+    </style>
+
     <script type="module">
         try {
             const { Chess } = await import("https://esm.sh/chess.js@1.0.0-beta.6");
-            const { Chessboard, COLOR, INPUT_EVENT_TYPE } = await import("https://esm.sh/cm-chessboard@8.5.1");
+            const { Chessboard, COLOR, INPUT_EVENT_TYPE, MARKER_TYPE } = await import("https://esm.sh/cm-chessboard@8.5.1");
 
             const UI = {
                 status: document.getElementById('status'),
@@ -84,6 +100,9 @@
             let aiWorker;
             let currentMode = 'play';
             let isEngineReady = false;
+            let viewIndex = -1; // Indice temporel de la vue actuelle
+
+            const STORAGE_KEY = 'chess_v10_state';
 
             function updateStatus(text, type = 'normal') {
                 UI.status.innerText = text;
@@ -94,19 +113,136 @@
                      "bg-gray-800 text-gray-300 border-gray-600");
             }
 
-            function updateHistory() {
-                const pgn = game.pgn();
-                UI.history.innerText = pgn ? pgn : "Aucun coup joué.";
-                if (isEngineReady) UI.undoBtn.disabled = game.history().length === 0;
+            function saveGame() {
+                const state = {
+                    pgn: game.pgn(),
+                    mode: currentMode,
+                    skill: UI.skillLevel.value
+                };
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
             }
+
+            function loadGame() {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (saved) {
+                    try {
+                        const state = JSON.parse(saved);
+                        game.loadPgn(state.pgn);
+                        viewIndex = game.history().length - 1;
+                        currentMode = state.mode || 'play';
+                        UI.modeSelect.value = currentMode;
+                        UI.skillLevel.value = state.skill || 10;
+                        UI.skillVal.innerText = UI.skillLevel.value;
+                        
+                        if (currentMode === 'analyze') {
+                            UI.diffContainer.classList.add('hidden');
+                            UI.analysisContainer.classList.remove('hidden');
+                            UI.analysisContainer.classList.add('flex');
+                        }
+                        return true;
+                    } catch (e) {
+                        return false;
+                    }
+                }
+                return false;
+            }
+
+            // Génération de l'historique sous forme de boutons interactifs
+            function updateHistory() {
+                const history = game.history({ verbose: true });
+                if (history.length === 0) {
+                    UI.history.innerHTML = "<span class='text-gray-500'>Aucun coup joué.</span>";
+                    if (isEngineReady) UI.undoBtn.disabled = true;
+                    viewIndex = -1;
+                    return;
+                }
+
+                if (isEngineReady) UI.undoBtn.disabled = false;
+
+                // Réalignement sur le présent si on est hors limites
+                if (viewIndex >= history.length || viewIndex === -1 && history.length > 0) {
+                    viewIndex = history.length - 1;
+                }
+
+                let html = '<div class="flex flex-col gap-1">';
+                for (let i = 0; i < history.length; i += 2) {
+                    const moveNum = (i / 2) + 1;
+                    const whiteMove = history[i];
+                    const blackMove = history[i + 1];
+
+                    html += `<div class="flex items-center text-sm">`;
+                    html += `<span class="w-8 text-gray-500 font-bold">${moveNum}.</span>`;
+                    
+                    const whiteActive = viewIndex === i ? 'bg-blue-600 text-white shadow-inner' : 'bg-gray-700 hover:bg-gray-600 text-gray-300';
+                    html += `<button class="flex-1 text-center px-2 py-1 mx-1 rounded cursor-pointer transition-colors ${whiteActive}" data-index="${i}">${whiteMove.san}</button>`;
+                    
+                    if (blackMove) {
+                        const blackActive = viewIndex === i + 1 ? 'bg-blue-600 text-white shadow-inner' : 'bg-gray-700 hover:bg-gray-600 text-gray-300';
+                        html += `<button class="flex-1 text-center px-2 py-1 mx-1 rounded cursor-pointer transition-colors ${blackActive}" data-index="${i + 1}">${blackMove.san}</button>`;
+                    } else {
+                        html += `<div class="flex-1 mx-1"></div>`;
+                    }
+                    html += `</div>`;
+                }
+                html += '</div>';
+                
+                UI.history.innerHTML = html;
+                UI.history.scrollTop = UI.history.scrollHeight;
+            }
+
+            // Extraction du FEN correspondant au moment visualisé
+            function getCurrentViewFen() {
+                const history = game.history({ verbose: true });
+                if (history.length === 0) return game.fen();
+                if (viewIndex === -1 || viewIndex >= history.length) return history[history.length - 1].after;
+                return history[viewIndex].after;
+            }
+
+            // Gestionnaire de saut temporel
+            function jumpToMove(idx) {
+                aiWorker.postMessage('stop');
+                viewIndex = idx;
+                const fen = getCurrentViewFen();
+                board.setPosition(fen);
+                clearVisualTelemetry();
+                updateHistory();
+                setBoardInput();
+                
+                if (currentMode === 'analyze') {
+                    triggerAnalysis();
+                } else if (currentMode === 'play') {
+                    const turn = fen.split(' ')[1];
+                    if (turn === 'w') {
+                        updateStatus("À vous (Passé)", 'normal');
+                    } else {
+                        updateStatus("Coup de l'IA (Passé)", 'normal');
+                    }
+                }
+            }
+
+            // Délégation d'événement pour l'historique interactif
+            UI.history.addEventListener('click', (e) => {
+                const btn = e.target.closest('button[data-index]');
+                if (btn && isEngineReady) {
+                    jumpToMove(parseInt(btn.getAttribute('data-index'), 10));
+                }
+            });
 
             function setBoardInput() {
                 if (!isEngineReady) return;
+                const fen = getCurrentViewFen();
+                const turn = fen.split(' ')[1];
+                
                 if (currentMode === 'play') {
-                    board.enableMoveInput(inputHandler, COLOR.white);
+                    if (turn === 'w') board.enableMoveInput(inputHandler, COLOR.white);
+                    else board.disableMoveInput(); // On ne bouge pas les noirs en mode jeu
                 } else {
-                    board.enableMoveInput(inputHandler, game.turn() === 'w' ? COLOR.white : COLOR.black);
+                    board.enableMoveInput(inputHandler, turn === 'w' ? COLOR.white : COLOR.black);
                 }
+            }
+
+            function clearVisualTelemetry() {
+                if (board) board.removeMarkers();
             }
 
             aiWorker = new Worker('./worker.js');
@@ -138,47 +274,77 @@
                 if (msg === 'readyok' && !isEngineReady) {
                     isEngineReady = true;
                     clearTimeout(engineLoadTimeout);
+                    
+                    loadGame();
+
                     UI.boardContainer.classList.remove('opacity-50');
                     UI.modeSelect.disabled = false;
                     UI.resetBtn.disabled = false;
                     UI.skillLevel.disabled = false;
                     UI.skillVal.classList.remove('text-gray-500');
                     UI.skillVal.classList.add('text-white');
+                    
                     aiWorker.postMessage('setoption name Skill Level value ' + UI.skillLevel.value);
+                    
+                    board.setPosition(getCurrentViewFen());
                     updateHistory();
-                    setBoardInput();
-                    updateStatus("Moteur prêt. À vous (Blancs)", 'success');
+                    
+                    if (currentMode === 'analyze') {
+                        triggerAnalysis();
+                    } else {
+                        const fen = getCurrentViewFen();
+                        if (fen.split(' ')[1] === 'b' && viewIndex === game.history().length - 1) {
+                            triggerAI();
+                        } else {
+                            setBoardInput();
+                            updateStatus("Moteur prêt. À vous (Blancs)", 'success');
+                        }
+                    }
                     return;
                 }
 
                 if (!isEngineReady) return;
 
                 if (currentMode === 'analyze' && msg.startsWith('info') && msg.includes('score')) {
+                    const fenTurn = getCurrentViewFen().split(' ')[1];
                     const scoreMatch = msg.match(/score (cp|mate) (-?\d+)/);
                     if (scoreMatch) {
                         let val = parseInt(scoreMatch[2], 10);
-                        let multiplier = game.turn() === 'w' ? 1 : -1;
+                        let multiplier = fenTurn === 'w' ? 1 : -1;
                         let evalText = scoreMatch[1] === 'cp' ? ((val * multiplier) / 100).toFixed(2) : (val * multiplier > 0 ? "+M" : "-M") + Math.abs(val);
                         UI.evalDisplay.innerText = evalText.startsWith('+') || evalText.startsWith('-') ? evalText : (evalText > 0 ? "+" + evalText : evalText);
                     }
+                    
                     const pvMatch = msg.match(/pv (.+)/);
-                    if (pvMatch) UI.pvDisplay.innerText = pvMatch[1];
+                    if (pvMatch) {
+                        UI.pvDisplay.innerText = pvMatch[1];
+                        const pvMoves = pvMatch[1].trim().split(' ');
+                        const bestMove = pvMoves[0];
+                        if (bestMove && bestMove.length >= 4) {
+                            const from = bestMove.substring(0, 2);
+                            const to = bestMove.substring(2, 4);
+                            clearVisualTelemetry();
+                            board.addMarker(MARKER_TYPE.frame, from);
+                            board.addMarker(MARKER_TYPE.frame, to);
+                        }
+                    }
                 }
 
                 if (currentMode === 'play') {
                     const match = String(msg).match(/^bestmove ([a-h][1-8][a-h][1-8][qrbn]?)/);
-                    if (match) {
+                    if (match && viewIndex === game.history().length - 1) {
                         const moveStr = match[1];
                         try {
                             game.move({ from: moveStr.substring(0, 2), to: moveStr.substring(2, 4), promotion: moveStr.length > 4 ? moveStr[4] : undefined });
-                            board.setPosition(game.fen());
+                            viewIndex = game.history().length - 1;
+                            board.setPosition(getCurrentViewFen());
                             updateHistory();
+                            saveGame();
                             if (!checkEndGame()) {
                                 setBoardInput();
                                 updateStatus("À vous (Blancs)", 'success');
                             }
                         } catch (err) {
-                            console.error("Erreur d'application du coup :", moveStr, err);
                             updateStatus("Erreur interne du jeu", 'error');
                         }
                     }
@@ -187,16 +353,17 @@
 
             function triggerAI() {
                 updateStatus("Stockfish réfléchit...", 'normal');
+                clearVisualTelemetry();
                 board.disableMoveInput();
-                aiWorker.postMessage('position fen ' + game.fen());
-                // Remplacement de la profondeur fixe par un temps maximal strict (1.5 secondes)
+                aiWorker.postMessage('position fen ' + getCurrentViewFen());
                 aiWorker.postMessage('go movetime 1500'); 
             }
 
             function triggerAnalysis() {
                 updateStatus("Analyse continue...", 'success');
+                clearVisualTelemetry();
                 aiWorker.postMessage('stop');
-                aiWorker.postMessage('position fen ' + game.fen());
+                aiWorker.postMessage('position fen ' + getCurrentViewFen());
                 aiWorker.postMessage('go infinite');
                 setBoardInput();
             }
@@ -210,15 +377,26 @@
             function inputHandler(event) {
                 if (event.type === INPUT_EVENT_TYPE.moveInputFinished) {
                     try {
+                        // Altération de la ligne temporelle : Suppression du futur si on joue depuis le passé
+                        const histLen = game.history().length;
+                        if (viewIndex >= 0 && viewIndex < histLen - 1) {
+                            const truncCount = (histLen - 1) - viewIndex;
+                            for(let i=0; i < truncCount; i++) game.undo();
+                        }
+
                         const move = game.move({ from: event.squareFrom, to: event.squareTo, promotion: 'q' });
                         if (move) {
-                            board.setPosition(game.fen());
+                            viewIndex = game.history().length - 1;
+                            board.setPosition(getCurrentViewFen());
+                            clearVisualTelemetry();
                             updateHistory();
+                            saveGame();
                             if (checkEndGame()) return true;
                             if (currentMode === 'play') triggerAI();
                             else triggerAnalysis();
                             return true;
                         }
+                        return false;
                     } catch (e) { return false; }
                 }
                 return true;
@@ -227,6 +405,14 @@
             UI.modeSelect.addEventListener('change', (e) => {
                 currentMode = e.target.value;
                 aiWorker.postMessage('stop');
+                clearVisualTelemetry();
+                
+                // Réinitialiser la vue au présent lors du changement de mode
+                viewIndex = game.history().length - 1;
+                board.setPosition(getCurrentViewFen());
+                updateHistory();
+                saveGame();
+                
                 if (currentMode === 'analyze') {
                     UI.diffContainer.classList.add('hidden');
                     UI.analysisContainer.classList.remove('hidden');
@@ -237,15 +423,56 @@
                     UI.analysisContainer.classList.add('hidden');
                     UI.analysisContainer.classList.remove('flex');
                     aiWorker.postMessage('setoption name Skill Level value ' + UI.skillLevel.value);
-                    if (game.turn() === 'b') triggerAI();
+                    if (getCurrentViewFen().split(' ')[1] === 'b') triggerAI();
                     else setBoardInput();
                 }
             });
 
             UI.skillLevel.addEventListener('input', (e) => { UI.skillVal.innerText = e.target.value; });
-            UI.skillLevel.addEventListener('change', (e) => { aiWorker.postMessage('setoption name Skill Level value ' + e.target.value); });
-            UI.resetBtn.addEventListener('click', () => { aiWorker.postMessage('stop'); game.reset(); board.setPosition(game.fen()); updateHistory(); if (currentMode === 'play') { updateStatus("À vous (Blancs)", 'success'); setBoardInput(); } else { triggerAnalysis(); } });
-            UI.undoBtn.addEventListener('click', () => { if (game.history().length === 0) return; aiWorker.postMessage('stop'); game.undo(); if (currentMode === 'play' && game.turn() === 'b') game.undo(); board.setPosition(game.fen()); updateHistory(); if (currentMode === 'play') { updateStatus("À vous (Blancs)", 'success'); setBoardInput(); } else { triggerAnalysis(); } });
+            UI.skillLevel.addEventListener('change', (e) => { 
+                aiWorker.postMessage('setoption name Skill Level value ' + e.target.value); 
+                saveGame();
+            });
+
+            UI.resetBtn.addEventListener('click', () => { 
+                aiWorker.postMessage('stop'); 
+                game.reset(); 
+                viewIndex = -1;
+                localStorage.removeItem(STORAGE_KEY);
+                clearVisualTelemetry();
+                board.setPosition(game.fen()); 
+                updateHistory(); 
+                if (currentMode === 'play') { 
+                    updateStatus("À vous (Blancs)", 'success'); 
+                    setBoardInput(); 
+                } else { 
+                    triggerAnalysis(); 
+                } 
+            });
+
+            UI.undoBtn.addEventListener('click', () => { 
+                if (game.history().length === 0) return; 
+                aiWorker.postMessage('stop'); 
+                
+                // Le bouton Undo annule depuis le vrai présent, peu importe la vue
+                const wasAtPresent = viewIndex === game.history().length - 1;
+                
+                game.undo(); 
+                if (currentMode === 'play' && game.turn() === 'b') game.undo(); 
+                
+                viewIndex = game.history().length - 1;
+                clearVisualTelemetry();
+                board.setPosition(getCurrentViewFen()); 
+                updateHistory(); 
+                saveGame();
+                
+                if (currentMode === 'play') { 
+                    updateStatus("À vous (Blancs)", 'success'); 
+                    setBoardInput(); 
+                } else { 
+                    triggerAnalysis(); 
+                } 
+            });
 
             board = new Chessboard(document.getElementById("board"), {
                 position: game.fen(),
