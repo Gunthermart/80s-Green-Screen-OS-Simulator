@@ -100,7 +100,7 @@
             let aiWorker;
             let currentMode = 'play';
             let isEngineReady = false;
-            let viewIndex = -1; // Indice temporel de la vue actuelle
+            let viewIndex = -1;
 
             const STORAGE_KEY = 'chess_v10_state';
 
@@ -147,7 +147,6 @@
                 return false;
             }
 
-            // Génération de l'historique sous forme de boutons interactifs
             function updateHistory() {
                 const history = game.history({ verbose: true });
                 if (history.length === 0) {
@@ -159,7 +158,6 @@
 
                 if (isEngineReady) UI.undoBtn.disabled = false;
 
-                // Réalignement sur le présent si on est hors limites
                 if (viewIndex >= history.length || viewIndex === -1 && history.length > 0) {
                     viewIndex = history.length - 1;
                 }
@@ -190,7 +188,6 @@
                 UI.history.scrollTop = UI.history.scrollHeight;
             }
 
-            // Extraction du FEN correspondant au moment visualisé
             function getCurrentViewFen() {
                 const history = game.history({ verbose: true });
                 if (history.length === 0) return game.fen();
@@ -198,7 +195,6 @@
                 return history[viewIndex].after;
             }
 
-            // Gestionnaire de saut temporel
             function jumpToMove(idx) {
                 aiWorker.postMessage('stop');
                 viewIndex = idx;
@@ -220,7 +216,6 @@
                 }
             }
 
-            // Délégation d'événement pour l'historique interactif
             UI.history.addEventListener('click', (e) => {
                 const btn = e.target.closest('button[data-index]');
                 if (btn && isEngineReady) {
@@ -235,7 +230,7 @@
                 
                 if (currentMode === 'play') {
                     if (turn === 'w') board.enableMoveInput(inputHandler, COLOR.white);
-                    else board.disableMoveInput(); // On ne bouge pas les noirs en mode jeu
+                    else board.disableMoveInput();
                 } else {
                     board.enableMoveInput(inputHandler, turn === 'w' ? COLOR.white : COLOR.black);
                 }
@@ -377,14 +372,25 @@
             function inputHandler(event) {
                 if (event.type === INPUT_EVENT_TYPE.moveInputFinished) {
                     try {
-                        // Altération de la ligne temporelle : Suppression du futur si on joue depuis le passé
                         const histLen = game.history().length;
                         if (viewIndex >= 0 && viewIndex < histLen - 1) {
                             const truncCount = (histLen - 1) - viewIndex;
                             for(let i=0; i < truncCount; i++) game.undo();
                         }
 
-                        const move = game.move({ from: event.squareFrom, to: event.squareTo, promotion: 'q' });
+                        let move = null;
+                        try {
+                            // Essai standard sans promotion forcée
+                            move = game.move({ from: event.squareFrom, to: event.squareTo });
+                        } catch (e) {
+                            // Repli tactique : Si rejeté, on teste avec le flag de promotion
+                            try {
+                                move = game.move({ from: event.squareFrom, to: event.squareTo, promotion: 'q' });
+                            } catch (err) {
+                                return false;
+                            }
+                        }
+
                         if (move) {
                             viewIndex = game.history().length - 1;
                             board.setPosition(getCurrentViewFen());
@@ -397,7 +403,9 @@
                             return true;
                         }
                         return false;
-                    } catch (e) { return false; }
+                    } catch (e) { 
+                        return false; 
+                    }
                 }
                 return true;
             }
@@ -407,7 +415,6 @@
                 aiWorker.postMessage('stop');
                 clearVisualTelemetry();
                 
-                // Réinitialiser la vue au présent lors du changement de mode
                 viewIndex = game.history().length - 1;
                 board.setPosition(getCurrentViewFen());
                 updateHistory();
@@ -453,9 +460,6 @@
             UI.undoBtn.addEventListener('click', () => { 
                 if (game.history().length === 0) return; 
                 aiWorker.postMessage('stop'); 
-                
-                // Le bouton Undo annule depuis le vrai présent, peu importe la vue
-                const wasAtPresent = viewIndex === game.history().length - 1;
                 
                 game.undo(); 
                 if (currentMode === 'play' && game.turn() === 'b') game.undo(); 
