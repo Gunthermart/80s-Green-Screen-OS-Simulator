@@ -3,541 +3,548 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jeu d'échecs vs Stockfish</title>
+    <title>Jeu d'échecs Pro</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cm-chessboard@8.5.1/assets/chessboard.css">
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #1f2937; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+        
+        /* Barre d'évaluation */
+        .eval-bar-container {
+            width: 24px;
+            background-color: #333;
+            position: relative;
+            border-radius: 4px;
+            overflow: hidden;
+            border: 1px solid #4b5563;
+        }
+        .eval-bar-fill {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            background-color: #f3f4f6; /* Blanc */
+            transition: height 0.5s ease-in-out;
+        }
+        .eval-bar-text {
+            position: absolute;
+            width: 100%;
+            text-align: center;
+            font-size: 10px;
+            font-weight: bold;
+            z-index: 10;
+            mix-blend-mode: difference;
+            color: #fff;
+            padding-top: 4px;
+            padding-bottom: 4px;
+        }
+    </style>
 </head>
 <body class="bg-gray-900 text-gray-200 min-h-screen m-0 p-4 font-sans flex items-center justify-center">
 
     <div class="w-full max-w-6xl flex flex-col md:flex-row gap-6">
         
-        <!-- Colonne Gauche : L'échiquier -->
-        <div class="flex-1 max-w-lg mx-auto w-full">
+        <!-- Zone de jeu -->
+        <div class="flex-1 max-w-lg mx-auto w-full flex flex-col">
             <div class="mb-4 flex justify-between items-end">
-                <h1 class="text-3xl font-bold text-white tracking-tight">Chess v10.0</h1>
-                <div id="status" class="text-sm font-bold bg-yellow-900 text-yellow-400 px-3 py-1 rounded animate-pulse border border-yellow-700">Téléchargement du moteur...</div>
+                <h1 class="text-3xl font-bold text-white tracking-tight">Chess Engine</h1>
+                <div id="status-indicator" class="text-sm font-bold bg-yellow-900 text-yellow-400 px-3 py-1 rounded border border-yellow-700">Initialisation...</div>
             </div>
-            <div id="board" class="w-full aspect-square shadow-2xl rounded overflow-hidden border border-gray-700 bg-gray-800 opacity-50 transition-opacity duration-500"></div>
+            
+            <div class="flex gap-2 w-full aspect-square">
+                <!-- Barre d'évaluation -->
+                <div class="eval-bar-container hidden" id="eval-bar">
+                    <div id="eval-fill" class="eval-bar-fill" style="height: 50%;"></div>
+                    <div id="eval-text-top" class="eval-bar-text top-0"></div>
+                    <div id="eval-text-bottom" class="eval-bar-text bottom-0">0.0</div>
+                </div>
+                
+                <!-- Échiquier -->
+                <div id="board" class="flex-1 shadow-2xl rounded overflow-hidden border border-gray-700 bg-gray-800 opacity-50 transition-opacity duration-300"></div>
+            </div>
         </div>
 
-        <!-- Colonne Droite : Panneaux de contrôle -->
+        <!-- Panneau de contrôle -->
         <div class="w-full md:w-96 flex flex-col gap-4">
             
             <div class="bg-gray-800 border border-gray-700 rounded p-4 flex flex-col gap-4">
-                <h2 class="text-lg font-semibold text-white border-b border-gray-700 pb-2">Moteur UCI</h2>
+                <div class="flex justify-between items-center border-b border-gray-700 pb-2">
+                    <h2 class="text-lg font-semibold text-white">Paramètres</h2>
+                </div>
                 
-                <select id="mode-select" disabled class="w-full bg-gray-900 text-white rounded p-2 border border-gray-600 focus:outline-none focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed">
-                    <option value="play">Mode : Jouer contre l'IA</option>
+                <select id="mode-select" disabled class="w-full bg-gray-900 text-white rounded p-2 border border-gray-600 focus:outline-none focus:border-blue-500 disabled:opacity-50">
+                    <option value="play">Mode : Jouer contre Stockfish</option>
                     <option value="analyze">Mode : Analyse Libre</option>
                 </select>
 
                 <div id="difficulty-container" class="flex flex-col gap-2">
                     <label class="text-sm text-gray-400 flex justify-between">
-                        <span>Niveau (Skill Level)</span>
+                        <span>Niveau de l'IA (Skill Level)</span>
                         <span id="skill-val" class="font-bold text-gray-500">10</span>
                     </label>
-                    <input type="range" id="skill-level" min="0" max="20" value="10" disabled class="w-full cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                    <input type="range" id="skill-level" min="0" max="20" value="10" disabled class="w-full cursor-pointer disabled:opacity-50">
                 </div>
 
-                <div id="analysis-container" class="hidden flex-col gap-2">
-                    <div class="flex justify-between items-center bg-gray-900 p-2 rounded border border-gray-700">
-                        <span class="text-gray-400 text-sm">Évaluation</span>
-                        <span id="eval-display" class="font-mono font-bold text-white">0.00</span>
-                    </div>
-                    <div class="bg-gray-900 p-2 rounded border border-gray-700 flex flex-col gap-1">
-                        <span class="text-gray-500 text-xs uppercase tracking-wider">Meilleure Ligne (PV)</span>
-                        <span id="pv-display" class="text-xs font-mono text-gray-300 break-words leading-relaxed min-h-[40px]">En attente...</span>
-                    </div>
+                <div id="pv-container" class="hidden flex-col gap-1 bg-gray-900 p-2 rounded border border-gray-700">
+                    <span class="text-gray-500 text-xs uppercase tracking-wider">Meilleure Ligne Estimée</span>
+                    <span id="pv-display" class="text-xs font-mono text-gray-300 break-words min-h-[40px]">...</span>
                 </div>
             </div>
 
-            <!-- Actions et Validation -->
             <div class="bg-gray-800 border border-gray-700 rounded p-4 flex flex-col gap-3">
-                
-                <!-- Bloc de validation de coup (Caché par défaut) -->
-                <div id="pending-controls" class="hidden flex-col gap-2 p-3 mb-1 bg-blue-900 border border-blue-700 rounded shadow-lg">
-                    <span class="text-xs text-center text-blue-200 font-bold uppercase tracking-wider">Valider ce coup ?</span>
-                    <div class="flex gap-2">
-                        <button id="confirm-move-btn" class="flex-1 bg-green-600 hover:bg-green-500 text-white font-bold py-1 px-2 rounded transition-colors text-sm">Oui</button>
-                        <button id="cancel-pending-btn" class="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-1 px-2 rounded transition-colors text-sm">Non</button>
-                    </div>
-                </div>
-
-                <button id="undo-btn" class="w-full bg-gray-700 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                <button id="undo-btn" class="w-full bg-gray-700 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded transition-colors disabled:opacity-50" disabled>
                     Annuler le coup
                 </button>
-                <button id="reset-btn" disabled class="w-full bg-blue-900 hover:bg-blue-800 text-white font-medium py-2 px-4 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                    Nouvelle Partie
+                <button id="reset-btn" disabled class="w-full bg-red-900 hover:bg-red-800 text-white font-medium py-2 px-4 rounded transition-colors disabled:opacity-50">
+                    Abandonner / Recommencer
                 </button>
             </div>
 
-            <div class="bg-gray-800 border border-gray-700 rounded p-4 flex-1 flex flex-col min-h-[150px] max-h-[250px]">
-                <h2 class="text-lg font-semibold text-white border-b border-gray-700 pb-2 mb-2">Historique Interactif</h2>
+            <div class="bg-gray-800 border border-gray-700 rounded p-4 flex-1 flex flex-col min-h-[200px] max-h-[300px]">
+                <h2 class="text-lg font-semibold text-white border-b border-gray-700 pb-2 mb-2">Historique</h2>
                 <div id="pgn-history" class="text-sm font-mono overflow-y-auto flex-1 pr-2 custom-scrollbar">
-                    <span class="text-gray-500">En attente du moteur...</span>
+                    <span class="text-gray-500">En attente d'action...</span>
                 </div>
             </div>
 
         </div>
     </div>
 
-    <style>
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #1f2937; border-radius: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #4b5563; }
-    </style>
-
     <script type="module">
-        try {
-            const { Chess } = await import("https://esm.sh/chess.js@1.0.0-beta.6");
-            const { Chessboard, COLOR, INPUT_EVENT_TYPE, MARKER_TYPE } = await import("https://esm.sh/cm-chessboard@8.5.1");
+        import { Chess } from "https://esm.sh/chess.js@1.0.0-beta.6";
+        import { Chessboard, COLOR, INPUT_EVENT_TYPE, MARKER_TYPE } from "https://esm.sh/cm-chessboard@8.5.1";
 
-            const UI = {
-                status: document.getElementById('status'),
-                boardContainer: document.getElementById('board'),
-                pendingControls: document.getElementById('pending-controls'),
-                confirmMoveBtn: document.getElementById('confirm-move-btn'),
-                cancelPendingBtn: document.getElementById('cancel-pending-btn'),
-                undoBtn: document.getElementById('undo-btn'),
-                resetBtn: document.getElementById('reset-btn'),
-                history: document.getElementById('pgn-history'),
-                modeSelect: document.getElementById('mode-select'),
-                diffContainer: document.getElementById('difficulty-container'),
-                skillLevel: document.getElementById('skill-level'),
-                skillVal: document.getElementById('skill-val'),
-                analysisContainer: document.getElementById('analysis-container'),
-                evalDisplay: document.getElementById('eval-display'),
-                pvDisplay: document.getElementById('pv-display')
-            };
-            
-            let game = new Chess();
-            let board;
-            let aiWorker;
-            let currentMode = 'play';
-            let isEngineReady = false;
-            let viewIndex = -1;
-            let isPendingMove = false;
-
-            const STORAGE_KEY = 'chess_v10_state';
-
-            function updateStatus(text, type = 'normal') {
-                UI.status.innerText = text;
-                UI.status.className = "text-sm font-mono px-3 py-1 rounded border " + 
-                    (type === 'error' ? "bg-red-900 text-red-200 border-red-700" : 
-                     type === 'success' ? "bg-green-900 text-green-400 border-green-700" : 
-                     type === 'loading' ? "bg-yellow-900 text-yellow-400 border-yellow-700 animate-pulse" : 
-                     "bg-gray-800 text-gray-300 border-gray-600");
+        /**
+         * SERVICE : Gère la communication asynchrone avec Stockfish
+         */
+        class EngineService {
+            constructor(onReady, onMessage) {
+                this.isReady = false;
+                this.onReadyCallback = onReady;
+                this.onMessageCallback = onMessage;
+                this.initWorker();
             }
 
-            function saveGame() {
-                const state = {
-                    pgn: game.pgn(),
-                    mode: currentMode,
-                    skill: UI.skillLevel.value
-                };
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-            }
-
-            function loadGame() {
-                const saved = localStorage.getItem(STORAGE_KEY);
-                if (saved) {
+            initWorker() {
+                const workerCode = `
                     try {
-                        const state = JSON.parse(saved);
-                        game.loadPgn(state.pgn);
-                        viewIndex = game.history().length - 1;
-                        currentMode = state.mode || 'play';
-                        UI.modeSelect.value = currentMode;
-                        UI.skillLevel.value = state.skill || 10;
-                        UI.skillVal.innerText = UI.skillLevel.value;
-                        
-                        if (currentMode === 'analyze') {
-                            UI.diffContainer.classList.add('hidden');
-                            UI.analysisContainer.classList.remove('hidden');
-                            UI.analysisContainer.classList.add('flex');
-                        }
-                        return true;
+                        var Module = { locateFile: (path) => 'https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.0/' + path };
+                        importScripts('https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.0/stockfish.js');
+                        var engine = typeof STOCKFISH === 'function' ? STOCKFISH() : Stockfish();
+                        self.onmessage = (e) => engine.postMessage(e.data);
+                        engine.onmessage = (msg) => self.postMessage(msg);
                     } catch (e) {
-                        return false;
+                        self.postMessage('CRITICAL_ERROR:' + e.message);
                     }
-                }
-                return false;
+                `;
+                this.worker = new Worker(URL.createObjectURL(new Blob([workerCode], { type: 'application/javascript' })));
+                this.worker.onmessage = (e) => this.handleMessage(e);
+                this.send('uci');
             }
 
-            function updateHistory() {
-                const history = game.history({ verbose: true });
-                if (history.length === 0) {
-                    UI.history.innerHTML = "<span class='text-gray-500'>Aucun coup joué.</span>";
-                    if (isEngineReady) UI.undoBtn.disabled = true;
-                    viewIndex = -1;
-                    return;
-                }
-
-                if (isEngineReady) UI.undoBtn.disabled = false;
-
-                if (viewIndex >= history.length || viewIndex === -1 && history.length > 0) {
-                    viewIndex = history.length - 1;
-                }
-
-                let html = '<div class="flex flex-col gap-1">';
-                for (let i = 0; i < history.length; i += 2) {
-                    const moveNum = (i / 2) + 1;
-                    const whiteMove = history[i];
-                    const blackMove = history[i + 1];
-
-                    html += `<div class="flex items-center text-sm">`;
-                    html += `<span class="w-8 text-gray-500 font-bold">${moveNum}.</span>`;
-                    
-                    const whiteActive = viewIndex === i ? 'bg-blue-600 text-white shadow-inner' : 'bg-gray-700 hover:bg-gray-600 text-gray-300';
-                    html += `<button class="flex-1 text-center px-2 py-1 mx-1 rounded cursor-pointer transition-colors ${whiteActive}" data-index="${i}">${whiteMove.san}</button>`;
-                    
-                    if (blackMove) {
-                        const blackActive = viewIndex === i + 1 ? 'bg-blue-600 text-white shadow-inner' : 'bg-gray-700 hover:bg-gray-600 text-gray-300';
-                        html += `<button class="flex-1 text-center px-2 py-1 mx-1 rounded cursor-pointer transition-colors ${blackActive}" data-index="${i + 1}">${blackMove.san}</button>`;
-                    } else {
-                        html += `<div class="flex-1 mx-1"></div>`;
-                    }
-                    html += `</div>`;
-                }
-                html += '</div>';
-                
-                UI.history.innerHTML = html;
-                UI.history.scrollTop = UI.history.scrollHeight;
+            send(cmd) {
+                if (this.worker) this.worker.postMessage(cmd);
             }
 
-            function getCurrentViewFen() {
-                const history = game.history({ verbose: true });
-                if (history.length === 0) return game.fen();
-                if (viewIndex === -1 || viewIndex >= history.length) return history[history.length - 1].after;
-                return history[viewIndex].after;
+            stop() {
+                this.send('stop');
             }
 
-            function jumpToMove(idx) {
-                aiWorker.postMessage('stop');
-                clearPendingMove(true);
-                viewIndex = idx;
-                const fen = getCurrentViewFen();
-                board.setPosition(fen);
-                clearVisualTelemetry();
-                updateHistory();
-                setBoardInput();
-                
-                if (currentMode === 'analyze') {
-                    triggerAnalysis();
-                } else if (currentMode === 'play') {
-                    const turn = fen.split(' ')[1];
-                    if (turn === 'w') {
-                        updateStatus("À vous (Passé)", 'normal');
-                    } else {
-                        updateStatus("Coup de l'IA (Passé)", 'normal');
-                    }
-                }
+            setSkillLevel(level) {
+                this.send(`setoption name Skill Level value ${level}`);
             }
 
-            UI.history.addEventListener('click', (e) => {
-                const btn = e.target.closest('button[data-index]');
-                if (btn && isEngineReady && !isPendingMove) {
-                    jumpToMove(parseInt(btn.getAttribute('data-index'), 10));
-                }
-            });
-
-            function setBoardInput() {
-                if (!isEngineReady || isPendingMove) return;
-                const fen = getCurrentViewFen();
-                const turn = fen.split(' ')[1];
-                
-                if (currentMode === 'play') {
-                    if (turn === 'w') board.enableMoveInput(inputHandler, COLOR.white);
-                    else board.disableMoveInput();
-                } else {
-                    board.enableMoveInput(inputHandler, turn === 'w' ? COLOR.white : COLOR.black);
-                }
+            analyze(fen, depth = 15) {
+                this.stop();
+                this.send(`position fen ${fen}`);
+                this.send(`go infinite`);
             }
 
-            function clearVisualTelemetry() {
-                if (board) board.removeMarkers();
+            findBestMove(fen, movetime = 1500) {
+                this.stop();
+                this.send(`position fen ${fen}`);
+                this.send(`go movetime ${movetime}`);
             }
 
-            function clearPendingMove(revert = false) {
-                if (!isPendingMove) return;
-                isPendingMove = false;
-                UI.pendingControls.classList.add('hidden');
-                UI.pendingControls.classList.remove('flex');
-                if (revert) {
-                    game.undo();
-                    board.setPosition(getCurrentViewFen());
-                }
-                setBoardInput();
-            }
-
-            UI.confirmMoveBtn.addEventListener('click', () => {
-                if (!isPendingMove) return;
-                isPendingMove = false;
-                UI.pendingControls.classList.add('hidden');
-                UI.pendingControls.classList.remove('flex');
-                
-                viewIndex = game.history().length - 1;
-                updateHistory();
-                saveGame();
-                if (checkEndGame()) return;
-                if (currentMode === 'play') triggerAI();
-                else triggerAnalysis();
-            });
-
-            UI.cancelPendingBtn.addEventListener('click', () => {
-                clearPendingMove(true);
-            });
-
-            aiWorker = new Worker('./worker.js');
-            
-            const engineLoadTimeout = setTimeout(() => {
-                if (!isEngineReady) {
-                    updateStatus("Échec réseau : Moteur injoignable", 'error');
-                    aiWorker.terminate();
-                }
-            }, 15000);
-
-            aiWorker.postMessage('uci');
-
-            aiWorker.onmessage = function(e) {
+            handleMessage(e) {
                 const msg = typeof e.data === 'string' ? e.data : (e.data && e.data.data ? e.data.data : "");
                 if (!msg) return;
 
-                if (msg.startsWith('CRITICAL_ERROR')) {
-                    clearTimeout(engineLoadTimeout);
-                    updateStatus("Erreur fatale du moteur", 'error');
-                    return;
-                }
-
                 if (msg === 'uciok') {
-                    aiWorker.postMessage('isready');
-                    return;
+                    this.send('isready');
+                } else if (msg === 'readyok' && !this.isReady) {
+                    this.isReady = true;
+                    this.onReadyCallback();
+                } else if (this.isReady) {
+                    this.onMessageCallback(msg);
+                }
+            }
+        }
+
+        /**
+         * CONTROLLER : Centralise l'état et orchestre le modèle et la vue
+         */
+        class ChessApp {
+            constructor() {
+                this.game = new Chess();
+                this.mode = 'play'; // 'play' ou 'analyze'
+                this.viewIndex = -1;
+                this.storageKey = 'chess_pro_state';
+                
+                this.initDOM();
+                this.loadState();
+                
+                this.engine = new EngineService(
+                    () => this.onEngineReady(),
+                    (msg) => this.onEngineMessage(msg)
+                );
+            }
+
+            initDOM() {
+                this.UI = {
+                    status: document.getElementById('status-indicator'),
+                    board: document.getElementById('board'),
+                    evalBar: document.getElementById('eval-bar'),
+                    evalFill: document.getElementById('eval-fill'),
+                    evalTextTop: document.getElementById('eval-text-top'),
+                    evalTextBottom: document.getElementById('eval-text-bottom'),
+                    modeSelect: document.getElementById('mode-select'),
+                    skillLevel: document.getElementById('skill-level'),
+                    skillVal: document.getElementById('skill-val'),
+                    diffContainer: document.getElementById('difficulty-container'),
+                    pvContainer: document.getElementById('pv-container'),
+                    pvDisplay: document.getElementById('pv-display'),
+                    undoBtn: document.getElementById('undo-btn'),
+                    resetBtn: document.getElementById('reset-btn'),
+                    history: document.getElementById('pgn-history')
+                };
+
+                this.chessboard = new Chessboard(this.UI.board, {
+                    position: this.game.fen(),
+                    assetsUrl: "https://cdn.jsdelivr.net/npm/cm-chessboard@8.5.1/assets/",
+                    sprite: { url: "https://cdn.jsdelivr.net/npm/cm-chessboard@8.5.1/assets/images/chessboard-sprite.svg", cache: false },
+                    style: { cssClass: "default" }
+                });
+
+                this.attachEventListeners();
+            }
+
+            attachEventListeners() {
+                this.UI.modeSelect.addEventListener('change', (e) => this.setMode(e.target.value));
+                this.UI.skillLevel.addEventListener('input', (e) => this.UI.skillVal.innerText = e.target.value);
+                this.UI.skillLevel.addEventListener('change', (e) => {
+                    this.engine.setSkillLevel(e.target.value);
+                    this.saveState();
+                });
+                this.UI.resetBtn.addEventListener('click', () => this.resetGame());
+                this.UI.undoBtn.addEventListener('click', () => this.undoMove());
+                this.UI.history.addEventListener('click', (e) => {
+                    const btn = e.target.closest('button[data-index]');
+                    if (btn && this.engine.isReady) {
+                        this.jumpToHistory(parseInt(btn.getAttribute('data-index'), 10));
+                    }
+                });
+            }
+
+            setStatus(text, state = 'normal') {
+                this.UI.status.innerText = text;
+                const classes = {
+                    error: "bg-red-900 text-red-200 border-red-700",
+                    success: "bg-green-900 text-green-400 border-green-700",
+                    loading: "bg-yellow-900 text-yellow-400 border-yellow-700 animate-pulse",
+                    normal: "bg-gray-800 text-gray-300 border-gray-600"
+                };
+                this.UI.status.className = `text-sm font-bold px-3 py-1 rounded border ${classes[state]}`;
+            }
+
+            onEngineReady() {
+                this.UI.board.classList.remove('opacity-50');
+                this.UI.modeSelect.disabled = false;
+                this.UI.resetBtn.disabled = false;
+                this.UI.skillLevel.disabled = false;
+                this.UI.skillVal.classList.replace('text-gray-500', 'text-white');
+                
+                this.engine.setSkillLevel(this.UI.skillLevel.value);
+                this.syncView();
+            }
+
+            onEngineMessage(msg) {
+                if (this.mode === 'analyze' && msg.startsWith('info') && msg.includes('score')) {
+                    this.parseEvaluation(msg);
                 }
 
-                if (msg === 'readyok' && !isEngineReady) {
-                    isEngineReady = true;
-                    clearTimeout(engineLoadTimeout);
-                    
-                    loadGame();
+                if (this.mode === 'play' && msg.startsWith('bestmove') && this.isAtPresent()) {
+                    const match = msg.match(/^bestmove ([a-h][1-8][a-h][1-8][qrbn]?)/);
+                    if (match) this.executeMove(match[1]);
+                }
+            }
 
-                    UI.boardContainer.classList.remove('opacity-50');
-                    UI.modeSelect.disabled = false;
-                    UI.resetBtn.disabled = false;
-                    UI.skillLevel.disabled = false;
-                    UI.skillVal.classList.remove('text-gray-500');
-                    UI.skillVal.classList.add('text-white');
+            parseEvaluation(msg) {
+                const turn = this.getViewFen().split(' ')[1];
+                const multiplier = turn === 'w' ? 1 : -1;
+                
+                // Score FEN
+                const scoreMatch = msg.match(/score (cp|mate) (-?\d+)/);
+                if (scoreMatch) {
+                    const val = parseInt(scoreMatch[2], 10);
+                    let evalNum = 0;
+                    let evalText = "";
                     
-                    aiWorker.postMessage('setoption name Skill Level value ' + UI.skillLevel.value);
-                    
-                    board.setPosition(getCurrentViewFen());
-                    updateHistory();
-                    
-                    if (currentMode === 'analyze') {
-                        triggerAnalysis();
+                    if (scoreMatch[1] === 'cp') {
+                        evalNum = (val * multiplier) / 100;
+                        evalText = evalNum > 0 ? `+${evalNum.toFixed(2)}` : evalNum.toFixed(2);
                     } else {
-                        const fen = getCurrentViewFen();
-                        if (fen.split(' ')[1] === 'b' && viewIndex === game.history().length - 1) {
-                            triggerAI();
-                        } else {
-                            setBoardInput();
-                            updateStatus("Moteur prêt. À vous (Blancs)", 'success');
-                        }
+                        const mateIn = val * multiplier;
+                        evalNum = mateIn > 0 ? 100 : -100;
+                        evalText = mateIn > 0 ? `+M${mateIn}` : `-M${Math.abs(mateIn)}`;
                     }
-                    return;
+                    this.updateEvalBar(evalNum, evalText);
                 }
-
-                if (!isEngineReady) return;
-
-                if (currentMode === 'analyze' && msg.startsWith('info') && msg.includes('score')) {
-                    const fenTurn = getCurrentViewFen().split(' ')[1];
-                    const scoreMatch = msg.match(/score (cp|mate) (-?\d+)/);
-                    if (scoreMatch) {
-                        let val = parseInt(scoreMatch[2], 10);
-                        let multiplier = fenTurn === 'w' ? 1 : -1;
-                        let evalText = scoreMatch[1] === 'cp' ? ((val * multiplier) / 100).toFixed(2) : (val * multiplier > 0 ? "+M" : "-M") + Math.abs(val);
-                        UI.evalDisplay.innerText = evalText.startsWith('+') || evalText.startsWith('-') ? evalText : (evalText > 0 ? "+" + evalText : evalText);
+                
+                // Ligne principale (PV)
+                const pvMatch = msg.match(/pv (.+)/);
+                if (pvMatch) {
+                    this.UI.pvDisplay.innerText = pvMatch[1];
+                    const bestMove = pvMatch[1].trim().split(' ')[0];
+                    if (bestMove.length >= 4) {
+                        this.chessboard.removeMarkers();
+                        this.chessboard.addMarker(MARKER_TYPE.frame, bestMove.substring(0, 2));
+                        this.chessboard.addMarker(MARKER_TYPE.frame, bestMove.substring(2, 4));
                     }
+                }
+            }
+
+            updateEvalBar(score, text) {
+                // Conversion du score (centipions) en pourcentage pour la barre visuelle
+                // Limite arbitraire : +- 10 correspond à 0% ou 100%
+                let percentage = 50 + (score / 10) * 50;
+                percentage = Math.max(0, Math.min(100, percentage));
+                
+                this.UI.evalFill.style.height = `${percentage}%`;
+                
+                if (score >= 0) {
+                    this.UI.evalTextBottom.innerText = text;
+                    this.UI.evalTextTop.innerText = "";
+                } else {
+                    this.UI.evalTextTop.innerText = text;
+                    this.UI.evalTextBottom.innerText = "";
+                }
+            }
+
+            executeMove(moveStr) {
+                try {
+                    const moveObj = {
+                        from: moveStr.substring(0, 2),
+                        to: moveStr.substring(2, 4),
+                        promotion: moveStr.length > 4 ? moveStr[4] : undefined
+                    };
+                    const move = this.game.move(moveObj);
                     
-                    const pvMatch = msg.match(/pv (.+)/);
-                    if (pvMatch) {
-                        UI.pvDisplay.innerText = pvMatch[1];
-                        const pvMoves = pvMatch[1].trim().split(' ');
-                        const bestMove = pvMoves[0];
-                        if (bestMove && bestMove.length >= 4 && !isPendingMove) {
-                            const from = bestMove.substring(0, 2);
-                            const to = bestMove.substring(2, 4);
-                            clearVisualTelemetry();
-                            board.addMarker(MARKER_TYPE.frame, from);
-                            board.addMarker(MARKER_TYPE.frame, to);
-                        }
+                    if (move) {
+                        this.viewIndex = this.game.history().length - 1;
+                        this.saveState();
+                        this.syncView();
                     }
+                } catch (e) {
+                    console.error("Move execution failed", e);
                 }
-
-                if (currentMode === 'play') {
-                    const match = String(msg).match(/^bestmove ([a-h][1-8][a-h][1-8][qrbn]?)/);
-                    if (match && viewIndex === game.history().length - 1 && !isPendingMove) {
-                        const moveStr = match[1];
-                        try {
-                            game.move({ from: moveStr.substring(0, 2), to: moveStr.substring(2, 4), promotion: moveStr.length > 4 ? moveStr[4] : undefined });
-                            viewIndex = game.history().length - 1;
-                            board.setPosition(getCurrentViewFen());
-                            updateHistory();
-                            saveGame();
-                            if (!checkEndGame()) {
-                                setBoardInput();
-                                updateStatus("À vous (Blancs)", 'success');
-                            }
-                        } catch (err) {
-                            updateStatus("Erreur interne du jeu", 'error');
-                        }
-                    }
-                }
-            };
-
-            function triggerAI() {
-                updateStatus("Stockfish réfléchit...", 'normal');
-                clearVisualTelemetry();
-                board.disableMoveInput();
-                aiWorker.postMessage('position fen ' + getCurrentViewFen());
-                aiWorker.postMessage('go movetime 1500'); 
             }
 
-            function triggerAnalysis() {
-                updateStatus("Analyse continue...", 'success');
-                clearVisualTelemetry();
-                aiWorker.postMessage('stop');
-                aiWorker.postMessage('position fen ' + getCurrentViewFen());
-                aiWorker.postMessage('go infinite');
-                setBoardInput();
-            }
-
-            function checkEndGame() {
-                if (game.isCheckmate()) { updateStatus("Échec et mat.", 'error'); aiWorker.postMessage('stop'); return true; }
-                if (game.isDraw() || game.isStalemate() || game.isThreefoldRepetition()) { updateStatus("Match nul.", 'normal'); aiWorker.postMessage('stop'); return true; }
-                return false;
-            }
-
-            function inputHandler(event) {
+            handleUserInput(event) {
                 if (event.type === INPUT_EVENT_TYPE.moveInputFinished) {
                     try {
-                        const histLen = game.history().length;
-                        if (viewIndex >= 0 && viewIndex < histLen - 1) {
-                            const truncCount = (histLen - 1) - viewIndex;
-                            for(let i=0; i < truncCount; i++) game.undo();
+                        // Troncature du futur si on joue depuis le passé
+                        const histLen = this.game.history().length;
+                        if (this.viewIndex >= 0 && this.viewIndex < histLen - 1) {
+                            const truncCount = (histLen - 1) - this.viewIndex;
+                            for(let i=0; i < truncCount; i++) this.game.undo();
                         }
 
                         let move = null;
-                        try {
-                            move = game.move({ from: event.squareFrom, to: event.squareTo });
-                        } catch (e) {
-                            try {
-                                move = game.move({ from: event.squareFrom, to: event.squareTo, promotion: 'q' });
-                            } catch (err) {
-                                return false;
-                            }
+                        try { move = this.game.move({ from: event.squareFrom, to: event.squareTo }); } 
+                        catch (e) {
+                            try { move = this.game.move({ from: event.squareFrom, to: event.squareTo, promotion: 'q' }); } 
+                            catch (err) { return false; }
                         }
 
                         if (move) {
-                            isPendingMove = true;
-                            board.setPosition(getCurrentViewFen());
-                            clearVisualTelemetry();
-                            board.disableMoveInput();
-                            UI.pendingControls.classList.remove('hidden');
-                            UI.pendingControls.classList.add('flex');
+                            this.viewIndex = this.game.history().length - 1;
+                            this.saveState();
+                            this.syncView();
                             return true;
                         }
                         return false;
-                    } catch (e) { 
-                        return false; 
-                    }
+                    } catch (e) { return false; }
                 }
                 return true;
             }
 
-            UI.modeSelect.addEventListener('change', (e) => {
-                currentMode = e.target.value;
-                aiWorker.postMessage('stop');
-                clearPendingMove(true);
-                clearVisualTelemetry();
+            syncView() {
+                const fen = this.getViewFen();
+                this.chessboard.setPosition(fen);
+                this.chessboard.removeMarkers();
+                this.renderHistory();
+                this.checkGameStatus();
+                this.updatePermissions(fen);
+            }
+
+            updatePermissions(fen) {
+                const turn = fen.split(' ')[1];
                 
-                viewIndex = game.history().length - 1;
-                board.setPosition(getCurrentViewFen());
-                updateHistory();
-                saveGame();
-                
-                if (currentMode === 'analyze') {
-                    UI.diffContainer.classList.add('hidden');
-                    UI.analysisContainer.classList.remove('hidden');
-                    UI.analysisContainer.classList.add('flex');
-                    triggerAnalysis();
+                if (this.mode === 'play') {
+                    if (turn === 'w' && this.isAtPresent()) {
+                        this.chessboard.enableMoveInput((e) => this.handleUserInput(e), COLOR.white);
+                        this.setStatus("À vous (Blancs)", 'success');
+                    } else if (turn === 'b' && this.isAtPresent()) {
+                        this.chessboard.disableMoveInput();
+                        this.setStatus("Stockfish réfléchit...", 'normal');
+                        this.engine.findBestMove(fen);
+                    } else {
+                        this.chessboard.disableMoveInput();
+                        this.setStatus("Vue Historique", 'normal');
+                    }
                 } else {
-                    UI.diffContainer.classList.remove('hidden');
-                    UI.analysisContainer.classList.add('hidden');
-                    UI.analysisContainer.classList.remove('flex');
-                    aiWorker.postMessage('setoption name Skill Level value ' + UI.skillLevel.value);
-                    if (getCurrentViewFen().split(' ')[1] === 'b') triggerAI();
-                    else setBoardInput();
+                    this.chessboard.enableMoveInput((e) => this.handleUserInput(e), turn === 'w' ? COLOR.white : COLOR.black);
+                    this.setStatus("Analyse...", 'success');
+                    this.engine.analyze(fen);
                 }
-            });
+            }
 
-            UI.skillLevel.addEventListener('input', (e) => { UI.skillVal.innerText = e.target.value; });
-            UI.skillLevel.addEventListener('change', (e) => { 
-                aiWorker.postMessage('setoption name Skill Level value ' + e.target.value); 
-                saveGame();
-            });
+            checkGameStatus() {
+                if (this.game.isCheckmate()) {
+                    this.setStatus("Échec et mat.", 'error');
+                    this.engine.stop();
+                } else if (this.game.isDraw() || this.game.isStalemate() || this.game.isThreefoldRepetition()) {
+                    this.setStatus("Match nul.", 'normal');
+                    this.engine.stop();
+                }
+            }
 
-            UI.resetBtn.addEventListener('click', () => { 
-                aiWorker.postMessage('stop'); 
-                clearPendingMove(false);
-                game.reset(); 
-                viewIndex = -1;
-                localStorage.removeItem(STORAGE_KEY);
-                clearVisualTelemetry();
-                board.setPosition(game.fen()); 
-                updateHistory(); 
-                if (currentMode === 'play') { 
-                    updateStatus("À vous (Blancs)", 'success'); 
-                    setBoardInput(); 
-                } else { 
-                    triggerAnalysis(); 
-                } 
-            });
+            setMode(newMode) {
+                this.mode = newMode;
+                this.engine.stop();
+                this.viewIndex = this.game.history().length - 1;
+                
+                if (this.mode === 'analyze') {
+                    this.UI.diffContainer.classList.add('hidden');
+                    this.UI.pvContainer.classList.remove('hidden');
+                    this.UI.pvContainer.classList.add('flex');
+                    this.UI.evalBar.classList.remove('hidden');
+                } else {
+                    this.UI.diffContainer.classList.remove('hidden');
+                    this.UI.pvContainer.classList.add('hidden');
+                    this.UI.pvContainer.classList.remove('flex');
+                    this.UI.evalBar.classList.add('hidden');
+                }
+                
+                this.saveState();
+                this.syncView();
+            }
 
-            UI.undoBtn.addEventListener('click', () => { 
-                if (isPendingMove) {
-                    clearPendingMove(true);
+            undoMove() {
+                if (this.game.history().length === 0) return;
+                this.engine.stop();
+                
+                this.game.undo();
+                if (this.mode === 'play' && this.game.turn() === 'b') {
+                    this.game.undo(); // Annuler IA + Joueur
+                }
+                
+                this.viewIndex = this.game.history().length - 1;
+                this.saveState();
+                this.syncView();
+            }
+
+            resetGame() {
+                this.engine.stop();
+                this.game.reset();
+                this.viewIndex = -1;
+                localStorage.removeItem(this.storageKey);
+                this.updateEvalBar(0, "0.0");
+                this.UI.pvDisplay.innerText = "...";
+                this.syncView();
+            }
+
+            jumpToHistory(idx) {
+                this.engine.stop();
+                this.viewIndex = idx;
+                this.updateEvalBar(0, "");
+                this.UI.pvDisplay.innerText = "...";
+                this.syncView();
+            }
+
+            renderHistory() {
+                const history = this.game.history({ verbose: true });
+                this.UI.undoBtn.disabled = history.length === 0 || !this.engine.isReady;
+
+                if (history.length === 0) {
+                    this.UI.history.innerHTML = "<span class='text-gray-500'>Aucun mouvement.</span>";
                     return;
                 }
-                if (game.history().length === 0) return; 
-                aiWorker.postMessage('stop'); 
-                
-                game.undo(); 
-                if (currentMode === 'play' && game.turn() === 'b') game.undo(); 
-                
-                viewIndex = game.history().length - 1;
-                clearVisualTelemetry();
-                board.setPosition(getCurrentViewFen()); 
-                updateHistory(); 
-                saveGame();
-                
-                if (currentMode === 'play') { 
-                    updateStatus("À vous (Blancs)", 'success'); 
-                    setBoardInput(); 
-                } else { 
-                    triggerAnalysis(); 
-                } 
-            });
 
-            board = new Chessboard(document.getElementById("board"), {
-                position: game.fen(),
-                assetsUrl: "https://cdn.jsdelivr.net/npm/cm-chessboard@8.5.1/assets/",
-                sprite: { url: "https://cdn.jsdelivr.net/npm/cm-chessboard@8.5.1/assets/images/chessboard-sprite.svg", cache: false },
-                style: { cssClass: "default" }
-            });
+                let html = '<div class="flex flex-col gap-1">';
+                for (let i = 0; i < history.length; i += 2) {
+                    const num = (i / 2) + 1;
+                    const w = history[i];
+                    const b = history[i + 1];
+                    
+                    const wClass = this.viewIndex === i ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600 text-gray-300';
+                    const bClass = this.viewIndex === i + 1 ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600 text-gray-300';
 
-        } catch (error) {
-            console.error(error);
+                    html += `
+                        <div class="flex items-center text-sm">
+                            <span class="w-8 text-gray-500 font-bold">${num}.</span>
+                            <button class="flex-1 text-center px-2 py-1 mx-1 rounded ${wClass}" data-index="${i}">${w.san}</button>
+                            ${b ? `<button class="flex-1 text-center px-2 py-1 mx-1 rounded ${bClass}" data-index="${i + 1}">${b.san}</button>` : '<div class="flex-1 mx-1"></div>'}
+                        </div>`;
+                }
+                html += '</div>';
+                
+                this.UI.history.innerHTML = html;
+                this.UI.history.scrollTop = this.UI.history.scrollHeight;
+            }
+
+            getViewFen() {
+                const hist = this.game.history({ verbose: true });
+                if (hist.length === 0 || this.viewIndex === -1) return this.game.fen();
+                return hist[this.viewIndex].after;
+            }
+
+            isAtPresent() {
+                return this.viewIndex === this.game.history().length - 1 || this.viewIndex === -1 && this.game.history().length === 0;
+            }
+
+            saveState() {
+                const state = { pgn: this.game.pgn(), mode: this.mode, skill: this.UI.skillLevel.value };
+                localStorage.setItem(this.storageKey, JSON.stringify(state));
+            }
+
+            loadState() {
+                const saved = localStorage.getItem(this.storageKey);
+                if (saved) {
+                    try {
+                        const state = JSON.parse(saved);
+                        this.game.loadPgn(state.pgn);
+                        this.viewIndex = this.game.history().length - 1;
+                        this.UI.skillLevel.value = state.skill || 10;
+                        this.setMode(state.mode || 'play');
+                        this.UI.modeSelect.value = this.mode;
+                    } catch (e) {
+                        console.error("State load error", e);
+                    }
+                }
+            }
         }
+
+        // Lancement de l'application
+        window.addEventListener('DOMContentLoaded', () => {
+            try {
+                new ChessApp();
+            } catch (e) {
+                console.error("Initialization Failed", e);
+            }
+        });
     </script>
 </body>
 </html>
