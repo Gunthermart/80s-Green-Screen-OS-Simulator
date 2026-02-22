@@ -434,17 +434,31 @@
     <!-- SITREP MODAL -->
     <div id="modal-sitrep" class="modal-overlay" data-action="closeModals">
         <div class="modal-box bg-[#0f172a] border border-blue-900/50 w-full max-w-lg" onclick="event.stopPropagation()">
-            <div class="p-4 border-b border-white/10 flex justify-between items-center bg-[#0b1120]">
+            <div class="p-4 border-b border-white/10 flex justify-between items-center bg-[#0b1120] shrink-0">
                 <div class="flex items-center gap-2"><div class="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div><span class="text-xs font-black text-white uppercase tracking-widest">SITUATION REPORT</span></div>
                 <button data-action="closeModals" class="text-slate-400 hover:text-white">✕</button>
             </div>
-            <div class="flex border-b border-white/5">
+            
+            <!-- MORNING BRIEFING & DEBRIEFING -->
+            <div class="p-4 bg-blue-900/10 border-b border-blue-500/20 shrink-0">
+                 <div class="flex gap-2">
+                     <button data-action="generateBriefing" id="btn-briefing" class="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white text-[10px] md:text-xs font-bold rounded uppercase tracking-widest transition-colors flex items-center justify-center gap-1 md:gap-2 shadow-lg shadow-blue-900/20">
+                         <span class="text-sm md:text-base">🤖</span> BRIEFING <span class="hidden md:inline">(MATIN)</span>
+                     </button>
+                     <button data-action="generateDebriefing" id="btn-debriefing" class="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] md:text-xs font-bold rounded uppercase tracking-widest transition-colors flex items-center justify-center gap-1 md:gap-2 shadow-lg shadow-indigo-900/20">
+                         <span class="text-sm md:text-base">🌙</span> DEBRIEF <span class="hidden md:inline">(SOIR)</span>
+                     </button>
+                 </div>
+                 <div id="sitrep-briefing-container" class="hidden mt-3 p-4 bg-[#0b1120] rounded border border-white/5 text-xs text-slate-300 leading-relaxed font-sans shadow-inner"></div>
+            </div>
+
+            <div class="flex border-b border-white/5 bg-[#0b1120] shrink-0">
                 <button class="sitrep-tab-btn active" data-action="switchSitrepTab" data-tab="tags">Index Tactique</button>
                 <button class="sitrep-tab-btn" data-action="switchSitrepTab" data-tab="time">TimeKeeper</button>
                 <button class="sitrep-tab-btn" data-action="switchSitrepTab" data-tab="missions">Missions</button>
             </div>
-            <div id="sitrep-content" class="p-4 overflow-y-auto custom-scrollbar h-[50vh] space-y-4"></div>
-            <div id="sitrep-footer" class="hidden p-3 bg-[#0b1120] border-t border-white/5 text-[11px] text-slate-400 font-mono">Syntaxe: <span class="text-amber-400">!demain</span>, <span class="text-amber-400">!lundi</span>, <span class="text-amber-400">!25-12</span></div>
+            <div id="sitrep-content" class="p-4 overflow-y-auto custom-scrollbar h-[40vh] space-y-4"></div>
+            <div id="sitrep-footer" class="hidden p-3 bg-[#0b1120] border-t border-white/5 text-[11px] text-slate-400 font-mono shrink-0">Syntaxe: <span class="text-amber-400">!demain</span>, <span class="text-amber-400">!lundi</span>, <span class="text-amber-400">!25-12</span></div>
         </div>
     </div>
 
@@ -928,12 +942,12 @@ Plan de Trade tactique :
                 async createPage(title, content) { await this.db.pages.add({ title, content, updated: Date.now() }); },
                 async updatePage(id, content) { await this.db.pages.update(parseInt(id), { content, updated: Date.now() }); },
                 async deletePage(id) { await this.db.pages.delete(parseInt(id)); },
-                async saveAttachment(file) { const id = await this.db.attachments.add({ name: file.name, type: file.type, data: file, created: Date.now() }); this.manager.updateUsage(); return id; },
-                async getAttachment(id) { return await this.db.attachments.get(parseInt(id)); },
-                async nuke() { await this.db.delete(); location.reload(); },
-                async loadMacros() { const s = await this.db.macros.toArray(); if(s.length===0) await this.db.macros.bulkPut(Object.entries(CONFIG.MACROS_DEFAULT).map(([k,v])=>({trigger:k,content:v}))); else { const m={}; s.forEach(x=>m[x.trigger]=x.content); State.macros=m; } },
-                async addMacro(t,c) { await this.db.macros.put({trigger:t,content:c}); await this.loadMacros(); },
-                async removeMacro(t) { await this.db.macros.delete(t); await this.loadMacros(); }
+                async saveAttachment(file) { const id = await Storage.db.attachments.add({ name: file.name, type: file.type, data: file, created: Date.now() }); this.manager.updateUsage(); return id; },
+                async getAttachment(id) { return await Storage.db.attachments.get(parseInt(id)); },
+                async nuke() { await Storage.db.delete(); location.reload(); },
+                async loadMacros() { const s = await Storage.db.macros.toArray(); if(s.length===0) await Storage.db.macros.bulkPut(Object.entries(CONFIG.MACROS_DEFAULT).map(([k,v])=>({trigger:k,content:v}))); else { const m={}; s.forEach(x=>m[x.trigger]=x.content); State.macros=m; } },
+                async addMacro(t,c) { await Storage.db.macros.put({trigger:t,content:c}); await this.loadMacros(); },
+                async removeMacro(t) { await Storage.db.macros.delete(t); await this.loadMacros(); }
             };
 
             const Renderer = {
@@ -1004,6 +1018,47 @@ Plan de Trade tactique :
                     { id: 'cmd_help', title: 'Manuel Opérationnel', desc: 'Ouvrir l\'aide', icon: '❓', action: 'openHelp', keys: 'aide,help,manuel,tuto,>aide' },
                     { id: 'cmd_attach', title: 'Joindre PDF', desc: 'Attacher un document à la note', icon: '📎', action: 'triggerAttach', keys: 'joindre,attach,pdf,fichier,>joindre' },
                 ],
+                
+                // --- GEMINI API INTEGRATION ---
+                async callGemini(userQuery) {
+                    let apiKey = ""; // Fallback pour l'environnement de développement
+                    try {
+                        const res = await fetch('/.netlify/functions/GetAgenDataAPIKey');
+                        if (res.ok) {
+                            const textData = await res.text();
+                            try { 
+                                const json = JSON.parse(textData); 
+                                apiKey = json.AgenDataAPIKey || json.apiKey || textData; 
+                            } catch(err) { 
+                                apiKey = textData.trim(); // Cas où le texte brut est retourné
+                            }
+                        }
+                    } catch(e) { console.warn("Liaison Netlify ignorée (Mode local)"); }
+
+                    const systemPrompt = "Tu es NoteLogic Intelligence, un analyste tactique expert. Analyse le texte fourni. Tu DOIS générer une réponse en HTML léger (strictement AUCUN markdown) contenant DEUX éléments : 1. Les points clés ultra-synthétiques sous forme de liste à puces avec <ul class='list-disc pl-5 space-y-1 text-slate-300 mb-2'> et <li>. 2. Une proposition de 3 à 5 tags pertinents (formatés ainsi: [TAG]) encapsulés dans une <div class='flex flex-wrap gap-2 text-[11px] font-mono font-bold text-purple-400 mt-2 pt-2 border-t border-white/10'>. Sois direct, opérationnel, sans aucune phrase d'introduction ou de conclusion.";
+                    
+                    let delay = 1000;
+                    for (let i = 0; i < 5; i++) {
+                        try {
+                            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    contents: [{ parts: [{ text: userQuery }] }],
+                                    systemInstruction: { parts: [{ text: systemPrompt }] }
+                                })
+                            });
+                            if (!response.ok) throw new Error("API Failure");
+                            const result = await response.json();
+                            return result.candidates?.[0]?.content?.parts?.[0]?.text || "Erreur lors de la génération du contenu.";
+                        } catch (err) {
+                            if (i === 4) throw err;
+                            await new Promise(r => setTimeout(r, delay));
+                            delay *= 2;
+                        }
+                    }
+                },
+
                 async sitrep(tab = 'tags') {
                     const contentDiv = document.getElementById('sitrep-content'); const footerDiv = document.getElementById('sitrep-footer'); const tabs = document.querySelectorAll('.sitrep-tab-btn');
                     tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tab)); contentDiv.innerHTML = '';
@@ -1011,87 +1066,69 @@ Plan de Trade tactique :
                     if(tab === 'tags') {
                         footerDiv.classList.add('hidden'); 
                         const tagMap = {}; 
-                        const orphans = []; // Array for dead drops
+                        const orphans = []; 
                         const tagRegex = /\[([a-zA-Z0-9\u00C0-\u00FF\s_\-'’]+)\]/g;
-                        const dateRegex = /!([a-zA-Z0-9\+\-\/]+)/g;
 
                         pages.forEach(page => { 
                             const div = document.createElement('div'); div.innerHTML = page.content; div.querySelectorAll('.ai-insight-panel').forEach(el => el.remove()); const text = div.innerText; 
-                            
                             let hasTags = false;
                             let match; 
-                            
-                            // Check for tags
                             while ((match = tagRegex.exec(text)) !== null) { 
                                 const tag = match[1]; 
                                 if (tag.match(/^(\d+(?:px|%|rem|em)|#[0-9a-f]+)$/)) continue; 
-                                
                                 hasTags = true;
                                 if (!tagMap[tag]) tagMap[tag] = []; 
                                 if (!tagMap[tag].find(p => p.pageId === page.id)) tagMap[tag].push({ pageId: page.id, title: page.title, updated: page.updated }); 
                             }
-                            
-                            // Check for dates (simple regex check is enough for boolean)
-                            const hasDates = /!([a-zA-Z0-9\+\-\/]+)/.test(text);
-
-                            if (!hasTags && !hasDates && !page.encrypted) {
-                                orphans.push(page);
-                            }
+                            if (!hasTags && !/!([a-zA-Z0-9\+\-\/]+)/.test(text) && !page.encrypted) orphans.push(page);
                         });
 
-                        // Rendering
-                        let html = '';
-                        
-                        // 1. Render Orphans First
+                        // 🧠 AJOUT DE L'INTERFACE NEXUS INSIGHTS ET SYNERGIES
+                        let html = `
+                            <div class="mb-6">
+                                <div class="flex gap-2">
+                                    <button data-action="generateNexusInsights" id="btn-nexus-insights" class="flex-1 py-2 bg-purple-900/20 hover:bg-purple-800/40 text-purple-400 border border-purple-500/20 text-xs font-bold rounded uppercase tracking-widest transition-colors flex items-center justify-center gap-1 shadow-lg shadow-purple-900/10">
+                                        <span class="text-sm">🧠</span> INSIGHTS
+                                    </button>
+                                    <button data-action="generateNexusSynergies" id="btn-nexus-synergies" class="flex-1 py-2 bg-amber-900/20 hover:bg-amber-800/40 text-amber-400 border border-amber-500/20 text-xs font-bold rounded uppercase tracking-widest transition-colors flex items-center justify-center gap-1 shadow-lg shadow-amber-900/10" title="Pensée latérale et croisement d'idées">
+                                        <span class="text-sm">⚡</span> SYNERGIES
+                                    </button>
+                                </div>
+                                <div id="sitrep-nexus-insights-container" class="hidden mt-3 p-4 bg-[#0b1120] rounded border border-purple-500/20 text-xs text-slate-300 leading-relaxed font-sans shadow-inner"></div>
+                                <div id="sitrep-nexus-synergies-container" class="hidden mt-3 p-4 bg-[#0b1120] rounded border border-amber-500/20 text-xs text-slate-300 leading-relaxed font-sans shadow-inner"></div>
+                            </div>
+                        `;
+
                         if (orphans.length > 0) {
                             const orphanHtml = orphans.map(i => `<div class="sitrep-item" style="border-left: 3px solid #ef4444; background: rgba(239, 68, 68, 0.05);" data-action="openPage" data-id="${i.id}"><span class="sitrep-page-title pointer-events-none text-red-300">${i.title}</span><span class="sitrep-source pointer-events-none text-red-400">ORPHELIN</span></div>`).join('');
                             html += `<div class="sitrep-group" style="border-color: rgba(239, 68, 68, 0.3);"><div class="sitrep-group-title" style="background: rgba(239, 68, 68, 0.1); color: #fca5a5;"><span>⚠️ NON-CLASSÉ</span><span class="text-red-500">${orphans.length}</span></div><div>${orphanHtml}</div></div>`;
                         }
 
-                        // --- HEATMAP LOGIC START ---
                         const now = Date.now();
-                        const hotThreshold = 48 * 60 * 60 * 1000; // 48h in ms
-
-                        // Helper to get most recent updated time for a tag
-                        const getFreshness = (tag) => {
-                            return Math.max(...tagMap[tag].map(p => p.updated));
-                        };
-
-                        // Sort tags by freshness (descending) instead of alphabetical
+                        const hotThreshold = 48 * 60 * 60 * 1000;
+                        const getFreshness = (tag) => Math.max(...tagMap[tag].map(p => p.updated));
                         const sortedTags = Object.keys(tagMap).sort((a, b) => getFreshness(b) - getFreshness(a));
 
                         if (sortedTags.length === 0 && orphans.length === 0) { 
-                            contentDiv.innerHTML = '<div class="p-8 text-center text-slate-400 text-sm italic">Aucun index détecté.</div>'; 
+                            contentDiv.innerHTML = html + '<div class="p-8 text-center text-slate-400 text-sm italic">Aucun index détecté.</div>'; 
                         } else { 
                             sortedTags.forEach(tag => { 
                                 const items = tagMap[tag]; 
-                                // Sort items within tag by update time as well
                                 items.sort((a,b) => b.updated - a.updated);
-
                                 const lastActive = getFreshness(tag);
                                 const isHot = (now - lastActive) < hotThreshold;
-
-                                let groupStyle = '';
-                                let titleStyle = '';
-                                let countClass = 'text-blue-500/50';
-                                let hotIcon = '';
-
+                                let groupStyle = '', titleStyle = '', countClass = 'text-blue-500/50', hotIcon = '';
                                 if (isHot) {
-                                    groupStyle = 'border-color: rgba(251, 191, 36, 0.3);'; // Amber border
-                                    titleStyle = 'background: rgba(251, 191, 36, 0.1); color: #fbbf24;'; // Amber bg/text
+                                    groupStyle = 'border-color: rgba(251, 191, 36, 0.3);';
+                                    titleStyle = 'background: rgba(251, 191, 36, 0.1); color: #fbbf24;';
                                     countClass = 'text-amber-500';
                                     hotIcon = ' <span class="animate-pulse ml-1 text-amber-500">🔥</span>';
-                                } else {
-                                     // Default blue style handled by CSS, but we can be explicit if needed
                                 }
-
                                 const itemsHtml = items.map(i => `<div class="sitrep-item" data-action="openPage" data-id="${i.pageId}"><span class="sitrep-page-title pointer-events-none">${i.title}</span><span class="sitrep-source pointer-events-none">${Engine.utils.formatDate(i.updated)}</span></div>`).join(''); 
-                                
                                 html += `<div class="sitrep-group" style="${groupStyle}"><div class="sitrep-group-title" style="${titleStyle}"><span>[${tag}]${hotIcon}</span><span class="${countClass}">${items.length}</span></div><div>${itemsHtml}</div></div>`; 
                             }); 
                             contentDiv.innerHTML = html; 
                         }
-                        // --- HEATMAP LOGIC END ---
                     } else if (tab === 'time') {
                         footerDiv.classList.remove('hidden'); const reminders = []; const today = new Date(); today.setHours(0,0,0,0);
                         pages.forEach(page => { if (page.encrypted) return; const div = document.createElement('div'); div.innerHTML = page.content; const text = div.innerText; const regex = /!([a-zA-Z0-9\+\-\/]+)/g; let match; while ((match = regex.exec(text)) !== null) { const date = TimeEngine.parse(match[1], page.updated); if(date) { const checkDate = new Date(date); checkDate.setHours(0,0,0,0); reminders.push({ id: page.id, title: page.title, date: date, tag: match[0], isOverdue: checkDate < today }); } } });
@@ -1121,31 +1158,350 @@ Plan de Trade tactique :
                     }
                     document.getElementById('modal-sitrep').style.display = 'flex';
                 },
-                extract() {
-                     const btn = document.getElementById('ai-trigger'); const label = document.getElementById('ai-label'); const pulse = document.getElementById('ai-pulse'); pulse.classList.add('bg-blue-400', 'shadow-[0_0_10px_#60a5fa]'); label.textContent = "ANALYSE STRATÉGIQUE..."; label.classList.add('text-blue-300');
-                     setTimeout(() => {
-                         const editor = document.getElementById('main-editor'); const existing = editor.querySelector('.ai-insight-panel'); if(existing) existing.remove();
-                         const text = editor.innerText.trim(); if(!text || text.length < 10) { pulse.classList.remove('bg-blue-400', 'shadow-[0_0_10px_#60a5fa]'); label.textContent = "SYSTEM.READY"; label.classList.remove('text-blue-300'); Renderer.toast("DONNÉES INSUFFISANTES"); return; }
-                         const lines = text.split('\n').filter(l => l.trim().length > 0); const tagRegex = /\[([a-zA-Z0-9\u00C0-\u00FF\s_\-'’]+)\]/g; const timeRegex = /!([a-zA-Z0-9\+\-\/]+)/g;
-                         const synthesis = lines.slice(0, 2).join(' ').substring(0, 150) + (lines[0].length > 150 ? '...' : '.');
-                         let architecture = []; lines.forEach(l => { if(l.trim().startsWith('-') || l.trim().startsWith('•') || l.match(/^\d+\./)) architecture.push(l.trim()); }); if(architecture.length === 0) architecture = lines.slice(2, 5); if(architecture.length === 0) architecture = ["Structure narrative linéaire non-identifiée."];
-                         let keyPoints = []; const tags = [...text.matchAll(tagRegex)].map(m => m[0]); const times = [...text.matchAll(timeRegex)].map(m => m[0]); const money = text.match(/\d+[\s]?(€|\$|eur|usd)/gi) || []; if(tags.length) keyPoints.push(`Indexation: ${tags.join(' ')}`); if(times.length) keyPoints.push(`Échéances: ${times.join(' ')}`); if(money.length) keyPoints.push(`Impact Financier: ${money.join(', ')}`); lines.forEach(l => { if(l.match(/important|urgent|critique|cible|stratégie/i)) keyPoints.push(l.trim()); }); if(keyPoints.length === 0) keyPoints.push("Aucun marqueur tactique explicite détecté.");
-                         let weaknesses = []; if(text.length < 200) weaknesses.push("Volume de données faible pour une analyse robuste."); if(!tags.length) weaknesses.push("Absence totale d'indexation [TAGS]."); if(!times.length) weaknesses.push("Aucune temporalité définie (!date)."); if(weaknesses.length === 0) weaknesses.push("Aucune incohérence majeure détectée.");
-                         const panelHtml = `<div class="ai-insight-panel select-none mb-6 border-l-2 border-blue-500 rounded bg-[#0f172a] font-mono text-xs" contenteditable="false"><div class="flex justify-between items-center p-2 border-b border-white/5 bg-white/5"><div class="flex items-center gap-2"><div class="w-2 h-2 bg-blue-500 rounded-sm"></div><span class="font-black text-blue-400 tracking-widest uppercase">Analyse Stratégique</span></div><button onclick="this.closest('.ai-insight-panel').remove();" class="text-slate-400 hover:text-red-400">✕</button></div><div class="p-4 space-y-4 text-slate-300"><div><h4 class="text-blue-500 font-bold uppercase mb-1">1. Synthèse Conceptuelle</h4><p class="leading-relaxed opacity-80">${synthesis}</p></div><div><h4 class="text-purple-400 font-bold uppercase mb-1">2. Architecture des Idées</h4><ul class="list-none space-y-1 opacity-80 pl-2 border-l border-white/10">${architecture.slice(0,3).map(i => `<li>${i}</li>`).join('')}</ul></div><div><h4 class="text-emerald-400 font-bold uppercase mb-1">3. Points Clés Stratégiques</h4><ul class="list-disc list-inside space-y-1 opacity-80">${keyPoints.slice(0,4).map(k => `<li>${k}</li>`).join('')}</ul></div><div><h4 class="text-red-400 font-bold uppercase mb-1">4. Angles Morts / Faiblesses</h4><ul class="list-none space-y-1 text-red-300/70 italic">${weaknesses.map(w => `<li>⚠ ${w}</li>`).join('')}</ul></div></div></div>`;
-                         editor.insertAdjacentHTML('afterbegin', panelHtml); Storage.saveDraft(editor.innerHTML); pulse.classList.remove('bg-blue-400', 'shadow-[0_0_10px_#60a5fa]'); label.textContent = "ANALYSE TERMINÉE"; label.classList.remove('text-blue-300'); Renderer.toast("RAPPORT GÉNÉRÉ");
-                     }, 800);
+
+                async extract() {
+                    const btn = document.getElementById('ai-trigger'); 
+                    const label = document.getElementById('ai-label'); 
+                    const pulse = document.getElementById('ai-pulse'); 
+                    
+                    const editor = document.getElementById('main-editor'); 
+                    const text = editor.innerText.trim(); 
+                    if(!text || text.length < 10) { Renderer.toast("DONNÉES INSUFFISANTES"); return; }
+
+                    pulse.classList.add('bg-blue-400', 'shadow-[0_0_10px_#60a5fa]'); 
+                    label.textContent = "RÉFLEXION EN COURS..."; 
+                    label.classList.add('text-blue-300');
+
+                    try {
+                        const aiResponse = await this.callGemini(text);
+                        
+                        // Suppression d'un ancien panel si présent
+                        const existing = editor.querySelector('.ai-insight-panel'); 
+                        if(existing) existing.remove();
+
+                        const panelHtml = `
+                            <div class="ai-insight-panel select-none mb-4 border-l-2 border-blue-500 rounded bg-[#0f172a] font-mono text-xs" contenteditable="false">
+                                <div class="flex justify-between items-center p-2 border-b border-white/5 bg-white/5">
+                                    <div class="flex items-center gap-2">
+                                        <div class="w-2 h-2 bg-blue-500 rounded-sm"></div>
+                                        <span class="font-black text-blue-400 tracking-widest uppercase">Points clefs et indexs</span>
+                                    </div>
+                                    <button onclick="this.closest('.ai-insight-panel').remove();" class="text-slate-400 hover:text-red-400">✕</button>
+                                </div>
+                                <div class="p-3 text-slate-300 space-y-1 leading-snug">
+                                    ${aiResponse}
+                                </div>
+                            </div>`;
+                            
+                        editor.insertAdjacentHTML('afterbegin', panelHtml); 
+                        Storage.saveDraft(editor.innerHTML);
+                        Renderer.toast("ANALYSE GEMINI TERMINÉE");
+                    } catch (err) {
+                        console.error(err);
+                        Renderer.toast("ERREUR DE LIAISON IA");
+                    } finally {
+                        pulse.classList.remove('bg-blue-400', 'shadow-[0_0_10px_#60a5fa]'); 
+                        label.textContent = "SYSTEM.READY"; 
+                        label.classList.remove('text-blue-300');
+                    }
                 },
+
+                async generateBriefing() {
+                    const btn = document.getElementById('btn-briefing');
+                    const container = document.getElementById('sitrep-briefing-container');
+                    if(btn.disabled) return;
+                    
+                    btn.disabled = true;
+                    btn.innerHTML = `<div class="w-3 h-3 bg-white rounded-full animate-pulse"></div> ANALYSE EN COURS...`;
+                    container.classList.remove('hidden');
+                    container.innerHTML = `<div class="flex items-center gap-2 text-blue-400 font-mono text-[10px] uppercase tracking-widest"><div class="w-1.5 h-1.5 bg-blue-500 animate-ping rounded-full"></div> Synchronisation des données tactiques...</div>`;
+
+                    try {
+                        const pages = await Storage.getPages();
+                        let taskList = [], reminderList = [];
+                        const today = new Date(); today.setHours(0,0,0,0);
+                        
+                        pages.forEach(p => {
+                            if(p.encrypted) return;
+                            const div = document.createElement('div'); div.innerHTML = p.content;
+                            
+                            // Extraction des tâches en attente
+                            div.querySelectorAll('.task-box:not([checked])').forEach(t => {
+                                let taskText = ""; let curr = t.nextSibling;
+                                while(curr && curr.tagName !== 'BR' && curr.tagName !== 'DIV') { taskText += curr.textContent; curr = curr.nextSibling; }
+                                if(taskText.trim()) taskList.push(`- [${p.title}] ${taskText.trim()}`);
+                            });
+                            
+                            // Extraction des rappels à venir (sur 7 jours max)
+                            const text = div.innerText;
+                            const regex = /!([a-zA-Z0-9\+\-\/]+)/g; let match;
+                            while((match = regex.exec(text)) !== null) {
+                                const d = TimeEngine.parse(match[1], p.updated);
+                                if(d && d.getTime() >= today.getTime() && d.getTime() <= today.getTime() + 7*86400000) {
+                                    reminderList.push(`- [${p.title}] échéance ${match[0]} (${TimeEngine.format(d)})`);
+                                }
+                            }
+                        });
+                        
+                        const recent = pages.filter(p => !p.encrypted).slice(0, 5).map(p => `- ${p.title}`).join('\n');
+                        const tasksContext = taskList.slice(0, 15).join('\n') || "Aucune tâche en attente.";
+                        const remindersContext = reminderList.slice(0, 10).join('\n') || "Aucun rappel imminent.";
+
+                        const prompt = `Tu es NoteLogic Intelligence. Rédige un "Morning Briefing" (Synthèse Exécutive Globale) très synthétique (1 court paragraphe) pour orienter ma journée opérationnelle. 
+Voici mes données actuelles :
+MISSIONS EN ATTENTE :
+${tasksContext}
+
+RAPPELS IMMINENTS (7 prochains jours) :
+${remindersContext}
+
+NOTES RÉCEMMENT MODIFIÉES :
+${recent}
+
+Instruction de formatage : Utilise des balises HTML (<span class="text-blue-400 font-bold">, <span class="text-emerald-400">, <span class="text-amber-400">) pour faire ressortir les concepts clés, les tags (comme [PROJET_X]) et les actions. Le ton doit être direct, militaire et professionnel. STRICTEMENT AUCUN MARKDOWN. Pas de phrases de politesse, va droit au but en désignant l'effort principal de la journée. Exemple de ton attendu : "L'effort principal aujourd'hui se concentre sur [PROJET_X] avec 3 missions critiques..."`;
+                        
+                        const response = await this.callGemini(prompt);
+                        container.innerHTML = `<div class="font-sans text-slate-200 text-sm leading-relaxed">${response}</div>`;
+                    } catch(e) {
+                        console.error(e);
+                        container.innerHTML = `<div class="text-red-400 font-mono text-xs uppercase">Erreur de liaison satellite (API).</div>`;
+                    } finally {
+                        btn.disabled = false;
+                        btn.innerHTML = `<span class="text-base">🤖</span> BRIEFING <span class="hidden md:inline">(MATIN)</span>`;
+                    }
+                },
+
+                async generateDebriefing() {
+                    const btn = document.getElementById('btn-debriefing');
+                    const container = document.getElementById('sitrep-briefing-container');
+                    if(btn.disabled) return;
+                    
+                    btn.disabled = true;
+                    btn.innerHTML = `<div class="w-3 h-3 bg-white rounded-full animate-pulse"></div> ANALYSE...`;
+                    container.classList.remove('hidden');
+                    container.innerHTML = `<div class="flex items-center gap-2 text-indigo-400 font-mono text-[10px] uppercase tracking-widest"><div class="w-1.5 h-1.5 bg-indigo-500 animate-ping rounded-full"></div> Analyse de fin de journée en cours...</div>`;
+
+                    try {
+                        const pages = await Storage.getPages();
+                        let completedTasks = [], pendingTasks = [], recentPages = [];
+                        const now = Date.now();
+                        const twentyFourHoursAgo = now - (24 * 60 * 60 * 1000);
+                        
+                        pages.forEach(p => {
+                            if(p.encrypted) return;
+                            const div = document.createElement('div'); div.innerHTML = p.content;
+                            
+                            // Notes modifiées récemment
+                            if (p.updated >= twentyFourHoursAgo) {
+                                recentPages.push(`- ${p.title}`);
+                            }
+                            
+                            // Extraction des tâches (achevées aujourd'hui vs en attente globales)
+                            div.querySelectorAll('.task-box').forEach(t => {
+                                let taskText = ""; let curr = t.nextSibling;
+                                while(curr && curr.tagName !== 'BR' && curr.tagName !== 'DIV') { taskText += curr.textContent; curr = curr.nextSibling; }
+                                if(taskText.trim()) {
+                                    if (t.hasAttribute('checked') && p.updated >= twentyFourHoursAgo) {
+                                        completedTasks.push(`- [${p.title}] ${taskText.trim()}`);
+                                    } else if (!t.hasAttribute('checked')) {
+                                        pendingTasks.push(`- [${p.title}] ${taskText.trim()}`);
+                                    }
+                                }
+                            });
+                        });
+                        
+                        const completedContext = completedTasks.slice(0, 15).join('\n') || "Aucune tâche marquée comme terminée aujourd'hui.";
+                        const pendingContext = pendingTasks.slice(0, 15).join('\n') || "Aucune tâche en attente.";
+                        const recentContext = recentPages.slice(0, 10).join('\n') || "Aucune activité récente.";
+
+                        const prompt = `Tu es NoteLogic Intelligence. Rédige un "Debriefing Tactique" (Synthèse de fin de journée) très synthétique (1 court paragraphe) pour vider ma charge mentale et préparer demain. 
+Voici mon activité des dernières 24h :
+TÂCHES ACCOMPLIES AUJOURD'HUI :
+${completedContext}
+
+NOTES MODIFIÉES (Indicateur d'activité) :
+${recentContext}
+
+TÂCHES TOUJOURS EN ATTENTE (Stagnation) :
+${pendingContext}
+
+Instruction de formatage : Utilise des balises HTML (<span class="text-indigo-400 font-bold">, <span class="text-emerald-400">, <span class="text-amber-400">) pour faire ressortir les concepts clés et les tags. Le ton doit être direct, analytique et agir comme un miroir de productivité (succès du jour + recommandation pour demain). STRICTEMENT AUCUN MARKDOWN. Exemple de ton attendu : "Opérations clôturées sur [PROJET_A] avec succès. Cependant, la tâche 'X' stagne depuis 48h. Recommandation : la déléguer demain. Le focus de demain devra se porter sur [FINANCES]."`;
+                        
+                        const response = await this.callGemini(prompt);
+                        container.innerHTML = `<div class="flex items-center gap-2 mb-3 border-b border-indigo-500/20 pb-2"><span class="text-indigo-400 text-lg">🌙</span><span class="text-[10px] font-black uppercase tracking-widest text-indigo-400">Debriefing Tactique (Bilan)</span></div><div class="font-sans text-slate-200 text-sm leading-relaxed">${response}</div>`;
+                    } catch(e) {
+                        console.error(e);
+                        container.innerHTML = `<div class="text-red-400 font-mono text-xs uppercase">Erreur de liaison satellite (API).</div>`;
+                    } finally {
+                        btn.disabled = false;
+                        btn.innerHTML = `<span class="text-sm md:text-base">🌙</span> DEBRIEF <span class="hidden md:inline">(SOIR)</span>`;
+                    }
+                },
+
+                async generateNexusInsights() {
+                    const btn = document.getElementById('btn-nexus-insights');
+                    const container = document.getElementById('sitrep-nexus-insights-container');
+                    if(!btn || btn.disabled) return;
+                    
+                    btn.disabled = true;
+                    btn.innerHTML = `<div class="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div> ANALYSE EN COURS...`;
+                    container.classList.remove('hidden');
+                    container.innerHTML = `<div class="flex items-center gap-2 text-purple-400 font-mono text-[10px] uppercase tracking-widest"><div class="w-1.5 h-1.5 bg-purple-500 animate-ping rounded-full"></div> Scan des archives orphelines...</div>`;
+
+                    try {
+                        const pages = await Storage.getPages();
+                        const tagMap = {}; 
+                        const orphans = []; 
+                        const tagRegex = /\[([a-zA-Z0-9\u00C0-\u00FF\s_\-'’]+)\]/g;
+
+                        pages.forEach(page => { 
+                            if (page.encrypted) return;
+                            const div = document.createElement('div'); div.innerHTML = page.content; 
+                            div.querySelectorAll('.ai-insight-panel').forEach(el => el.remove()); 
+                            const text = div.innerText; 
+                            
+                            let hasTags = false;
+                            let match; 
+                            while ((match = tagRegex.exec(text)) !== null) { 
+                                const tag = match[1]; 
+                                if (tag.match(/^(\d+(?:px|%|rem|em)|#[0-9a-f]+)$/)) continue; 
+                                hasTags = true;
+                                tagMap[tag] = (tagMap[tag] || 0) + 1;
+                            }
+                            // On exclut aussi les notes qui ont des rappels temporels (elles ne sont pas "orphelines" opérationnellement)
+                            if (!hasTags && !/!([a-zA-Z0-9\+\-\/]+)/.test(text)) {
+                                orphans.push({ id: page.id, title: page.title, text: text.substring(0, 300) });
+                            }
+                        });
+
+                        if(orphans.length === 0) {
+                            container.innerHTML = `<div class="text-emerald-400 font-mono text-xs flex items-center gap-2"><span>✅</span> Le Nexus est parfaitement organisé. Aucune note orpheline.</div>`;
+                            return;
+                        }
+
+                        const topTags = Object.entries(tagMap).sort((a,b) => b[1] - a[1]).slice(0, 20).map(t => `[${t[0]}]`).join(', ');
+                        const orphansContext = orphans.slice(0, 10).map(o => `ID_NOTE: ${o.id} | TITRE: "${o.title}" | EXTRAIT: ${o.text.replace(/\n/g, ' ')}...`).join('\n\n');
+
+                        const prompt = `Tu es NoteLogic Intelligence, un bibliothécaire tactique IA. 
+Voici la liste de mes TAGS EXISTANTS les plus utilisés : ${topTags || "Aucun tag existant."}
+
+Voici un échantillon de mes NOTES ORPHELINES (sans aucun tag de classement) :
+${orphansContext}
+
+Mission : 
+1. Suggère pour chaque note orpheline 1 à 2 tags pertinents (en piochant dans les TAGS EXISTANTS en priorité, ou en créant de nouveaux si indispensable). 
+2. Détecte les "Angles Morts" : s'il y a des corrélations invisibles entre ces notes orphelines et certains concepts/tags (ex: "Il semble que vos notes non classées parlent majoritairement de...").
+
+RÈGLE DE FORMATAGE ABSOLUE :
+Le format de sortie DOIT être du HTML léger strict (sans markdown ni \`\`\`).
+Pour CHAQUE tag suggéré, tu DOIS générer un bouton cliquable exact en utilisant l'ID_NOTE correspondant, comme ceci :
+<button data-action="applyInsightTag" data-id="ID_DE_LA_NOTE" data-tag="NOM_DU_TAG" class="hover:bg-purple-500/30 px-1 mx-0.5 rounded border border-purple-500/30 transition-colors text-purple-400 font-mono font-bold cursor-pointer">[NOM_DU_TAG]</button>
+
+Utilise <ul class='list-disc pl-5 space-y-2 mb-4'> et <li> pour lister les notes. Ton style doit être direct, analytique et concis.`;
+                        
+                        const response = await this.callGemini(prompt);
+                        container.innerHTML = `<div class="flex items-center gap-2 mb-3 border-b border-purple-500/20 pb-2"><span class="text-purple-400 text-lg">🧠</span><span class="text-[10px] font-black uppercase tracking-widest text-purple-400">Corrélations & Suggestions</span></div><div class="space-y-2 font-sans">${response}</div>`;
+                    } catch(e) {
+                        console.error(e);
+                        container.innerHTML = `<div class="text-red-400 font-mono text-xs uppercase">Erreur de liaison satellite (API).</div>`;
+                    } finally {
+                        if(btn) {
+                            btn.disabled = false;
+                            btn.innerHTML = `<span class="text-sm">🧠</span> INSIGHTS`;
+                        }
+                    }
+                },
+
+                async generateNexusSynergies() {
+                    const btn = document.getElementById('btn-nexus-synergies');
+                    const container = document.getElementById('sitrep-nexus-synergies-container');
+                    if(!btn || btn.disabled) return;
+                    
+                    btn.disabled = true;
+                    btn.innerHTML = `<div class="w-2 h-2 bg-amber-400 rounded-full animate-pulse"></div> COLLISION...`;
+                    
+                    document.getElementById('sitrep-nexus-insights-container')?.classList.add('hidden'); // Ferme l'autre panneau
+                    
+                    container.classList.remove('hidden');
+                    container.innerHTML = `<div class="flex items-center gap-2 text-amber-400 font-mono text-[10px] uppercase tracking-widest"><div class="w-1.5 h-1.5 bg-amber-500 animate-ping rounded-full"></div> Calcul des intersections neuronales...</div>`;
+
+                    try {
+                        const pages = await Storage.getPages();
+                        const tagMap = {}; 
+                        const tagRegex = /\[([a-zA-Z0-9\u00C0-\u00FF\s_\-'’]+)\]/g;
+
+                        pages.forEach(page => { 
+                            if (page.encrypted) return;
+                            const div = document.createElement('div'); div.innerHTML = page.content; 
+                            div.querySelectorAll('.ai-insight-panel').forEach(el => el.remove()); 
+                            const text = div.innerText; 
+                            
+                            let match; 
+                            while ((match = tagRegex.exec(text)) !== null) { 
+                                const tag = match[1]; 
+                                if (tag.match(/^(\d+(?:px|%|rem|em)|#[0-9a-f]+)$/)) continue; 
+                                if (!tagMap[tag]) tagMap[tag] = { count: 0, latestText: '', updated: 0 };
+                                tagMap[tag].count++;
+                                if (page.updated > tagMap[tag].updated) {
+                                    tagMap[tag].updated = page.updated;
+                                    tagMap[tag].latestText = text.substring(0, 400); // 400 char de contexte
+                                }
+                            }
+                        });
+
+                        const activeTags = Object.entries(tagMap).sort((a, b) => b[1].updated - a[1].updated);
+
+                        if (activeTags.length < 2) {
+                            container.innerHTML = `<div class="text-amber-400/70 font-mono text-xs flex items-center gap-2"><span>⚠️</span> Le Nexus nécessite au moins 2 Index différents pour générer une synergie.</div>`;
+                            return;
+                        }
+
+                        // On prend un pool des 10 derniers tags actifs, on le mélange et on en garde 3 max
+                        const candidatePool = activeTags.slice(0, 10);
+                        const shuffled = candidatePool.sort(() => 0.5 - Math.random());
+                        const selectedTags = shuffled.slice(0, Math.min(3, shuffled.length));
+
+                        const synergiesContext = selectedTags.map(t => `TAG: [${t[0]}] | EXTRAIT RÉCENT: ${t[1].latestText.replace(/\n/g, ' ')}...`).join('\n\n');
+
+                        const prompt = `Tu es NoteLogic Intelligence, un expert en stratégie opérationnelle et en pensée latérale.
+Ta mission est de forcer une "collision d'idées" entre des concepts disparates de mon classeur pour générer de la valeur inattendue.
+
+Voici les TAGS sélectionnés aléatoirement parmi mes plus actifs, avec un extrait de leur contexte :
+${synergiesContext}
+
+Mission : 
+1. Trouve un concept innovant, une opportunité stratégique, ou une nouvelle perspective à l'intersection de ces tags.
+2. Fais-moi sortir de mes schémas de pensée habituels. Trouve des ponts invisibles.
+
+RÈGLE DE FORMATAGE ABSOLUE :
+Format de sortie DOIT être du HTML léger (sans markdown ni \`\`\`).
+Stylise les tags mentionnés avec <span class="text-amber-400 font-mono font-bold">[TAG]</span>.
+Ton direct, percutant, Ops. AUCUNE introduction.
+Structure ta réponse exactement ainsi :
+<span class="text-amber-400 text-lg">⚡</span> <strong class="text-amber-300">SYNERGIE POTENTIELLE :</strong> [Ton analyse du lien entre les concepts]
+<br><br>
+<strong class="text-emerald-400">STRATÉGIE SUGGÉRÉE :</strong> [Ta recommandation concrète d'action]`;
+                        
+                        const response = await this.callGemini(prompt);
+                        container.innerHTML = `<div class="flex items-center gap-2 mb-3 border-b border-amber-500/20 pb-2"><span class="text-amber-400 text-lg">⚡</span><span class="text-[10px] font-black uppercase tracking-widest text-amber-400">Générateur d'étincelles</span></div><div class="space-y-2 font-sans text-slate-200">${response}</div>`;
+                    } catch(e) {
+                        console.error(e);
+                        container.innerHTML = `<div class="text-red-400 font-mono text-xs uppercase">Erreur de liaison satellite (API).</div>`;
+                    } finally {
+                        if(btn) {
+                            btn.disabled = false;
+                            btn.innerHTML = `<span class="text-sm">⚡</span> SYNERGIES`;
+                        }
+                    }
+                },
+
                 initVoice() { const SR = window.SpeechRecognition || window.webkitSpeechRecognition; if(SR) { State.recognition = new SR(); State.recognition.lang = 'fr-FR'; State.recognition.onstart = () => { State.isRecording = true; }; State.recognition.onresult = (e) => { if(!State.isReadMode && Bus) Bus.insertText(e.results[0][0].transcript); }; State.recognition.onend = () => { State.isRecording = false; }; } },
                 toggleVoice() { if(State.recognition) State.isRecording ? State.recognition.stop() : State.recognition.start(); },
                 async performSearch(query) {
-                    // OMNIBAR LOGIC
                     const qLower = query.toLowerCase();
                     const isCmdMode = qLower.startsWith('>');
                     const searchStr = isCmdMode ? qLower.substring(1).trim() : qLower;
-                    
                     let results = [];
-                    
-                    // 1. Show commands
                     if (searchStr.length > 0 || isCmdMode || query.length === 0) {
                         this.COMMANDS.forEach(cmd => {
                             if(query.length === 0 || cmd.title.toLowerCase().includes(searchStr) || cmd.keys.includes(searchStr)) {
@@ -1153,21 +1509,15 @@ Plan de Trade tactique :
                             }
                         });
                     }
-
-                    // 2. Show Pages (only if not strictly in command mode, and user typed something)
                     if (!isCmdMode && searchStr.length >= 1) {
                         const allPages = await Storage.getPages();
                         const escapeQuery = Engine.utils.escapeRegExp(searchStr); 
                         const regex = new RegExp(`(${escapeQuery})`, 'gi');
-                        
                         allPages.forEach(page => { 
                             if (page.encrypted) {
-                                if(page.title.toLowerCase().includes(searchStr)) {
-                                    results.push({ type: 'page', id: page.id, title: page.title, updated: page.updated, snippet: '<span class="text-red-400 font-mono text-xs">🔒 [DONNÉES CHIFFRÉES]</span>', score: 10, rawContent: '' }); 
-                                }
-                                return; // Black-Ops: on ne parse pas le contenu car il est chiffré !
+                                if(page.title.toLowerCase().includes(searchStr)) results.push({ type: 'page', id: page.id, title: page.title, updated: page.updated, snippet: '<span class="text-red-400 font-mono text-xs">🔒 [DONNÉES CHIFFRÉES]</span>', score: 10, rawContent: '' }); 
+                                return;
                             }
-
                             const tempDiv = document.createElement('div'); tempDiv.innerHTML = page.content; tempDiv.querySelectorAll('.ai-insight-panel').forEach(e => e.remove()); 
                             const textContent = tempDiv.innerText; let score = 0; 
                             if(page.title.toLowerCase().includes(searchStr)) score += 10; 
@@ -1177,15 +1527,12 @@ Plan de Trade tactique :
                                 if (index > -1) { 
                                     const start = Math.max(0, index - 40); const end = Math.min(textContent.length, index + searchStr.length + 60); 
                                     snippet = (start > 0 ? "..." : "") + textContent.substring(start, end) + (end < textContent.length ? "..." : ""); 
-                                } else { 
-                                    snippet = textContent.substring(0, 100) + "..."; 
-                                } 
+                                } else snippet = textContent.substring(0, 100) + "..."; 
                                 snippet = snippet.replace(regex, '<span class="search-highlight">$1</span>'); 
                                 results.push({ type: 'page', id: page.id, title: page.title, updated: page.updated, snippet: snippet, score: score, rawContent: page.content }); 
                             }
                         });
                     }
-
                     results.sort((a,b) => b.score - a.score);
                     State.searchResults = results; 
                     State.searchIndex = results.length > 0 ? 0 : -1; 
@@ -1213,41 +1560,26 @@ Plan de Trade tactique :
                     if(!sel.isCollapsed) return this.close();
                     const range = sel.getRangeAt(0);
                     if(range.startContainer.nodeType !== Node.TEXT_NODE) return this.close();
-                    
-                    // On récupère le texte avant le curseur
                     const text = range.startContainer.textContent.substring(0, range.startOffset);
                     const match = text.match(/(?:^|\s)\/([a-zA-Z0-9]*)$/);
-                    
                     if (match) {
                         State.slash.active = true;
                         State.slash.query = match[1].toLowerCase();
                         this.render();
-                        
-                        // Calcul dynamique de la position du curseur
                         const rect = range.getBoundingClientRect();
                         const menu = document.getElementById('slash-menu');
                         menu.style.display = 'flex';
-                        
                         let top = rect.bottom + window.scrollY + 5;
                         let left = rect.left + window.scrollX;
-                        // Afficher au-dessus si pas assez de place en bas
                         if(top + 250 > window.innerHeight) top = rect.top + window.scrollY - 260;
-                        
-                        menu.style.top = `${top}px`;
-                        menu.style.left = `${left}px`;
-                    } else {
-                        this.close();
-                    }
+                        menu.style.top = `${top}px`; menu.style.left = `${left}px`;
+                    } else this.close();
                 },
                 render() {
                     const menu = document.getElementById('slash-menu');
                     const filtered = this.COMMANDS.filter(c => c.id.includes(State.slash.query) || c.keys.some(k => k.includes(State.slash.query)));
                     if(filtered.length === 0) return this.close();
-                    
-                    State.slash.results = filtered;
-                    State.slash.index = Math.min(State.slash.index, filtered.length - 1);
-                    
-                    // Note: L'utilisation de mousedown prévient la perte de focus de l'éditeur lors du clic !
+                    State.slash.results = filtered; State.slash.index = Math.min(State.slash.index, filtered.length - 1);
                     menu.innerHTML = filtered.map((c, i) => `
                         <div class="slash-item ${i === State.slash.index ? 'selected' : ''}" data-action="execSlash" data-id="${c.id}" onmousedown="event.preventDefault();">
                             <span class="w-6 font-bold text-slate-400 font-mono text-center">${c.icon}</span>
@@ -1264,19 +1596,15 @@ Plan de Trade tactique :
                     return false;
                 },
                 execute(id) {
-                    // 1. Suppression de la chaîne "/commande" qui vient d'être tapée
                     const sel = window.getSelection();
                     if (sel.rangeCount > 0) {
                         const r = sel.getRangeAt(0);
                         const startOffset = r.startOffset - State.slash.query.length - 1;
                         if (startOffset >= 0 && r.startContainer.nodeType === Node.TEXT_NODE) {
-                            r.setStart(r.startContainer, startOffset);
-                            r.deleteContents();
+                            r.setStart(r.startContainer, startOffset); r.deleteContents();
                         }
                     }
                     this.close();
-                    
-                    // 2. Exécution du formatage ou de l'insertion
                     const editor = document.getElementById('main-editor');
                     if(id === 'h1') document.execCommand('formatBlock', false, 'H1');
                     if(id === 'h2') document.execCommand('formatBlock', false, 'H2');
@@ -1286,28 +1614,18 @@ Plan de Trade tactique :
                     if(id === 'date') document.execCommand('insertText', false, new Date().toLocaleDateString('fr-FR'));
                     if(id === 'tag') {
                         document.execCommand('insertText', false, '[]');
-                        // Replace the cursor right between the brackets
-                        const newRange = document.createRange();
-                        const sel2 = window.getSelection();
-                        newRange.setStart(sel2.anchorNode, sel2.anchorOffset - 1);
-                        newRange.collapse(true);
-                        sel2.removeAllRanges();
-                        sel2.addRange(newRange);
+                        const newRange = document.createRange(); const sel2 = window.getSelection();
+                        newRange.setStart(sel2.anchorNode, sel2.anchorOffset - 1); newRange.collapse(true);
+                        sel2.removeAllRanges(); sel2.addRange(newRange);
                     }
                     Storage.saveDraft(editor.innerHTML);
                 },
-                close() {
-                    State.slash.active = false;
-                    State.slash.query = '';
-                    State.slash.index = 0;
-                    const menu = document.getElementById('slash-menu');
-                    if(menu) menu.style.display = 'none';
-                }
+                close() { State.slash.active = false; State.slash.query = ''; State.slash.index = 0; const menu = document.getElementById('slash-menu'); if(menu) menu.style.display = 'none'; }
             };
             
             const IO = {
                 exportData: async () => { const pages = await Storage.getPages(); const draft = await Storage.db.meta.get('draft'); const blob = new Blob([JSON.stringify({version: "v9.80", date: new Date(), pages, draft}, null, 2)], {type: 'application/json'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); const now = new Date(); const d = now.getFullYear() + "-" + String(now.getMonth()+1).padStart(2, '0') + "-" + String(now.getDate()).padStart(2, '0'); const t = String(now.getHours()).padStart(2, '0') + "-" + String(now.getMinutes()).padStart(2, '0'); a.download = `NoteLogic_Backup_${d}_${t}.json`; a.click(); Renderer.toast("BACKUP GÉNÉRÉ"); },
-                importData: (file) => { const r = new FileReader(); r.onload = async (e) => { try { const d = JSON.parse(e.target.result); if(d.pages) for(let x of d.pages) await Storage.createPage(x.title, x.content); if(d.draft) await Storage.saveDraft(d.draft.content); Renderer.toast("IMPORT OK"); setTimeout(()=>location.reload(),1000); } catch(err) { Renderer.toast("ERREUR FICHIER"); } }; r.readAsText(file); },
+                importData: (file) => { if(!file) return; const r = new FileReader(); r.onload = async (e) => { try { const d = JSON.parse(e.target.result); if(d.pages) for(let x of d.pages) await Storage.db.pages.add({ title: x.title, content: x.content, updated: x.updated || Date.now(), pinned: x.pinned || false, encrypted: x.encrypted || false }); if(d.draft && d.draft.content) await Storage.saveDraft(d.draft.content, true); Renderer.toast("IMPORT OK"); Bus.renderBinder(); } catch(err) { console.error(err); Renderer.toast("ERREUR FICHIER"); } }; r.readAsText(file); },
                 attachPDF: async (file) => { if (file.size > 5000000) { Renderer.toast("FICHIER TROP GROS (>5Mo)"); return; } const id = await Storage.saveAttachment(file); const span = `<span class="pdf-chip" contenteditable="false" data-id="${id}" data-action="openPdf">📄 ${file.name.substring(0,25)}...</span>&nbsp;`; document.execCommand('insertHTML', false, span); Storage.saveDraft(document.getElementById('main-editor').innerHTML); Renderer.toast("PDF ATTACHÉ"); },
                 generatePDF: () => { const element = document.getElementById('main-editor'); if(!element.innerText.trim()) { Renderer.toast("NOTE VIDE"); return; } const now = new Date(); const d = now.getFullYear() + "-" + String(now.getMonth()+1).padStart(2, '0') + "-" + String(now.getDate()).padStart(2, '0'); const cleanText = element.innerText.trim(); const tagMatch = cleanText.match(/\[([a-zA-Z0-9\u00C0-\u00FF\s_\-'’]+)\]/); let rawTitle = tagMatch ? tagMatch[1] : cleanText.split('\n')[0].substring(0, 30); const safeTitle = rawTitle.replace(/[^a-zA-Z0-9\u00C0-\u00FF\-_]/g, '_'); const fname = `NoteLogic_${safeTitle}_${d}.pdf`; const opt = { margin: 10, filename: fname, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } }; const clone = element.cloneNode(true); clone.style.color = '#000000'; clone.style.background = '#ffffff'; clone.style.padding = '20px'; clone.style.width = '100%'; clone.style.fontFamily = 'Inter, sans-serif'; const container = document.createElement('div'); container.appendChild(clone); container.style.position = 'absolute'; container.style.left = '-9999px'; container.style.top = '0'; document.body.appendChild(container); html2pdf().set(opt).from(clone).save().then(() => { document.body.removeChild(container); Renderer.toast("PDF GÉNÉRÉ"); }).catch(err => { console.error(err); Renderer.toast("ERREUR PDF"); }); }
             };
@@ -1317,92 +1635,50 @@ Plan de Trade tactique :
                 async renderGlobal() { 
                     const container = document.getElementById('ui-nexus-content'); 
                     const all = await Storage.getPages(); 
-                    const tagCounts = {};
-                    const tagActivity = {}; // { tagName: [0,0...12] }
-                    const now = new Date();
-
+                    const tagCounts = {}, tagActivity = {}, now = new Date();
                     all.forEach(e => { 
                         if (e.encrypted) return;
                         const matches = e.content.match(/\[([a-zA-Z0-9_\-]+)\]/g) || []; 
                         matches.forEach(t => { 
-                            const tag = t.replace(/[\[\]]/g,''); 
-                            if (tag.match(/^(\d+(?:px|%|rem)|#[0-9a-f]+)$/)) return; 
-                            
-                            // Count volume
+                            const tag = t.replace(/[\[\]]/g,''); if (tag.match(/^(\d+(?:px|%|rem|em)|#[0-9a-f]+)$/)) return; 
                             tagCounts[tag] = (tagCounts[tag]||0)+1; 
-                            
-                            // Activity Heatmap
                             if(!tagActivity[tag]) tagActivity[tag] = new Array(12).fill(0);
                             const pageDate = new Date(e.updated);
-                            // Calc months diff (0 = this month)
                             const diffMonths = (now.getFullYear() - pageDate.getFullYear()) * 12 + (now.getMonth() - pageDate.getMonth());
-                            if(diffMonths >= 0 && diffMonths < 12) {
-                                // We store from Left (Oldest) to Right (Newest)
-                                // Index 11 is Current Month, Index 0 is 11 months ago
-                                const idx = 11 - diffMonths;
-                                tagActivity[tag][idx] = (tagActivity[tag][idx] || 0) + 1;
-                            }
+                            if(diffMonths >= 0 && diffMonths < 12) tagActivity[tag][11 - diffMonths] = (tagActivity[tag][11 - diffMonths] || 0) + 1;
                         }); 
                     }); 
-                    
                     const sorted = Object.entries(tagCounts).sort((a,b) => b[1] - a[1]); 
-                    
-                    if(sorted.length === 0) { 
-                        container.innerHTML = '<div class="p-8 text-center text-sm text-slate-400">Aucun tag détecté.</div>'; 
-                        return; 
-                    } 
-                    
+                    if(sorted.length === 0) { container.innerHTML = '<div class="p-8 text-center text-sm text-slate-400">Aucun tag détecté.</div>'; return; } 
                     const listHTML = sorted.map(([t, c]) => {
-                        // Generate Sparkline HTML
                         const activity = tagActivity[t] || new Array(12).fill(0);
                         const sparkBars = activity.map(val => {
-                            let heightClass = 'h-0.5'; // default min height
-                            let colorClass = 'empty';
-                            let styleHeight = '2px';
-                            
-                            if (val > 0) {
-                                // Normalize height roughly: 1 update = low, 2-3 = med, 4+ = high
-                                if (val >= 4) { colorClass = 'high'; styleHeight = '14px'; }
-                                else if (val >= 2) { colorClass = 'med'; styleHeight = '8px'; }
-                                else { colorClass = 'low'; styleHeight = '4px'; }
-                            }
-                            
+                            let colorClass = 'empty', styleHeight = '2px';
+                            if (val >= 4) { colorClass = 'high'; styleHeight = '14px'; }
+                            else if (val >= 2) { colorClass = 'med'; styleHeight = '8px'; }
+                            else if (val > 0) { colorClass = 'low'; styleHeight = '4px'; }
                             return `<div class="spark-bar ${colorClass}" style="height: ${styleHeight}"></div>`;
                         }).join('');
-
                         return `<div class="network-item" data-action="openNexus" data-tag="${t}"><div class="flex items-center"><span class="text-blue-300 font-bold font-mono tracking-wide pointer-events-none mr-2">${t}</span></div><div class="flex items-center"><div class="sparkline-container" title="Activité (12 derniers mois)">${sparkBars}</div><span class="text-xs text-slate-400 w-4 text-right pointer-events-none font-bold">${c}</span></div></div>`;
                     }).join(''); 
-                    
                     container.innerHTML = `<div class="nexus-header"><div class="nexus-title">INDEX GLOBAL</div><div class="nexus-meta">Tags: ${sorted.length}</div></div><div class="nexus-section-title">Fréquence & Activité</div><div class="flex flex-col">${listHTML}</div>`; 
                 }
             };
 
-            // Initialize Bus here with the full object
             Bus = {
-                listeners: {},
-                peekTimer: null,
-                currentPeekTarget: null,
-                lastMouseX: 0,
-                lastMouseY: 0,
+                listeners: {}, peekTimer: null, currentPeekTarget: null, lastMouseX: 0, lastMouseY: 0,
                 on(e,f) { (this.listeners[e]=this.listeners[e]||[]).push(f); },
                 emit(e,d) { (this.listeners[e]||[]).forEach(f=>f(d)); },
                 handle(e) {
                     const t = e.target.closest('[data-action]');
                     const settingsMenu = document.getElementById('ui-settings-menu');
-                    
-                    // Fermer le menu Slash si on clique ailleurs
                     if(State.slash.active && !e.target.closest('#slash-menu')) Slash.close();
-
-                    if(!e.target.closest('#ui-settings-menu') && !e.target.closest('[data-action="toggleSettings"]') && settingsMenu) {
-                        settingsMenu.classList.remove('active');
-                    }
-
+                    if(!e.target.closest('#ui-settings-menu') && !e.target.closest('[data-action="toggleSettings"]') && settingsMenu) settingsMenu.classList.remove('active');
                     if(t) { 
                         this.hidePeek(); 
                         if(settingsMenu && !t.closest('[data-action="toggleSettings"]')) settingsMenu.classList.remove('active');
                         e.preventDefault(); 
-                        this.dispatchAction(t.dataset.action, {...t.dataset, el:t, type: e.type}); 
-                        return; 
+                        this.dispatchAction(t.dataset.action, {...t.dataset, el:t, type: e.type}); return; 
                     }
                     if(e.target.closest('.modal-overlay')) { if(e.target.id === 'modal-search') document.getElementById('search-input').value = ''; document.querySelectorAll('.modal-overlay').forEach(el=>el.style.display='none'); }
                 },
@@ -1414,14 +1690,11 @@ Plan de Trade tactique :
                         e.preventDefault(); 
                         if(State.searchIndex >= 0 && State.searchResults[State.searchIndex]) { 
                             const res = State.searchResults[State.searchIndex];
-                            if (res.type === 'command') {
-                                this.dispatchAction('executeCommand', { cmd: res.action });
-                            } else {
-                                this.dispatchAction('openPage', {id: res.id}); 
-                            }
-                        } 
+                            if (res.type === 'command') this.dispatchAction('executeCommand', { cmd: res.action });
+                            else this.dispatchAction('openPage', {id: res.id}); 
+                        }
                     } 
-                    else if (e.key === 'Escape') { this.dispatchAction('closeModals'); }
+                    else if (e.key === 'Escape') this.dispatchAction('closeModals');
                 },
                 toggleIndexWrapper(strictMode = false) {
                     const editor = document.getElementById('main-editor'); const selection = window.getSelection();
@@ -1438,126 +1711,71 @@ Plan de Trade tactique :
                     const editor = document.getElementById('main-editor'); const toolbar = document.getElementById('selection-toolbar'); const selection = window.getSelection();
                     if (!selection.isCollapsed && editor.contains(selection.anchorNode)) {
                         const range = selection.getRangeAt(0); const rect = range.getBoundingClientRect();
-                        toolbar.style.top = `${Math.max(10, rect.top - 50)}px`;
-                        toolbar.style.left = `${Math.max(10, rect.left + (rect.width / 2) - (toolbar.offsetWidth / 2))}px`;
+                        toolbar.style.top = `${Math.max(10, rect.top - 50)}px`; toolbar.style.left = `${Math.max(10, rect.left + (rect.width / 2) - (toolbar.offsetWidth / 2))}px`;
                         toolbar.classList.add('active');
-                    } else {
-                        toolbar.classList.remove('active');
-                    }
+                    } else toolbar.classList.remove('active');
                 },
                 async showPeek(idOrTag, type) {
-                    const peekEl = document.getElementById('hover-peek');
-                    const titleEl = peekEl.querySelector('.peek-title');
-                    const contentEl = peekEl.querySelector('.peek-content');
-                    
+                    const peekEl = document.getElementById('hover-peek'); const titleEl = peekEl.querySelector('.peek-title'); const contentEl = peekEl.querySelector('.peek-content');
                     if (type === 'page') {
-                        const page = await Storage.getPage(idOrTag);
-                        if (!page) return;
-                        if (page.encrypted) return;
+                        const page = await Storage.getPage(idOrTag); if (!page || page.encrypted) return;
                         titleEl.innerHTML = `<span class="text-white mr-2">📄</span>${page.title}`;
-                        const temp = document.createElement('div');
-                        temp.innerHTML = page.content;
-                        temp.querySelectorAll('.ai-insight-panel, .pdf-chip').forEach(el => el.remove());
+                        const temp = document.createElement('div'); temp.innerHTML = page.content; temp.querySelectorAll('.ai-insight-panel, .pdf-chip').forEach(el => el.remove());
                         contentEl.innerHTML = temp.innerText.trim().substring(0, 300) || "<span class='italic opacity-50'>Note vide...</span>";
                     } else if (type === 'tag') {
-                        const pages = await Storage.getPages();
-                        const hits = pages.filter(p => !p.encrypted && p.content.includes(`[${idOrTag}]`));
-                        let latest = null;
-                        if (hits.length === 0) {
-                             const hitsText = pages.filter(p => !p.encrypted && p.content.includes(idOrTag));
-                             if (hitsText.length === 0) return;
-                             latest = hitsText.sort((a,b) => b.updated - a.updated)[0];
-                        } else {
-                             latest = hits.sort((a,b) => b.updated - a.updated)[0];
-                        }
-                        
+                        const pages = await Storage.getPages(); const hits = pages.filter(p => !p.encrypted && p.content.includes(`[${idOrTag}]`));
+                        let latest = hits.length === 0 ? pages.filter(p => !p.encrypted && p.content.includes(idOrTag)).sort((a,b) => b.updated - a.updated)[0] : hits.sort((a,b) => b.updated - a.updated)[0];
+                        if(!latest) return;
                         titleEl.innerHTML = `<span class="text-purple-400 mr-2">⚡</span>[${idOrTag}]`;
-                        const temp = document.createElement('div');
-                        temp.innerHTML = latest.content;
-                        temp.querySelectorAll('.ai-insight-panel, .pdf-chip').forEach(el => el.remove());
+                        const temp = document.createElement('div'); temp.innerHTML = latest.content; temp.querySelectorAll('.ai-insight-panel, .pdf-chip').forEach(el => el.remove());
                         contentEl.innerHTML = `<div class="text-blue-400 opacity-90 mb-1 border-b border-blue-500/20 pb-1 text-[10px] uppercase tracking-widest font-bold">Réf: ${latest.title}</div>${temp.innerText.trim().substring(0, 200)}`;
                     }
-                    
                     peekEl.style.display = 'block';
-                    
-                    let x = this.lastMouseX + 15;
-                    let y = this.lastMouseY + 15;
-                    
+                    let x = this.lastMouseX + 15, y = this.lastMouseY + 15;
                     requestAnimationFrame(() => {
                         if (x + peekEl.offsetWidth > window.innerWidth) x = window.innerWidth - peekEl.offsetWidth - 15;
                         if (y + peekEl.offsetHeight > window.innerHeight) y = window.innerHeight - peekEl.offsetHeight - 15;
-                        peekEl.style.left = `${x}px`;
-                        peekEl.style.top = `${y}px`;
-                        peekEl.classList.add('visible');
+                        peekEl.style.left = `${x}px`; peekEl.style.top = `${y}px`; peekEl.classList.add('visible');
                     });
                 },
-                hidePeek() {
-                    const peekEl = document.getElementById('hover-peek');
-                    if(peekEl) {
-                        peekEl.classList.remove('visible');
-                        peekEl.style.display = 'none';
-                    }
-                },
+                hidePeek() { const peekEl = document.getElementById('hover-peek'); if(peekEl) { peekEl.classList.remove('visible'); peekEl.style.display = 'none'; } },
                 async dispatchAction(act, d) {
                     if(act==='executeCommand') { this.dispatchAction('closeModals'); setTimeout(() => this.dispatchAction(d.cmd), 50); }
                     if(act==='execSlash') Slash.execute(d.id);
                     if(act==='toggleSettings') { 
-                        const menu = document.getElementById('ui-settings-menu');
-                        const btn = document.querySelector('[data-action="toggleSettings"]');
-                        if(menu && btn) {
-                            const rect = btn.getBoundingClientRect();
-                            menu.style.top = `${rect.bottom + 8}px`;
-                            menu.style.left = `${Math.max(10, rect.right - 160)}px`;
-                            menu.classList.toggle('active');
-                        }
+                        const menu = document.getElementById('ui-settings-menu'), btn = document.querySelector('[data-action="toggleSettings"]');
+                        if(menu && btn) { const rect = btn.getBoundingClientRect(); menu.style.top = `${rect.bottom + 8}px`; menu.style.left = `${Math.max(10, rect.right - 160)}px`; menu.classList.toggle('active'); }
                     }
                     if(act==='toggleZenMode') { document.body.classList.toggle('zen-mode'); Renderer.toast(document.body.classList.contains('zen-mode') ? "MODE STEALTH ACTIVÉ (Alt+Z)" : "MODE STANDARD"); }
                     if(act==='toggleEncryption') {
                         if (!State.currentPageId) { Renderer.toast("SAUVEGARDER OU OUVRIR UNE NOTE D'ABORD"); return; }
                         Storage.getPage(State.currentPageId).then(page => {
-                            if (!page) return;
-                            State.cryptoContext = { id: page.id, action: page.encrypted ? 'remove' : 'add' };
+                            if (!page) return; State.cryptoContext = { id: page.id, action: page.encrypted ? 'remove' : 'add' };
                             document.getElementById('crypto-msg').textContent = page.encrypted ? "Mot de passe pour DÉCHIFFRER définitivement cette note :" : "Créer un mot de passe de CHIFFREMENT (AES-256) pour cette note :";
-                            document.getElementById('crypto-input').value = '';
-                            document.getElementById('modal-crypto').style.display = 'flex';
-                            document.getElementById('crypto-input').focus();
+                            document.getElementById('crypto-input').value = ''; document.getElementById('modal-crypto').style.display = 'flex'; document.getElementById('crypto-input').focus();
                         });
                     }
                     if(act==='submitCrypto') {
-                        const pwd = document.getElementById('crypto-input').value;
-                        if (!pwd) return;
-                        const ctx = State.cryptoContext;
-                        if (!ctx) return;
-                        
+                        const pwd = document.getElementById('crypto-input').value; if (!pwd) return; const ctx = State.cryptoContext; if (!ctx) return;
                         Storage.getPage(ctx.id).then(async page => {
                             if (ctx.action === 'add') {
-                                const plain = document.getElementById('main-editor').innerHTML;
-                                const cipher = await CryptoEngine.encrypt(plain, pwd);
+                                const cipher = await CryptoEngine.encrypt(document.getElementById('main-editor').innerHTML, pwd);
                                 await Storage.db.pages.update(ctx.id, { content: cipher, encrypted: true });
-                                State.unlockedNotes[ctx.id] = pwd;
-                                Renderer.toast("NOTE SÉCURISÉE 🔒");
-                                document.getElementById('btn-crypto').classList.add('text-red-500');
-                                this.dispatchAction('closeModals');
-                                this.renderBinder();
+                                State.unlockedNotes[ctx.id] = pwd; Renderer.toast("NOTE SÉCURISÉE 🔒");
+                                document.getElementById('btn-crypto').classList.add('text-red-500'); this.dispatchAction('closeModals'); this.renderBinder();
                             } else if (ctx.action === 'remove') {
                                 try {
                                     const plain = await CryptoEngine.decrypt(page.content, pwd);
                                     await Storage.db.pages.update(ctx.id, { content: plain, encrypted: false });
-                                    delete State.unlockedNotes[ctx.id];
-                                    Renderer.toast("CHIFFREMENT RETIRÉ 🔓");
-                                    document.getElementById('btn-crypto').classList.remove('text-red-500');
-                                    this.dispatchAction('closeModals');
-                                    this.renderBinder();
+                                    delete State.unlockedNotes[ctx.id]; Renderer.toast("CHIFFREMENT RETIRÉ 🔓");
+                                    document.getElementById('btn-crypto').classList.remove('text-red-500'); this.dispatchAction('closeModals'); this.renderBinder();
                                 } catch(e) { Renderer.toast("MOT DE PASSE INCORRECT"); }
                             } else if (ctx.action === 'unlock') {
                                 try {
                                     const plain = await CryptoEngine.decrypt(page.content, pwd);
-                                    State.unlockedNotes[ctx.id] = pwd;
-                                    State.currentPageId = page.id;
+                                    State.unlockedNotes[ctx.id] = pwd; State.currentPageId = page.id;
                                     document.getElementById('main-editor').innerHTML = Renderer.processContent(plain);
-                                    document.getElementById('btn-crypto').classList.add('text-red-500');
-                                    Renderer.toast("ACCÈS AUTORISÉ");
-                                    this.dispatchAction('closeModals');
+                                    document.getElementById('btn-crypto').classList.add('text-red-500'); Renderer.toast("ACCÈS AUTORISÉ"); this.dispatchAction('closeModals');
                                 } catch(e) { Renderer.toast("ACCÈS REFUSÉ"); }
                             }
                         });
@@ -1567,7 +1785,7 @@ Plan de Trade tactique :
                     if(act==='triggerSitrep') Intelligence.sitrep('tags');
                     if(act==='aiChallenge') Intelligence.extract();
                     if(act==='openNexus') { this.dispatchAction('toggleView',{view:'index'}); Nexus.render(d.tag); }
-                    if(act==='clearDraft') { if(d.type === 'dblclick' || !d.type) { document.getElementById('main-editor').innerHTML=''; Storage.saveDraft(''); Renderer.toast("VIDÉ"); } else { Renderer.toast("Double-clic pour vider"); } }
+                    if(act==='clearDraft') { if(d.type === 'dblclick' || !d.type) { document.getElementById('main-editor').innerHTML=''; Storage.saveDraft(''); Renderer.toast("VIDÉ"); } else Renderer.toast("Double-clic pour vider"); }
                     if(act==='dispatchToPage') this.dispatchDraftToPage();
                     if(act==='newPage') { State.currentPageId = null; document.getElementById('main-editor').innerHTML=''; document.getElementById('btn-crypto').classList.remove('text-red-500'); Storage.saveDraft(''); document.getElementById('main-editor').focus(); Renderer.toast("NOUVELLE NOTE PRÊTE"); }
                     if(act==='insertIndex') this.toggleIndexWrapper();
@@ -1578,8 +1796,36 @@ Plan de Trade tactique :
                     if(act==='openReminders') Intelligence.sitrep('time');
                     if(act==='openMacroManager') { Renderer.renderMacroManager(); document.getElementById('modal-macros').style.display='flex'; }
                     if(act==='switchSitrepTab') Intelligence.sitrep(d.tab);
+                    if(act==='generateBriefing') Intelligence.generateBriefing();
+                    if(act==='generateDebriefing') Intelligence.generateDebriefing();
+                    if(act==='generateNexusInsights') {
+                        document.getElementById('sitrep-nexus-synergies-container')?.classList.add('hidden');
+                        Intelligence.generateNexusInsights();
+                    }
+                    if(act==='generateNexusSynergies') Intelligence.generateNexusSynergies();
+                    if(act==='applyInsightTag') {
+                        const pageId = parseInt(d.id);
+                        Storage.getPage(pageId).then(async page => {
+                            if(!page) return;
+                            const newTag = `[${d.tag}]`;
+                            if (page.content.includes(newTag)) { Renderer.toast("DÉJÀ APPLIQUÉ"); return; }
+                            const newContent = page.content + `<div><br>${newTag}</div>`;
+                            await Storage.updatePage(pageId, newContent);
+                            if (State.currentPageId === pageId) {
+                                document.getElementById('main-editor').innerHTML = Renderer.processContent(newContent);
+                                Storage.saveDraft(newContent, true);
+                            }
+                            Renderer.toast(`TAG ${newTag} AJOUTÉ`);
+                            d.el.classList.replace('text-purple-400', 'text-emerald-400');
+                            d.el.classList.replace('border-purple-500/30', 'border-emerald-500/50');
+                            d.el.classList.remove('hover:bg-purple-500/30', 'cursor-pointer');
+                            d.el.innerHTML = `✓ ${newTag}`;
+                            d.el.disabled = true;
+                            this.renderBinder();
+                        });
+                    }
                     if(act==='socialBroadcast') Social.broadcast();
-                    if(act==='toggleFab') { const menu = document.getElementById('fab-menu'); const main = document.getElementById('fab-main'); menu.classList.toggle('fab-menu-open'); main.classList.toggle('fab-main-open'); }
+                    if(act==='toggleFab') { const menu = document.getElementById('fab-menu'), main = document.getElementById('fab-main'); menu.classList.toggle('fab-menu-open'); main.classList.toggle('fab-main-open'); }
                     if(act==='formatBold') { document.execCommand('bold', false, null); this.checkSelection(); Storage.saveDraft(document.getElementById('main-editor').innerHTML); }
                     if(act==='formatItalic') { document.execCommand('italic', false, null); this.checkSelection(); Storage.saveDraft(document.getElementById('main-editor').innerHTML); }
                     if(act==='formatTag') { this.toggleIndexWrapper(true); this.checkSelection(); }
@@ -1587,133 +1833,102 @@ Plan de Trade tactique :
                     if(act==='shareTwitter') Social.twitter();
                     if(act==='shareLinkedIn') Social.linkedin();
                     if(act==='copyToClipboard') Social.clipboard();
-                    if(act==='addMacro') { const k = document.getElementById('new-macro-key').value.toLowerCase(); const v = document.getElementById('new-macro-val').innerHTML; if(k && v && v !== '<br>'){ Storage.addMacro(k,v).then(() => { Renderer.renderMacroManager(); document.getElementById('new-macro-key').value = ''; document.getElementById('new-macro-val').innerHTML = ''; Renderer.toast(`MACRO [${k.toUpperCase()}] CRÉÉE`); }); } else { Renderer.toast("CHAMPS VIDES"); } }
-                    if(act==='removeMacro') { Storage.removeMacro(d.trigger).then(() => { Renderer.renderMacroManager(); }); }
+                    if(act==='addMacro') { const k = document.getElementById('new-macro-key').value.toLowerCase(), v = document.getElementById('new-macro-val').innerHTML; if(k && v && v !== '<br>'){ Storage.addMacro(k,v).then(() => { Renderer.renderMacroManager(); document.getElementById('new-macro-key').value = ''; document.getElementById('new-macro-val').innerHTML = ''; Renderer.toast(`MACRO [${k.toUpperCase()}] CRÉÉE`); }); } else Renderer.toast("CHAMPS VIDES"); }
+                    if(act==='removeMacro') Storage.removeMacro(d.trigger).then(() => Renderer.renderMacroManager());
                     if(act==='hardReset') this.confirmAction(d.el, () => Storage.nuke());
-                    if(act==='closeModals') { document.querySelectorAll('.modal-overlay').forEach(el=>el.style.display='none'); document.getElementById('search-input').value = ''; }
+                    if(act==='closeModals') { 
+                        document.querySelectorAll('.modal-overlay').forEach(el=>el.style.display='none'); 
+                        document.getElementById('search-input').value = ''; 
+                        const briefingContainer = document.getElementById('sitrep-briefing-container');
+                        if(briefingContainer) { briefingContainer.classList.add('hidden'); briefingContainer.innerHTML = ''; }
+                    }
                     if(act==='pageDelete') this.confirmAction(d.el, async()=>{ await Storage.deletePage(d.id); this.renderBinder(); });
                     if(act==='togglePin') { await Storage.togglePinPage(d.id); this.renderBinder(); }
                     if(act==='openPage') { this.openPage(d.id); document.querySelectorAll('.modal-overlay').forEach(el=>el.style.display='none'); }
                     if(act==='ioExport') IO.exportData();
                     if(act==='exportToPDF') IO.generatePDF();
                     if(act==='triggerImport') document.getElementById('import-input').click();
-                    if(act==='cleanFormat') { const editor = document.getElementById('main-editor'); editor.querySelectorAll('*').forEach(el => el.removeAttribute('style')); editor.querySelectorAll('*').forEach(el => { if(!el.classList.contains('pdf-chip') && !el.classList.contains('chrono-tag') && !el.classList.contains('task-box')) { el.removeAttribute('class'); } }); const stripTags = ['b', 'strong', 'i', 'em', 'u', 'font', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'table', 'tbody', 'tr', 'td', 'a', 'strike', 'blockquote', 'code', 'pre']; stripTags.forEach(tag => { const elements = editor.querySelectorAll(tag); elements.forEach(el => { const parent = el.parentNode; while(el.firstChild) parent.insertBefore(el.firstChild, el); parent.removeChild(el); }); }); editor.querySelectorAll('span').forEach(el => { if(!el.classList.contains('pdf-chip') && !el.classList.contains('chrono-tag') && !el.classList.contains('task-box')) { const parent = el.parentNode; while(el.firstChild) parent.insertBefore(el.firstChild, el); parent.removeChild(el); } }); const finalHTML = Renderer.processContent(editor.innerHTML); editor.innerHTML = finalHTML; Storage.saveDraft(editor.innerHTML); Renderer.toast("FORMAT NETTOYÉ"); }
+                    if(act==='cleanFormat') { 
+                        const editor = document.getElementById('main-editor'); editor.querySelectorAll('*').forEach(el => el.removeAttribute('style')); 
+                        editor.querySelectorAll('*').forEach(el => { if(!el.classList.contains('pdf-chip') && !el.classList.contains('chrono-tag') && !el.classList.contains('task-box')) el.removeAttribute('class'); }); 
+                        ['b', 'strong', 'i', 'em', 'u', 'font', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'table', 'tbody', 'tr', 'td', 'a', 'strike', 'blockquote', 'code', 'pre'].forEach(tag => { 
+                            editor.querySelectorAll(tag).forEach(el => { const parent = el.parentNode; while(el.firstChild) parent.insertBefore(el.firstChild, el); parent.removeChild(el); }); 
+                        }); 
+                        editor.querySelectorAll('span').forEach(el => { if(!el.classList.contains('pdf-chip') && !el.classList.contains('chrono-tag') && !el.classList.contains('task-box')) { const parent = el.parentNode; while(el.firstChild) parent.insertBefore(el.firstChild, el); parent.removeChild(el); } }); 
+                        editor.innerHTML = Renderer.processContent(editor.innerHTML); Storage.saveDraft(editor.innerHTML); Renderer.toast("FORMAT NETTOYÉ"); 
+                    }
                     if(act==='clearFilter') { State.activeTagFilter=null; document.getElementById('ui-filter-banner').classList.add('hidden'); this.renderBinder(); }
                     if(act==='pruneAttachments') Storage.manager.pruneAttachments();
                     if(act==='editorAction') { 
+                        const ed=document.getElementById('main-editor');
                         if(d.cmd==='focusStart') { 
-                            const ed=document.getElementById('main-editor'); 
-                            ed.insertAdjacentHTML('afterbegin', '<div><br></div>'); 
-                            Storage.saveDraft(ed.innerHTML); 
-                            
-                            // Focus inside that new line
-                            const newLine = ed.firstElementChild;
-                            const r = document.createRange(); 
-                            r.selectNodeContents(newLine); 
-                            r.collapse(true); 
-                            
-                            const s = window.getSelection(); 
-                            s.removeAllRanges(); 
-                            s.addRange(r); 
-                            ed.scrollTop = 0;
+                            ed.insertAdjacentHTML('afterbegin', '<div><br></div>'); Storage.saveDraft(ed.innerHTML); 
+                            const newLine = ed.firstElementChild, r = document.createRange(); r.selectNodeContents(newLine); r.collapse(true); 
+                            const s = window.getSelection(); s.removeAllRanges(); s.addRange(r); ed.scrollTop = 0;
                         } 
                         if(d.cmd==='focusEnd') { 
-                            const ed=document.getElementById('main-editor'); 
-                            ed.insertAdjacentHTML('beforeend', '<div><br></div>'); 
-                            Storage.saveDraft(ed.innerHTML); 
-                            const r=document.createRange(); 
-                            r.selectNodeContents(ed); 
-                            r.collapse(false); 
-                            const s=window.getSelection(); 
-                            s.removeAllRanges(); 
-                            s.addRange(r); 
-                            ed.scrollTop = ed.scrollHeight;
+                            ed.insertAdjacentHTML('beforeend', '<div><br></div>'); Storage.saveDraft(ed.innerHTML); 
+                            const r=document.createRange(); r.selectNodeContents(ed); r.collapse(false); 
+                            const s=window.getSelection(); s.removeAllRanges(); s.addRange(r); ed.scrollTop = ed.scrollHeight;
                         } 
                     }
-                    if(act==='installPWA') { if (State.deferredPrompt) { State.deferredPrompt.prompt(); State.deferredPrompt.userChoice.then((result) => { State.deferredPrompt = null; document.getElementById('btn-install-pwa').classList.add('hidden'); }); } }
-                    if(act==='toggleContrast') { const selection = window.getSelection(); if (!selection.isCollapsed) { document.execCommand('styleWithCSS', false, true); document.execCommand('foreColor', false, '#000000'); document.execCommand('hiliteColor', false, '#ffffff'); } else { Renderer.toast("SÉLECTIONNER TEXTE"); } }
+                    if(act==='installPWA') { if (State.deferredPrompt) { State.deferredPrompt.prompt(); State.deferredPrompt.userChoice.then(() => { State.deferredPrompt = null; document.getElementById('btn-install-pwa').classList.add('hidden'); }); } }
+                    if(act==='toggleContrast') { const sel = window.getSelection(); if (!sel.isCollapsed) { document.execCommand('styleWithCSS', false, true); document.execCommand('foreColor', false, '#000000'); document.execCommand('hiliteColor', false, '#ffffff'); } else Renderer.toast("SÉLECTIONNER TEXTE"); }
                     if(act==='triggerAttach') document.getElementById('pdf-input').click();
                     if(act==='openPdf') this.openPdf(d.id);
                 },
-                promptUnlock(id) {
-                    State.cryptoContext = { id: id, action: 'unlock' };
-                    document.getElementById('crypto-msg').textContent = "Note protégée. Accès requis :";
-                    document.getElementById('crypto-input').value = '';
-                    document.getElementById('modal-crypto').style.display = 'flex';
-                    document.getElementById('crypto-input').focus();
-                },
-                async openPdf(id) { const file = await Storage.getAttachment(id); if(file && file.data) { const url = URL.createObjectURL(file.data); window.open(url, '_blank'); } else { Renderer.toast("PDF INTROUVABLE"); } },
+                promptUnlock(id) { State.cryptoContext = { id, action: 'unlock' }; document.getElementById('crypto-msg').textContent = "Note protégée. Accès requis :"; document.getElementById('crypto-input').value = ''; document.getElementById('modal-crypto').style.display = 'flex'; document.getElementById('crypto-input').focus(); },
+                async openPdf(id) { const file = await Storage.getAttachment(id); if(file && file.data) window.open(URL.createObjectURL(file.data), '_blank'); else Renderer.toast("PDF INTROUVABLE"); },
                 confirmAction(btn, cb) { if(!btn) return; if(btn.dataset.confirm==="true") { cb(); btn.dataset.confirm="false"; btn.classList.remove('text-red-500', 'border-red-500', 'bg-red-500/20'); } else { btn.dataset.confirm="true"; btn.classList.add('text-red-500', 'border-red-500', 'bg-red-500/20'); Renderer.toast("SÛR ?"); setTimeout(()=>{btn.dataset.confirm="false";btn.classList.remove('text-red-500', 'border-red-500', 'bg-red-500/20');},2000); } },
                 insertHTML(html) { const editor = document.getElementById('main-editor'); editor.focus(); document.execCommand('insertHTML', false, html); setTimeout(() => { document.execCommand('insertHTML', false, '<div><br></div>'); Storage.saveDraft(editor.innerHTML); }, 10); },
                 insertText(t) { document.execCommand('insertText', false, t); Storage.saveDraft(document.getElementById('main-editor').innerHTML); },
                 async dispatchDraftToPage() {
                     const editor = document.getElementById('main-editor'); if(!editor.innerText.trim()) { Renderer.toast("VIDE"); return; }
-                    const clone = editor.cloneNode(true); const panels = clone.querySelectorAll('.ai-insight-panel'); panels.forEach(p => p.remove());
-                    const cleanText = clone.innerText.trim(); const fullContent = editor.innerHTML;
-                    if(!cleanText && panels.length > 0) { Renderer.toast("AJOUTER CONTENU MANUEL"); return; }
-                    const tagMatch = cleanText.match(/\[([a-zA-Z0-9\u00C0-\u00FF\s_\-'’]+)\]/);
-                    let title = tagMatch ? tagMatch[1] : null; if (!title) { title = cleanText.split('\n')[0].substring(0, 40) || "Sans Titre"; }
+                    const clone = editor.cloneNode(true); clone.querySelectorAll('.ai-insight-panel').forEach(p => p.remove());
+                    const cleanText = clone.innerText.trim(), fullContent = editor.innerHTML, tagMatch = cleanText.match(/\[([a-zA-Z0-9\u00C0-\u00FF\s_\-'’]+)\]/);
+                    let title = tagMatch ? tagMatch[1] : (cleanText.split('\n')[0].substring(0, 40) || "Sans Titre");
                     const existingPage = await Storage.findPageByTitle(title);
                     if (existingPage) { 
-                        const tempDiv = document.createElement('div'); tempDiv.innerHTML = existingPage.content; tempDiv.querySelectorAll('.ai-insight-panel').forEach(el => el.remove()); const cleanOldContent = tempDiv.innerHTML; let newContent; if (State.currentPageId === existingPage.id) { newContent = fullContent; Renderer.toast(`MISE À JOUR: [${title}]`); } else { newContent = cleanOldContent + "<br><hr style='border-color: rgba(255,255,255,0.1); margin: 20px 0;'><br>" + fullContent; Renderer.toast(`FUSION: [${title}]`); } 
+                        const tempDiv = document.createElement('div'); tempDiv.innerHTML = existingPage.content; tempDiv.querySelectorAll('.ai-insight-panel').forEach(el => el.remove()); 
+                        let newContent = (State.currentPageId === existingPage.id) ? fullContent : tempDiv.innerHTML + "<br><hr style='border-color: rgba(255,255,255,0.1); margin: 20px 0;'><br>" + fullContent;
+                        Renderer.toast((State.currentPageId === existingPage.id) ? `MISE À JOUR: [${title}]` : `FUSION: [${title}]`);
                         if (existingPage.encrypted) {
                             if(!State.unlockedNotes[existingPage.id]) { Renderer.toast("ERREUR DE CLÉ"); return; }
                             newContent = await CryptoEngine.encrypt(newContent, State.unlockedNotes[existingPage.id]);
                         }
                         await Storage.updatePage(existingPage.id, newContent); 
-                    } 
-                    else { await Storage.createPage(title, fullContent); Renderer.toast(`NOUVELLE PAGE: [${title}]`); }
+                    } else { await Storage.createPage(title, fullContent); Renderer.toast(`NOUVELLE PAGE: [${title}]`); }
                     State.currentPageId = null; editor.innerHTML = ''; document.getElementById('btn-crypto').classList.remove('text-red-500'); await Storage.saveDraft('', true); this.renderBinder();
                 },
                 async openPage(id) { 
-                    const page = await Storage.getPage(id); 
-                    if(page) { 
-                        if(page.encrypted) {
-                            if(State.unlockedNotes[id]) {
-                                try {
-                                    const plain = await CryptoEngine.decrypt(page.content, State.unlockedNotes[id]);
-                                    State.currentPageId = page.id;
-                                    document.getElementById('main-editor').innerHTML = Renderer.processContent(plain);
-                                    document.getElementById('btn-crypto').classList.add('text-red-500');
-                                    await Storage.saveDraft('', true); // Efface le draft si on lit une note sécurisée
-                                } catch(e) {
-                                    delete State.unlockedNotes[id];
-                                    this.promptUnlock(page.id);
-                                }
-                            } else {
-                                this.promptUnlock(page.id);
-                            }
-                        } else {
-                            State.currentPageId = page.id; 
-                            document.getElementById('main-editor').innerHTML = Renderer.processContent(page.content); 
-                            Storage.saveDraft(page.content, true); 
-                            document.getElementById('btn-crypto').classList.remove('text-red-500');
-                        }
-                    } 
+                    const page = await Storage.getPage(id); if(!page) return;
+                    if(page.encrypted) {
+                        if(State.unlockedNotes[id]) {
+                            try {
+                                const plain = await CryptoEngine.decrypt(page.content, State.unlockedNotes[id]);
+                                State.currentPageId = page.id; document.getElementById('main-editor').innerHTML = Renderer.processContent(plain);
+                                document.getElementById('btn-crypto').classList.add('text-red-500'); await Storage.saveDraft('', true);
+                            } catch(e) { delete State.unlockedNotes[id]; this.promptUnlock(page.id); }
+                        } else this.promptUnlock(page.id);
+                    } else {
+                        State.currentPageId = page.id; document.getElementById('main-editor').innerHTML = Renderer.processContent(page.content); 
+                        Storage.saveDraft(page.content, true); document.getElementById('btn-crypto').classList.remove('text-red-500');
+                    }
                 },
                 async renderBinder() {
                     const container = document.getElementById('ui-binder-content'); container.innerHTML='';
                     const pages = await Storage.getPages();
-                    let displayPages = pages;
-                    if(State.activeTagFilter) { displayPages = pages.filter(e => e.content.includes(State.activeTagFilter)); document.getElementById('ui-filter-banner').classList.remove('hidden'); document.getElementById('ui-filter-text').textContent = `Filtre: [${State.activeTagFilter}]`; }
+                    let displayPages = State.activeTagFilter ? pages.filter(e => e.content.includes(State.activeTagFilter)) : pages;
+                    if(State.activeTagFilter) { document.getElementById('ui-filter-banner').classList.remove('hidden'); document.getElementById('ui-filter-text').textContent = `Filtre: [${State.activeTagFilter}]`; }
                     if(displayPages.length === 0) container.innerHTML = '<div class="p-8 text-center text-slate-400 text-sm italic">Classeur Vide</div>';
                     displayPages.forEach(page => {
                         const card = document.createElement('div'); card.className = `page-card px-4 py-3`; if(State.currentPageId === page.id) card.classList.add('active');
-                        const isPinned = !!page.pinned;
-                        if (isPinned) { card.style.borderLeftColor = '#3b82f6'; card.style.background = 'rgba(59, 130, 246, 0.03)'; }
-                        
+                        if (page.pinned) { card.style.borderLeftColor = '#3b82f6'; card.style.background = 'rgba(59, 130, 246, 0.03)'; }
                         const lockIcon = page.encrypted ? `<svg class="w-3 h-3 text-red-500 shrink-0 ml-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"></path></svg>` : '';
-                        const pinIcon = `<svg class="w-3 h-3 pointer-events-none" fill="${isPinned ? 'currentColor' : 'none'}" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg>`;
-                        
-                        if(page.encrypted) {
-                            card.innerHTML = `<div class="flex justify-between items-start mb-1"><div class="flex flex-col w-full" data-action="openPage" data-id="${page.id}"><span class="text-sm font-bold text-slate-200 truncate pr-8 pointer-events-none flex items-center gap-1.5">${isPinned ? '<svg class="w-3 h-3 text-blue-500 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path d="M5 4a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 18V4z"/></svg>' : ''}<span class="truncate">${page.title}</span>${lockIcon}</span><span class="text-[11px] text-slate-400 font-mono mt-0.5 pointer-events-none">${Engine.utils.formatDate(page.updated)}</span><div class="mt-1 pointer-events-none"><span class="card-tag-badge !text-red-400 !border-red-500/30 !bg-red-500/10">BLACK-OPS</span></div></div><div class="card-actions"><button data-action="togglePin" data-id="${page.id}" class="p-1 ${isPinned ? 'text-blue-400' : 'text-slate-400'} hover:text-blue-400 rounded transition-colors" title="${isPinned ? 'Désépingler' : 'Épingler'}">${pinIcon}</button><button data-action="pageDelete" data-id="${page.id}" class="p-1 text-slate-400 hover:text-red-400 rounded transition-colors" title="Supprimer définitivement"><svg class="w-3 h-3 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-width="2"/></svg></button></div></div>`;
-                        } else {
-                            const matches = page.content.match(/\[([a-zA-Z0-9\u00C0-\u00FF\s_\-'’]+)\]/g) || [];
-                            const cleanTags = matches.map(t => t.replace(/[\[\]]/g,'')).filter(t => !t.match(/^(\d+(?:px|%|rem|em)|#[0-9a-f]+)$/));
-                            const uniqueTags = [...new Set(cleanTags)];
-                            const tagsHTML = uniqueTags.slice(0,3).map(t=>`<span class="card-tag-badge" data-action="openNexus" data-tag="${t}">${t}</span>`).join('');
-                            card.innerHTML = `<div class="flex justify-between items-start mb-1"><div class="flex flex-col w-full" data-action="openPage" data-id="${page.id}"><span class="text-sm font-bold text-slate-200 truncate pr-8 pointer-events-none flex items-center gap-1.5">${isPinned ? '<svg class="w-3 h-3 text-blue-500 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path d="M5 4a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 18V4z"/></svg>' : ''}<span class="truncate">${page.title}</span></span><span class="text-[11px] text-slate-400 font-mono mt-0.5 pointer-events-none">${Engine.utils.formatDate(page.updated)}</span><div class="mt-1 pointer-events-none">${tagsHTML}</div></div><div class="card-actions"><button data-action="togglePin" data-id="${page.id}" class="p-1 ${isPinned ? 'text-blue-400' : 'text-slate-400'} hover:text-blue-400 rounded transition-colors" title="${isPinned ? 'Désépingler' : 'Épingler'}">${pinIcon}</button><button data-action="pageDelete" data-id="${page.id}" class="p-1 text-slate-400 hover:text-red-400 rounded transition-colors" title="Supprimer définitivement"><svg class="w-3 h-3 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-width="2"/></svg></button></div></div>`;
-                        }
+                        const pinIcon = `<svg class="w-3 h-3 pointer-events-none" fill="${page.pinned ? 'currentColor' : 'none'}" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg>`;
+                        const matches = page.content.match(/\[([a-zA-Z0-9\u00C0-\u00FF\s_\-'’]+)\]/g) || [];
+                        const tagsHTML = page.encrypted ? '<span class="card-tag-badge !text-red-400 !border-red-500/30 !bg-red-500/10">BLACK-OPS</span>' : [...new Set(matches.map(t=>t.replace(/[\[\]]/g,'')).filter(t=>!t.match(/^(\d+(?:px|%|rem|em)|#[0-9a-f]+)$/)))].slice(0,3).map(t=>`<span class="card-tag-badge" data-action="openNexus" data-tag="${t}">${t}</span>`).join('');
+                        card.innerHTML = `<div class="flex justify-between items-start mb-1"><div class="flex flex-col w-full" data-action="openPage" data-id="${page.id}"><span class="text-sm font-bold text-slate-200 truncate pr-8 pointer-events-none flex items-center gap-1.5">${page.pinned ? '<svg class="w-3 h-3 text-blue-500 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path d="M5 4a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 18V4z"/></svg>' : ''}<span class="truncate">${page.title}</span>${lockIcon}</span><span class="text-[11px] text-slate-400 font-mono mt-0.5 pointer-events-none">${Engine.utils.formatDate(page.updated)}</span><div class="mt-1 pointer-events-none">${tagsHTML}</div></div><div class="card-actions"><button data-action="togglePin" data-id="${page.id}" class="p-1 ${page.pinned ? 'text-blue-400' : 'text-slate-400'} hover:text-blue-400 rounded transition-colors" title="${page.pinned ? 'Désépingler' : 'Épingler'}">${pinIcon}</button><button data-action="pageDelete" data-id="${page.id}" class="p-1 text-slate-400 hover:text-red-400 rounded transition-colors" title="Supprimer définitivement"><svg class="w-3 h-3 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-width="2"/></svg></button></div></div>`;
                         container.appendChild(card);
                     });
                 }
@@ -1721,100 +1936,56 @@ Plan de Trade tactique :
 
             const init = async () => {
                 try {
-                    window.Bus = Bus; // Exposer Bus globalement pour résoudre les ReferenceErrors d'UI inline.
-                    await Storage.init(); Engine.gfx.init(); Intelligence.initVoice(); await Intelligence.checkReminders();
+                    window.Bus = Bus; await Storage.init(); Engine.gfx.init(); Intelligence.initVoice(); await Intelligence.checkReminders();
                     window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); State.deferredPrompt = e; document.getElementById('btn-install-pwa').classList.remove('hidden'); document.getElementById('btn-install-pwa').classList.add('flex'); });
-                    
-                    // --- HOVER PEEK MOUSE TRACKER ---
                     document.addEventListener('mousemove', (e) => {
-                        Bus.lastMouseX = e.clientX;
-                        Bus.lastMouseY = e.clientY;
-                        const targetPage = e.target.closest('[data-action="openPage"]');
-                        const targetTag = e.target.closest('[data-action="openNexus"]');
-                        const target = targetPage || targetTag;
-
+                        Bus.lastMouseX = e.clientX; Bus.lastMouseY = e.clientY;
+                        const target = e.target.closest('[data-action="openPage"]') || e.target.closest('[data-action="openNexus"]');
                         if (target !== Bus.currentPeekTarget) {
-                            clearTimeout(Bus.peekTimer);
-                            Bus.hidePeek();
+                            clearTimeout(Bus.peekTimer); Bus.hidePeek();
                             if (target) {
                                 Bus.currentPeekTarget = target;
                                 Bus.peekTimer = setTimeout(() => {
-                                    if (targetPage) Bus.showPeek(target.dataset.id, 'page');
-                                    else if (targetTag) Bus.showPeek(target.dataset.tag, 'tag');
+                                    if (target.dataset.id) Bus.showPeek(target.dataset.id, 'page');
+                                    else if (target.dataset.tag) Bus.showPeek(target.dataset.tag, 'tag');
                                 }, 800);
-                            } else {
-                                Bus.currentPeekTarget = null;
-                            }
+                            } else Bus.currentPeekTarget = null;
                         }
                     });
-
                     document.body.addEventListener('click', (e) => Bus.handle(e)); document.body.addEventListener('dblclick', (e) => Bus.handle(e));
-                    document.getElementById('main-editor').addEventListener('dblclick', (e) => { Bus.toggleIndexWrapper(true); });
+                    document.getElementById('main-editor').addEventListener('dblclick', () => Bus.toggleIndexWrapper(true));
                     document.addEventListener('selectionchange', Engine.utils.debounce(() => Bus.checkSelection(), 100));
-                    document.getElementById('import-input').addEventListener('change', (e) => IO.importData(e.target.files[0]));
-                    document.getElementById('pdf-input').addEventListener('change', (e) => IO.attachPDF(e.target.files[0]));
-                    
-                    document.getElementById('crypto-input').addEventListener('keydown', (e) => {
-                        if(e.key === 'Enter') { e.preventDefault(); Bus.dispatchAction('submitCrypto'); }
-                    });
-
-                    // Interception à la frappe pour le menu slash
-                    document.getElementById('main-editor').addEventListener('input', (e) => { Slash.check(); });
+                    document.getElementById('import-input').addEventListener('change', (e) => { IO.importData(e.target.files[0]); e.target.value = ''; });
+                    document.getElementById('pdf-input').addEventListener('change', (e) => { IO.attachPDF(e.target.files[0]); e.target.value = ''; });
+                    document.getElementById('crypto-input').addEventListener('keydown', (e) => { if(e.key === 'Enter') { e.preventDefault(); Bus.dispatchAction('submitCrypto'); } });
+                    document.getElementById('main-editor').addEventListener('input', () => Slash.check());
                     document.getElementById('main-editor').addEventListener('input', Engine.utils.debounce(() => Storage.saveDraft(document.getElementById('main-editor').innerHTML), 1000));
-                    
-                    // Gestion de l'état des cases à cocher dans l'éditeur
                     document.getElementById('main-editor').addEventListener('change', (e) => {
                         if (e.target.classList.contains('task-box')) {
-                            if (e.target.checked) e.target.setAttribute('checked', 'checked');
-                            else e.target.removeAttribute('checked');
+                            if (e.target.checked) e.target.setAttribute('checked', 'checked'); else e.target.removeAttribute('checked');
                             Storage.saveDraft(document.getElementById('main-editor').innerHTML);
                         }
                     });
-
-                    document.getElementById('main-editor').addEventListener('paste', (e) => { setTimeout(() => { document.execCommand('insertHTML', false, '<div><br></div>'); Storage.saveDraft(document.getElementById('main-editor').innerHTML); }, 10); });
+                    document.getElementById('main-editor').addEventListener('paste', () => { setTimeout(() => { document.execCommand('insertHTML', false, '<div><br></div>'); Storage.saveDraft(document.getElementById('main-editor').innerHTML); }, 10); });
                     document.addEventListener('keydown', (e) => {
-                        // Capture des flèches/entrer si le menu slash est ouvert
                         if (e.target.id === 'main-editor' && Slash.handleKey(e)) return;
-
-                        // Conversion magique des Checklists à la frappe
                         if (e.target.id === 'main-editor' && e.code === 'Space') {
                             const sel = window.getSelection();
                             if (sel.isCollapsed && sel.anchorNode.nodeType === 3) {
                                 const text = sel.anchorNode.textContent.substring(0, sel.anchorOffset);
-                                if (text.endsWith('- [ ]')) {
-                                    e.preventDefault();
-                                    for(let i=0; i<5; i++) document.execCommand('delete', false, null);
-                                    document.execCommand('insertHTML', false, '<input type="checkbox" class="task-box" contenteditable="false">&nbsp;');
-                                } else if (text.match(/- \[[xX]\]$/)) {
-                                    e.preventDefault();
-                                    for(let i=0; i<5; i++) document.execCommand('delete', false, null);
-                                    document.execCommand('insertHTML', false, '<input type="checkbox" class="task-box" contenteditable="false" checked="checked">&nbsp;');
+                                if (text.endsWith('- [ ]') || text.match(/- \[[xX]\]$/)) {
+                                    e.preventDefault(); for(let i=0; i<5; i++) document.execCommand('delete', false, null);
+                                    document.execCommand('insertHTML', false, `<input type="checkbox" class="task-box" contenteditable="false" ${text.match(/[xX]/) ? 'checked="checked"' : ''}>&nbsp;`);
                                 }
                             }
                         }
-
                         if(e.key === 'Alt') document.getElementById('macro-hud').classList.add('visible');
-                        if(e.altKey && e.code === 'KeyZ') { e.preventDefault(); Bus.dispatchAction('toggleZenMode'); }
-                        if(e.altKey && e.code === 'KeyX') { e.preventDefault(); Bus.dispatchAction('toggleEncryption'); }
-                        if(e.altKey && e.code === 'KeyT') { e.preventDefault(); Bus.dispatchAction('insertIndex'); }
+                        if(e.altKey) {
+                            const keys = { 'KeyZ': 'toggleZenMode', 'KeyX': 'toggleEncryption', 'KeyT': 'insertIndex', 'KeyN': 'newPage', 'KeyS': 'triggerSitrep', 'Digit1': 'toggleViewPages', 'Digit2': 'toggleViewIndex', 'KeyM': 'toggleSidebar', 'KeyC': 'toggleContrast', 'ArrowUp': 'focusStart', 'ArrowDown': 'focusEnd', 'KeyG': 'aiChallenge', 'KeyP': 'triggerAttach', 'KeyR': 'openReminders', 'KeyB': 'socialBroadcast', 'KeyF': 'openSearch', 'Enter': 'dispatchToPage', 'KeyO': 'toggleSettings', 'KeyL': 'cleanFormat', 'Delete': 'clearDraft' };
+                            if(keys[e.code]) { e.preventDefault(); Bus.dispatchAction(keys[e.code].includes('toggleView') ? 'toggleView' : keys[e.code], keys[e.code].includes('Pages') ? {view:'pages'} : keys[e.code].includes('Index') ? {view:'index'} : keys[e.code] === 'focusStart' || keys[e.code] === 'focusEnd' ? {cmd:keys[e.code]} : {}); }
+                        }
+                        if(e.ctrlKey && e.code === 'KeyK') { e.preventDefault(); Bus.dispatchAction('openSearch'); }
                         if(e.key === 'F1') { e.preventDefault(); Bus.dispatchAction('openHelp'); }
-                        if(e.altKey && e.code === 'KeyN') { e.preventDefault(); Bus.dispatchAction('newPage'); }
-                        if(e.altKey && e.code === 'KeyS') { e.preventDefault(); Bus.dispatchAction('triggerSitrep'); }
-                        if(e.altKey && e.code === 'Digit1') { e.preventDefault(); Bus.dispatchAction('toggleView', {view: 'pages'}); }
-                        if(e.altKey && e.code === 'Digit2') { e.preventDefault(); Bus.dispatchAction('toggleView', {view: 'index'}); }
-                        if(e.altKey && e.code === 'KeyM') { e.preventDefault(); Bus.dispatchAction('toggleSidebar'); }
-                        if(e.altKey && e.code === 'KeyC') { e.preventDefault(); Bus.dispatchAction('toggleContrast'); }
-                        if(e.altKey && e.code === 'ArrowUp') { e.preventDefault(); Bus.dispatchAction('editorAction', {cmd: 'focusStart'}); }
-                        if(e.altKey && e.code === 'ArrowDown') { e.preventDefault(); Bus.dispatchAction('editorAction', {cmd: 'focusEnd'}); }
-                        if(e.altKey && e.code === 'KeyG') { e.preventDefault(); Bus.dispatchAction('aiChallenge'); }
-                        if(e.altKey && e.code === 'KeyP') { e.preventDefault(); Bus.dispatchAction('triggerAttach'); }
-                        if(e.altKey && e.code === 'KeyR') { e.preventDefault(); Bus.dispatchAction('openReminders'); } 
-                        if(e.altKey && e.code === 'KeyB') { e.preventDefault(); Bus.dispatchAction('socialBroadcast'); }
-                        if((e.altKey && e.code === 'KeyF') || (e.ctrlKey && e.code === 'KeyK')) { e.preventDefault(); Bus.dispatchAction('openSearch'); }
-                        if(e.altKey && e.code === 'Enter') { e.preventDefault(); Bus.dispatchAction('dispatchToPage'); }
-                        if(e.altKey && e.code === 'KeyO') { e.preventDefault(); Bus.dispatchAction('toggleSettings'); }
-                        if(e.altKey && e.code === 'KeyL') { e.preventDefault(); Bus.dispatchAction('cleanFormat'); }
-                        if(e.altKey && e.code === 'Delete') { e.preventDefault(); Bus.dispatchAction('clearDraft', {type: 'dblclick'}); }
                         Bus.handleSearchKeydown(e);
                         if (!e.altKey && State.chordBuffer.length === 0) return;
                         if (['Alt', 'Control', 'Shift', 'Meta'].includes(e.key)) return;
@@ -1823,24 +1994,23 @@ Plan de Trade tactique :
                             if (e.altKey) {
                                 const potentialMatches = Object.keys(State.macros).filter(k => k.startsWith(key + ',') || k === key);
                                 if (potentialMatches.length > 0) {
-                                    const exactMatch = State.macros[key]; const isPrefixForOthers = potentialMatches.some(k => k.startsWith(key + ','));
-                                    if (exactMatch && !isPrefixForOthers) { e.preventDefault(); Bus.insertHTML(exactMatch); Renderer.toast(`MACRO [${key.toUpperCase()}]`); } 
-                                    else if (potentialMatches.length > 0) { e.preventDefault(); State.chordBuffer.push(key); Renderer.toast(`SÉQUENCE: ${key.toUpperCase()}...`); document.getElementById('macro-hud').classList.add('visible'); clearTimeout(State.chordTimer); State.chordTimer = setTimeout(() => { State.chordBuffer = []; Renderer.toast("TIMEOUT MACRO"); document.getElementById('macro-hud').classList.remove('visible'); }, 2000); }
+                                    if (State.macros[key] && !potentialMatches.some(k => k.startsWith(key + ','))) { e.preventDefault(); Bus.insertHTML(State.macros[key]); Renderer.toast(`MACRO [${key.toUpperCase()}]`); } 
+                                    else { e.preventDefault(); State.chordBuffer.push(key); Renderer.toast(`SÉQUENCE: ${key.toUpperCase()}...`); document.getElementById('macro-hud').classList.add('visible'); clearTimeout(State.chordTimer); State.chordTimer = setTimeout(() => { State.chordBuffer = []; Renderer.toast("TIMEOUT MACRO"); document.getElementById('macro-hud').classList.remove('visible'); }, 2000); }
                                 }
                             }
                             return;
                         }
-                        e.preventDefault(); State.chordBuffer.push(key); const sequence = State.chordBuffer.join(',');
-                        if (State.macros[sequence]) { Bus.insertHTML(State.macros[sequence]); Renderer.toast(`MACRO [${sequence.toUpperCase()}]`); State.chordBuffer = []; clearTimeout(State.chordTimer); document.getElementById('macro-hud').classList.remove('visible'); } 
-                        else { const isPrefix = Object.keys(State.macros).some(k => k.startsWith(sequence + ',')); if (isPrefix) { Renderer.toast(`SÉQUENCE: ${sequence.toUpperCase()}...`); clearTimeout(State.chordTimer); State.chordTimer = setTimeout(() => { State.chordBuffer = []; Renderer.toast("TIMEOUT MACRO"); }, 2000); } else { Renderer.toast(`SÉQUENCE INCONNUE: ${sequence.toUpperCase()}`); State.chordBuffer = []; clearTimeout(State.chordTimer); } }
+                        e.preventDefault(); State.chordBuffer.push(key); const seq = State.chordBuffer.join(',');
+                        if (State.macros[seq]) { Bus.insertHTML(State.macros[seq]); Renderer.toast(`MACRO [${seq.toUpperCase()}]`); State.chordBuffer = []; clearTimeout(State.chordTimer); document.getElementById('macro-hud').classList.remove('visible'); } 
+                        else if (Object.keys(State.macros).some(k => k.startsWith(seq + ','))) { Renderer.toast(`SÉQUENCE: ${seq.toUpperCase()}...`); clearTimeout(State.chordTimer); State.chordTimer = setTimeout(() => { State.chordBuffer = []; Renderer.toast("TIMEOUT MACRO"); }, 2000); }
+                        else { Renderer.toast(`SÉQUENCE INCONNUE: ${seq.toUpperCase()}`); State.chordBuffer = []; clearTimeout(State.chordTimer); }
                     });
-                    document.addEventListener('keyup', (e) => { if(e.key === 'Alt') { if(State.chordBuffer.length === 0) document.getElementById('macro-hud').classList.remove('visible'); } });
-                    document.getElementById('search-input').addEventListener('input', Engine.utils.debounce((e) => { Intelligence.performSearch(e.target.value); }, 150));
+                    document.addEventListener('keyup', (e) => { if(e.key === 'Alt' && State.chordBuffer.length === 0) document.getElementById('macro-hud').classList.remove('visible'); });
+                    document.getElementById('search-input').addEventListener('input', Engine.utils.debounce((e) => Intelligence.performSearch(e.target.value), 150));
                     Bus.renderBinder(); Renderer.renderHUD(State.macros);
                     setTimeout(() => { document.getElementById('splash-screen').style.opacity=0; setTimeout(()=>document.getElementById('splash-screen').remove(),700); }, 1000);
                 } catch(e) { console.error(e); Renderer.toast("ERR KERNEL"); }
             };
-
             return { init };
         })();
         window.onload = System.init;
