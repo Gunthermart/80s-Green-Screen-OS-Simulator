@@ -1,42 +1,21 @@
-// netlify/functions/GetAgenDataAPIKey.js
-
+// Cette fonction s'exécute de manière sécurisée sur les serveurs de Netlify
 exports.handler = async function(event, context) {
-  // Gestion du Preflight CORS pour autoriser les requêtes depuis le navigateur
-  if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      },
-      body: '',
-    };
-  }
-
-  try {
-    // Utilisation du nom exact de ta variable configurée sur Netlify
+    // On récupère la variable d'environnement définie dans l'interface Netlify
     const apiKey = process.env.AgenDataAPIKey;
 
     if (!apiKey) {
-      throw new Error("La variable AgenDataAPIKey est introuvable sur Netlify");
+        return {
+            statusCode: 500,
+            body: JSON.stringify({ error: "Clé API manquante dans les variables d'environnement Netlify" })
+        };
     }
 
+    // On retourne la clé au format JSON
     return {
-      statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({ apiKey: apiKey }),
+        statusCode: 200,
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ AgenDataAPIKey: apiKey })
     };
-  } catch (error) {
-    return {
-      statusCode: 500,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({ error: error.message }),
-    };
-  }
 };
