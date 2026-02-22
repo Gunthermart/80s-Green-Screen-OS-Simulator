@@ -891,7 +891,7 @@ Plan de Trade tactique :
                     div.querySelectorAll('.nexus-index, .chrono-tag').forEach(el => { const text = document.createTextNode(el.innerText); el.parentNode.replaceChild(text, el); });
                     const walker = document.createTreeWalker(div, NodeFilter.SHOW_TEXT, null, false); const nodesToReplace = [];
                     while(walker.nextNode()) { const node = walker.currentNode; const hasTag = node.nodeValue && node.nodeValue.match(/\[[a-zA-Z0-9\u00C0-\u00FF\s_\-'’]+\]/); const hasTime = node.nodeValue && node.nodeValue.match(/!([a-zA-Z0-9\+\-\/]+)/); const hasTask = node.nodeValue && node.nodeValue.match(/-\s*\[[ xX]*\]/); if(hasTag || hasTime || hasTask) { if(node.parentElement.tagName !== 'SCRIPT' && node.parentElement.tagName !== 'STYLE') nodesToReplace.push(node); } }
-                    nodesToReplace.forEach(node => { const fragment = document.createDocumentFragment(); const parts = node.nodeValue.split(/(\[[a-zA-Z0-9\u00C0-\u00FF\s_\-'’]+\]|![a-zA-Z0-9\+\-\/]+|-\s*\[[ xX]*\])/g); parts.forEach(part => { if(part.match(/^\[[a-zA-Z0-9\u00C0-\u00FF\s_\-'’]+\]$/)) { if(part.match(/^\[(\d+(?:px|%|rem|em|vw|vh)|#[0-9a-fA-F]{3,6})\]$/)) { fragment.appendChild(document.createTextNode(part)); } else { const span = document.createElement('span'); span.className = 'nexus-index'; span.dataset.action = 'openNexus'; span.dataset.tag = part.replace(/[\[\]]/g, ''); span.textContent = part; fragment.appendChild(span); } } else if (part.match(/^![a-zA-Z0-9\+\-\/]+$/)) { const span = document.createElement('span'); span.className = 'chrono-tag'; const parsedDate = TimeEngine.parse(part.substring(1)); if(parsedDate && TimeEngine.isOverdue(parsedDate) && !TimeEngine.isToday(parsedDate)) span.classList.add('overdue'); span.textContent = part; fragment.appendChild(span); } else if (part.match(/^-\s*\[[ xX]*\]$/)) { const isChecked = part.toLowerCase().includes('x'); const input = document.createElement('input'); input.type = 'checkbox'; input.className = 'task-box'; input.contentEditable = 'false'; if(isChecked) input.setAttribute('checked', 'checked'); fragment.appendChild(input); fragment.appendChild(document.createTextNode(' ')); } else { fragment.appendChild(document.createTextNode(part)); } }); node.parentNode.replaceChild(fragment, node); });
+                    nodesToReplace.forEach(node => { const fragment = document.createDocumentFragment(); const parts = node.nodeValue.split(/(\[[a-zA-Z0-9\u00C0-\u00FF\s_\-'’]+\]|![a-zA-Z0-9\+\-\/]+|-\s*\[[ xX]*\])/g); parts.forEach(part => { if(part.match(/^\[[a-zA-Z0-9\u00C0-\u00FF\s_\-'’]+\]$/)) { if(part.match(/^\[(\d+(?:px|%|rem|em)|#[0-9a-fA-F]{3,6})\]$/)) { fragment.appendChild(document.createTextNode(part)); } else { const span = document.createElement('span'); span.className = 'nexus-index'; span.dataset.action = 'openNexus'; span.dataset.tag = part.replace(/[\[\]]/g, ''); span.textContent = part; fragment.appendChild(span); } } else if (part.match(/^![a-zA-Z0-9\+\-\/]+$/)) { const span = document.createElement('span'); span.className = 'chrono-tag'; const parsedDate = TimeEngine.parse(part.substring(1)); if(parsedDate && TimeEngine.isOverdue(parsedDate) && !TimeEngine.isToday(parsedDate)) span.classList.add('overdue'); span.textContent = part; fragment.appendChild(span); } else if (part.match(/^-\s*\[[ xX]*\]$/)) { const isChecked = part.toLowerCase().includes('x'); const input = document.createElement('input'); input.type = 'checkbox'; input.className = 'task-box'; input.contentEditable = 'false'; if(isChecked) input.setAttribute('checked', 'checked'); fragment.appendChild(input); fragment.appendChild(document.createTextNode(' ')); } else { fragment.appendChild(document.createTextNode(part)); } }); node.parentNode.replaceChild(fragment, node); });
                     return div.innerHTML;
                 },
                 toast(msg) { const el=document.getElementById('toast'); el.textContent=msg; el.style.opacity="1"; setTimeout(()=>el.style.opacity="0",2000); },
@@ -939,6 +939,8 @@ Plan de Trade tactique :
             };
 
             const Intelligence = {
+                apiCooldownUntil: 0, // Bouclier anti-spam pour l'API
+                
                 // COMMAND PALETTE DEFINITIONS
                 COMMANDS: [
                     { id: 'cmd_new', title: 'Nouvelle Note', desc: 'Créer une note vierge', icon: '📝', action: 'newPage', keys: 'nouveau,new,creer,note,>nouvelle' },
@@ -956,28 +958,35 @@ Plan de Trade tactique :
                 
                 // --- GEMINI API INTEGRATION ---
                 async callGemini(userQuery) {
+                    if (Date.now() < this.apiCooldownUntil) {
+                        const remaining = Math.ceil((this.apiCooldownUntil - Date.now()) / 1000);
+                        throw new Error(`QUOTA ÉPUISÉ. Refroidissement : ${remaining}s.`);
+                    }
+
                     let apiKey = "";
                     let model = "gemini-2.5-flash-preview-09-2025"; // Modèle par défaut (compatible avec cet éditeur)
 
                     try {
                         console.log("[NoteLogic] Tentative de récupération de la clé Netlify...");
-                        const res = await fetch('/.netlify/functions/GetAgenDataAPIKey');
+                        // Mise à jour vers votre fonction dédiée qui renvoie NoteLogic_Api_Key
+                        const res = await fetch('/.netlify/functions/GetNoteLogicApiKey');
                         if (res.ok) {
                             const textData = await res.text();
                             try {
                                 const json = JSON.parse(textData);
-                                if (json.AgenDataAPIKey) apiKey = json.AgenDataAPIKey;
+                                // On utilise votre nom de variable exact spécifié sur Netlify
+                                if (json.NoteLogic_Api_Key) apiKey = json.NoteLogic_Api_Key;
                             } catch(e) {
-                                // Fallback si texte brut, sécurité contre les pages 404 HTML de Netlify
+                                // Fallback si texte brut (Netlify renvoie parfois la valeur directe)
                                 if (!textData.includes("<!DOCTYPE html>") && !textData.includes("<html")) {
                                     apiKey = textData.trim();
                                 }
                             }
                             if (apiKey && apiKey.length > 10) {
-                                model = "gemini-2.0-flash"; // Nouveau modèle stable recommandé par Google
+                                model = "gemini-2.0-flash"; // Utilisation du modèle 2.0 en production
                                 console.log("[NoteLogic] Clé trouvée ! Modèle :", model);
                             } else {
-                                throw new Error("CLÉ API NETLIFY VIDE OU INTROUVABLE DANS LA RÉPONSE");
+                                throw new Error("VARIABLE NoteLogic_Api_Key VIDE OU INTROUVABLE");
                             }
                         } else {
                             console.warn(`[NoteLogic] Fonction Netlify introuvable (HTTP ${res.status}). Mode de test Canvas local activé.`);
@@ -990,7 +999,7 @@ Plan de Trade tactique :
 
                     const systemPrompt = "Tu es NoteLogic Intelligence, un analyste tactique expert. Analyse le texte fourni. Tu DOIS générer une réponse en HTML léger (strictement AUCUN markdown) contenant DEUX éléments : 1. Les points clés ultra-synthétiques sous forme de liste à puces avec <ul class='list-disc pl-5 space-y-1 text-slate-300 mb-2'> et <li>. 2. Une proposition de 3 à 5 tags pertinents (formatés ainsi: [TAG]) encapsulés dans une <div class='flex flex-wrap gap-2 text-[11px] font-mono font-bold text-purple-400 mt-2 pt-2 border-t border-white/10'>. Sois direct, opérationnel, sans aucune phrase d'introduction ou de conclusion.";
                     
-                    let delay = 2000; // On augmente le délai de base à 2 secondes pour laisser souffler l'API
+                    let delay = 2000; 
                     for (let i = 0; i < 5; i++) {
                         try {
                             const response = await fetch(url, {
@@ -1003,8 +1012,10 @@ Plan de Trade tactique :
                             });
                             
                             if (!response.ok) {
-                                // Détection spécifique du blocage pour "Trop de requêtes"
-                                if (response.status === 429) throw new Error("RATE_LIMIT");
+                                if (response.status === 429) {
+                                    this.apiCooldownUntil = Date.now() + 60000; 
+                                    throw new Error("RATE_LIMIT");
+                                }
                                 
                                 let errDetails = `HTTP ${response.status}`;
                                 try {
@@ -1018,12 +1029,12 @@ Plan de Trade tactique :
                             return result.candidates?.[0]?.content?.parts?.[0]?.text || "Aucun contenu généré.";
                         } catch (err) {
                             if (i === 4) {
-                                // Message clair et "Ops" au lieu de l'erreur technique brute
-                                if (err.message === "RATE_LIMIT") throw new Error("QUOTA GOOGLE DÉPASSÉ. Attendez 1 min.");
+                                if (err.message === "RATE_LIMIT") throw new Error("QUOTA GOOGLE DÉPASSÉ (Pause de 60s imposée).");
                                 throw err;
                             }
-                            // Si c'est un 429, on patiente encore plus longtemps avant de réessayer
-                            await new Promise(r => setTimeout(r, err.message === "RATE_LIMIT" ? delay * 1.5 : delay));
+                            if (err.message === "RATE_LIMIT") throw err;
+                            
+                            await new Promise(r => setTimeout(r, delay));
                             delay *= 2;
                         }
                     }
