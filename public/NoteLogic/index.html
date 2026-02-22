@@ -957,17 +957,35 @@ Plan de Trade tactique :
                 // --- GEMINI API INTEGRATION ---
                 async callGemini(userQuery) {
                     let apiKey = "";
+                    let model = "gemini-2.5-flash-preview-09-2025"; // Modèle par défaut (compatible avec cet éditeur)
+
                     try {
+                        console.log("[NoteLogic] Tentative de récupération de la clé Netlify...");
                         const res = await fetch('/.netlify/functions/GetAgenDataAPIKey');
                         if (res.ok) {
-                            const json = await res.json();
-                            apiKey = json.AgenDataAPIKey || "";
+                            const textData = await res.text();
+                            try {
+                                const json = JSON.parse(textData);
+                                if (json.AgenDataAPIKey) apiKey = json.AgenDataAPIKey;
+                            } catch(e) {
+                                // Fallback si texte brut, sécurité contre les pages 404 HTML de Netlify
+                                if (!textData.includes("<!DOCTYPE html>") && !textData.includes("<html")) {
+                                    apiKey = textData.trim();
+                                }
+                            }
+                            if (apiKey && apiKey.length > 10) {
+                                model = "gemini-1.5-flash"; // Modèle stable utilisé en production sur Netlify
+                                console.log("[NoteLogic] Clé trouvée ! Modèle :", model);
+                            } else {
+                                throw new Error("CLÉ API NETLIFY VIDE OU INTROUVABLE DANS LA RÉPONSE");
+                            }
+                        } else {
+                            console.warn(`[NoteLogic] Fonction Netlify introuvable (HTTP ${res.status}). Mode de test Canvas local activé.`);
                         }
-                    } catch(e) { console.warn("Liaison Netlify indisponible."); }
+                    } catch(e) { 
+                        console.warn("[NoteLogic] Fallback sur le proxy local/Canvas.", e.message); 
+                    }
 
-                    if (!apiKey) throw new Error("API_KEY_MISSING");
-
-                    const model = "gemini-1.5-flash";
                     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
                     const systemPrompt = "Tu es NoteLogic Intelligence, un analyste tactique expert. Analyse le texte fourni. Tu DOIS générer une réponse en HTML léger (strictement AUCUN markdown) contenant DEUX éléments : 1. Les points clés ultra-synthétiques sous forme de liste à puces avec <ul class='list-disc pl-5 space-y-1 text-slate-300 mb-2'> et <li>. 2. Une proposition de 3 à 5 tags pertinents (formatés ainsi: [TAG]) encapsulés dans une <div class='flex flex-wrap gap-2 text-[11px] font-mono font-bold text-purple-400 mt-2 pt-2 border-t border-white/10'>. Sois direct, opérationnel, sans aucune phrase d'introduction ou de conclusion.";
@@ -984,8 +1002,12 @@ Plan de Trade tactique :
                                 })
                             });
                             if (!response.ok) {
-                                const errData = await response.json();
-                                throw new Error(errData.error?.message || "API_FAILURE");
+                                let errDetails = `HTTP ${response.status}`;
+                                try {
+                                    const errData = await response.json();
+                                    errDetails = errData.error?.message || errDetails;
+                                } catch(e) {}
+                                throw new Error(errDetails);
                             }
                             const result = await response.json();
                             return result.candidates?.[0]?.content?.parts?.[0]?.text || "Aucun contenu généré.";
@@ -1135,8 +1157,9 @@ Plan de Trade tactique :
                         Storage.saveDraft(editor.innerHTML);
                         Renderer.toast("ANALYSE GEMINI TERMINÉE");
                     } catch (err) {
-                        console.error(err);
-                        Renderer.toast("ERREUR DE LIAISON IA");
+                        console.error("[IA Extract Error]", err);
+                        const msg = err.message || "Erreur inconnue";
+                        Renderer.toast("ERREUR IA : " + (msg.length > 30 ? msg.substring(0, 30) + "..." : msg));
                     } finally {
                         pulse.classList.remove('bg-blue-400', 'shadow-[0_0_10px_#60a5fa]'); 
                         label.textContent = "SYSTEM.READY"; 
@@ -1201,8 +1224,8 @@ Instruction de formatage : Utilise des balises HTML (<span class="text-blue-400 
                         const response = await this.callGemini(prompt);
                         container.innerHTML = `<div class="font-sans text-slate-200 text-sm leading-relaxed">${response}</div>`;
                     } catch(e) {
-                        console.error(e);
-                        container.innerHTML = `<div class="text-red-400 font-mono text-xs uppercase">Erreur de liaison satellite (API).</div>`;
+                        console.error("[IA Briefing Error]", e);
+                        container.innerHTML = `<div class="text-red-400 font-mono text-xs uppercase border border-red-500/30 bg-red-500/10 p-2 rounded">Erreur IA : ${e.message}</div>`;
                     } finally {
                         btn.disabled = false;
                         btn.innerHTML = `<span class="text-sm md:text-base">🤖</span> BRIEFING <span class="hidden md:inline">(MATIN)</span>`;
@@ -1268,8 +1291,8 @@ Instruction de formatage : Utilise des balises HTML (<span class="text-indigo-40
                         const response = await this.callGemini(prompt);
                         container.innerHTML = `<div class="flex items-center gap-2 mb-3 border-b border-indigo-500/20 pb-2"><span class="text-indigo-400 text-lg">🌙</span><span class="text-[10px] font-black uppercase tracking-widest text-indigo-400">Debriefing Tactique (Bilan)</span></div><div class="font-sans text-slate-200 text-sm leading-relaxed">${response}</div>`;
                     } catch(e) {
-                        console.error(e);
-                        container.innerHTML = `<div class="text-red-400 font-mono text-xs uppercase">Erreur de liaison satellite (API).</div>`;
+                        console.error("[IA Debriefing Error]", e);
+                        container.innerHTML = `<div class="text-red-400 font-mono text-xs uppercase border border-red-500/30 bg-red-500/10 p-2 rounded">Erreur IA : ${e.message}</div>`;
                     } finally {
                         btn.disabled = false;
                         btn.innerHTML = `<span class="text-sm md:text-base">🌙</span> DEBRIEF <span class="hidden md:inline">(SOIR)</span>`;
@@ -1343,8 +1366,8 @@ Utilise <ul class='list-disc pl-5 space-y-2 mb-4'> et <li> pour lister les notes
                         const response = await this.callGemini(prompt);
                         container.innerHTML = `<div class="flex items-center gap-2 mb-3 border-b border-purple-500/20 pb-2"><span class="text-purple-400 text-lg">🧠</span><span class="text-[10px] font-black uppercase tracking-widest text-purple-400">Corrélations & Suggestions</span></div><div class="space-y-2 font-sans">${response}</div>`;
                     } catch(e) {
-                        console.error(e);
-                        container.innerHTML = `<div class="text-red-400 font-mono text-xs uppercase">Erreur de liaison satellite (API).</div>`;
+                        console.error("[IA Insights Error]", e);
+                        container.innerHTML = `<div class="text-red-400 font-mono text-xs uppercase border border-red-500/30 bg-red-500/10 p-2 rounded">Erreur IA : ${e.message}</div>`;
                     } finally {
                         if(btn) {
                             btn.disabled = false;
@@ -1425,8 +1448,8 @@ Structure ta réponse exactement ainsi :
                         const response = await this.callGemini(prompt);
                         container.innerHTML = `<div class="flex items-center gap-2 mb-3 border-b border-amber-500/20 pb-2"><span class="text-amber-400 text-lg">⚡</span><span class="text-[10px] font-black uppercase tracking-widest text-amber-400">Générateur d'étincelles</span></div><div class="space-y-2 font-sans text-slate-200">${response}</div>`;
                     } catch(e) {
-                        console.error(e);
-                        container.innerHTML = `<div class="text-red-400 font-mono text-xs uppercase">Erreur de liaison satellite (API).</div>`;
+                        console.error("[IA Synergies Error]", e);
+                        container.innerHTML = `<div class="text-red-400 font-mono text-xs uppercase border border-red-500/30 bg-red-500/10 p-2 rounded">Erreur IA : ${e.message}</div>`;
                     } finally {
                         if(btn) {
                             btn.disabled = false;
