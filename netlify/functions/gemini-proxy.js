@@ -1,13 +1,18 @@
 exports.handler = async function(event, context) {
-    // Remplacer localhost par le nom de domaine exact en production
-    const allowedOrigins = ['https://leonce-equity.com/notelogic/index.html', 'http://localhost:8888']; 
+    // Domaines stricts autorisés à interroger ton proxy
+    const allowedOrigins = [
+        'https://leonce-equity.com',
+        'https://www.leonce-equity.com', 
+        'http://localhost:8888'
+    ]; 
     const origin = event.headers.origin;
     
-    // Si la requête provient d'un navigateur, on vérifie l'origine
+    // Vérification de l'origine
     if (origin && !allowedOrigins.includes(origin)) {
         return { statusCode: 403, body: JSON.stringify({ error: "Accès refusé. Origine non autorisée." }) };
     }
 
+    // Filtrage des méthodes
     if (event.httpMethod !== 'POST') {
         return { statusCode: 405, body: JSON.stringify({ error: "Méthode HTTP non autorisée." }) };
     }
@@ -49,7 +54,7 @@ exports.handler = async function(event, context) {
             statusCode: 200,
             headers: {
                 'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': origin || '*'
+                'Access-Control-Allow-Origin': origin || '*' // L'en-tête dynamique est nécessaire pour le navigateur
             },
             body: JSON.stringify({ text: generatedText })
         };
