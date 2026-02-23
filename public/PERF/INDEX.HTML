@@ -24,6 +24,12 @@
         .help-icon { cursor: pointer; color: #94a3b8; transition: color 0.2s; display: inline-block; vertical-align: middle; margin-left: 0.25rem; }
         .help-icon:hover { color: #38bdf8; }
         .modal-overlay { background-color: rgba(0, 0, 0, 0.8); backdrop-filter: blur(4px); }
+        .pulse-border { animation: pulse-border-anim 2s infinite; }
+        @keyframes pulse-border-anim {
+            0% { border-color: rgba(220, 38, 38, 0.4); box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); }
+            70% { border-color: rgba(220, 38, 38, 1); box-shadow: 0 0 0 10px rgba(220, 38, 38, 0); }
+            100% { border-color: rgba(220, 38, 38, 0.4); box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+        }
     </style>
 </head>
 <body class="p-4 md:p-8">
@@ -57,6 +63,78 @@
                 <div class="text-sm font-medium text-slate-300 pointer-events-none">
                     <span class="block text-lg mb-1 text-white">2. Historique</span>
                     <span id="label-hist" class="text-slate-400">Glisse 'historique-portefeuille.csv' ici</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- PRE-TRADE JOURNAL SECTION -->
+        <div id="pre-trade-journal" class="space-y-6 mt-4 mb-10 pt-4 border-t border-zinc-700">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-4">
+                <div>
+                    <h2 class="text-2xl font-bold text-white">
+                        Contrat d'Entrée (Validation R-Multiple)
+                        <svg onclick="showHelp('contrat_entree')" class="w-5 h-5 help-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </h2>
+                    <p class="text-slate-400 text-sm mt-1">Interdiction formelle d'ouvrir le courtier avant validation mathématique du risque.</p>
+                </div>
+            </div>
+
+            <div class="card border-zinc-700/50 bg-slate-800/50">
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div>
+                        <label class="block text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">Actif visé</label>
+                        <input type="text" id="journal-asset" placeholder="Ex: TotalEnergies" class="w-full bg-slate-900 text-white border border-slate-700 p-2 rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">Prix d'Entrée</label>
+                        <input type="number" id="journal-entry" placeholder="0.00" step="0.01" class="w-full bg-slate-900 text-white border border-slate-700 p-2 rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">Stop Loss Strict</label>
+                        <input type="number" id="journal-stop" placeholder="0.00" step="0.01" class="w-full bg-slate-900 text-white border border-slate-700 p-2 rounded focus:outline-none focus:border-red-500">
+                    </div>
+                    <div>
+                        <label class="block text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">Cible de Profit</label>
+                        <input type="number" id="journal-target" placeholder="0.00" step="0.01" class="w-full bg-slate-900 text-white border border-slate-700 p-2 rounded focus:outline-none focus:border-emerald-500">
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <label class="block text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">
+                        Déclencheur Psychologique (Pourquoi ce trade ?)
+                        <svg onclick="showHelp('biais_emotionnel')" class="w-4 h-4 help-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </label>
+                    <select id="journal-bias" class="w-full bg-slate-900 text-white border border-slate-700 p-3 rounded focus:outline-none focus:border-purple-500">
+                        <option value="" disabled selected>-- Sois honnête avec toi-même --</option>
+                        <option value="fomo">FOMO : J'ai peur de rater la hausse, le train part sans moi.</option>
+                        <option value="ennui">Ennui : Je n'ai pas de position, je veux juste être sur le marché.</option>
+                        <option value="revanche">Revanche : Je viens de perdre, je dois récupérer cet argent rapidement.</option>
+                        <option value="gourou">Bruit Externe : Quelqu'un a dit sur internet que ça allait exploser.</option>
+                        <option value="strategie">Froid & Rationnel : Mon setup est validé, les probabilités sont de mon côté.</option>
+                    </select>
+                </div>
+                <button onclick="evaluateTrade()" class="w-full mt-6 bg-zinc-700 hover:bg-zinc-600 text-white font-bold py-3 px-4 rounded transition-colors uppercase text-sm tracking-wider">
+                    Soumettre à l'Algorithme de Risque
+                </button>
+            </div>
+
+            <div id="journal-result" style="display:none;" class="card mt-4 border-l-4">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 text-center">
+                    <div>
+                        <div class="text-slate-400 text-xs uppercase tracking-wider">Risque pris (R)</div>
+                        <div id="res-risk" class="text-xl font-bold text-red-400">--</div>
+                    </div>
+                    <div>
+                        <div class="text-slate-400 text-xs uppercase tracking-wider">Gain visé</div>
+                        <div id="res-reward" class="text-xl font-bold text-emerald-400">--</div>
+                    </div>
+                    <div>
+                        <div class="text-slate-400 text-xs uppercase tracking-wider">Ratio d'Asymétrie</div>
+                        <div id="res-ratio" class="text-3xl font-bold">--</div>
+                    </div>
+                </div>
+                <div class="border-t border-slate-700/50 pt-4 mt-2">
+                    <div class="text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">Verdict d'Exécution</div>
+                    <div id="journal-diagnostic" class="text-white text-sm">--</div>
                 </div>
             </div>
         </div>
@@ -432,6 +510,41 @@
             </div>
         </div>
 
+        <!-- ORDRE DE LIQUIDATION SECTION (TRIAGE D'ABATTAGE) -->
+        <div id="liquidation-section" style="display:none;" class="space-y-6 mt-8 pt-8 border-t border-red-900">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-4">
+                <div>
+                    <h2 class="text-2xl font-bold text-red-600 flex items-center gap-2">
+                        Ordre de Liquidation (Triage d'Abattage)
+                        <svg onclick="showHelp('ordre_liquidation')" class="w-6 h-6 help-icon text-red-600 hover:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                    </h2>
+                    <p class="text-slate-400 text-sm mt-1">L'algorithme identifie la ligne la plus toxique du portefeuille et génère un ordre de vente strict sans émotion.</p>
+                </div>
+            </div>
+
+            <div id="liquidation-card" class="card border-2 border-red-600 bg-red-900/10 text-center pulse-border">
+                <div class="text-slate-400 text-xs uppercase font-bold tracking-wider mb-4">Cible d'Exécution Immédiate</div>
+                <div id="liq-target-name" class="text-5xl font-black text-white mb-2">--</div>
+                <div id="liq-target-amount" class="text-2xl font-bold text-red-500 mb-6">--</div>
+                
+                <div class="bg-slate-900/80 rounded p-4 text-left border border-red-900/50 max-w-2xl mx-auto">
+                    <h4 class="text-sm uppercase font-bold text-slate-400 mb-2 border-b border-slate-700 pb-2">Motifs de la Sentence :</h4>
+                    <ul id="liq-reasons" class="space-y-2 text-slate-300 text-sm">
+                        <!-- Raisons injectées ici -->
+                    </ul>
+                </div>
+
+                <div class="mt-8 text-slate-400 text-sm italic">
+                    "Cet ordre annule et remplace ton libre arbitre. Vends cette ligne à la prochaine ouverture des marchés."
+                </div>
+            </div>
+            
+            <div id="liquidation-safe" style="display:none;" class="card border-emerald-900/50 bg-emerald-900/10 text-center">
+                <div class="text-emerald-400 text-lg font-bold">Portefeuille Sain. Aucun abattage requis.</div>
+                <div class="text-slate-400 text-sm mt-2">Aucune position ne présente un profil de toxicité critique (Perte profonde + Capital bloqué). Maintiens tes stops habituels.</div>
+            </div>
+        </div>
+
         <!-- MONEY MANAGEMENT SECTION -->
         <div id="money-management-section" style="display:none;" class="space-y-6 mt-8 pt-8 border-t border-cyan-900">
             <div class="flex flex-col md:flex-row justify-between items-center mb-4">
@@ -669,6 +782,18 @@
             "chaleur_globale": {
                 title: "Chaleur Globale (Portfolio Heat)",
                 text: "C'est l'addition de tout le risque ouvert sur ton compte. Si toutes tes actions chutent en même temps, voici le montant exact qui disparaît. Les professionnels maintiennent cette chaleur globale sous les 6%. Au-delà, une simple correction de marché suffit à paralyser ton portefeuille et à déclencher des appels de marge ou des liquidations forcées en panique."
+            },
+            "contrat_entree": {
+                title: "Contrat d'Entrée (Validation R)",
+                text: "Le ratio mathématique de ton trade. Si tu risques 1 euro pour en gagner 1.5, tu joues avec une espérance négative sur le long terme car ton Win Rate n'est jamais de 100%. L'algorithme refuse tout trade dont le ratio Reward/Risk est inférieur à 2. C'est le filtre entre les investisseurs et la liquidité (les pigeons)."
+            },
+            "biais_emotionnel": {
+                title: "Traqueur de Biais Émotionnel",
+                text: "Un setup parfait exécuté pour de mauvaises raisons finira toujours par une perte de contrôle. Ce traqueur t'oblige à avouer pourquoi tu cliques. Si tu cliques par ennui, par peur de rater le train (FOMO) ou par esprit de revanche, le système te bloque. Les mathématiques ne peuvent pas sauver une psychologie défaillante."
+            },
+            "ordre_liquidation": {
+                title: "Ordre de Liquidation (Triage)",
+                text: "Face à des pertes multiples, l'ego paralyse l'investisseur. Ce module retire l'humain de la décision. Il croise la profondeur de la perte, l'improbabilité mathématique du rebond, et le capital pris en otage, pour dicter quelle ligne doit être abattue en priorité. Ce n'est pas un conseil, c'est un ordre d'hygiène financière."
             }
         };
 
@@ -690,6 +815,99 @@
                 closeHelp();
             }
         });
+
+        // --- Pre-Trade Journal Logic ---
+        function evaluateTrade() {
+            const entry = parseFloat(document.getElementById('journal-entry').value);
+            const stop = parseFloat(document.getElementById('journal-stop').value);
+            const target = parseFloat(document.getElementById('journal-target').value);
+            const bias = document.getElementById('journal-bias').value;
+
+            const resultBox = document.getElementById('journal-result');
+            const diagBox = document.getElementById('journal-diagnostic');
+
+            if (isNaN(entry) || isNaN(stop) || isNaN(target) || !bias) {
+                resultBox.style.display = 'block';
+                resultBox.className = "card mt-4 border-l-4 border-slate-500 bg-slate-800/50";
+                diagBox.innerHTML = "<p class='text-slate-400'>Erreur de saisie. Remplis les trois paramètres de prix et sélectionne ton biais psychologique.</p>";
+                return;
+            }
+
+            const isLong = target > entry;
+
+            let risk, reward;
+            if (isLong) {
+                risk = entry - stop;
+                reward = target - entry;
+            } else {
+                risk = stop - entry;
+                reward = entry - target;
+            }
+
+            if (risk <= 0) {
+                resultBox.style.display = 'block';
+                resultBox.className = "card mt-4 border-l-4 border-red-600 bg-slate-800/50";
+                diagBox.innerHTML = "<p class='text-red-500 font-bold'>PARAMÉTRAGE INVALIDE. Ton Stop Loss est du mauvais côté de ton point d'entrée.</p>";
+                return;
+            }
+
+            if (reward <= 0) {
+                 resultBox.style.display = 'block';
+                 resultBox.className = "card mt-4 border-l-4 border-red-600 bg-slate-800/50";
+                 diagBox.innerHTML = "<p class='text-red-500 font-bold'>PARAMÉTRAGE INVALIDE. Ta cible de profit est du mauvais côté de ton point d'entrée.</p>";
+                 return;
+            }
+
+            const ratio = reward / risk;
+
+            document.getElementById('res-risk').textContent = formatCurrency(risk);
+            document.getElementById('res-reward').textContent = formatCurrency(reward);
+            const ratioEl = document.getElementById('res-ratio');
+            ratioEl.textContent = "1 : " + ratio.toFixed(2);
+
+            resultBox.style.display = 'block';
+
+            if (bias !== 'strategie') {
+                resultBox.className = "card mt-4 border-l-4 border-purple-600 bg-purple-900/10";
+                ratioEl.className = "text-3xl font-bold text-purple-400";
+                
+                let biasMessage = "";
+                if (bias === 'fomo') biasMessage = "Tu achètes sous le coup de l'émotion parce que le prix monte déjà. Tu vas servir de liquidité à ceux qui ont acheté plus bas et qui prennent leurs profits sur toi.";
+                else if (bias === 'ennui') biasMessage = "Le marché n'est pas un casino conçu pour te divertir. Agir par ennui garantit la destruction de ton capital.";
+                else if (bias === 'revanche') biasMessage = "Le marché ne te doit rien et n'a aucune mémoire de tes pertes précédentes. Essayer de te refaire est la voie express vers la liquidation totale.";
+                else if (bias === 'gourou') biasMessage = "Tu as externalisé ton cerveau. Si tu ne maîtrises pas la thèse, tu paniqueras à la première baisse.";
+
+                diagBox.innerHTML = `
+                    <p class="text-purple-400 font-bold text-lg">VERDICT : REJETÉ (Corruption Émotionnelle).</p>
+                    <p class="text-slate-300 mt-2">${biasMessage}</p>
+                    <p class="text-slate-300 mt-2">Peu importe que ton ratio mathématique soit de 1 : ${ratio.toFixed(2)}. La base de ce trade est compromise car tu n'es pas dans un état d'esprit rationnel. Ferme la plateforme.</p>
+                `;
+                return;
+            }
+
+            if (ratio < 2) {
+                resultBox.className = "card mt-4 border-l-4 border-red-600 bg-red-900/10";
+                ratioEl.className = "text-3xl font-bold text-red-500";
+                diagBox.innerHTML = `
+                    <p class="text-red-400 font-bold text-lg">VERDICT : REJETÉ (Toxique).</p>
+                    <p class="text-slate-300 mt-2">Tu risques 1 pour gagner ${ratio.toFixed(2)}. Avec ce type de ratio, la moindre série de pertes ruinera ton compte. Le marché ne paie pas assez cher pour le risque que tu prends. Ce n'est pas un investissement, c'est un don à ton courtier. Annule ce trade.</p>
+                `;
+            } else if (ratio >= 2 && ratio < 3) {
+                resultBox.className = "card mt-4 border-l-4 border-emerald-500 bg-emerald-900/10";
+                ratioEl.className = "text-3xl font-bold text-emerald-400";
+                diagBox.innerHTML = `
+                    <p class="text-emerald-400 font-bold text-lg">VERDICT : AUTORISÉ (Standard).</p>
+                    <p class="text-slate-300 mt-2">Le ratio de 1 : ${ratio.toFixed(2)} est mathématiquement viable. Le contrat est simple : si l'action touche ${formatCurrency(stop)}, tu fermes la position comme un robot, sans aucune excuse. Si tu n'es pas prêt à assumer cette perte au centime près, n'achète pas.</p>
+                `;
+            } else {
+                resultBox.className = "card mt-4 border-l-4 border-blue-500 bg-blue-900/10";
+                ratioEl.className = "text-3xl font-bold text-blue-400";
+                diagBox.innerHTML = `
+                    <p class="text-blue-400 font-bold text-lg">VERDICT : AUTORISÉ (Asymétrie Forte).</p>
+                    <p class="text-slate-300 mt-2">Structure théorique excellente (1 : ${ratio.toFixed(2)}). Attention au biais d'optimisme : ta cible à ${formatCurrency(target)} est-elle techniquement et fondamentalement atteignable, ou as-tu triché sur les chiffres pour valider l'équation ? Si c'est réaliste, exécute le plan.</p>
+                `;
+            }
+        }
 
         // --- Utils ---
         const parseFrenchNumber = (str) => {
@@ -727,6 +945,10 @@
                 renderRiskMetrics(globalPortfolio, globalHistory);
                 renderSectorMatrix(globalPortfolio);
                 renderRecoveryMetrics(globalPortfolio);
+            }
+
+            if (hasHist && hasPos) {
+                renderLiquidationOrder(globalPortfolio, globalHistory);
             }
 
             if (hasHist) {
@@ -1327,7 +1549,7 @@
                 Object.values(inventory).forEach(inv => {
                     if (inv.qty > 0) {
                         currentTotalBasis += inv.costBasis;
-                        if (inv.costBasis > currentMaxBasis) {
+                        if (currentMaxBasis < inv.costBasis) {
                             currentMaxBasis = inv.costBasis;
                         }
                     }
@@ -1774,6 +1996,100 @@
             }
 
             document.getElementById('recovery-diagnostic').innerHTML = diagnosticHTML;
+        }
+
+        // --- NOUVEAU MODULE : ORDRE DE LIQUIDATION ---
+        function renderLiquidationOrder(portfolioData, historyData) {
+            const section = document.getElementById('liquidation-section');
+            const card = document.getElementById('liquidation-card');
+            const safeBox = document.getElementById('liquidation-safe');
+            
+            section.style.display = 'block';
+
+            const txs = parseHistory(historyData);
+            const inventoryDates = {};
+
+            // Calcul de la date d'achat moyenne pour le temps de détention
+            txs.forEach(t => {
+                const stock = t.stock;
+                if (!inventoryDates[stock]) inventoryDates[stock] = { qty: 0, avgDate: null };
+
+                if (t.type === 'Achat') {
+                    let currentQty = inventoryDates[stock].qty;
+                    let currentAvgDate = inventoryDates[stock].avgDate || t.date.getTime();
+                    inventoryDates[stock].avgDate = ((currentAvgDate * currentQty) + (t.date.getTime() * t.qty)) / (currentQty + t.qty);
+                    inventoryDates[stock].qty += t.qty;
+                } else if (t.type === 'Vente') {
+                    inventoryDates[stock].qty -= t.qty;
+                    if (inventoryDates[stock].qty <= 0) {
+                        inventoryDates[stock].qty = 0;
+                        inventoryDates[stock].avgDate = null;
+                    }
+                }
+            });
+
+            const now = new Date();
+            let worstCandidate = null;
+            let highestToxicityScore = -Infinity;
+
+            portfolioData.forEach(row => {
+                const stockName = row['Titre'];
+                const currentVal = parseFrenchNumber(row['valeur actuelle']);
+                const pru = parseFrenchNumber(row['prix de revient']);
+                const price = parseFrenchNumber(row['cours actuel']);
+                const pnlPercent = parseFrenchNumber(row['gain ou perte en pourcentage']);
+                const pnlEuro = parseFrenchNumber(row['gain ou perte en euros']);
+                
+                // Ne cible que les pertes latentes d'au moins 10%
+                if (currentVal <= 0 || pnlPercent > -0.10) return;
+
+                const requiredGain = price > 0 ? ((pru - price) / price) : 0;
+                
+                let daysHeld = 0;
+                if (inventoryDates[stockName] && inventoryDates[stockName].avgDate) {
+                    daysHeld = (now.getTime() - inventoryDates[stockName].avgDate) / (1000 * 3600 * 24);
+                }
+
+                // Score de toxicité = Capital bloqué * Effort de récupération requis
+                // Plus la somme est grosse ET le trou est profond, plus le score explose.
+                const toxicityScore = currentVal * requiredGain;
+
+                if (toxicityScore > highestToxicityScore) {
+                    highestToxicityScore = toxicityScore;
+                    worstCandidate = {
+                        name: stockName,
+                        currentVal: currentVal,
+                        pnlPercent: pnlPercent,
+                        pnlEuro: pnlEuro,
+                        requiredGain: requiredGain,
+                        daysHeld: daysHeld
+                    };
+                }
+            });
+
+            if (!worstCandidate || worstCandidate.requiredGain < 0.15) {
+                card.style.display = 'none';
+                safeBox.style.display = 'block';
+            } else {
+                safeBox.style.display = 'none';
+                card.style.display = 'block';
+
+                document.getElementById('liq-target-name').textContent = worstCandidate.name;
+                document.getElementById('liq-target-amount').textContent = formatCurrency(worstCandidate.currentVal);
+
+                const reasonsList = document.getElementById('liq-reasons');
+                reasonsList.innerHTML = '';
+
+                reasonsList.innerHTML += `<li><span class="text-red-400 font-bold">↳ Destruction de Valeur :</span> Position en perte de ${formatPercent(worstCandidate.pnlPercent)} (${formatCurrency(worstCandidate.pnlEuro)} partis en fumée).</li>`;
+                
+                reasonsList.innerHTML += `<li><span class="text-red-400 font-bold">↳ Illusion Statistique :</span> L'actif doit générer une performance de +${formatPercent(worstCandidate.requiredGain)} juste pour te ramener à ton prix de revient.</li>`;
+                
+                if (worstCandidate.daysHeld > 0) {
+                    reasonsList.innerHTML += `<li><span class="text-red-400 font-bold">↳ Capital Séquestré :</span> Cet argent est bloqué et improductif depuis environ ${Math.round(worstCandidate.daysHeld)} jours, subissant un coût d'opportunité massif.</li>`;
+                }
+
+                reasonsList.innerHTML += `<li class="mt-4 text-white font-bold text-center">Tire un trait. Accepte la perte. Récupère ton cash.</li>`;
+            }
         }
 
         function renderMoneyManagementMetrics(portfolioData) {
