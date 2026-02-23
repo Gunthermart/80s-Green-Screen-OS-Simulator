@@ -983,7 +983,7 @@ Plan de Trade tactique :
                                 }
                             }
                             if (apiKey && apiKey.length > 10) {
-                                model = "gemini-2.0-flash"; // Utilisation du modèle 2.0 en production
+                                model = "gemini-2.5-flash"; // <-- MISE À JOUR ICI : on passe à la version 2.5
                                 console.log("[NoteLogic] Clé trouvée ! Modèle :", model);
                             } else {
                                 throw new Error("VARIABLE NoteLogic_Api_Key VIDE OU INTROUVABLE");
@@ -1014,7 +1014,8 @@ Plan de Trade tactique :
                             if (!response.ok) {
                                 if (response.status === 429) {
                                     this.apiCooldownUntil = Date.now() + 60000; 
-                                    throw new Error("RATE_LIMIT");
+                                    // On renvoie directement le bon message d'erreur
+                                    throw new Error("QUOTA GOOGLE DÉPASSÉ (Pause de 60s).");
                                 }
                                 
                                 let errDetails = `HTTP ${response.status}`;
@@ -1028,11 +1029,10 @@ Plan de Trade tactique :
                             const result = await response.json();
                             return result.candidates?.[0]?.content?.parts?.[0]?.text || "Aucun contenu généré.";
                         } catch (err) {
-                            if (i === 4) {
-                                if (err.message === "RATE_LIMIT") throw new Error("QUOTA GOOGLE DÉPASSÉ (Pause de 60s imposée).");
-                                throw err;
-                            }
-                            if (err.message === "RATE_LIMIT") throw err;
+                            // Si c'est l'erreur 429 de Google, on arrête tout de suite de forcer
+                            if (err.message.includes("QUOTA GOOGLE")) throw err;
+
+                            if (i === 4) throw err;
                             
                             await new Promise(r => setTimeout(r, delay));
                             delay *= 2;
