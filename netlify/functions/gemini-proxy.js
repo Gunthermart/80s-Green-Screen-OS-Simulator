@@ -1,6 +1,6 @@
 exports.handler = async function(event, context) {
     // Remplacer localhost par le nom de domaine exact en production
-    const allowedOrigins = ['https://ton-domaine.com', 'http://localhost:8888']; 
+    const allowedOrigins = ['https://leonce-equity.com/notelogic/index.html', 'http://localhost:8888']; 
     const origin = event.headers.origin;
     
     // Si la requête provient d'un navigateur, on vérifie l'origine
