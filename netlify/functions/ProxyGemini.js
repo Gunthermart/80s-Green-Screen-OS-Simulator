@@ -3,7 +3,7 @@ exports.handler = async function(event, context) {
     const allowedOrigins = [
         'http://localhost:8888', // Pour vos tests en local
         'http://localhost:3000',
-        'https://votre-nom-app.netlify.app' // <-- REMPLACEZ PAR VOTRE VRAI DOMAINE
+        'https://https://leonce-equity.com/notelogic/index.html' // <-- REMPLACEZ PAR VOTRE VRAI DOMAINE
     ];
 
     const origin = event.headers.origin;
