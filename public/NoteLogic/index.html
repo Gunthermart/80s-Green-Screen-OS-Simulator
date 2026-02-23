@@ -647,19 +647,6 @@ Plan de Trade tactique :
             </div>
         </div>
     </div>
-    
-    <!-- MACRO MODAL -->
-    <div id="modal-macros" class="modal-overlay" data-action="closeModals">
-        <div class="modal-box bg-[#1e293b] max-w-lg" onclick="event.stopPropagation()">
-            <div class="p-4 border-b border-white/5 flex justify-between items-center bg-black/20"><span class="text-xs font-bold text-white uppercase">Gestionnaire de Macros</span><button data-action="closeModals" class="text-slate-400 hover:text-white">✕</button></div>
-            <div id="ui-macro-manager-list" class="p-4 overflow-y-auto custom-scrollbar h-[35vh] space-y-1 bg-[#0b1120]"></div>
-            <div class="p-4 border-t border-white/5 bg-[#1e293b] flex flex-col gap-3">
-                <div class="flex justify-between items-center"><span class="text-xs font-bold text-blue-400 uppercase tracking-wider">Nouvelle Macro</span></div>
-                <div class="flex gap-2"><div class="w-24 flex flex-col gap-1"><label class="text-[11px] text-slate-400 font-mono uppercase font-bold">Touche</label><input id="new-macro-key" type="text" class="w-full bg-black/30 border border-white/10 rounded px-2 py-2 text-center font-mono text-blue-400 font-bold outline-none uppercase text-lg" placeholder="Ex: G,H"></div><div class="flex-1 flex flex-col gap-1"><label class="text-[11px] text-slate-400 font-mono uppercase font-bold">Contenu (Rich Text/HTML)</label><div id="new-macro-val" contenteditable="true" class="w-full bg-black/30 border border-white/10 rounded px-3 py-2 text-xs text-slate-300 outline-none font-mono custom-scrollbar focus:border-blue-500/50 transition-colors h-24 overflow-y-auto" placeholder="Collez contenu riche..."></div></div></div>
-                <button data-action="addMacro" class="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded uppercase tracking-widest transition-colors shadow-lg shadow-blue-900/20">Enregistrer Macro</button>
-            </div>
-        </div>
-    </div>
 
     <!-- CRYPTO MODAL (BLACK-OPS) -->
     <div id="modal-crypto" class="modal-overlay" data-action="closeModals">
@@ -981,7 +968,7 @@ Plan de Trade tactique :
                     { id: 'cmd_new', title: 'Nouvelle Note', desc: 'Créer une note vierge', icon: '📝', action: 'newPage', keys: 'nouveau,new,creer,note,>nouvelle' },
                     { id: 'cmd_zen', title: 'Mode Focus / Stealth', desc: 'Masquer toute l\'interface (Alt+Z)', icon: '👁️', action: 'toggleZenMode', keys: 'zen,focus,stealth,immersion,>zen' },
                     { id: 'cmd_sitrep', title: 'Rapport Stratégique (SITREP)', desc: 'Ouvrir le tableau de bord global', icon: '📡', action: 'triggerSitrep', keys: 'sitrep,dashboard,rapport,index,>sitrep' },
-                    { id: 'cmd_ai', title: 'Analyse Brain IA', desc: 'Générer une synthèse stratégique', icon: '🤖', action: 'aiChallenge', keys: 'ia,ai,analyse,synthese,>analyse' },
+                    { id: 'cmd_ai', title: 'Analyse IA', desc: 'Générer une synthèse stratégique', icon: '🤖', action: 'aiChallenge', keys: 'ia,ai,analyse,synthese,>analyse' },
                     { id: 'cmd_pdf', title: 'Exporter PDF', desc: 'Générer un PDF de la note active', icon: '📄', action: 'exportToPDF', keys: 'pdf,export,imprimer,>export' },
                     { id: 'cmd_backup', title: 'Backup Complet', desc: 'Sauvegarder les données (JSON)', icon: '⬇️', action: 'ioExport', keys: 'backup,sauvegarde,export,json,>backup' },
                     { id: 'cmd_import', title: 'Importer Backup', desc: 'Restaurer depuis un fichier JSON', icon: '⬆️', action: 'triggerImport', keys: 'import,restaurer,>import' },
@@ -991,66 +978,45 @@ Plan de Trade tactique :
                     { id: 'cmd_attach', title: 'Joindre PDF', desc: 'Attacher un document à la note', icon: '📎', action: 'triggerAttach', keys: 'joindre,attach,pdf,fichier,>joindre' },
                 ],
                 
-                // --- BRAIN IA API INTEGRATION (VIA PROXY) ---
+                // --- GEMINI API INTEGRATION SECURE PROXY CALL ---
                 async callGemini(userQuery) {
                     if (Date.now() < this.apiCooldownUntil) {
                         const remaining = Math.ceil((this.apiCooldownUntil - Date.now()) / 1000);
                         throw new Error(`QUOTA ÉPUISÉ. Refroidissement : ${remaining}s.`);
                     }
 
-                    const systemPrompt = "Tu es Brain IA, un analyste tactique expert. Analyse le texte fourni. Tu DOIS générer une réponse en HTML léger (strictement AUCUN markdown) contenant DEUX éléments : 1. Les points clés ultra-synthétiques sous forme de liste à puces avec <ul class='list-disc pl-5 space-y-1 text-slate-300 mb-2'> et <li>. 2. Une proposition de 3 à 5 tags pertinents (formatés ainsi: [TAG]) encapsulés dans une <div class='flex flex-wrap gap-2 text-[11px] font-mono font-bold text-purple-400 mt-2 pt-2 border-t border-white/10'>. Sois direct, opérationnel, sans aucune phrase d'introduction ou de conclusion.";
-                    
-                    let delay = 2000; 
-                    for (let i = 0; i < 5; i++) {
-                        try {
-                            let response;
-                            try {
-                                // Envoi direct au Proxy Backend (Aucune clé n'est manipulée ici)
-                                response = await fetch('/.netlify/functions/ProxyGemini', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({
-                                        text: userQuery,
-                                        systemPrompt: systemPrompt
-                                    })
-                                });
-                            } catch (fetchError) {
-                                // FALLBACK : Permet de tester dans le Canvas (sans serveur Netlify)
-                                console.warn("Proxy Netlify inaccessible. Fallback Canvas local activé.");
-                                response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=`, {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({
-                                        contents: [{ parts: [{ text: userQuery }] }],
-                                        systemInstruction: { parts: [{ text: systemPrompt }] }
-                                    })
-                                });
-                            }
-                            
-                            if (!response.ok) {
-                                if (response.status === 429) {
-                                    this.apiCooldownUntil = Date.now() + 60000; 
-                                    throw new Error("QUOTA GOOGLE DÉPASSÉ (Pause de 60s).");
-                                }
-                                
-                                let errDetails = `HTTP ${response.status}`;
-                                try {
-                                    const errData = await response.json();
-                                    errDetails = errData.error?.message || errDetails;
-                                } catch(e) {}
-                                throw new Error(errDetails);
-                            }
-                            
-                            const result = await response.json();
-                            return result.candidates?.[0]?.content?.parts?.[0]?.text || "Aucun contenu généré.";
-                        } catch (err) {
-                            if (err.message.includes("QUOTA GOOGLE")) throw err;
+                    const systemPrompt = "Tu es NoteLogic Intelligence, un analyste tactique expert. Analyse le texte fourni. Tu DOIS générer une réponse en HTML léger (strictement AUCUN markdown) contenant DEUX éléments : 1. Les points clés ultra-synthétiques sous forme de liste à puces avec <ul class='list-disc pl-5 space-y-1 text-slate-300 mb-2'> et <li>. 2. Une proposition de 3 à 5 tags pertinents (formatés ainsi: [TAG]) encapsulés dans une <div class='flex flex-wrap gap-2 text-[11px] font-mono font-bold text-purple-400 mt-2 pt-2 border-t border-white/10'>. Sois direct, opérationnel, sans aucune phrase d'introduction ou de conclusion.";
 
-                            if (i === 4) throw err;
+                    try {
+                        // L'appel se fait vers ta fonction Netlify. Plus aucune clé ne transite ici.
+                        const response = await fetch('/.netlify/functions/gemini-proxy', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                prompt: userQuery,
+                                system: systemPrompt
+                            })
+                        });
+                        
+                        if (!response.ok) {
+                            if (response.status === 429) {
+                                this.apiCooldownUntil = Date.now() + 60000;
+                                throw new Error("QUOTA DÉPASSÉ (Pause de 60s).");
+                            }
                             
-                            await new Promise(r => setTimeout(r, delay));
-                            delay *= 2;
+                            let errDetails = `HTTP ${response.status}`;
+                            try {
+                                const errData = await response.json();
+                                errDetails = errData.error || errDetails;
+                            } catch(e) {}
+                            throw new Error(errDetails);
                         }
+                        
+                        const result = await response.json();
+                        return result.text || "Aucun contenu généré.";
+
+                    } catch (err) {
+                        throw err;
                     }
                 },
 
@@ -1243,7 +1209,7 @@ Plan de Trade tactique :
                         const tasksContext = taskList.slice(0, 15).join('\n') || "Aucune tâche en attente.";
                         const remindersContext = reminderList.slice(0, 10).join('\n') || "Aucun rappel imminent.";
 
-                        const prompt = `Tu es Brain IA. Rédige un "Morning Briefing" (Synthèse Exécutive Globale) très synthétique (1 court paragraphe) pour orienter ma journée opérationnelle. 
+                        const prompt = `Tu es NoteLogic Intelligence. Rédige un "Morning Briefing" (Synthèse Exécutive Globale) très synthétique (1 court paragraphe) pour orienter ma journée opérationnelle. 
 Voici mes données actuelles :
 MISSIONS EN ATTENTE :
 ${tasksContext}
@@ -1310,7 +1276,7 @@ Instruction de formatage : Utilise des balises HTML (<span class="text-blue-400 
                         const pendingContext = pendingTasks.slice(0, 15).join('\n') || "Aucune tâche en attente.";
                         const recentContext = recentPages.slice(0, 10).join('\n') || "Aucune activité récente.";
 
-                        const prompt = `Tu es Brain IA. Rédige un "Debriefing Tactique" (Synthèse de fin de journée) très synthétique (1 court paragraphe) pour vider ma charge mentale et préparer demain. 
+                        const prompt = `Tu es NoteLogic Intelligence. Rédige un "Debriefing Tactique" (Synthèse de fin de journée) très synthétique (1 court paragraphe) pour vider ma charge mentale et préparer demain. 
 Voici mon activité des dernières 24h :
 TÂCHES ACCOMPLIES AUJOURD'HUI :
 ${completedContext}
@@ -1381,7 +1347,7 @@ Instruction de formatage : Utilise des balises HTML (<span class="text-indigo-40
                         const topTags = Object.entries(tagMap).sort((a,b) => b[1] - a[1]).slice(0, 20).map(t => `[${t[0]}]`).join(', ');
                         const orphansContext = orphans.slice(0, 10).map(o => `ID_NOTE: ${o.id} | TITRE: "${o.title}" | EXTRAIT: ${o.text.replace(/\n/g, ' ')}...`).join('\n\n');
 
-                        const prompt = `Tu es Brain IA, un bibliothécaire tactique. 
+                        const prompt = `Tu es NoteLogic Intelligence, un bibliothécaire tactique IA. 
 Voici la liste de mes TAGS EXISTANTS les plus utilisés : ${topTags || "Aucun tag existant."}
 
 Voici un échantillon de mes NOTES ORPHELINES (sans aucun tag de classement) :
@@ -1461,7 +1427,7 @@ Utilise <ul class='list-disc pl-5 space-y-2 mb-4'> et <li> pour lister les notes
 
                         const synergiesContext = selectedTags.map(t => `TAG: [${t[0]}] | EXTRAIT RÉCENT: ${t[1].latestText.replace(/\n/g, ' ')}...`).join('\n\n');
 
-                        const prompt = `Tu es Brain IA, un expert en stratégie opérationnelle et en pensée latérale.
+                        const prompt = `Tu es NoteLogic Intelligence, un expert en stratégie opérationnelle et en pensée latérale.
 Ta mission est de forcer une "collision d'idées" entre des concepts disparates de mon classeur pour générer de la valeur inattendue.
 
 Voici les TAGS sélectionnés aléatoirement parmi mes plus actifs, avec un extrait de leur contexte :
