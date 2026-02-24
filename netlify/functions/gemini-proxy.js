@@ -1,5 +1,4 @@
 exports.handler = async function(event, context) {
-    // Domaines stricts autorisés à interroger ton proxy
     const allowedOrigins = [
         'https://leonce-equity.com',
         'https://www.leonce-equity.com', 
@@ -7,19 +6,31 @@ exports.handler = async function(event, context) {
     ]; 
     const origin = event.headers.origin;
     
-    // Vérification de l'origine
-    if (origin && !allowedOrigins.includes(origin)) {
-        return { statusCode: 403, body: JSON.stringify({ error: "Accès refusé. Origine non autorisée." }) };
+    // 1. Définition des headers CORS obligatoires
+    const headers = {
+        'Access-Control-Allow-Origin': (origin && allowedOrigins.includes(origin)) ? origin : allowedOrigins[0],
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS'
+    };
+
+    // 2. Interception du Preflight (OPTIONS)
+    if (event.httpMethod === 'OPTIONS') {
+        return { statusCode: 200, headers, body: '' };
     }
 
-    // Filtrage des méthodes
+    // 3. Vérification stricte de l'origine
+    if (origin && !allowedOrigins.includes(origin)) {
+        return { statusCode: 403, headers, body: JSON.stringify({ error: `Accès refusé. Origine non autorisée: ${origin}` }) };
+    }
+
+    // 4. Filtrage des méthodes
     if (event.httpMethod !== 'POST') {
-        return { statusCode: 405, body: JSON.stringify({ error: "Méthode HTTP non autorisée." }) };
+        return { statusCode: 405, headers, body: JSON.stringify({ error: "Méthode HTTP non autorisée." }) };
     }
 
     const apiKey = process.env.NoteLogic_Api_Key;
     if (!apiKey) {
-        return { statusCode: 500, body: JSON.stringify({ error: "Erreur serveur : Clé API non configurée." }) };
+        return { statusCode: 500, headers, body: JSON.stringify({ error: "Erreur serveur : Clé API non configurée." }) };
     }
 
     try {
@@ -28,7 +39,7 @@ exports.handler = async function(event, context) {
         const systemPrompt = body.system;
 
         if (!userPrompt) {
-            return { statusCode: 400, body: JSON.stringify({ error: "Prompt utilisateur manquant." }) };
+            return { statusCode: 400, headers, body: JSON.stringify({ error: "Prompt utilisateur manquant." }) };
         }
 
         const model = "gemini-2.5-flash-lite"; 
@@ -44,7 +55,7 @@ exports.handler = async function(event, context) {
         });
 
         if (!googleResponse.ok) {
-            return { statusCode: googleResponse.status, body: JSON.stringify({ error: `Erreur API Google: ${googleResponse.status}` }) };
+            return { statusCode: googleResponse.status, headers, body: JSON.stringify({ error: `Erreur API Google: ${googleResponse.status}` }) };
         }
 
         const data = await googleResponse.json();
@@ -52,14 +63,11 @@ exports.handler = async function(event, context) {
 
         return {
             statusCode: 200,
-            headers: {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': origin || '*' // L'en-tête dynamique est nécessaire pour le navigateur
-            },
+            headers,
             body: JSON.stringify({ text: generatedText })
         };
 
     } catch (error) {
-        return { statusCode: 500, body: JSON.stringify({ error: "Erreur interne lors du traitement." }) };
+        return { statusCode: 500, headers, body: JSON.stringify({ error: "Erreur interne lors du traitement." }) };
     }
 };
