@@ -974,39 +974,30 @@ Plan de Trade tactique :
                     { id: 'cmd_global_magic', title: 'Macro Globale', desc: 'Appliquer l\'instruction [##] à toute la note', icon: '🔄', action: 'globalMagic', keys: 'macro,globale,transformer,>macro' },
                 ],
                 
-                // Modification pour accepter un payload binaire (fichier) optionnel via l'API Gemini native
+                // Modification pour utiliser le proxy Netlify
                 async callGemini(userQuery, filePayload = null, customSystemPrompt = null) {
                     if (Date.now() < this.apiCooldownUntil) {
                         const remaining = Math.ceil((this.apiCooldownUntil - Date.now()) / 1000);
                         throw new Error(`QUOTA ÉPUISÉ. Refroidissement : ${remaining}s.`);
                     }
 
-                    const apiKey = "";
-                    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+                    const endpoint = `https://leonce-equity.com/.netlify/functions/gemini-proxy`;
 
-                    const systemPrompt = customSystemPrompt || "Tu es NoteLogic Intelligence, un analyste tactique expert. Analyse le texte fourni et, le cas échéant, le document PDF joint. Tu DOIS générer une réponse en HTML léger (strictement AUCUN markdown) contenant DEUX éléments : 1. Les points clés ultra-synthétiques sous forme de liste à puces avec <ul class='list-disc pl-5 space-y-1 text-slate-300 mb-2'> et <li>. 2. Une proposition de 3 à 5 tags pertinents (formatés ainsi: [TAG]) encapsulés dans une <div class='flex flex-wrap gap-2 text-[11px] font-mono font-bold text-purple-400 mt-2 pt-2 border-t border-white/10'>. Sois direct, opérationnel, sans aucune phrase d'introduction ou de conclusion.";
+                    const systemPrompt = customSystemPrompt || "Tu es NoteLogic Intelligence, un analyste tactique expert. Analyse le texte fourni. Tu DOIS générer une réponse en HTML léger (strictement AUCUN markdown) contenant DEUX éléments : 1. Les points clés ultra-synthétiques sous forme de liste à puces avec <ul class='list-disc pl-5 space-y-1 text-slate-300 mb-2'> et <li>. 2. Une proposition de 3 à 5 tags pertinents (formatés ainsi: [TAG]) encapsulés dans une <div class='flex flex-wrap gap-2 text-[11px] font-mono font-bold text-purple-400 mt-2 pt-2 border-t border-white/10'>. Sois direct, opérationnel, sans aucune phrase d'introduction ou de conclusion.";
 
-                    const parts = [];
-                    if (userQuery) parts.push({ text: userQuery });
                     if (filePayload) {
-                        parts.push({
-                            inlineData: {
-                                mimeType: filePayload.mimeType,
-                                data: filePayload.data
-                            }
-                        });
+                        console.warn("Le proxy Netlify ne supporte pas encore les fichiers binaires. Ignoré.");
                     }
-                    if (parts.length === 0) parts.push({ text: "Analyse générale." });
 
                     const bodyPayload = {
-                        systemInstruction: { parts: [{ text: systemPrompt }] },
-                        contents: [{ parts: parts }]
+                        prompt: userQuery || "Analyse générale.",
+                        system: systemPrompt
                     };
 
-                    const delays = [1000, 2000, 4000, 8000, 16000];
+                    const delays = [1000, 2000, 4000, 8000];
                     let lastError = null;
 
-                    for (let attempt = 0; attempt <= 5; attempt++) {
+                    for (let attempt = 0; attempt <= 4; attempt++) {
                         try {
                             if (attempt > 0) {
                                 await new Promise(r => setTimeout(r, delays[attempt - 1]));
@@ -1023,18 +1014,17 @@ Plan de Trade tactique :
                                     throw new Error("QUOTA DÉPASSÉ (Pause de 60s).");
                                 }
                                 const errData = await response.json().catch(() => ({}));
-                                throw new Error(errData.error?.message || `HTTP ${response.status}`);
+                                throw new Error(errData.error || `HTTP ${response.status} - Erreur Proxy`);
                             }
                             
                             const result = await response.json();
-                            const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
-                            return text || "Aucun contenu généré.";
+                            return result.text || "Aucun contenu généré.";
                         } catch (err) {
                             lastError = err;
                             if (err.message.includes("QUOTA DÉPASSÉ")) throw err;
                         }
                     }
-                    throw new Error("L'API Gemini est injoignable après plusieurs tentatives.");
+                    throw new Error("Le proxy Netlify est injoignable après plusieurs tentatives. Vérifiez l'origine ou l'URL.");
                 },
 
                 async sitrep(tab = 'tags') {
@@ -2082,6 +2072,7 @@ Structure ta réponse exactement ainsi :
                     });
                     document.addEventListener('keyup', (e) => { if(e.key === 'Alt' && State.chordBuffer.length === 0) document.getElementById('macro-hud').classList.remove('visible'); });
                     document.getElementById('search-input').addEventListener('input', Engine.utils.debounce((e) => Intelligence.performSearch(e.target.value), 150));
+                    
                     Bus.renderBinder(); Renderer.renderHUD(State.macros);
                     setTimeout(() => { document.getElementById('splash-screen').style.opacity=0; setTimeout(()=>document.getElementById('splash-screen').remove(),700); }, 1000);
                 } catch(e) { console.error(e); Renderer.toast("ERR KERNEL"); }
