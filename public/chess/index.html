@@ -2,7 +2,8 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Verrouillage strict du viewport pour empêcher le zoom sur mobile (crucial pour un jeu web) -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Jeu d'Échecs</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
@@ -12,6 +13,8 @@
         body {
             background-color: #f3f4f6;
             color: #1f2937;
+            /* Empêche le pull-to-refresh sur mobile */
+            overscroll-behavior-y: none;
         }
         #main-board-area {
             width: 100%;
@@ -19,95 +22,118 @@
         .board {
             width: 100%;
             aspect-ratio: 1 / 1;
+            /* Désactive les gestes du navigateur (swipe pour reculer, etc.) sur l'échiquier */
+            touch-action: none;
         }
         .clock-active {
             background-color: #fef08a !important;
             border-color: #eab308 !important;
         }
+        /* Ajustement de la scrollbar pour le panneau d'historique */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #c1c1c1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8; 
+        }
     </style>
 </head>
-<body class="min-h-screen flex flex-col items-center py-8 px-4">
+<body class="min-h-screen flex flex-col items-center py-2 sm:py-8 px-2 sm:px-4">
 
-    <div class="w-full max-w-5xl bg-white p-6 rounded-lg shadow-md flex flex-col md:flex-row gap-6">
+    <!-- Réduction des marges internes sur mobile (p-3) et utilisation de flex-col systématique avant le breakpoint lg -->
+    <div class="w-full max-w-6xl bg-white p-3 sm:p-6 rounded-lg shadow-md flex flex-col lg:flex-row gap-4 sm:gap-6">
         
-        <div class="flex-1 flex flex-col items-center">
-            <header class="w-full mb-6 flex flex-col lg:flex-row justify-between items-center gap-4">
-                <h1 class="text-2xl font-bold uppercase tracking-wide">Échecs</h1>
+        <div class="flex-1 flex flex-col items-center w-full">
+            <header class="w-full mb-3 sm:mb-6 flex flex-col lg:flex-row justify-between items-center gap-3">
+                <h1 class="text-xl sm:text-2xl font-bold uppercase tracking-wide text-center lg:text-left w-full lg:w-auto">Échecs</h1>
                 
-                <div class="flex flex-wrap items-center justify-center gap-2">
-                    <select id="player-color" class="bg-gray-50 border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5">
+                <!-- Grille compacte sur mobile, flex sur desktop -->
+                <div class="grid grid-cols-2 sm:flex sm:flex-wrap items-center justify-center gap-2 w-full lg:w-auto">
+                    <select id="player-color" class="w-full bg-gray-50 border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2 sm:p-2.5">
                         <option value="w" selected>Blancs</option>
                         <option value="b">Noirs</option>
                     </select>
-                    <select id="difficulty" class="bg-gray-50 border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5">
-                        <option value="0">Niveau 0 (Débutant)</option>
-                        <option value="1" selected>Niveau 1 (Facile)</option>
-                        <option value="2">Niveau 2 (Moyen)</option>
-                        <option value="3">Niveau 3 (Difficile)</option>
+                    <select id="difficulty" class="w-full bg-gray-50 border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2 sm:p-2.5">
+                        <option value="0">Niveau 0</option>
+                        <option value="1" selected>Niveau 1</option>
+                        <option value="2">Niveau 2</option>
+                        <option value="3">Niveau 3</option>
                     </select>
-                    <select id="time-control" class="bg-gray-50 border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5">
+                    <select id="time-control" class="w-full bg-gray-50 border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2 sm:p-2.5">
                         <option value="0" selected>Infini</option>
                         <option value="3">3 min</option>
                         <option value="5">5 min</option>
                         <option value="10">10 min</option>
                     </select>
-                    <button id="sound-btn" class="bg-gray-200 text-gray-800 px-3 py-2 rounded text-sm font-medium hover:bg-gray-300 transition w-20">
+                    <button id="sound-btn" class="w-full sm:w-20 bg-gray-200 text-gray-800 px-2 py-2 sm:p-2.5 rounded text-sm font-medium hover:bg-gray-300 transition">
                         Son: ON
                     </button>
-                    <button id="reset-btn" class="bg-gray-800 text-white px-4 py-2 rounded font-medium hover:bg-gray-700 transition">
+                    <!-- Ce bouton prend toute la largeur sur la dernière ligne de la grille mobile -->
+                    <button id="reset-btn" class="col-span-2 sm:col-span-1 w-full sm:w-auto bg-gray-800 text-white px-4 py-2 sm:p-2.5 rounded font-medium hover:bg-gray-700 transition">
                         Nouvelle Partie
                     </button>
                 </div>
             </header>
 
-            <div id="status-bar" class="w-full mb-4 text-center font-semibold text-lg h-8">
+            <div id="status-bar" class="w-full mb-2 sm:mb-4 text-center font-semibold text-sm sm:text-lg h-6 sm:h-8">
                 Chargement...
             </div>
 
-            <div class="w-full max-w-[600px] flex flex-col">
-                <div class="flex justify-between items-center mb-2 px-1">
-                    <span class="font-bold text-sm text-gray-700">Ordinateur</span>
-                    <span id="top-clock" class="font-mono font-bold text-lg bg-gray-100 border border-gray-300 rounded px-3 py-1 transition-colors">--:--</span>
+            <!-- Conteneur d'échiquier contraint pour éviter le débordement vertical excessif -->
+            <div class="w-full max-w-[600px] flex flex-col mx-auto">
+                <div class="flex justify-between items-center mb-1 sm:mb-2 px-1">
+                    <span class="font-bold text-xs sm:text-sm text-gray-700">Ordinateur</span>
+                    <span id="top-clock" class="font-mono font-bold text-sm sm:text-lg bg-gray-100 border border-gray-300 rounded px-2 sm:px-3 py-1 transition-colors">--:--</span>
                 </div>
 
-                <div id="main-board-area" class="flex gap-2">
-                    <div id="eval-bar" class="w-6 md:w-8 bg-gray-800 rounded flex flex-col-reverse overflow-hidden relative border border-gray-300 shrink-0">
+                <div id="main-board-area" class="flex gap-1 sm:gap-2">
+                    <div id="eval-bar" class="w-4 sm:w-6 md:w-8 bg-gray-800 rounded flex flex-col-reverse overflow-hidden relative border border-gray-300 shrink-0">
                         <div id="eval-fill" class="bg-white w-full transition-all duration-300 ease-out" style="height: 50%;"></div>
-                        <span id="eval-text" class="absolute inset-0 flex items-center justify-center text-[10px] md:text-xs font-bold text-white z-10 pointer-events-none mix-blend-difference">0.0</span>
+                        <span id="eval-text" class="absolute inset-0 flex items-center justify-center text-[8px] sm:text-[10px] md:text-xs font-bold text-white z-10 pointer-events-none mix-blend-difference">0.0</span>
                     </div>
                     <div id="board" class="board flex-1"></div>
                 </div>
 
-                <div class="flex justify-between items-center mt-2 px-1">
-                    <span class="font-bold text-sm text-gray-700">Vous</span>
-                    <span id="bottom-clock" class="font-mono font-bold text-lg bg-gray-100 border border-gray-300 rounded px-3 py-1 transition-colors">--:--</span>
+                <div class="flex justify-between items-center mt-1 sm:mt-2 px-1">
+                    <span class="font-bold text-xs sm:text-sm text-gray-700">Vous</span>
+                    <span id="bottom-clock" class="font-mono font-bold text-sm sm:text-lg bg-gray-100 border border-gray-300 rounded px-2 sm:px-3 py-1 transition-colors">--:--</span>
                 </div>
             </div>
             
-            <div id="engine-status" class="mt-4 text-sm text-gray-500 text-center hidden">
+            <div id="engine-status" class="mt-2 sm:mt-4 text-xs sm:text-sm text-gray-500 text-center hidden">
                 L'ordinateur réfléchit...
             </div>
         </div>
 
-        <div class="w-full md:w-72 flex flex-col bg-gray-50 border border-gray-200 rounded-lg p-4">
-            <h2 class="text-lg font-bold mb-4 border-b pb-2">Historique</h2>
-            <div id="move-history" class="flex-1 overflow-y-auto mb-4 text-sm font-mono space-y-1 h-64 md:h-[calc(100%-4rem)]">
+        <!-- Panneau latéral : fixé en hauteur sur mobile pour ne pas forcer un scroll infini, flex sur desktop -->
+        <div class="w-full lg:w-72 flex flex-col bg-gray-50 border border-gray-200 rounded-lg p-3 sm:p-4">
+            <h2 class="text-base sm:text-lg font-bold mb-2 sm:mb-4 border-b pb-1 sm:pb-2">Historique</h2>
+            <div id="move-history" class="flex-1 overflow-y-auto mb-3 sm:mb-4 text-xs sm:text-sm font-mono space-y-1 h-32 sm:h-48 lg:h-[calc(100%-4rem)]">
             </div>
-            <button id="copy-pgn-btn" class="w-full bg-gray-200 text-gray-800 px-4 py-2 rounded font-medium hover:bg-gray-300 transition">
+            <button id="copy-pgn-btn" class="w-full bg-gray-200 text-gray-800 px-4 py-2 rounded font-medium hover:bg-gray-300 transition text-sm sm:text-base">
                 Copier PGN
             </button>
         </div>
 
     </div>
 
+    <!-- Modale de promotion adaptée au tactile (gros boutons) -->
     <div id="promotion-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
-        <div class="bg-white p-6 rounded-lg shadow-xl text-center">
-            <h2 class="text-xl font-bold mb-4">Choisissez la promotion</h2>
-            <div class="flex gap-4 justify-center">
-                <button class="promo-btn text-5xl p-2 hover:bg-gray-100 rounded border transition cursor-pointer" data-piece="q">♕</button>
-                <button class="promo-btn text-5xl p-2 hover:bg-gray-100 rounded border transition cursor-pointer" data-piece="r">♖</button>
-                <button class="promo-btn text-5xl p-2 hover:bg-gray-100 rounded border transition cursor-pointer" data-piece="b">♗</button>
-                <button class="promo-btn text-5xl p-2 hover:bg-gray-100 rounded border transition cursor-pointer" data-piece="n">♘</button>
+        <div class="bg-white p-4 sm:p-6 rounded-lg shadow-xl text-center w-11/12 max-w-sm">
+            <h2 class="text-lg sm:text-xl font-bold mb-4">Promotion</h2>
+            <div class="flex gap-2 sm:gap-4 justify-center">
+                <button class="promo-btn text-4xl sm:text-5xl p-2 sm:p-3 hover:bg-gray-100 rounded border transition cursor-pointer flex-1" data-piece="q">♕</button>
+                <button class="promo-btn text-4xl sm:text-5xl p-2 sm:p-3 hover:bg-gray-100 rounded border transition cursor-pointer flex-1" data-piece="r">♖</button>
+                <button class="promo-btn text-4xl sm:text-5xl p-2 sm:p-3 hover:bg-gray-100 rounded border transition cursor-pointer flex-1" data-piece="b">♗</button>
+                <button class="promo-btn text-4xl sm:text-5xl p-2 sm:p-3 hover:bg-gray-100 rounded border transition cursor-pointer flex-1" data-piece="n">♘</button>
             </div>
         </div>
     </div>
@@ -349,11 +375,14 @@
             
             setupEvalBar(playerColor) {
                 const isWhiteBottom = playerColor === 'w';
+                const baseClasses = "rounded flex flex-col-reverse overflow-hidden relative border border-gray-300 shrink-0 ";
+                const wClasses = "w-4 sm:w-6 md:w-8 ";
+                
                 if (isWhiteBottom) {
-                    this.elements.evalBar.className = "w-6 md:w-8 bg-gray-800 rounded flex flex-col-reverse overflow-hidden relative border border-gray-300 shrink-0";
+                    this.elements.evalBar.className = wClasses + baseClasses + "bg-gray-800";
                     this.elements.evalFill.className = "bg-white w-full transition-all duration-300 ease-out";
                 } else {
-                    this.elements.evalBar.className = "w-6 md:w-8 bg-white rounded flex flex-col-reverse overflow-hidden relative border border-gray-300 shrink-0";
+                    this.elements.evalBar.className = wClasses + baseClasses + "bg-white";
                     this.elements.evalFill.className = "bg-gray-800 w-full transition-all duration-300 ease-out";
                 }
             }
@@ -456,11 +485,11 @@
                     const blackMove = history[i + 1] ? history[i + 1] : '';
                     
                     const row = document.createElement('div');
-                    row.className = 'flex justify-between hover:bg-gray-200 px-2 py-1 rounded';
+                    row.className = 'flex justify-between hover:bg-gray-200 px-1 sm:px-2 py-1 rounded';
                     row.innerHTML = `
-                        <span class="w-8 text-gray-400 select-none">${moveNum}.</span>
-                        <span class="w-20 font-semibold text-gray-800">${whiteMove}</span>
-                        <span class="w-20 font-semibold text-gray-800">${blackMove}</span>
+                        <span class="w-6 sm:w-8 text-gray-400 select-none">${moveNum}.</span>
+                        <span class="w-16 sm:w-20 font-semibold text-gray-800">${whiteMove}</span>
+                        <span class="w-16 sm:w-20 font-semibold text-gray-800">${blackMove}</span>
                     `;
                     this.elements.moveHistory.appendChild(row);
                 }
@@ -509,14 +538,16 @@
 
             updateStatus(text, type) {
                 this.elements.status.textContent = text;
+                const baseClasses = "mb-2 sm:mb-4 text-center h-6 sm:h-8 font-bold ";
+                
                 if (type === 'danger') {
-                    this.elements.status.className = "mb-4 text-center font-bold text-xl text-red-600 h-8";
+                    this.elements.status.className = baseClasses + "text-base sm:text-xl text-red-600";
                 } else if (type === 'warning') {
-                    this.elements.status.className = "mb-4 text-center font-bold text-lg text-orange-500 h-8";
+                    this.elements.status.className = baseClasses + "text-sm sm:text-lg text-orange-500";
                 } else if (type === 'neutral') {
-                    this.elements.status.className = "mb-4 text-center font-bold text-xl text-gray-600 h-8";
+                    this.elements.status.className = baseClasses + "text-base sm:text-xl text-gray-600";
                 } else {
-                    this.elements.status.className = "mb-4 text-center font-semibold text-lg h-8 text-gray-800";
+                    this.elements.status.className = "mb-2 sm:mb-4 text-center h-6 sm:h-8 font-semibold text-sm sm:text-lg text-gray-800";
                 }
             }
         }
@@ -562,20 +593,31 @@
                         return this.isMuted;
                     }
                 });
+
+                window.addEventListener('beforeunload', () => this.saveSession());
+                document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'hidden') {
+                        this.saveSession();
+                    }
+                });
             }
 
             saveSession() {
-                const session = {
-                    pgn: this.chess.pgn(),
-                    playerColor: this.playerColor,
-                    difficulty: this.ui.getDifficulty(),
-                    timeControl: this.ui.getTimeControl(),
-                    whiteTime: this.clock.whiteTime,
-                    blackTime: this.clock.blackTime,
-                    timeoutColor: this.timeoutColor,
-                    isMuted: this.isMuted
-                };
-                localStorage.setItem('chess_session', JSON.stringify(session));
+                try {
+                    const session = {
+                        pgn: this.chess.pgn(),
+                        playerColor: this.playerColor,
+                        difficulty: this.ui.getDifficulty(),
+                        timeControl: this.ui.getTimeControl(),
+                        whiteTime: this.clock.whiteTime,
+                        blackTime: this.clock.blackTime,
+                        timeoutColor: this.timeoutColor,
+                        isMuted: this.isMuted
+                    };
+                    localStorage.setItem('chess_session', JSON.stringify(session));
+                } catch (e) {
+                    // Sécurisation : ignore silencieusement si le mode privé bloque le stockage local
+                }
             }
 
             playMoveSound(moveResult) {
