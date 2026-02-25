@@ -2,18 +2,16 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <!-- Verrouillage strict du viewport pour empêcher le zoom sur mobile (crucial pour un jeu web) -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Jeu d'Échecs</title>
+    <title>Mikhaïl Botvinnik - Chess Master</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cm-chessboard@8.5.1/assets/chessboard.css">
 
     <style>
         body {
-            background-color: #f3f4f6;
-            color: #1f2937;
-            /* Empêche le pull-to-refresh sur mobile */
+            background-color: #111827; /* bg-gray-900 pour un look plus premium */
+            color: #f3f4f6;
             overscroll-behavior-y: none;
         }
         #main-board-area {
@@ -22,118 +20,141 @@
         .board {
             width: 100%;
             aspect-ratio: 1 / 1;
-            /* Désactive les gestes du navigateur (swipe pour reculer, etc.) sur l'échiquier */
             touch-action: none;
         }
         .clock-active {
-            background-color: #fef08a !important;
-            border-color: #eab308 !important;
+            background-color: #4b5563 !important; /* bg-gray-600 */
+            border-color: #9ca3af !important; /* border-gray-400 */
+            color: #f9fafb !important;
         }
-        /* Ajustement de la scrollbar pour le panneau d'historique */
         ::-webkit-scrollbar {
             width: 6px;
         }
         ::-webkit-scrollbar-track {
-            background: #f1f1f1; 
+            background: #1f2937; 
             border-radius: 4px;
         }
         ::-webkit-scrollbar-thumb {
-            background: #c1c1c1; 
+            background: #4b5563; 
             border-radius: 4px;
         }
         ::-webkit-scrollbar-thumb:hover {
-            background: #a8a8a8; 
+            background: #6b7280; 
         }
     </style>
 </head>
-<body class="min-h-screen flex flex-col items-center py-2 sm:py-8 px-2 sm:px-4">
+<body class="min-h-screen flex flex-col items-center justify-center py-2 sm:py-8 px-2 sm:px-4">
 
-    <!-- Réduction des marges internes sur mobile (p-3) et utilisation de flex-col systématique avant le breakpoint lg -->
-    <div class="w-full max-w-6xl bg-white p-3 sm:p-6 rounded-lg shadow-md flex flex-col lg:flex-row gap-4 sm:gap-6">
+    <!-- Splash Screen -->
+    <div id="splash-screen" class="fixed inset-0 bg-gray-900 flex flex-col items-center justify-center z-[100] transition-opacity duration-500">
+        <h1 class="text-4xl sm:text-6xl md:text-7xl font-serif text-white mb-2 tracking-wider text-center px-4">Mikhaïl Botvinnik</h1>
+        <p class="text-lg sm:text-xl md:text-2xl text-gray-400 font-light tracking-[0.3em] uppercase mb-12 text-center">Chess Master</p>
+        <button id="enter-game-btn" class="px-10 py-3 bg-white text-gray-900 font-bold tracking-wide rounded hover:bg-gray-200 transition opacity-0 transform translate-y-4 duration-700 ease-out">
+            ENTRER
+        </button>
+    </div>
+
+    <!-- Interface Principale -->
+    <div class="w-full max-w-6xl flex flex-col lg:flex-row gap-4 sm:gap-6 opacity-0 transition-opacity duration-700" id="main-interface">
         
-        <div class="flex-1 flex flex-col items-center w-full">
-            <header class="w-full mb-3 sm:mb-6 flex flex-col lg:flex-row justify-between items-center gap-3">
-                <h1 class="text-xl sm:text-2xl font-bold uppercase tracking-wide text-center lg:text-left w-full lg:w-auto">Échecs</h1>
-                
-                <!-- Grille compacte sur mobile, flex sur desktop -->
-                <div class="grid grid-cols-2 sm:flex sm:flex-wrap items-center justify-center gap-2 w-full lg:w-auto">
-                    <select id="player-color" class="w-full bg-gray-50 border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2 sm:p-2.5">
-                        <option value="w" selected>Blancs</option>
-                        <option value="b">Noirs</option>
-                    </select>
-                    <select id="difficulty" class="w-full bg-gray-50 border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2 sm:p-2.5">
-                        <option value="0">Niveau 0</option>
-                        <option value="1" selected>Niveau 1</option>
-                        <option value="2">Niveau 2</option>
-                        <option value="3">Niveau 3</option>
-                    </select>
-                    <select id="time-control" class="w-full bg-gray-50 border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2 sm:p-2.5">
-                        <option value="0" selected>Infini</option>
-                        <option value="3">3 min</option>
-                        <option value="5">5 min</option>
-                        <option value="10">10 min</option>
-                    </select>
-                    <button id="sound-btn" class="w-full sm:w-20 bg-gray-200 text-gray-800 px-2 py-2 sm:p-2.5 rounded text-sm font-medium hover:bg-gray-300 transition">
-                        Son: ON
-                    </button>
-                    <!-- Ce bouton prend toute la largeur sur la dernière ligne de la grille mobile -->
-                    <button id="reset-btn" class="col-span-2 sm:col-span-1 w-full sm:w-auto bg-gray-800 text-white px-4 py-2 sm:p-2.5 rounded font-medium hover:bg-gray-700 transition">
-                        Nouvelle Partie
-                    </button>
-                </div>
-            </header>
-
-            <div id="status-bar" class="w-full mb-2 sm:mb-4 text-center font-semibold text-sm sm:text-lg h-6 sm:h-8">
-                Chargement...
+        <!-- Zone de Jeu (Gauche) -->
+        <div class="flex-1 flex flex-col items-center w-full justify-center">
+            
+            <div id="status-bar" class="w-full mb-2 text-center font-semibold text-sm sm:text-lg h-6 sm:h-8 text-gray-300">
+                Préparation de l'échiquier...
             </div>
 
-            <!-- Conteneur d'échiquier contraint pour éviter le débordement vertical excessif -->
-            <div class="w-full max-w-[600px] flex flex-col mx-auto">
+            <div class="w-full max-w-[650px] flex flex-col mx-auto">
                 <div class="flex justify-between items-center mb-1 sm:mb-2 px-1">
-                    <span class="font-bold text-xs sm:text-sm text-gray-700">Ordinateur</span>
-                    <span id="top-clock" class="font-mono font-bold text-sm sm:text-lg bg-gray-100 border border-gray-300 rounded px-2 sm:px-3 py-1 transition-colors">--:--</span>
+                    <span class="font-bold text-xs sm:text-sm text-gray-400">Ordinateur</span>
+                    <span id="top-clock" class="font-mono font-bold text-sm sm:text-lg bg-gray-800 border border-gray-700 text-gray-300 rounded px-2 sm:px-3 py-1 transition-colors">--:--</span>
                 </div>
 
                 <div id="main-board-area" class="flex gap-1 sm:gap-2">
-                    <div id="eval-bar" class="w-4 sm:w-6 md:w-8 bg-gray-800 rounded flex flex-col-reverse overflow-hidden relative border border-gray-300 shrink-0">
-                        <div id="eval-fill" class="bg-white w-full transition-all duration-300 ease-out" style="height: 50%;"></div>
-                        <span id="eval-text" class="absolute inset-0 flex items-center justify-center text-[8px] sm:text-[10px] md:text-xs font-bold text-white z-10 pointer-events-none mix-blend-difference">0.0</span>
+                    <div id="eval-bar" class="w-4 sm:w-6 md:w-8 bg-gray-800 rounded flex flex-col-reverse overflow-hidden relative border border-gray-700 shrink-0">
+                        <div id="eval-fill" class="bg-gray-300 w-full transition-all duration-300 ease-out" style="height: 50%;"></div>
+                        <span id="eval-text" class="absolute inset-0 flex items-center justify-center text-[8px] sm:text-[10px] md:text-xs font-bold text-gray-900 z-10 pointer-events-none mix-blend-difference">0.0</span>
                     </div>
-                    <div id="board" class="board flex-1"></div>
+                    <div id="board" class="board flex-1 shadow-2xl rounded"></div>
                 </div>
 
                 <div class="flex justify-between items-center mt-1 sm:mt-2 px-1">
-                    <span class="font-bold text-xs sm:text-sm text-gray-700">Vous</span>
-                    <span id="bottom-clock" class="font-mono font-bold text-sm sm:text-lg bg-gray-100 border border-gray-300 rounded px-2 sm:px-3 py-1 transition-colors">--:--</span>
+                    <span class="font-bold text-xs sm:text-sm text-gray-400">Vous</span>
+                    <span id="bottom-clock" class="font-mono font-bold text-sm sm:text-lg bg-gray-800 border border-gray-700 text-gray-300 rounded px-2 sm:px-3 py-1 transition-colors">--:--</span>
                 </div>
             </div>
             
-            <div id="engine-status" class="mt-2 sm:mt-4 text-xs sm:text-sm text-gray-500 text-center hidden">
+            <div id="engine-status" class="mt-2 text-xs sm:text-sm text-gray-500 text-center hidden">
                 L'ordinateur réfléchit...
             </div>
         </div>
 
-        <!-- Panneau latéral : fixé en hauteur sur mobile pour ne pas forcer un scroll infini, flex sur desktop -->
-        <div class="w-full lg:w-72 flex flex-col bg-gray-50 border border-gray-200 rounded-lg p-3 sm:p-4">
-            <h2 class="text-base sm:text-lg font-bold mb-2 sm:mb-4 border-b pb-1 sm:pb-2">Historique</h2>
-            <div id="move-history" class="flex-1 overflow-y-auto mb-3 sm:mb-4 text-xs sm:text-sm font-mono space-y-1 h-32 sm:h-48 lg:h-[calc(100%-4rem)]">
+        <!-- Panneau de Contrôle (Droite) -->
+        <div class="w-full lg:w-80 flex flex-col bg-gray-800 border border-gray-700 rounded-lg p-3 sm:p-4 gap-4 sm:gap-6 shadow-xl">
+            
+            <!-- Contrôles -->
+            <div class="flex flex-col gap-3">
+                <button id="reset-btn" class="w-full bg-blue-600 text-white px-4 py-3 rounded font-bold hover:bg-blue-700 transition shadow-lg uppercase tracking-wide text-sm">
+                    Nouvelle Partie
+                </button>
+                
+                <div class="grid grid-cols-2 gap-2 mt-2">
+                    <div class="flex flex-col gap-1">
+                        <label class="text-[10px] uppercase tracking-wider text-gray-400 font-semibold px-1">Couleur</label>
+                        <select id="player-color" class="w-full bg-gray-700 border-none text-white text-sm rounded focus:ring-1 focus:ring-blue-500 block p-2">
+                            <option value="w" selected>Blancs</option>
+                            <option value="b">Noirs</option>
+                        </select>
+                    </div>
+                    <div class="flex flex-col gap-1">
+                        <label class="text-[10px] uppercase tracking-wider text-gray-400 font-semibold px-1">Niveau</label>
+                        <select id="difficulty" class="w-full bg-gray-700 border-none text-white text-sm rounded focus:ring-1 focus:ring-blue-500 block p-2">
+                            <option value="0">Débutant</option>
+                            <option value="1" selected>Facile</option>
+                            <option value="2">Moyen</option>
+                            <option value="3">Difficile</option>
+                        </select>
+                    </div>
+                    <div class="flex flex-col gap-1">
+                        <label class="text-[10px] uppercase tracking-wider text-gray-400 font-semibold px-1">Cadence</label>
+                        <select id="time-control" class="w-full bg-gray-700 border-none text-white text-sm rounded focus:ring-1 focus:ring-blue-500 block p-2">
+                            <option value="0" selected>Infini</option>
+                            <option value="3">3 min</option>
+                            <option value="5">5 min</option>
+                            <option value="10">10 min</option>
+                        </select>
+                    </div>
+                    <div class="flex flex-col justify-end">
+                        <button id="sound-btn" class="w-full bg-gray-700 text-white px-2 py-2 rounded text-sm hover:bg-gray-600 transition h-[36px]">
+                            Son: ON
+                        </button>
+                    </div>
+                </div>
             </div>
-            <button id="copy-pgn-btn" class="w-full bg-gray-200 text-gray-800 px-4 py-2 rounded font-medium hover:bg-gray-300 transition text-sm sm:text-base">
-                Copier PGN
-            </button>
+
+            <!-- Historique -->
+            <div class="flex flex-col flex-1">
+                <h2 class="text-sm font-bold mb-2 border-b border-gray-700 pb-2 text-gray-300 uppercase tracking-wider">Historique</h2>
+                <div id="move-history" class="flex-1 overflow-y-auto mb-3 text-xs sm:text-sm font-mono space-y-1 min-h-[150px] max-h-[250px] lg:max-h-none lg:h-0">
+                    <!-- Injections JS -->
+                </div>
+                <button id="copy-pgn-btn" class="w-full bg-gray-700 text-white px-4 py-2 rounded font-medium hover:bg-gray-600 transition text-sm">
+                    Copier PGN
+                </button>
+            </div>
         </div>
 
     </div>
 
-    <!-- Modale de promotion adaptée au tactile (gros boutons) -->
-    <div id="promotion-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
-        <div class="bg-white p-4 sm:p-6 rounded-lg shadow-xl text-center w-11/12 max-w-sm">
-            <h2 class="text-lg sm:text-xl font-bold mb-4">Promotion</h2>
+    <!-- Modale de promotion -->
+    <div id="promotion-modal" class="fixed inset-0 bg-gray-900 bg-opacity-80 flex items-center justify-center z-50 hidden backdrop-blur-sm">
+        <div class="bg-gray-800 p-4 sm:p-6 rounded-lg shadow-2xl text-center w-11/12 max-w-sm border border-gray-700">
+            <h2 class="text-lg sm:text-xl font-bold mb-4 text-white">Promotion</h2>
             <div class="flex gap-2 sm:gap-4 justify-center">
-                <button class="promo-btn text-4xl sm:text-5xl p-2 sm:p-3 hover:bg-gray-100 rounded border transition cursor-pointer flex-1" data-piece="q">♕</button>
-                <button class="promo-btn text-4xl sm:text-5xl p-2 sm:p-3 hover:bg-gray-100 rounded border transition cursor-pointer flex-1" data-piece="r">♖</button>
-                <button class="promo-btn text-4xl sm:text-5xl p-2 sm:p-3 hover:bg-gray-100 rounded border transition cursor-pointer flex-1" data-piece="b">♗</button>
-                <button class="promo-btn text-4xl sm:text-5xl p-2 sm:p-3 hover:bg-gray-100 rounded border transition cursor-pointer flex-1" data-piece="n">♘</button>
+                <button class="promo-btn text-4xl sm:text-5xl p-2 sm:p-3 bg-gray-700 text-white hover:bg-gray-600 rounded border border-gray-600 transition cursor-pointer flex-1" data-piece="q">♕</button>
+                <button class="promo-btn text-4xl sm:text-5xl p-2 sm:p-3 bg-gray-700 text-white hover:bg-gray-600 rounded border border-gray-600 transition cursor-pointer flex-1" data-piece="r">♖</button>
+                <button class="promo-btn text-4xl sm:text-5xl p-2 sm:p-3 bg-gray-700 text-white hover:bg-gray-600 rounded border border-gray-600 transition cursor-pointer flex-1" data-piece="b">♗</button>
+                <button class="promo-btn text-4xl sm:text-5xl p-2 sm:p-3 bg-gray-700 text-white hover:bg-gray-600 rounded border border-gray-600 transition cursor-pointer flex-1" data-piece="n">♘</button>
             </div>
         </div>
     </div>
@@ -142,6 +163,28 @@
         import {Chessboard, INPUT_EVENT_TYPE, COLOR} from "https://cdn.jsdelivr.net/npm/cm-chessboard@8.5.1/src/Chessboard.js";
         import {MARKER_TYPE, Markers} from "https://cdn.jsdelivr.net/npm/cm-chessboard@8.5.1/src/extensions/markers/Markers.js";
         import {Chess} from "https://esm.sh/chess.js@1.0.0-beta.8";
+
+        // --- SPLASH SCREEN LOGIC ---
+        document.addEventListener('DOMContentLoaded', () => {
+            const btn = document.getElementById('enter-game-btn');
+            const splash = document.getElementById('splash-screen');
+            const mainUI = document.getElementById('main-interface');
+            
+            // Animation d'entrée du bouton
+            setTimeout(() => {
+                btn.classList.remove('opacity-0', 'translate-y-4');
+            }, 800);
+
+            btn.addEventListener('click', () => {
+                splash.classList.add('opacity-0');
+                setTimeout(() => {
+                    splash.style.display = 'none';
+                    mainUI.classList.remove('opacity-0');
+                    // Force le redimensionnement de l'échiquier une fois visible
+                    window.dispatchEvent(new Event('resize'));
+                }, 500);
+            });
+        });
 
         class AudioController {
             constructor() {
@@ -321,6 +364,8 @@
                 this.elements.soundBtn.addEventListener('click', () => {
                     const isMuted = this.callbacks.onToggleSound();
                     this.elements.soundBtn.textContent = isMuted ? "Son: OFF" : "Son: ON";
+                    this.elements.soundBtn.classList.toggle('bg-red-900', isMuted);
+                    this.elements.soundBtn.classList.toggle('text-red-200', isMuted);
                 });
                 
                 document.querySelectorAll('.promo-btn').forEach(btn => {
@@ -375,14 +420,14 @@
             
             setupEvalBar(playerColor) {
                 const isWhiteBottom = playerColor === 'w';
-                const baseClasses = "rounded flex flex-col-reverse overflow-hidden relative border border-gray-300 shrink-0 ";
+                const baseClasses = "rounded flex flex-col-reverse overflow-hidden relative border border-gray-700 shrink-0 ";
                 const wClasses = "w-4 sm:w-6 md:w-8 ";
                 
                 if (isWhiteBottom) {
                     this.elements.evalBar.className = wClasses + baseClasses + "bg-gray-800";
-                    this.elements.evalFill.className = "bg-white w-full transition-all duration-300 ease-out";
+                    this.elements.evalFill.className = "bg-gray-300 w-full transition-all duration-300 ease-out";
                 } else {
-                    this.elements.evalBar.className = wClasses + baseClasses + "bg-white";
+                    this.elements.evalBar.className = wClasses + baseClasses + "bg-gray-300";
                     this.elements.evalFill.className = "bg-gray-800 w-full transition-all duration-300 ease-out";
                 }
             }
@@ -414,6 +459,15 @@
 
                 this.elements.evalFill.style.height = `${percent}%`;
                 this.elements.evalText.textContent = text;
+                
+                // Adapte la couleur du texte en fonction du remplissage pour rester lisible
+                if (percent > 55) {
+                    this.elements.evalText.classList.add('text-gray-900');
+                    this.elements.evalText.classList.remove('text-white');
+                } else {
+                    this.elements.evalText.classList.add('text-white');
+                    this.elements.evalText.classList.remove('text-gray-900');
+                }
             }
 
             formatTime(ms) {
@@ -485,11 +539,11 @@
                     const blackMove = history[i + 1] ? history[i + 1] : '';
                     
                     const row = document.createElement('div');
-                    row.className = 'flex justify-between hover:bg-gray-200 px-1 sm:px-2 py-1 rounded';
+                    row.className = 'flex justify-between hover:bg-gray-700 px-1 sm:px-2 py-1 rounded text-gray-300';
                     row.innerHTML = `
-                        <span class="w-6 sm:w-8 text-gray-400 select-none">${moveNum}.</span>
-                        <span class="w-16 sm:w-20 font-semibold text-gray-800">${whiteMove}</span>
-                        <span class="w-16 sm:w-20 font-semibold text-gray-800">${blackMove}</span>
+                        <span class="w-6 sm:w-8 text-gray-500 select-none">${moveNum}.</span>
+                        <span class="w-16 sm:w-20 font-semibold">${whiteMove}</span>
+                        <span class="w-16 sm:w-20 font-semibold">${blackMove}</span>
                     `;
                     this.elements.moveHistory.appendChild(row);
                 }
@@ -534,20 +588,22 @@
 
             setSoundUI(isMuted) {
                 this.elements.soundBtn.textContent = isMuted ? "Son: OFF" : "Son: ON";
+                this.elements.soundBtn.classList.toggle('bg-red-900', isMuted);
+                this.elements.soundBtn.classList.toggle('text-red-200', isMuted);
             }
 
             updateStatus(text, type) {
                 this.elements.status.textContent = text;
-                const baseClasses = "mb-2 sm:mb-4 text-center h-6 sm:h-8 font-bold ";
+                const baseClasses = "mb-2 text-center h-6 sm:h-8 font-bold ";
                 
                 if (type === 'danger') {
-                    this.elements.status.className = baseClasses + "text-base sm:text-xl text-red-600";
+                    this.elements.status.className = baseClasses + "text-base sm:text-xl text-red-500";
                 } else if (type === 'warning') {
-                    this.elements.status.className = baseClasses + "text-sm sm:text-lg text-orange-500";
+                    this.elements.status.className = baseClasses + "text-sm sm:text-lg text-orange-400";
                 } else if (type === 'neutral') {
-                    this.elements.status.className = baseClasses + "text-base sm:text-xl text-gray-600";
+                    this.elements.status.className = baseClasses + "text-base sm:text-xl text-gray-400";
                 } else {
-                    this.elements.status.className = "mb-2 sm:mb-4 text-center h-6 sm:h-8 font-semibold text-sm sm:text-lg text-gray-800";
+                    this.elements.status.className = "mb-2 text-center h-6 sm:h-8 font-semibold text-sm sm:text-lg text-gray-300";
                 }
             }
         }
@@ -615,9 +671,7 @@
                         isMuted: this.isMuted
                     };
                     localStorage.setItem('chess_session', JSON.stringify(session));
-                } catch (e) {
-                    // Sécurisation : ignore silencieusement si le mode privé bloque le stockage local
-                }
+                } catch (e) {}
             }
 
             playMoveSound(moveResult) {
