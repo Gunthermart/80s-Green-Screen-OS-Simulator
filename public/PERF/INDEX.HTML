@@ -163,20 +163,21 @@
             <div id="journal-result" style="display:none;" class="card mt-4 border-l-4">
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-center border-b border-slate-700/50 pb-4">
                     <div>
-                        <div class="text-slate-400 text-xs uppercase tracking-wider">Risque Absolu</div>
+                        <div class="text-slate-400 text-xs uppercase tracking-wider">Risque Réel (€)</div>
                         <div id="res-risk-euro" class="text-xl font-bold text-red-400">--</div>
+                        <div id="res-max-risk-label" class="text-[10px] text-slate-500 mt-1">--</div>
                     </div>
                     <div>
-                        <div class="text-slate-400 text-xs uppercase tracking-wider">Quantité à acheter</div>
-                        <div id="res-shares" class="text-3xl font-black text-cyan-400">--</div>
+                        <div class="text-slate-400 text-xs uppercase tracking-wider text-cyan-500 font-bold">Quantité (Ajustable)</div>
+                        <input type="number" id="res-shares-input" class="w-full text-center bg-slate-900 text-3xl font-black text-cyan-400 border border-slate-700 rounded mt-1 focus:outline-none focus:border-cyan-500 py-1" oninput="recalculateTradeRisk()" min="1" step="1">
                     </div>
                     <div>
                         <div class="text-slate-400 text-xs uppercase tracking-wider">Taille Position</div>
-                        <div id="res-position-size" class="text-xl font-bold text-white">--</div>
+                        <div id="res-position-size" class="text-xl font-bold text-white mt-3">--</div>
                     </div>
                     <div>
                         <div class="text-slate-400 text-xs uppercase tracking-wider">Ratio (Reward/Risk)</div>
-                        <div id="res-ratio" class="text-2xl font-bold">--</div>
+                        <div id="res-ratio" class="text-2xl font-bold mt-2">--</div>
                     </div>
                 </div>
                 <div class="pt-2">
@@ -200,9 +201,10 @@
                             <tr class="border-b border-slate-600 bg-slate-900/50 text-slate-400 text-xs uppercase tracking-wider">
                                 <th class="p-3 font-bold">Date</th>
                                 <th class="p-3 font-bold">Actif</th>
-                                <th class="p-3 font-bold">Ratio R/R</th>
+                                <th class="p-3 font-bold text-center">Qté</th>
+                                <th class="p-3 font-bold text-right">Risque Pris</th>
+                                <th class="p-3 font-bold text-center">Ratio</th>
                                 <th class="p-3 font-bold">Verdict Algo</th>
-                                <th class="p-3 font-bold">Biais Initial</th>
                                 <th class="p-3 font-bold text-center">Action Réelle</th>
                                 <th class="p-3 font-bold text-center">Supprimer</th>
                             </tr>
@@ -941,8 +943,24 @@
             const totalPositionSize = shares * entry;
             const ratio = rewardPerShare / riskPerShare;
 
+            // Sauvegarde des paramètres pour le recalcul dynamique
+            window.activeTradeParams = {
+                entry: entry,
+                stop: stop,
+                target: target,
+                riskPerShare: riskPerShare,
+                maxLossEuro: maxLossEuro,
+                ratio: ratio,
+                bias: bias,
+                asset: document.getElementById('journal-asset').value || "Non défini",
+                originalShares: shares
+            };
+
             document.getElementById('res-risk-euro').textContent = formatCurrency(maxLossEuro);
-            document.getElementById('res-shares').textContent = shares;
+            document.getElementById('res-risk-euro').className = "text-xl font-bold text-white";
+            document.getElementById('res-max-risk-label').textContent = `Max autorisé: ${formatCurrency(maxLossEuro)}`;
+            
+            document.getElementById('res-shares-input').value = shares;
             document.getElementById('res-position-size').textContent = formatCurrency(totalPositionSize);
             
             const ratioEl = document.getElementById('res-ratio');
@@ -951,74 +969,99 @@
             resultBox.style.display = 'block';
             document.getElementById('save-intention-container').classList.remove('hidden');
 
-            const assetName = document.getElementById('journal-asset').value || "Non défini";
+            updateDiagnosticText(shares, maxLossEuro, ratio, bias, maxLossEuro);
+        }
+
+        function recalculateTradeRisk() {
+            if (!window.activeTradeParams) return;
+            
+            const newShares = parseInt(document.getElementById('res-shares-input').value);
+            if (isNaN(newShares) || newShares <= 0) return;
+
+            const p = window.activeTradeParams;
+            const newRiskEuro = newShares * p.riskPerShare;
+            const newPositionSize = newShares * p.entry;
+
+            document.getElementById('res-position-size').textContent = formatCurrency(newPositionSize);
+            const riskEuroEl = document.getElementById('res-risk-euro');
+            riskEuroEl.textContent = formatCurrency(newRiskEuro);
+
+            if (newRiskEuro > p.maxLossEuro) {
+                riskEuroEl.className = "text-xl font-bold text-red-500 pulse-border";
+            } else {
+                riskEuroEl.className = "text-xl font-bold text-white";
+            }
+
+            updateDiagnosticText(newShares, newRiskEuro, p.ratio, p.bias, p.maxLossEuro);
+        }
+
+        function updateDiagnosticText(shares, actualRiskEuro, ratio, bias, maxLossEuro) {
+            const resultBox = document.getElementById('journal-result');
+            const diagBox = document.getElementById('journal-diagnostic');
+            const ratioEl = document.getElementById('res-ratio');
+
+            const isOverRisk = actualRiskEuro > maxLossEuro;
 
             currentIntentionDraft = {
                 id: Date.now(),
                 date: new Date().toLocaleDateString('fr-FR') + ' ' + new Date().toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'}),
-                asset: assetName,
+                asset: window.activeTradeParams.asset,
+                qty: shares,
+                actualRisk: actualRiskEuro,
+                maxRisk: maxLossEuro,
                 ratio: ratio,
                 bias: bias,
                 status: 'En attente',
                 verdict: ''
             };
 
-            // Contrôle psychologique
             if (bias !== 'strategie') {
                 currentIntentionDraft.verdict = 'Rejeté (Émotion)';
                 resultBox.className = "card mt-4 border-l-4 border-purple-600 bg-purple-900/10";
                 ratioEl.className = "text-2xl font-bold text-purple-400";
-                
-                let biasMessage = "";
-                if (bias === 'fomo') biasMessage = "Tu achètes sous le coup de l'émotion parce que le prix monte déjà. Tu vas servir de liquidité à ceux qui ont acheté plus bas.";
-                else if (bias === 'ennui') biasMessage = "Le marché n'est pas conçu pour te divertir. Agir par ennui garantit la destruction de ton capital.";
-                else if (bias === 'revanche') biasMessage = "Le marché n'a aucune mémoire de tes pertes précédentes. Essayer de te refaire est la voie express vers la liquidation.";
-                else if (bias === 'gourou') biasMessage = "Tu as externalisé ton cerveau. Si tu ne maîtrises pas la thèse, tu paniqueras à la première baisse.";
-
                 diagBox.innerHTML = `
                     <p class="text-purple-400 font-bold text-lg">VERDICT : REJETÉ (Corruption Émotionnelle).</p>
-                    <p class="text-slate-300 mt-2">${biasMessage}</p>
-                    <p class="text-slate-300 mt-2">Structure ou pas, ton esprit est compromis. L'exécution sera défaillante. Ferme la plateforme.</p>
+                    <p class="text-slate-300 mt-2">Peu importe tes modifications de quantité, ton esprit est compromis. L'exécution sera défaillante. Ne clique pas.</p>
                 `;
                 return;
             }
 
-            // Contrôle de sous-capitalisation ou sur-risque
+            if (isOverRisk) {
+                currentIntentionDraft.verdict = 'Sur-risque Actif';
+                resultBox.className = "card mt-4 border-l-4 border-red-600 bg-red-900/10";
+                ratioEl.className = "text-2xl font-bold text-red-500";
+                diagBox.innerHTML = `
+                    <p class="text-red-500 font-bold text-lg">VERDICT : VIOLATION DU RISQUE.</p>
+                    <p class="text-slate-300 mt-2">Tu as modifié la quantité à ${shares} titres. Ton risque réel passe à ${formatCurrency(actualRiskEuro)}, ce qui dépasse ton budget maximum de ${formatCurrency(maxLossEuro)}. Tu opères hors de ton cadre de gestion. C'est du jeu, pas du trading.</p>
+                `;
+                return;
+            }
+
             if (shares <= 0) {
                 currentIntentionDraft.verdict = 'Inexécutable';
                 resultBox.className = "card mt-4 border-l-4 border-orange-600 bg-orange-900/10";
                 ratioEl.className = "text-2xl font-bold text-orange-400";
                 diagBox.innerHTML = `
-                    <p class="text-orange-400 font-bold text-lg">VERDICT : INEXÉCUTABLE (Stop trop large).</p>
-                    <p class="text-slate-300 mt-2">Ton risque autorisé est de ${formatCurrency(maxLossEuro)}, mais le risque par action est de ${formatCurrency(riskPerShare)}. Tu ne peux même pas acheter 1 titre sans dépasser ton risque maximum. Réduis la distance de ton stop ou abandonne le trade.</p>
+                    <p class="text-orange-400 font-bold text-lg">VERDICT : INEXÉCUTABLE.</p>
                 `;
                 return;
             }
 
-            // Contrôle mathématique de l'asymétrie
             if (ratio < 2) {
                 currentIntentionDraft.verdict = 'Rejeté (Toxique)';
                 resultBox.className = "card mt-4 border-l-4 border-red-600 bg-red-900/10";
                 ratioEl.className = "text-2xl font-bold text-red-500";
                 diagBox.innerHTML = `
                     <p class="text-red-400 font-bold text-lg">VERDICT : REJETÉ (Mathématiquement Toxique).</p>
-                    <p class="text-slate-300 mt-2">Tu risques ${formatCurrency(maxLossEuro)} pour gagner seulement ${formatCurrency(maxLossEuro * ratio)}. Le marché ne paie pas assez pour le risque pris. Ce trade te ruinera sur le long terme. Annule.</p>
-                `;
-            } else if (ratio >= 2 && ratio < 3) {
-                currentIntentionDraft.verdict = 'Autorisé (Standard)';
-                resultBox.className = "card mt-4 border-l-4 border-emerald-500 bg-emerald-900/10";
-                ratioEl.className = "text-2xl font-bold text-emerald-400";
-                diagBox.innerHTML = `
-                    <p class="text-emerald-400 font-bold text-lg">VERDICT : AUTORISÉ (Standard).</p>
-                    <p class="text-slate-300 mt-2">Ton exposition est contrôlée. L'ordre dicte d'acheter <b>${shares}</b> titres, pas un de plus. Si le prix touche ${formatCurrency(stop)}, tu encaisses ta perte de ${formatCurrency(maxLossEuro)} mécaniquement.</p>
+                    <p class="text-slate-300 mt-2">Le marché ne paie pas assez pour le risque pris. Ce trade te ruinera sur le long terme.</p>
                 `;
             } else {
-                currentIntentionDraft.verdict = 'Autorisé (Asymétrie)';
-                resultBox.className = "card mt-4 border-l-4 border-blue-500 bg-blue-900/10";
-                ratioEl.className = "text-2xl font-bold text-blue-400";
+                currentIntentionDraft.verdict = ratio >= 3 ? 'Autorisé (Asymétrie)' : 'Autorisé (Standard)';
+                resultBox.className = `card mt-4 border-l-4 ${ratio >= 3 ? 'border-blue-500 bg-blue-900/10' : 'border-emerald-500 bg-emerald-900/10'}`;
+                ratioEl.className = `text-2xl font-bold ${ratio >= 3 ? 'text-blue-400' : 'text-emerald-400'}`;
                 diagBox.innerHTML = `
-                    <p class="text-blue-400 font-bold text-lg">VERDICT : AUTORISÉ (Forte Asymétrie).</p>
-                    <p class="text-slate-300 mt-2">L'équation est excellente. Achète <b>${shares}</b> titres pour une taille totale de ${formatCurrency(totalPositionSize)}. Assure-toi que ta cible à ${formatCurrency(target)} est réaliste et n'est pas le fruit de ton imagination pour valider le trade.</p>
+                    <p class="${ratio >= 3 ? 'text-blue-400' : 'text-emerald-400'} font-bold text-lg">VERDICT : ${currentIntentionDraft.verdict.toUpperCase()}.</p>
+                    <p class="text-slate-300 mt-2">Paramètres valides. Si tu exécutes, tu t'engages à acheter <b>${shares}</b> titres stricts. Ton risque est de ${formatCurrency(actualRiskEuro)}.</p>
                 `;
             }
         }
@@ -1065,6 +1108,7 @@
                 
                 let verdictColor = 'text-slate-300';
                 if (intent.verdict.includes('Rejeté') || intent.verdict.includes('Inexécutable')) verdictColor = 'text-red-400 font-bold';
+                else if (intent.verdict.includes('Sur-risque')) verdictColor = 'text-red-500 font-black';
                 else if (intent.verdict.includes('Autorisé')) verdictColor = 'text-emerald-400 font-bold';
 
                 let statusHtml = '';
@@ -1081,19 +1125,26 @@
                 }
 
                 let logicFlag = '';
-                if (intent.status === 'Exécuté' && intent.verdict.includes('Rejeté')) {
-                    logicFlag = '<span class="ml-2 px-1 bg-red-900 text-white text-[10px] rounded" title="Indiscipline">INDISCIPLINE</span>';
+                if (intent.status === 'Exécuté') {
+                    if (intent.verdict.includes('Rejeté')) {
+                        logicFlag = '<div class="mt-1"><span class="px-1 bg-red-900 text-white text-[10px] rounded" title="Indiscipline Emotionnelle ou Toxique">INDISCIPLINE</span></div>';
+                    } else if (intent.verdict.includes('Sur-risque')) {
+                        logicFlag = '<div class="mt-1"><span class="px-1 bg-red-900 text-white text-[10px] rounded" title="Non respect du Money Management">SUR-EXPOSITION</span></div>';
+                    }
                 } else if (intent.status === 'Abandonné' && intent.verdict.includes('Autorisé')) {
-                    logicFlag = '<span class="ml-2 px-1 bg-orange-900 text-white text-[10px] rounded" title="Hésitation / Peur">HÉSITATION</span>';
+                    logicFlag = '<div class="mt-1"><span class="px-1 bg-orange-900 text-white text-[10px] rounded" title="Hésitation / Peur">HÉSITATION</span></div>';
                 }
+
+                const riskColor = intent.actualRisk > intent.maxRisk ? 'text-red-500 font-bold' : 'text-slate-300';
 
                 tr.innerHTML = `
                     <td class="p-3 text-slate-400">${intent.date}</td>
                     <td class="p-3 text-white font-medium">${intent.asset}</td>
-                    <td class="p-3 text-slate-300">1 : ${intent.ratio.toFixed(2)}</td>
+                    <td class="p-3 text-center text-cyan-400 font-bold">${intent.qty}</td>
+                    <td class="p-3 text-right ${riskColor}">${formatCurrency(intent.actualRisk)}</td>
+                    <td class="p-3 text-center text-slate-300">1:${intent.ratio.toFixed(2)}</td>
                     <td class="p-3 ${verdictColor}">${intent.verdict}</td>
-                    <td class="p-3 text-slate-400 capitalize">${intent.bias}</td>
-                    <td class="p-3 text-center">${statusHtml} ${logicFlag}</td>
+                    <td class="p-3 text-center align-middle">${statusHtml} ${logicFlag}</td>
                     <td class="p-3 text-center">
                         <button onclick="deleteIntention(${intent.id})" class="text-slate-500 hover:text-red-500">✕</button>
                     </td>
