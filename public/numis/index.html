@@ -267,52 +267,98 @@
           // Document A4 portrait
           const doc = new jsPDF();
           
-          const primaryColor = [15, 23, 42]; // Slate 950
-          const secondaryColor = [71, 85, 105]; // Slate 600
+          // Architect Rule: Sanitizer pour contrer le bug V8 du "Narrow No-Break Space" (\u202F)
+          // qui provoque l'affichage de "1/000,00" dans la police Helvetica standard du PDF.
+          const formatPDFCurrency = (val) => {
+            const formatted = new Intl.NumberFormat('fr-FR', { 
+              minimumFractionDigits: 2, 
+              maximumFractionDigits: 2 
+            }).format(val);
+            // Écrase les espaces insécables bizarres par des espaces purs, et ajoute l'Euro
+            return formatted.replace(/[\u202F\u00A0]/g, ' ') + ' €';
+          };
+
+          const formatPDFWeight = (val) => {
+            return new Intl.NumberFormat('fr-FR', { 
+              minimumFractionDigits: 2, 
+              maximumFractionDigits: 2 
+            }).format(val).replace(/[\u202F\u00A0]/g, ' ');
+          };
           
-          // --- HEADER ---
+          const primaryColor = [15, 23, 42]; // Slate 950
+          const accentColor = [56, 189, 248]; // Sky 400
+          
+          // --- HEADER (Fond Sombre Élégant) ---
+          doc.setFillColor(...primaryColor);
+          doc.rect(0, 0, 210, 45, 'F');
+          
           doc.setFont("helvetica", "bold");
-          doc.setFontSize(22);
-          doc.setTextColor(...primaryColor);
-          doc.text("AUDIT NUMISMATIQUE", 14, 22);
+          doc.setFontSize(24);
+          doc.setTextColor(255, 255, 255);
+          doc.text("AUDIT NUMISMATIQUE", 14, 24);
           
           doc.setFont("helvetica", "normal");
           doc.setFontSize(10);
-          doc.setTextColor(...secondaryColor);
+          doc.setTextColor(148, 163, 184); // Slate 400
           const dateStr = new Date().toLocaleString('fr-FR');
-          doc.text(`Généré le : ${dateStr}`, 14, 30);
-          doc.text(`Oracle Spot : OR = ${formatCurrency(spotPricesOz.GOLD)}/oz | ARGENT = ${formatCurrency(spotPricesOz.SILVER)}/oz`, 14, 35);
+          doc.text(`Généré le : ${dateStr}`, 14, 34);
           
-          doc.line(14, 40, 196, 40); // Ligne séparatrice
+          doc.setTextColor(...accentColor);
+          doc.text(`Oracle Spot : OR = ${formatPDFCurrency(spotPricesOz.GOLD)}/oz  |  ARGENT = ${formatPDFCurrency(spotPricesOz.SILVER)}/oz`, 14, 40);
 
-          // --- KPIs ---
+          // --- KPIs (Cartes visuelles) ---
+          let startY = 55;
+          
+          // Boite 1 : Bilan Financier
+          doc.setDrawColor(203, 213, 225); // Slate 300
+          doc.setFillColor(248, 250, 252); // Slate 50
+          doc.roundedRect(14, startY, 85, 35, 3, 3, 'FD');
+          
           doc.setFont("helvetica", "bold");
-          doc.setFontSize(14);
+          doc.setFontSize(11);
           doc.setTextColor(...primaryColor);
-          doc.text("Bilan Financier", 14, 50);
+          doc.text("BILAN FINANCIER", 18, startY + 8);
+          
+          doc.setFontSize(16);
+          doc.text(formatPDFCurrency(portfolioStats.totalPortfolioValue), 18, startY + 16);
           
           doc.setFont("helvetica", "normal");
-          doc.setFontSize(11);
-          doc.setTextColor(50);
-          doc.text(`Valorisation Actuelle : ${formatCurrency(portfolioStats.totalPortfolioValue)}`, 14, 58);
-          doc.text(`Coût d'Acquisition : ${formatCurrency(portfolioStats.totalAcquisitionCost)}`, 14, 64);
+          doc.setFontSize(9);
+          doc.setTextColor(71, 85, 105);
+          doc.text(`Coût d'Acquisition : ${formatPDFCurrency(portfolioStats.totalAcquisitionCost)}`, 18, startY + 24);
           
           const isPositive = portfolioStats.latentCapitalGain >= 0;
           doc.setFont("helvetica", "bold");
           doc.setTextColor(isPositive ? 5 : 220, isPositive ? 150 : 38, isPositive ? 105 : 38); 
           const sign = isPositive ? '+' : '';
-          doc.text(`Plus-value Latente : ${sign}${formatCurrency(portfolioStats.latentCapitalGain)} (${sign}${portfolioStats.roiPercentage.toFixed(2)}%)`, 14, 70);
+          doc.text(`Plus-value : ${sign}${formatPDFCurrency(portfolioStats.latentCapitalGain)} (${sign}${portfolioStats.roiPercentage.toFixed(2)}%)`, 18, startY + 30);
 
-          // Masses
-          doc.setFont("helvetica", "bold");
-          doc.setTextColor(...primaryColor);
-          doc.text("Masses Pures En Stock", 110, 50);
+          // Boite 2 : Masses
+          doc.setDrawColor(203, 213, 225);
+          doc.setFillColor(248, 250, 252);
+          doc.roundedRect(110, startY, 85, 35, 3, 3, 'FD');
           
-          doc.setFont("helvetica", "normal");
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(11);
+          doc.setTextColor(...primaryColor);
+          doc.text("MASSES PURES (EN STOCK)", 114, startY + 8);
+          
           doc.setFontSize(10);
-          doc.setTextColor(50);
-          doc.text(`OR : ${portfolioStats.totalGoldWeightPure.toFixed(2)} g  (${ (portfolioStats.totalGoldWeightPure / TROY_OUNCE_GRAMS).toFixed(2)} oz)`, 110, 58);
-          doc.text(`ARGENT : ${(portfolioStats.totalSilverWeightPure / 1000).toFixed(2)} kg  (${ (portfolioStats.totalSilverWeightPure / TROY_OUNCE_GRAMS).toFixed(2)} oz)`, 110, 64);
+          doc.setTextColor(180, 83, 9); // Amber 700 (Or)
+          doc.text(`OR : ${formatPDFWeight(portfolioStats.totalGoldWeightPure)} g`, 114, startY + 16);
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(8);
+          doc.setTextColor(100, 116, 139);
+          doc.text(`Équivalent : ${formatPDFWeight(portfolioStats.totalGoldWeightPure / TROY_OUNCE_GRAMS)} oz`, 114, startY + 20);
+
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(10);
+          doc.setTextColor(71, 85, 105); // Slate 600 (Argent)
+          doc.text(`ARGENT : ${formatPDFWeight(portfolioStats.totalSilverWeightPure / 1000)} kg`, 114, startY + 27);
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(8);
+          doc.setTextColor(100, 116, 139);
+          doc.text(`Équivalent : ${formatPDFWeight(portfolioStats.totalSilverWeightPure / TROY_OUNCE_GRAMS)} oz`, 114, startY + 31);
 
           // --- DATA TABLE ---
           const activeAssets = portfolioStats.detailedAssets.filter(item => item.parsedQuantity > 0);
@@ -320,42 +366,54 @@
           const tableData = activeAssets.map(item => [
             item.def.name + (customDictionary[item.coinId] ? " (*)" : ""),
             item.parsedQuantity.toString(),
-            formatCurrency(parseFloat(item.avgBuyPrice) || 0),
-            formatCurrency(item.intrinsicValuePerCoin),
-            formatCurrency(item.totalIntrinsicValue),
-            `${item.latentLineCapitalGain >= 0 ? '+' : ''}${formatCurrency(item.latentLineCapitalGain)} (${item.latentLineCapitalGain >= 0 ? '+' : ''}${item.lineRoiPercentage.toFixed(1)}%)`
+            formatPDFCurrency(parseFloat(item.avgBuyPrice) || 0),
+            formatPDFCurrency(item.intrinsicValuePerCoin),
+            formatPDFCurrency(item.totalIntrinsicValue),
+            `${item.latentLineCapitalGain >= 0 ? '+' : ''}${formatPDFCurrency(item.latentLineCapitalGain)}\n(${item.latentLineCapitalGain >= 0 ? '+' : ''}${item.lineRoiPercentage.toFixed(1)}%)`
           ]);
 
           doc.autoTable({
-            startY: 85,
-            head: [['Actif', 'Qte', 'PRU Moyen', 'Valeur Unitaire', 'Valorisation Totale', 'Performance']],
+            startY: 100,
+            head: [['Actif (Métal)', 'Qte', 'PRU Moyen', 'Valeur Fonte', 'Valorisation', 'Performance']],
             body: tableData,
-            theme: 'grid',
-            headStyles: { fillColor: primaryColor, textColor: 255, fontStyle: 'bold' },
-            styles: { fontSize: 9, cellPadding: 3, font: "helvetica" },
-            alternateRowStyles: { fillColor: [248, 250, 252] }, // Slate 50
+            theme: 'striped',
+            headStyles: { 
+              fillColor: primaryColor, 
+              textColor: 255, 
+              fontStyle: 'bold',
+              halign: 'center'
+            },
+            styles: { 
+              fontSize: 9, 
+              cellPadding: 4, 
+              font: "helvetica",
+              textColor: [51, 65, 85] // Slate 700
+            },
+            alternateRowStyles: { fillColor: [248, 250, 252] },
             columnStyles: {
+              0: { halign: 'left', fontStyle: 'bold' },
               1: { halign: 'center' },
+              // Architect Rule: L'alignement à droite avec un formatage strict (X XX,00 €) force l'alignement visuel parfait sur la virgule.
               2: { halign: 'right' },
               3: { halign: 'right' },
-              4: { halign: 'right', fontStyle: 'bold' },
-              5: { halign: 'right', fontStyle: 'bold', textColor: [15, 23, 42] }
+              4: { halign: 'right', fontStyle: 'bold', textColor: [15, 23, 42] },
+              5: { halign: 'right', fontStyle: 'bold' }
             },
             didParseCell: function(data) {
-               // Coloration conditionnelle pour la colonne Performance (index 5)
+               // Coloration conditionnelle pour la colonne Performance
                if (data.section === 'body' && data.column.index === 5) {
                   const valStr = data.cell.raw;
-                  if (valStr.includes('+')) data.cell.styles.textColor = [5, 150, 105]; // Emerald
-                  if (valStr.includes('-')) data.cell.styles.textColor = [220, 38, 38]; // Red
+                  if (valStr.includes('+')) data.cell.styles.textColor = [5, 150, 105]; // Vert positif
+                  if (valStr.includes('-')) data.cell.styles.textColor = [220, 38, 38]; // Rouge négatif
                }
             }
           });
 
           // Footer
-          const finalY = doc.lastAutoTable.finalY || 85;
+          const finalY = doc.lastAutoTable.finalY || 100;
           if (Object.keys(customDictionary).length > 0) {
              doc.setFontSize(8);
-             doc.setTextColor(150);
+             doc.setTextColor(148, 163, 184);
              doc.text("(*) Actifs sur-mesure créés localement.", 14, finalY + 10);
           }
 
@@ -363,7 +421,7 @@
           for(let i = 1; i <= pageCount; i++) {
             doc.setPage(i);
             doc.setFontSize(8);
-            doc.setTextColor(150);
+            doc.setTextColor(148, 163, 184);
             doc.text(`Engine Numismatique V2 - Page ${i} sur ${pageCount}`, 14, doc.internal.pageSize.height - 10);
           }
 
