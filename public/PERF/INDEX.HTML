@@ -158,6 +158,33 @@
                     <div class="text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">Verdict d'Exécution</div>
                     <div id="journal-diagnostic" class="text-white text-sm">--</div>
                 </div>
+                <div id="save-intention-container" class="mt-4 pt-4 border-t border-slate-700/50 hidden">
+                    <button onclick="saveIntention()" class="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-2 px-4 rounded transition-colors uppercase text-sm tracking-wider">
+                        Graver cette intention dans le registre
+                    </button>
+                </div>
+            </div>
+
+            <!-- REGISTRE DES INTENTIONS -->
+            <div id="intentions-section" style="display:none;" class="mt-8 pt-6 border-t border-zinc-700">
+                <h3 class="text-xl font-bold text-white mb-4">Registre des Intentions (Théorie vs Réalité)</h3>
+                <p class="text-slate-400 text-sm mb-4">L'écart entre ce que tu prévois de faire et ce que tu fais réellement. Mesure ta lâcheté ou ton indiscipline.</p>
+                <div class="card bg-slate-800/50 overflow-x-auto p-0 border-slate-700">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="border-b border-slate-600 bg-slate-900/50 text-slate-400 text-xs uppercase tracking-wider">
+                                <th class="p-3 font-bold">Date</th>
+                                <th class="p-3 font-bold">Actif</th>
+                                <th class="p-3 font-bold">Ratio R/R</th>
+                                <th class="p-3 font-bold">Verdict Algo</th>
+                                <th class="p-3 font-bold">Biais Initial</th>
+                                <th class="p-3 font-bold text-center">Action Réelle</th>
+                                <th class="p-3 font-bold text-center">Supprimer</th>
+                            </tr>
+                        </thead>
+                        <tbody id="intentions-tbody" class="text-sm"></tbody>
+                    </table>
+                </div>
             </div>
         </div>
 
@@ -734,6 +761,8 @@
         // --- Globals ---
         let globalPortfolio = [];
         let globalHistory = [];
+        let globalIntentions = [];
+        let currentIntentionDraft = null;
 
         // --- Help System ---
         const helpContent = {
@@ -895,9 +924,23 @@
             ratioEl.textContent = "1 : " + ratio.toFixed(2);
 
             resultBox.style.display = 'block';
+            document.getElementById('save-intention-container').classList.remove('hidden');
+
+            const assetName = document.getElementById('journal-asset').value || "Non défini";
+
+            currentIntentionDraft = {
+                id: Date.now(),
+                date: new Date().toLocaleDateString('fr-FR') + ' ' + new Date().toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'}),
+                asset: assetName,
+                ratio: ratio,
+                bias: bias,
+                status: 'En attente',
+                verdict: ''
+            };
 
             // Contrôle psychologique
             if (bias !== 'strategie') {
+                currentIntentionDraft.verdict = 'Rejeté (Émotion)';
                 resultBox.className = "card mt-4 border-l-4 border-purple-600 bg-purple-900/10";
                 ratioEl.className = "text-2xl font-bold text-purple-400";
                 
@@ -917,6 +960,7 @@
 
             // Contrôle de sous-capitalisation ou sur-risque
             if (shares <= 0) {
+                currentIntentionDraft.verdict = 'Inexécutable';
                 resultBox.className = "card mt-4 border-l-4 border-orange-600 bg-orange-900/10";
                 ratioEl.className = "text-2xl font-bold text-orange-400";
                 diagBox.innerHTML = `
@@ -928,6 +972,7 @@
 
             // Contrôle mathématique de l'asymétrie
             if (ratio < 2) {
+                currentIntentionDraft.verdict = 'Rejeté (Toxique)';
                 resultBox.className = "card mt-4 border-l-4 border-red-600 bg-red-900/10";
                 ratioEl.className = "text-2xl font-bold text-red-500";
                 diagBox.innerHTML = `
@@ -935,6 +980,7 @@
                     <p class="text-slate-300 mt-2">Tu risques ${formatCurrency(maxLossEuro)} pour gagner seulement ${formatCurrency(maxLossEuro * ratio)}. Le marché ne paie pas assez pour le risque pris. Ce trade te ruinera sur le long terme. Annule.</p>
                 `;
             } else if (ratio >= 2 && ratio < 3) {
+                currentIntentionDraft.verdict = 'Autorisé (Standard)';
                 resultBox.className = "card mt-4 border-l-4 border-emerald-500 bg-emerald-900/10";
                 ratioEl.className = "text-2xl font-bold text-emerald-400";
                 diagBox.innerHTML = `
@@ -942,6 +988,7 @@
                     <p class="text-slate-300 mt-2">Ton exposition est contrôlée. L'ordre dicte d'acheter <b>${shares}</b> titres, pas un de plus. Si le prix touche ${formatCurrency(stop)}, tu encaisses ta perte de ${formatCurrency(maxLossEuro)} mécaniquement.</p>
                 `;
             } else {
+                currentIntentionDraft.verdict = 'Autorisé (Asymétrie)';
                 resultBox.className = "card mt-4 border-l-4 border-blue-500 bg-blue-900/10";
                 ratioEl.className = "text-2xl font-bold text-blue-400";
                 diagBox.innerHTML = `
@@ -949,6 +996,85 @@
                     <p class="text-slate-300 mt-2">L'équation est excellente. Achète <b>${shares}</b> titres pour une taille totale de ${formatCurrency(totalPositionSize)}. Assure-toi que ta cible à ${formatCurrency(target)} est réaliste et n'est pas le fruit de ton imagination pour valider le trade.</p>
                 `;
             }
+        }
+
+        function saveIntention() {
+            if (!currentIntentionDraft) return;
+            globalIntentions.unshift(currentIntentionDraft);
+            localStorage.setItem('brutal_intentions', JSON.stringify(globalIntentions));
+            renderIntentions();
+            document.getElementById('save-intention-container').classList.add('hidden');
+            currentIntentionDraft = null;
+        }
+
+        function updateIntentionStatus(id, newStatus) {
+            const index = globalIntentions.findIndex(i => i.id === id);
+            if (index !== -1) {
+                globalIntentions[index].status = newStatus;
+                localStorage.setItem('brutal_intentions', JSON.stringify(globalIntentions));
+                renderIntentions();
+            }
+        }
+
+        function deleteIntention(id) {
+            globalIntentions = globalIntentions.filter(i => i.id !== id);
+            localStorage.setItem('brutal_intentions', JSON.stringify(globalIntentions));
+            renderIntentions();
+        }
+
+        function renderIntentions() {
+            const section = document.getElementById('intentions-section');
+            const tbody = document.getElementById('intentions-tbody');
+            
+            if (globalIntentions.length === 0) {
+                section.style.display = 'none';
+                return;
+            }
+            
+            section.style.display = 'block';
+            tbody.innerHTML = '';
+
+            globalIntentions.forEach(intent => {
+                const tr = document.createElement('tr');
+                tr.className = "border-b border-slate-700/50 hover:bg-slate-800/50";
+                
+                let verdictColor = 'text-slate-300';
+                if (intent.verdict.includes('Rejeté') || intent.verdict.includes('Inexécutable')) verdictColor = 'text-red-400 font-bold';
+                else if (intent.verdict.includes('Autorisé')) verdictColor = 'text-emerald-400 font-bold';
+
+                let statusHtml = '';
+                if (intent.status === 'En attente') {
+                    statusHtml = `
+                        <div class="flex gap-2 justify-center">
+                            <button onclick="updateIntentionStatus(${intent.id}, 'Exécuté')" class="text-xs bg-emerald-900/50 text-emerald-400 hover:bg-emerald-800 py-1 px-2 rounded border border-emerald-900">Exécuté</button>
+                            <button onclick="updateIntentionStatus(${intent.id}, 'Abandonné')" class="text-xs bg-slate-700 text-slate-300 hover:bg-slate-600 py-1 px-2 rounded border border-slate-600">Abandonné</button>
+                        </div>
+                    `;
+                } else {
+                    const statusColor = intent.status === 'Exécuté' ? 'text-emerald-400' : 'text-slate-500';
+                    statusHtml = `<span class="font-bold ${statusColor}">${intent.status}</span>`;
+                }
+
+                let logicFlag = '';
+                if (intent.status === 'Exécuté' && intent.verdict.includes('Rejeté')) {
+                    logicFlag = '<span class="ml-2 px-1 bg-red-900 text-white text-[10px] rounded" title="Indiscipline">INDISCIPLINE</span>';
+                } else if (intent.status === 'Abandonné' && intent.verdict.includes('Autorisé')) {
+                    logicFlag = '<span class="ml-2 px-1 bg-orange-900 text-white text-[10px] rounded" title="Hésitation / Peur">HÉSITATION</span>';
+                }
+
+                tr.innerHTML = `
+                    <td class="p-3 text-slate-400">${intent.date}</td>
+                    <td class="p-3 text-white font-medium">${intent.asset}</td>
+                    <td class="p-3 text-slate-300">1 : ${intent.ratio.toFixed(2)}</td>
+                    <td class="p-3 ${verdictColor}">${intent.verdict}</td>
+                    <td class="p-3 text-slate-400 capitalize">${intent.bias}</td>
+                    <td class="p-3 text-center">${statusHtml} ${logicFlag}</td>
+                    <td class="p-3 text-center">
+                        <button onclick="deleteIntention(${intent.id})" class="text-slate-500 hover:text-red-500">✕</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
         }
 
         // --- Utils ---
@@ -2936,8 +3062,16 @@
         function loadFromCache() {
             const savedPos = localStorage.getItem('brutal_portfolio');
             const savedHist = localStorage.getItem('brutal_history');
+            const savedIntent = localStorage.getItem('brutal_intentions');
             
             let loaded = false;
+
+            if (savedIntent) {
+                try {
+                    globalIntentions = JSON.parse(savedIntent);
+                    renderIntentions();
+                } catch(e) { console.error("Cache intentions corrompu", e); }
+            }
             
             if (savedPos) {
                 try {
@@ -2966,6 +3100,7 @@
         function clearCache() {
             localStorage.removeItem('brutal_portfolio');
             localStorage.removeItem('brutal_history');
+            localStorage.removeItem('brutal_intentions');
             location.reload();
         }
 
