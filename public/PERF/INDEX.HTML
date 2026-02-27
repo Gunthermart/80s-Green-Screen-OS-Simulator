@@ -12,6 +12,9 @@
     
     <style>
         body { background-color: #0f172a; color: #e2e8f0; font-family: 'Inter', sans-serif; }
+        html { scroll-behavior: smooth; scroll-padding-top: 90px; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .card { background-color: #1e293b; border: 1px solid #334155; border-radius: 0.5rem; padding: 1.5rem; }
         .negative { color: #ef4444; }
         .positive { color: #22c55e; }
@@ -45,6 +48,9 @@
                 <button onclick="clearCache()" id="clear-btn" class="hidden text-xs text-slate-500 hover:text-red-500 transition-colors uppercase tracking-wider font-bold">
                     Purger la mémoire
                 </button>
+                <button onclick="generateFlashPDF()" id="pdf-flash-btn" class="hidden bg-red-900 hover:bg-red-800 text-white px-4 py-2 rounded text-xs font-bold uppercase tracking-wider transition-colors border border-red-700">
+                    Snapshot Tactique (PDF)
+                </button>
                 <button onclick="generateYearlyPDF()" id="pdf-btn" class="btn-primary hidden flex items-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -69,6 +75,25 @@
                     <span class="block text-lg mb-1 text-white">2. Historique</span>
                     <span id="label-hist" class="text-slate-400">Glisse 'historique-portefeuille.csv' ici</span>
                 </div>
+            </div>
+        </div>
+
+        <!-- NAVIGATION TACTIQUE (HUD) -->
+        <div id="sticky-nav" style="display:none;" class="sticky top-0 z-40 bg-[#0f172a] pt-4 pb-2 border-b border-slate-700 shadow-[0_10px_15px_-3px_rgba(15,23,42,1)] -mx-4 px-4 md:-mx-8 md:px-8">
+            <div class="flex gap-6 overflow-x-auto no-scrollbar text-[11px] font-bold uppercase tracking-wider pb-2">
+                <a href="#pre-trade-journal" class="whitespace-nowrap text-blue-400 hover:text-blue-300">Journal d'Entrée</a>
+                <a href="#liquidation-section" class="whitespace-nowrap text-red-600 hover:text-red-500">Triage d'Abattage</a>
+                <a href="#kpi-pos-container" class="whitespace-nowrap text-slate-400 hover:text-white">Vue Globale</a>
+                <a href="#risk-section" class="whitespace-nowrap text-red-400 hover:text-red-300">Risques</a>
+                <a href="#money-management-section" class="whitespace-nowrap text-cyan-500 hover:text-cyan-400">Capital Risqué</a>
+                <a href="#psychology-section" class="whitespace-nowrap text-blue-500 hover:text-blue-400">Psychologie</a>
+                <a href="#liquidity-section" class="whitespace-nowrap text-teal-500 hover:text-teal-400">Liquidité</a>
+                <a href="#trends-section" class="whitespace-nowrap text-indigo-500 hover:text-indigo-400">Tendances</a>
+                <a href="#trade-analysis-section" class="whitespace-nowrap text-fuchsia-500 hover:text-fuchsia-400">Analyse Trades</a>
+                <a href="#recovery-section" class="whitespace-nowrap text-orange-500 hover:text-orange-400">Récupération</a>
+                <a href="#sector-section" class="whitespace-nowrap text-yellow-500 hover:text-yellow-400">Secteurs</a>
+                <a href="#cagr-section" class="whitespace-nowrap text-purple-500 hover:text-purple-400">Rendement</a>
+                <a href="#detail-section" class="whitespace-nowrap text-slate-400 hover:text-white">Autopsie</a>
             </div>
         </div>
 
@@ -1104,9 +1129,13 @@
 
             if (hasPos || hasHist) {
                 document.getElementById('empty-state').style.display = 'none';
+                document.getElementById('sticky-nav').style.display = 'block';
             }
 
-            if (hasPos) renderPortfolio(globalPortfolio);
+            if (hasPos) {
+                renderPortfolio(globalPortfolio);
+                document.getElementById('pdf-flash-btn').classList.remove('hidden');
+            }
             if (hasHist) renderHistory(globalHistory);
             
             if (hasPos) {
@@ -3012,6 +3041,166 @@
             doc.text("de couper une perte. Imprime cette page et garde-la sous les yeux avant de racheter une action qui baisse.", 14, finalY + 44);
 
             doc.save('audit_performance_reelle_mtm.pdf');
+        }
+
+        function generateFlashPDF() {
+            if (globalPortfolio.length === 0) {
+                alert("Charge tes positions actuelles d'abord.");
+                return;
+            }
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('fr-FR') + ' ' + now.toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'});
+
+            // Extractions rapides
+            let portfolio = globalPortfolio.map(row => ({
+                name: row['Titre'],
+                currentVal: parseFrenchNumber(row['valeur actuelle']),
+                pnlEuro: parseFrenchNumber(row['gain ou perte en euros']),
+                pnlPercent: parseFrenchNumber(row['gain ou perte en pourcentage']),
+                pru: parseFrenchNumber(row['prix de revient']),
+                price: parseFrenchNumber(row['cours actuel'])
+            })).filter(item => item.currentVal > 0);
+
+            const totalValue = portfolio.reduce((sum, item) => sum + item.currentVal, 0);
+            const totalPnL = portfolio.reduce((sum, item) => sum + item.pnlEuro, 0);
+            
+            portfolio.sort((a, b) => b.currentVal - a.currentVal);
+            const maxWeightItem = portfolio[0];
+            const maxWeightPct = totalValue > 0 ? (maxWeightItem.currentVal / totalValue) : 0;
+
+            portfolio.sort((a, b) => a.pnlEuro - b.pnlEuro);
+            const worstLoser = portfolio[0];
+
+            let heatTotal = 0;
+            const stopPct = parseFloat(document.getElementById('mm-stop-pct').value) || 15;
+            heatTotal = totalValue * (stopPct / 100);
+
+            // Extraction psychologie (si historique présent)
+            let winRate = "N/A", payoff = "N/A";
+            if (globalHistory.length > 0) {
+                const txs = parseHistory(globalHistory);
+                const pdfStockPMP = {};
+                const pdfTrades = [];
+                let tw = 0, wc = 0, tl = 0, lc = 0;
+
+                txs.forEach(t => {
+                    const stock = t.stock;
+                    if (!pdfStockPMP[stock]) pdfStockPMP[stock] = { qty: 0, cost: 0, pmp: 0 };
+                    if (t.type === 'Achat') {
+                        pdfStockPMP[stock].cost += (t.price * t.qty);
+                        pdfStockPMP[stock].qty += t.qty;
+                        pdfStockPMP[stock].pmp = pdfStockPMP[stock].cost / pdfStockPMP[stock].qty;
+                    } else if (t.type === 'Vente') {
+                        if (pdfStockPMP[stock].qty > 0) {
+                            const cb = pdfStockPMP[stock].pmp * t.qty;
+                            const pnl = (t.price * t.qty) - t.fees - cb;
+                            pdfTrades.push(pnl);
+                            if (pnl > 0) { tw += pnl; wc++; }
+                            else { tl += Math.abs(pnl); lc++; }
+                            pdfStockPMP[stock].qty -= t.qty;
+                            pdfStockPMP[stock].cost -= cb;
+                        }
+                    }
+                });
+                
+                if (pdfTrades.length > 0) {
+                    const wr = (wc / pdfTrades.length) * 100;
+                    const aw = wc > 0 ? tw / wc : 0;
+                    const al = lc > 0 ? tl / lc : 0;
+                    const po = al > 0 ? aw / al : 0;
+                    winRate = wr.toFixed(1) + "%";
+                    payoff = po.toFixed(2);
+                }
+            }
+
+            // Détection Ordre Liquidation
+            let liquidationTarget = null;
+            const targetNameEl = document.getElementById('liq-target-name');
+            if (targetNameEl && targetNameEl.textContent !== '--' && document.getElementById('liquidation-card').style.display !== 'none') {
+                liquidationTarget = targetNameEl.textContent;
+            }
+
+            // --- Dessin du PDF ---
+            doc.setFillColor(15, 23, 42); // Slate-900 background for header
+            doc.rect(0, 0, 210, 40, 'F');
+            
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(22);
+            doc.text("SNAPSHOT TACTIQUE", 14, 20);
+            doc.setFontSize(10);
+            doc.setTextColor(148, 163, 184); // Slate-400
+            doc.text(`Généré le : ${dateStr} | Objectivité : Sans Filtre`, 14, 28);
+
+            doc.setTextColor(15, 23, 42);
+            doc.setFontSize(14);
+            doc.text("1. ÉTAT DU CAPITAL", 14, 55);
+            doc.setLineWidth(0.5);
+            doc.line(14, 57, 196, 57);
+
+            doc.setFontSize(11);
+            doc.text(`Valeur Totale : ${formatCurrency(totalValue)}`, 14, 65);
+            
+            doc.setTextColor(totalPnL < 0 ? 220 : 22, totalPnL < 0 ? 38 : 163, totalPnL < 0 ? 38 : 74);
+            doc.text(`P&L Latent : ${formatCurrency(totalPnL)}`, 100, 65);
+            
+            doc.setTextColor(220, 38, 38); // Red
+            doc.text(`Chaleur Globale (Risque Estimé) : -${formatCurrency(heatTotal)}`, 14, 73);
+
+            doc.setTextColor(15, 23, 42);
+            doc.setFontSize(14);
+            doc.text("2. POINTS DE DÉFAILLANCE", 14, 90);
+            doc.line(14, 92, 196, 92);
+
+            doc.setFontSize(11);
+            doc.text(`Concentration Max : ${maxWeightItem ? maxWeightItem.name : 'N/A'} (${formatPercent(maxWeightPct)})`, 14, 100);
+            if (maxWeightPct > 0.15) doc.setTextColor(220, 38, 38).text("-> Risque de ruine spécifique élevé.", 14, 106);
+            
+            doc.setTextColor(15, 23, 42);
+            if (worstLoser && worstLoser.pnlPercent < 0) {
+                doc.text(`Le Boulet du Portefeuille : ${worstLoser.name}`, 14, 116);
+                doc.setTextColor(220, 38, 38);
+                doc.text(`Perte : ${formatCurrency(worstLoser.pnlEuro)} (${formatPercent(worstLoser.pnlPercent)})`, 14, 122);
+                const req = Math.abs(worstLoser.pnlPercent) / (1 + worstLoser.pnlPercent);
+                doc.text(`Hausse requise pour Break-Even : +${formatPercent(req)}`, 14, 128);
+            } else {
+                doc.text("Aucune perte latente critique.", 14, 116);
+            }
+
+            doc.setTextColor(15, 23, 42);
+            doc.setFontSize(14);
+            doc.text("3. MÉCANIQUE D'EXÉCUTION (HISTORIQUE)", 14, 145);
+            doc.line(14, 147, 196, 147);
+
+            doc.setFontSize(11);
+            doc.text(`Taux de Succès (Win Rate) : ${winRate}`, 14, 155);
+            doc.text(`Ratio Gain/Perte (Payoff) : ${payoff}`, 100, 155);
+
+            if (liquidationTarget) {
+                doc.setFillColor(254, 226, 226); // bg-red-100
+                doc.setDrawColor(220, 38, 38); // border-red-600
+                doc.rect(14, 170, 182, 35, 'FD');
+                
+                doc.setTextColor(220, 38, 38);
+                doc.setFontSize(16);
+                doc.text("ORDRE DE LIQUIDATION IMMÉDIAT :", 20, 182);
+                doc.setFontSize(20);
+                doc.setFont(undefined, 'bold');
+                doc.text(`VENDRE ${liquidationTarget.toUpperCase()}`, 20, 195);
+                doc.setFont(undefined, 'normal');
+            } else {
+                doc.setTextColor(22, 163, 74);
+                doc.text("Aucun ordre d'abattage requis ce jour.", 14, 175);
+            }
+
+            doc.setTextColor(148, 163, 184);
+            doc.setFontSize(9);
+            doc.text("Ce document ne donne pas d'opinion. Il constate l'état de ton capital.", 14, 280);
+
+            doc.save(`snapshot_tactique_${Date.now()}.pdf`);
         }
 
         function setupDropZone(zoneId, inputId, labelId, isHistory) {
