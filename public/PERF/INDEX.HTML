@@ -41,12 +41,17 @@
                 <h1 class="text-3xl font-bold text-white tracking-tight">Analyse de Performance</h1>
                 <p class="text-slate-400 text-sm mt-1">La vérité sur ton allocation et tes coûts.</p>
             </div>
-            <button onclick="generateYearlyPDF()" id="pdf-btn" class="btn-primary hidden flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Générer Rapport Annuel (PDF)
-            </button>
+            <div class="flex items-center gap-4">
+                <button onclick="clearCache()" id="clear-btn" class="hidden text-xs text-slate-500 hover:text-red-500 transition-colors uppercase tracking-wider font-bold">
+                    Purger la mémoire
+                </button>
+                <button onclick="generateYearlyPDF()" id="pdf-btn" class="btn-primary hidden flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Générer Rapport Annuel (PDF)
+                </button>
+            </div>
         </div>
 
         <!-- Input Section -->
@@ -72,14 +77,27 @@
             <div class="flex flex-col md:flex-row justify-between items-center mb-4">
                 <div>
                     <h2 class="text-2xl font-bold text-white">
-                        Contrat d'Entrée (Validation R-Multiple)
+                        Contrat d'Entrée (Taille de Position & Validation)
                         <svg onclick="showHelp('contrat_entree')" class="w-5 h-5 help-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                     </h2>
-                    <p class="text-slate-400 text-sm mt-1">Interdiction formelle d'ouvrir le courtier avant validation mathématique du risque.</p>
+                    <p class="text-slate-400 text-sm mt-1">Définit ton exposition exacte avant d'ouvrir le courtier. Zéro improvisation.</p>
                 </div>
             </div>
 
             <div class="card border-zinc-700/50 bg-slate-800/50">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 border-b border-slate-700/50 pb-4">
+                    <div>
+                        <label class="block text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">
+                            Capital Total (€) <span class="text-emerald-500 text-[10px] ml-1 tracking-normal">(Auto-synchronisé)</span>
+                        </label>
+                        <input type="number" id="journal-capital" placeholder="En attente du CSV..." step="0.01" class="w-full bg-slate-900/50 text-slate-500 border border-slate-700 p-2 rounded cursor-not-allowed focus:outline-none" readonly>
+                    </div>
+                    <div>
+                        <label class="block text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">Risque Accepté (%)</label>
+                        <input type="number" id="journal-risk-pct" placeholder="Ex: 1" value="1" step="0.1" max="5" class="w-full bg-slate-900 text-white border border-slate-700 p-2 rounded focus:outline-none focus:border-cyan-500">
+                    </div>
+                </div>
+
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
                         <label class="block text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">Actif visé</label>
@@ -118,21 +136,25 @@
             </div>
 
             <div id="journal-result" style="display:none;" class="card mt-4 border-l-4">
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 text-center">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-center border-b border-slate-700/50 pb-4">
                     <div>
-                        <div class="text-slate-400 text-xs uppercase tracking-wider">Risque pris (R)</div>
-                        <div id="res-risk" class="text-xl font-bold text-red-400">--</div>
+                        <div class="text-slate-400 text-xs uppercase tracking-wider">Risque Absolu</div>
+                        <div id="res-risk-euro" class="text-xl font-bold text-red-400">--</div>
                     </div>
                     <div>
-                        <div class="text-slate-400 text-xs uppercase tracking-wider">Gain visé</div>
-                        <div id="res-reward" class="text-xl font-bold text-emerald-400">--</div>
+                        <div class="text-slate-400 text-xs uppercase tracking-wider">Quantité à acheter</div>
+                        <div id="res-shares" class="text-3xl font-black text-cyan-400">--</div>
                     </div>
                     <div>
-                        <div class="text-slate-400 text-xs uppercase tracking-wider">Ratio d'Asymétrie</div>
-                        <div id="res-ratio" class="text-3xl font-bold">--</div>
+                        <div class="text-slate-400 text-xs uppercase tracking-wider">Taille Position</div>
+                        <div id="res-position-size" class="text-xl font-bold text-white">--</div>
+                    </div>
+                    <div>
+                        <div class="text-slate-400 text-xs uppercase tracking-wider">Ratio (Reward/Risk)</div>
+                        <div id="res-ratio" class="text-2xl font-bold">--</div>
                     </div>
                 </div>
-                <div class="border-t border-slate-700/50 pt-4 mt-2">
+                <div class="pt-2">
                     <div class="text-slate-400 text-xs uppercase font-bold tracking-wider mb-2">Verdict d'Exécution</div>
                     <div id="journal-diagnostic" class="text-white text-sm">--</div>
                 </div>
@@ -818,6 +840,8 @@
 
         // --- Pre-Trade Journal Logic ---
         function evaluateTrade() {
+            const capital = parseFloat(document.getElementById('journal-capital').value);
+            const riskPct = parseFloat(document.getElementById('journal-risk-pct').value);
             const entry = parseFloat(document.getElementById('journal-entry').value);
             const stop = parseFloat(document.getElementById('journal-stop').value);
             const target = parseFloat(document.getElementById('journal-target').value);
@@ -826,85 +850,103 @@
             const resultBox = document.getElementById('journal-result');
             const diagBox = document.getElementById('journal-diagnostic');
 
-            if (isNaN(entry) || isNaN(stop) || isNaN(target) || !bias) {
+            if (isNaN(capital) || isNaN(riskPct) || isNaN(entry) || isNaN(stop) || isNaN(target) || !bias) {
                 resultBox.style.display = 'block';
                 resultBox.className = "card mt-4 border-l-4 border-slate-500 bg-slate-800/50";
-                diagBox.innerHTML = "<p class='text-slate-400'>Erreur de saisie. Remplis les trois paramètres de prix et sélectionne ton biais psychologique.</p>";
+                diagBox.innerHTML = "<p class='text-slate-400'>Erreur de saisie. Remplis ton capital, ton risque, les trois prix et sélectionne ton biais psychologique.</p>";
                 return;
             }
 
             const isLong = target > entry;
 
-            let risk, reward;
+            let riskPerShare, rewardPerShare;
             if (isLong) {
-                risk = entry - stop;
-                reward = target - entry;
+                riskPerShare = entry - stop;
+                rewardPerShare = target - entry;
             } else {
-                risk = stop - entry;
-                reward = entry - target;
+                riskPerShare = stop - entry;
+                rewardPerShare = entry - target;
             }
 
-            if (risk <= 0) {
+            if (riskPerShare <= 0) {
                 resultBox.style.display = 'block';
                 resultBox.className = "card mt-4 border-l-4 border-red-600 bg-slate-800/50";
                 diagBox.innerHTML = "<p class='text-red-500 font-bold'>PARAMÉTRAGE INVALIDE. Ton Stop Loss est du mauvais côté de ton point d'entrée.</p>";
                 return;
             }
 
-            if (reward <= 0) {
+            if (rewardPerShare <= 0) {
                  resultBox.style.display = 'block';
                  resultBox.className = "card mt-4 border-l-4 border-red-600 bg-slate-800/50";
                  diagBox.innerHTML = "<p class='text-red-500 font-bold'>PARAMÉTRAGE INVALIDE. Ta cible de profit est du mauvais côté de ton point d'entrée.</p>";
                  return;
             }
 
-            const ratio = reward / risk;
+            const maxLossEuro = capital * (riskPct / 100);
+            const shares = Math.floor(maxLossEuro / riskPerShare);
+            const totalPositionSize = shares * entry;
+            const ratio = rewardPerShare / riskPerShare;
 
-            document.getElementById('res-risk').textContent = formatCurrency(risk);
-            document.getElementById('res-reward').textContent = formatCurrency(reward);
+            document.getElementById('res-risk-euro').textContent = formatCurrency(maxLossEuro);
+            document.getElementById('res-shares').textContent = shares;
+            document.getElementById('res-position-size').textContent = formatCurrency(totalPositionSize);
+            
             const ratioEl = document.getElementById('res-ratio');
             ratioEl.textContent = "1 : " + ratio.toFixed(2);
 
             resultBox.style.display = 'block';
 
+            // Contrôle psychologique
             if (bias !== 'strategie') {
                 resultBox.className = "card mt-4 border-l-4 border-purple-600 bg-purple-900/10";
-                ratioEl.className = "text-3xl font-bold text-purple-400";
+                ratioEl.className = "text-2xl font-bold text-purple-400";
                 
                 let biasMessage = "";
-                if (bias === 'fomo') biasMessage = "Tu achètes sous le coup de l'émotion parce que le prix monte déjà. Tu vas servir de liquidité à ceux qui ont acheté plus bas et qui prennent leurs profits sur toi.";
-                else if (bias === 'ennui') biasMessage = "Le marché n'est pas un casino conçu pour te divertir. Agir par ennui garantit la destruction de ton capital.";
-                else if (bias === 'revanche') biasMessage = "Le marché ne te doit rien et n'a aucune mémoire de tes pertes précédentes. Essayer de te refaire est la voie express vers la liquidation totale.";
+                if (bias === 'fomo') biasMessage = "Tu achètes sous le coup de l'émotion parce que le prix monte déjà. Tu vas servir de liquidité à ceux qui ont acheté plus bas.";
+                else if (bias === 'ennui') biasMessage = "Le marché n'est pas conçu pour te divertir. Agir par ennui garantit la destruction de ton capital.";
+                else if (bias === 'revanche') biasMessage = "Le marché n'a aucune mémoire de tes pertes précédentes. Essayer de te refaire est la voie express vers la liquidation.";
                 else if (bias === 'gourou') biasMessage = "Tu as externalisé ton cerveau. Si tu ne maîtrises pas la thèse, tu paniqueras à la première baisse.";
 
                 diagBox.innerHTML = `
                     <p class="text-purple-400 font-bold text-lg">VERDICT : REJETÉ (Corruption Émotionnelle).</p>
                     <p class="text-slate-300 mt-2">${biasMessage}</p>
-                    <p class="text-slate-300 mt-2">Peu importe que ton ratio mathématique soit de 1 : ${ratio.toFixed(2)}. La base de ce trade est compromise car tu n'es pas dans un état d'esprit rationnel. Ferme la plateforme.</p>
+                    <p class="text-slate-300 mt-2">Structure ou pas, ton esprit est compromis. L'exécution sera défaillante. Ferme la plateforme.</p>
                 `;
                 return;
             }
 
+            // Contrôle de sous-capitalisation ou sur-risque
+            if (shares <= 0) {
+                resultBox.className = "card mt-4 border-l-4 border-orange-600 bg-orange-900/10";
+                ratioEl.className = "text-2xl font-bold text-orange-400";
+                diagBox.innerHTML = `
+                    <p class="text-orange-400 font-bold text-lg">VERDICT : INEXÉCUTABLE (Stop trop large).</p>
+                    <p class="text-slate-300 mt-2">Ton risque autorisé est de ${formatCurrency(maxLossEuro)}, mais le risque par action est de ${formatCurrency(riskPerShare)}. Tu ne peux même pas acheter 1 titre sans dépasser ton risque maximum. Réduis la distance de ton stop ou abandonne le trade.</p>
+                `;
+                return;
+            }
+
+            // Contrôle mathématique de l'asymétrie
             if (ratio < 2) {
                 resultBox.className = "card mt-4 border-l-4 border-red-600 bg-red-900/10";
-                ratioEl.className = "text-3xl font-bold text-red-500";
+                ratioEl.className = "text-2xl font-bold text-red-500";
                 diagBox.innerHTML = `
-                    <p class="text-red-400 font-bold text-lg">VERDICT : REJETÉ (Toxique).</p>
-                    <p class="text-slate-300 mt-2">Tu risques 1 pour gagner ${ratio.toFixed(2)}. Avec ce type de ratio, la moindre série de pertes ruinera ton compte. Le marché ne paie pas assez cher pour le risque que tu prends. Ce n'est pas un investissement, c'est un don à ton courtier. Annule ce trade.</p>
+                    <p class="text-red-400 font-bold text-lg">VERDICT : REJETÉ (Mathématiquement Toxique).</p>
+                    <p class="text-slate-300 mt-2">Tu risques ${formatCurrency(maxLossEuro)} pour gagner seulement ${formatCurrency(maxLossEuro * ratio)}. Le marché ne paie pas assez pour le risque pris. Ce trade te ruinera sur le long terme. Annule.</p>
                 `;
             } else if (ratio >= 2 && ratio < 3) {
                 resultBox.className = "card mt-4 border-l-4 border-emerald-500 bg-emerald-900/10";
-                ratioEl.className = "text-3xl font-bold text-emerald-400";
+                ratioEl.className = "text-2xl font-bold text-emerald-400";
                 diagBox.innerHTML = `
                     <p class="text-emerald-400 font-bold text-lg">VERDICT : AUTORISÉ (Standard).</p>
-                    <p class="text-slate-300 mt-2">Le ratio de 1 : ${ratio.toFixed(2)} est mathématiquement viable. Le contrat est simple : si l'action touche ${formatCurrency(stop)}, tu fermes la position comme un robot, sans aucune excuse. Si tu n'es pas prêt à assumer cette perte au centime près, n'achète pas.</p>
+                    <p class="text-slate-300 mt-2">Ton exposition est contrôlée. L'ordre dicte d'acheter <b>${shares}</b> titres, pas un de plus. Si le prix touche ${formatCurrency(stop)}, tu encaisses ta perte de ${formatCurrency(maxLossEuro)} mécaniquement.</p>
                 `;
             } else {
                 resultBox.className = "card mt-4 border-l-4 border-blue-500 bg-blue-900/10";
-                ratioEl.className = "text-3xl font-bold text-blue-400";
+                ratioEl.className = "text-2xl font-bold text-blue-400";
                 diagBox.innerHTML = `
-                    <p class="text-blue-400 font-bold text-lg">VERDICT : AUTORISÉ (Asymétrie Forte).</p>
-                    <p class="text-slate-300 mt-2">Structure théorique excellente (1 : ${ratio.toFixed(2)}). Attention au biais d'optimisme : ta cible à ${formatCurrency(target)} est-elle techniquement et fondamentalement atteignable, ou as-tu triché sur les chiffres pour valider l'équation ? Si c'est réaliste, exécute le plan.</p>
+                    <p class="text-blue-400 font-bold text-lg">VERDICT : AUTORISÉ (Forte Asymétrie).</p>
+                    <p class="text-slate-300 mt-2">L'équation est excellente. Achète <b>${shares}</b> titres pour une taille totale de ${formatCurrency(totalPositionSize)}. Assure-toi que ta cible à ${formatCurrency(target)} est réaliste et n'est pas le fruit de ton imagination pour valider le trade.</p>
                 `;
             }
         }
@@ -990,6 +1032,13 @@
             const worstEuro = sortedByPnL[0];
 
             document.getElementById('total-valeur').textContent = formatCurrency(totalValue);
+            
+            // Verrouillage et synchronisation du capital pour le contrat d'entrée
+            const capitalInput = document.getElementById('journal-capital');
+            if (capitalInput) {
+                capitalInput.value = totalValue.toFixed(2);
+            }
+
             const pnlEl = document.getElementById('total-pnl');
             pnlEl.textContent = formatCurrency(totalPnL);
             pnlEl.className = `text-2xl font-bold mt-2 ${totalPnL >= 0 ? 'positive' : 'negative'}`;
@@ -2873,16 +2922,64 @@
                 complete: function(results) {
                     if (isHistory) {
                         globalHistory = results.data;
+                        localStorage.setItem('brutal_history', JSON.stringify(globalHistory));
                     } else {
                         globalPortfolio = results.data;
+                        localStorage.setItem('brutal_portfolio', JSON.stringify(globalPortfolio));
                     }
                     updateDashboard();
+                    checkCacheStatus();
                 }
             });
         }
 
+        function loadFromCache() {
+            const savedPos = localStorage.getItem('brutal_portfolio');
+            const savedHist = localStorage.getItem('brutal_history');
+            
+            let loaded = false;
+            
+            if (savedPos) {
+                try {
+                    globalPortfolio = JSON.parse(savedPos);
+                    document.getElementById('drop-zone-pos').classList.add('loaded');
+                    document.getElementById('label-pos').textContent = "Chargé depuis la mémoire";
+                    loaded = true;
+                } catch(e) { console.error("Cache position corrompu", e); }
+            }
+            
+            if (savedHist) {
+                try {
+                    globalHistory = JSON.parse(savedHist);
+                    document.getElementById('drop-zone-hist').classList.add('loaded');
+                    document.getElementById('label-hist').textContent = "Chargé depuis la mémoire";
+                    loaded = true;
+                } catch(e) { console.error("Cache historique corrompu", e); }
+            }
+            
+            if (loaded) {
+                updateDashboard();
+                checkCacheStatus();
+            }
+        }
+
+        function clearCache() {
+            localStorage.removeItem('brutal_portfolio');
+            localStorage.removeItem('brutal_history');
+            location.reload();
+        }
+
+        function checkCacheStatus() {
+            if (globalPortfolio.length > 0 || globalHistory.length > 0) {
+                document.getElementById('clear-btn').classList.remove('hidden');
+            }
+        }
+
         setupDropZone('drop-zone-pos', 'csvInputPos', 'label-pos', false);
         setupDropZone('drop-zone-hist', 'csvInputHist', 'label-hist', true);
+
+        // Chargement automatique au démarrage
+        loadFromCache();
 
     </script>
 </body>
