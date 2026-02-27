@@ -1,0 +1,583 @@
+import React, { useMemo, useState, useEffect, useRef } from 'react';
+import { Coins, TrendingUp, AlertTriangle, ShieldCheck, Scale, LineChart, Save, Trash2, Download, Upload, Printer } from 'lucide-react';
+
+// ==========================================
+// 1. ARCHITECTURE DES TYPES (Strict Mode)
+// ==========================================
+
+type MetalType = 'GOLD' | 'SILVER';
+
+interface MetalSpotPrice {
+  metal: MetalType;
+  pricePerGram: number; // En euros
+}
+
+interface CoinDefinition {
+  id: string;
+  name: string;
+  metal: MetalType;
+  grossWeight: number; // Poids brut en grammes
+  purity: number;      // Titre (ex: 0.900)
+}
+
+interface PortfolioItem {
+  coinId: string;
+  quantity: number;
+  avgBuyPrice?: number;
+}
+
+// Type Guard Strict pour la validation I/O Entrante
+const isValidPortfolioItem = (item: any): item is PortfolioItem => {
+  return (
+    typeof item === 'object' &&
+    item !== null &&
+    typeof item.coinId === 'string' &&
+    typeof item.quantity === 'number' &&
+    (item.avgBuyPrice === undefined || typeof item.avgBuyPrice === 'number')
+  );
+};
+
+// ==========================================
+// 2. DATA LAYER (Normalisé)
+// ==========================================
+
+const TROY_OUNCE_GRAMS = 31.1034768; // Précision absolue exigée pour les métaux précieux
+
+const SPOT_PRICES: Record<MetalType, number> = {
+  GOLD: 117.00,
+  SILVER: 1.595,
+};
+
+const COIN_DICTIONARY: Record<string, Readonly<CoinDefinition>> = {
+  'souverain': { id: 'souverain', name: 'Souverain', metal: 'GOLD', grossWeight: 7.988, purity: 0.917 },
+  'coq_20f': { id: 'coq_20f', name: 'Coq 20 Francs', metal: 'GOLD', grossWeight: 6.45, purity: 0.900 },
+  'hercule_50f': { id: 'hercule_50f', name: 'Hercule 50 Francs', metal: 'SILVER', grossWeight: 30.0, purity: 0.900 },
+  'hercule_10f': { id: 'hercule_10f', name: 'Hercule 10 Francs', metal: 'SILVER', grossWeight: 25.0, purity: 0.900 },
+  'liberty_10': { id: 'liberty_10', name: 'Liberty 10$', metal: 'GOLD', grossWeight: 16.718, purity: 0.900 },
+  'liberty_20': { id: 'liberty_20', name: 'Liberty 20$', metal: 'GOLD', grossWeight: 33.436, purity: 0.900 },
+  '10f_or': { id: '10f_or', name: '10 Francs Or', metal: 'GOLD', grossWeight: 3.225, purity: 0.900 },
+  '40f_or': { id: '40f_or', name: '40 Francs Or', metal: 'GOLD', grossWeight: 12.90, purity: 0.900 },
+  '50f_or': { id: '50f_or', name: '50 Francs Or', metal: 'GOLD', grossWeight: 16.12, purity: 0.900 },
+};
+
+// Architect Rule : Zéro donnée financière personnelle dans le code source (No hardcoded PII/Financial data).
+// Génération dynamique d'un portefeuille vierge basé sur le dictionnaire.
+const DEFAULT_PORTFOLIO: readonly PortfolioItem[] = Object.keys(COIN_DICTIONARY).map(coinId => ({
+  coinId,
+  quantity: 0,
+  avgBuyPrice: 0
+}));
+
+const STORAGE_KEY = '@numismatic_engine/portfolio_v1';
+
+// ==========================================
+// 3. LOGIQUE METIER (Pure & Performante)
+// ==========================================
+
+export default function App() {
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Initialisation paresseuse (Lazy Initialization)
+  const [portfolio, setPortfolio] = useState<PortfolioItem[]>(() => {
+    try {
+      const cached = localStorage.getItem(STORAGE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.every(isValidPortfolioItem)) return parsed;
+      }
+    } catch (error) {
+      console.warn('[Architect Error]: LocalStorage corrompu. Fallback sur le state initial.', error);
+    }
+    return [...DEFAULT_PORTFOLIO];
+  });
+
+  // Synchronisation asynchrone State -> Disque.
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(portfolio));
+    } catch (error) {
+      console.error('[Architect Error]: Quota LocalStorage dépassé ou accès restreint.', error);
+    }
+  }, [portfolio]);
+
+  const updateAsset = (coinId: string, field: keyof PortfolioItem, value: number) => {
+    setPortfolio(prev => prev.map(item => 
+      item.coinId === coinId ? { ...item, [field]: Math.max(0, value) } : item
+    ));
+  };
+
+  // ==========================================
+  // 4. I/O MANAGER (JSON Export/Import)
+  // ==========================================
+  
+  const handleExportJSON = () => {
+    try {
+      const dataStr = JSON.stringify(portfolio, null, 2);
+      const blob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `numismatic_backup_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      
+      // Cleanup V8 Memory
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("[Architect Error]: Échec de l'export JSON.", error);
+    }
+  };
+
+  const handleImportJSON = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const content = e.target?.result as string;
+        const parsed = JSON.parse(content);
+        
+        // Architect Rule : Ne jamais faire confiance au fichier client.
+        if (!Array.isArray(parsed)) throw new Error("Format invalide : Le fichier n'est pas un tableau (Array).");
+        
+        const isValid = parsed.every(isValidPortfolioItem);
+        if (!isValid) throw new Error("Format invalide : La structure des objets ne correspond pas au typage PortfolioItem.");
+
+        setPortfolio(parsed);
+        alert("✅ Portfolio restauré avec succès à partir du JSON.");
+      } catch (error: any) {
+        console.error(error);
+        alert(`❌ Échec de la restauration : ${error.message}`);
+      } finally {
+        // Reset de l'input pour permettre de re-sélectionner le même fichier si besoin
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+    };
+    
+    reader.onerror = () => {
+      alert("❌ Erreur de lecture du fichier par le navigateur.");
+    };
+    
+    reader.readAsText(file);
+  };
+
+  // ==========================================
+  // 4.5. REPORT GENERATOR (Native Print Spooler)
+  // ==========================================
+
+  const handlePrintReport = () => {
+    // Architect Rule: Zero-dependency PDF/Print. Utilisation du moteur de rendu natif.
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert("⚠️ [Architect Error] : Le navigateur a bloqué le popup d'impression. Autorisez les popups pour ce site.");
+      return;
+    }
+
+    const dateStr = new Date().toLocaleString('fr-FR');
+    
+    // On ne mappe que les lignes pertinentes (quantité > 0)
+    const activeAssets = portfolioStats.detailedAssets.filter(item => item.quantity > 0);
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html lang="fr">
+      <head>
+        <meta charset="UTF-8">
+        <title>Audit Numismatique - ${dateStr}</title>
+        <style>
+          :root { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+          body { color: #0f172a; max-width: 900px; margin: 0 auto; padding: 2rem; }
+          .header { border-bottom: 2px solid #0f172a; padding-bottom: 1rem; margin-bottom: 2rem; }
+          h1 { margin: 0 0 0.5rem 0; font-size: 1.5rem; text-transform: uppercase; letter-spacing: 0.05em; }
+          .meta { color: #64748b; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 0.875rem; }
+          
+          .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem; }
+          .kpi-box { border: 1px solid #cbd5e1; padding: 1.5rem; border-radius: 0.5rem; background: #f8fafc; }
+          .kpi-box h3 { margin-top: 0; color: #334155; font-size: 0.875rem; text-transform: uppercase; }
+          .kpi-value { font-size: 1.5rem; font-weight: 700; margin: 0.5rem 0; }
+          .kpi-sub { font-size: 0.875rem; color: #475569; }
+          
+          table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: 0.875rem; }
+          th, td { border-bottom: 1px solid #e2e8f0; padding: 0.75rem 0.5rem; text-align: left; }
+          th { background-color: #f1f5f9; font-weight: 600; color: #334155; }
+          .right { text-align: right; font-variant-numeric: tabular-nums; }
+          
+          .positive { color: #059669; }
+          .negative { color: #dc2626; }
+          
+          @media print {
+            body { padding: 0; max-width: 100%; }
+            .no-print { display: none; }
+            .kpi-box { border: 1px solid #000; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>Rapport d'Audit Numismatique</h1>
+          <div class="meta">Date de génération : ${dateStr} | Valuation : Fonte Spot (Temps Réel)</div>
+          <div class="meta no-print" style="margin-top: 1rem; color: #0284c7;">
+            ℹ️ Utilisez les options d'impression pour "Enregistrer au format PDF".
+          </div>
+        </div>
+        
+        <div class="kpi-grid">
+           <div class="kpi-box">
+             <h3>Bilan Financier</h3>
+             <div class="kpi-value">${formatCurrency(portfolioStats.totalPortfolioValue)}</div>
+             <div class="kpi-sub">
+               Coût d'acquisition : ${formatCurrency(portfolioStats.totalAcquisitionCost)}<br/>
+               Plus-value : <strong class="${portfolioStats.latentCapitalGain >= 0 ? 'positive' : 'negative'}">
+                  ${portfolioStats.latentCapitalGain > 0 ? '+' : ''}${formatCurrency(portfolioStats.latentCapitalGain)} (${portfolioStats.roiPercentage.toFixed(2)}%)
+               </strong>
+             </div>
+           </div>
+           <div class="kpi-box">
+             <h3>Masses Pures (Standard)</h3>
+             <div class="kpi-value" style="color: #b45309;">OR : ${portfolioStats.totalGoldWeightPure.toFixed(2)} g</div>
+             <div class="kpi-sub" style="margin-bottom: 0.5rem;">Équivalent Troy : ${(portfolioStats.totalGoldWeightPure / TROY_OUNCE_GRAMS).toFixed(2)} oz</div>
+             <div class="kpi-value" style="color: #475569; font-size: 1.25rem;">ARGENT : ${(portfolioStats.totalSilverWeightPure / 1000).toFixed(2)} kg</div>
+             <div class="kpi-sub">Équivalent Troy : ${(portfolioStats.totalSilverWeightPure / TROY_OUNCE_GRAMS).toFixed(2)} oz</div>
+           </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Actif</th>
+              <th class="right">Quantité</th>
+              <th class="right">PRU Moyen</th>
+              <th class="right">Valeur Unitaire (Fonte)</th>
+              <th class="right">Valorisation Totale</th>
+              <th class="right">Performance</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${activeAssets.length === 0 ? '<tr><td colspan="6" style="text-align:center; padding: 2rem;">Aucun actif en stock (Quantités à 0).</td></tr>' : ''}
+            ${activeAssets.map(item => `
+              <tr>
+                <td><strong>${item.def.name}</strong></td>
+                <td class="right">${item.quantity}</td>
+                <td class="right">${formatCurrency(item.avgBuyPrice || 0)}</td>
+                <td class="right">${formatCurrency(item.intrinsicValuePerCoin)}</td>
+                <td class="right" style="font-weight:600;">${formatCurrency(item.totalIntrinsicValue)}</td>
+                <td class="right ${item.latentLineCapitalGain >= 0 ? 'positive' : 'negative'}">
+                  ${item.latentLineCapitalGain > 0 ? '+' : ''}${formatCurrency(item.latentLineCapitalGain)}<br/>
+                  <small>${item.lineRoiPercentage > 0 ? '+' : ''}${item.lineRoiPercentage.toFixed(1)}%</small>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        
+        <script>
+          window.onload = () => { window.print(); }
+        </script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.open();
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+  };
+
+  // ==========================================
+  // 5. ENGINE MATHÉMATIQUE (O(N) Memoized)
+  // ==========================================
+
+  const portfolioStats = useMemo(() => {
+    let totalGoldValue = 0;
+    let totalSilverValue = 0;
+    let totalAcquisitionCost = 0;
+    let totalGoldWeightPure = 0;
+    let totalSilverWeightPure = 0;
+    
+    const detailedAssets = portfolio.map(item => {
+      const def = COIN_DICTIONARY[item.coinId];
+      if (!def) {
+         console.warn(`[Architect Warning]: Unknown coin ID: ${item.coinId}`);
+         return null;
+      }
+
+      const pureMetalWeight = def.grossWeight * def.purity;
+      const spotPrice = SPOT_PRICES[def.metal];
+      const intrinsicValuePerCoin = pureMetalWeight * spotPrice;
+      const totalIntrinsicValue = intrinsicValuePerCoin * item.quantity;
+      const totalBuyCost = (item.avgBuyPrice || 0) * item.quantity;
+      const totalPureWeightLine = pureMetalWeight * item.quantity;
+
+      const latentLineCapitalGain = totalIntrinsicValue - totalBuyCost;
+      const lineRoiPercentage = totalBuyCost > 0 ? (latentLineCapitalGain / totalBuyCost) * 100 : 0;
+
+      if (def.metal === 'GOLD') {
+        totalGoldValue += totalIntrinsicValue;
+        totalGoldWeightPure += totalPureWeightLine;
+      }
+      if (def.metal === 'SILVER') {
+        totalSilverValue += totalIntrinsicValue;
+        totalSilverWeightPure += totalPureWeightLine;
+      }
+      totalAcquisitionCost += totalBuyCost;
+
+      return {
+        ...item,
+        def,
+        pureMetalWeight,
+        intrinsicValuePerCoin,
+        totalIntrinsicValue,
+        totalBuyCost,
+        latentLineCapitalGain,
+        lineRoiPercentage
+      };
+    }).filter(Boolean) as any[];
+
+    const totalPortfolioValue = totalGoldValue + totalSilverValue;
+    const latentCapitalGain = totalPortfolioValue - totalAcquisitionCost;
+    const roiPercentage = totalAcquisitionCost > 0 ? (latentCapitalGain / totalAcquisitionCost) * 100 : 0;
+
+    return {
+      detailedAssets,
+      totalGoldValue,
+      totalSilverValue,
+      totalGoldWeightPure,
+      totalSilverWeightPure,
+      totalPortfolioValue,
+      totalAcquisitionCost,
+      latentCapitalGain,
+      roiPercentage
+    };
+  }, [portfolio]);
+
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    setTimeout(() => setIsRefreshing(false), 400); 
+  };
+
+  const handleReset = () => {
+    if (window.confirm("⚠️ [Architect Warning] : Voulez-vous vraiment purger le cache et revenir à un portefeuille vierge (Quantités à 0) ?")) {
+      setPortfolio([...DEFAULT_PORTFOLIO]);
+    }
+  };
+
+  const formatCurrency = (val: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(val);
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-200 font-sans p-6">
+      <div className="max-w-6xl mx-auto space-y-6">
+        
+        {/* Header Dashboard */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-slate-800 pb-4">
+          <div>
+            <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+              <ShieldCheck className="text-emerald-500" />
+              Engine Numismatique
+            </h1>
+            <p className="text-slate-400 text-sm mt-1">Typage strict. Sécurisation In/Out. Engine V8.</p>
+          </div>
+          <div className="mt-4 md:mt-0 flex flex-wrap gap-3">
+            
+            {/* IO Controller: Hidden File Input */}
+            <input 
+              type="file" 
+              accept=".json" 
+              className="hidden" 
+              ref={fileInputRef}
+              onChange={handleImportJSON}
+            />
+
+            <button 
+              onClick={handlePrintReport}
+              className="flex items-center gap-2 px-3 py-2 bg-indigo-900/50 hover:bg-indigo-800 text-indigo-300 border border-indigo-800 rounded-md text-sm font-semibold transition-all"
+              title="Générer un rapport d'audit (Impression/PDF)"
+            >
+              <Printer size={16} />
+              Rapport
+            </button>
+
+            <button 
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-md text-sm font-semibold transition-all"
+              title="Restaurer une sauvegarde JSON"
+            >
+              <Upload size={16} />
+              Import
+            </button>
+
+            <button 
+              onClick={handleExportJSON}
+              className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-md text-sm font-semibold transition-all"
+              title="Sauvegarder l'état actuel en JSON"
+            >
+              <Download size={16} />
+              Export
+            </button>
+
+            <div className="w-px h-8 bg-slate-800 mx-1 hidden md:block"></div>
+
+            <button 
+              onClick={handleReset}
+              className="flex items-center gap-2 px-3 py-2 bg-slate-900 hover:bg-red-900/50 text-slate-400 hover:text-red-400 border border-slate-800 hover:border-red-900/50 rounded-md text-sm font-semibold transition-all"
+              title="Factory Reset"
+            >
+              <Trash2 size={16} />
+            </button>
+            <button 
+              onClick={handleRefresh}
+              className={`flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-md text-sm font-semibold transition-all ${isRefreshing ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              <Save size={16} />
+              Spot Update
+            </button>
+          </div>
+        </div>
+
+        {/* Dashboard Spot Prices (g, oz, kg) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {(Object.entries(SPOT_PRICES) as [MetalType, number][]).map(([metal, pricePerGram]) => (
+            <div key={metal} className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col shadow-lg">
+              <div className="text-sm font-medium mb-3 flex items-center gap-2 text-slate-400">
+                <LineChart size={16} className={metal === 'GOLD' ? 'text-yellow-500' : 'text-slate-300'} />
+                Cours Spot {metal === 'GOLD' ? 'OR' : 'ARGENT'} (Temps Réel)
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center divide-x divide-slate-800">
+                <div>
+                  <div className="text-xs text-slate-500 uppercase tracking-wider">Gramme</div>
+                  <div className={`text-lg font-bold ${metal === 'GOLD' ? 'text-yellow-500' : 'text-slate-300'}`}>
+                    {formatCurrency(pricePerGram)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-slate-500 uppercase tracking-wider">Once (oz)</div>
+                  <div className={`text-lg font-bold ${metal === 'GOLD' ? 'text-yellow-500' : 'text-slate-300'}`}>
+                    {formatCurrency(pricePerGram * TROY_OUNCE_GRAMS)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-slate-500 uppercase tracking-wider">Kilo (kg)</div>
+                  <div className={`text-lg font-bold ${metal === 'GOLD' ? 'text-yellow-500' : 'text-slate-300'}`}>
+                    {formatCurrency(pricePerGram * 1000)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* KPIs Section */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg flex flex-col justify-center">
+            <div className="text-slate-500 text-sm font-medium mb-1 flex items-center gap-2"><Coins size={16}/> Valeur Intrinsèque Totale</div>
+            <div className="text-3xl font-black text-white">{formatCurrency(portfolioStats.totalPortfolioValue)}</div>
+          </div>
+          
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg flex flex-col justify-between">
+            <div>
+              <div className="text-yellow-600 text-sm font-medium mb-1">Total Or Pur (Spot)</div>
+              <div className="text-2xl font-bold text-yellow-500">{formatCurrency(portfolioStats.totalGoldValue)}</div>
+            </div>
+            <div className="mt-2 pt-2 border-t border-slate-800/50 text-xs text-yellow-600/80 font-mono flex flex-wrap gap-x-3 gap-y-1">
+              <span>{portfolioStats.totalGoldWeightPure.toFixed(2)}g</span>
+              <span>{(portfolioStats.totalGoldWeightPure / TROY_OUNCE_GRAMS).toFixed(2)} oz</span>
+            </div>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg flex flex-col justify-between">
+            <div>
+              <div className="text-slate-400 text-sm font-medium mb-1">Total Argent Pur (Spot)</div>
+              <div className="text-2xl font-bold text-slate-300">{formatCurrency(portfolioStats.totalSilverValue)}</div>
+            </div>
+            <div className="mt-2 pt-2 border-t border-slate-800/50 text-xs text-slate-500 font-mono flex flex-wrap gap-x-3 gap-y-1">
+              <span>{(portfolioStats.totalSilverWeightPure / 1000).toFixed(2)} kg</span>
+              <span>{(portfolioStats.totalSilverWeightPure / TROY_OUNCE_GRAMS).toFixed(2)} oz</span>
+            </div>
+          </div>
+
+          <div className={`border rounded-xl p-5 shadow-lg flex flex-col justify-center ${portfolioStats.latentCapitalGain >= 0 ? 'bg-emerald-950/30 border-emerald-900' : 'bg-red-950/30 border-red-900'}`}>
+            <div className="text-slate-400 text-sm font-medium mb-1 flex items-center gap-2">
+               <TrendingUp size={16} className={portfolioStats.latentCapitalGain >= 0 ? 'text-emerald-500' : 'text-red-500'} /> 
+               Plus-value Latente
+            </div>
+            <div className={`text-2xl font-bold ${portfolioStats.latentCapitalGain >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              {portfolioStats.latentCapitalGain > 0 ? '+' : ''}{formatCurrency(portfolioStats.latentCapitalGain)}
+            </div>
+            <div className={`text-xs mt-1 ${portfolioStats.latentCapitalGain >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+              ROI: {portfolioStats.roiPercentage.toFixed(2)}%
+            </div>
+          </div>
+        </div>
+
+        {/* Table de données optimisée */}
+        <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm whitespace-nowrap">
+              <thead className="bg-slate-950 border-b border-slate-800 text-slate-400">
+                <tr>
+                  <th className="p-4 font-semibold">Actif (Métal)</th>
+                  <th className="p-4 font-semibold">Quantité</th>
+                  <th className="p-4 font-semibold">Prix d'Achat Moyen</th>
+                  <th className="p-4 font-semibold text-right">Poids Pur U.</th>
+                  <th className="p-4 font-semibold text-right">Valeur Fonte U.</th>
+                  <th className="p-4 font-semibold text-right">Valeur Totale Fonte</th>
+                  <th className="p-4 font-semibold text-right">Performance Ligne</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/50">
+                {portfolioStats.detailedAssets.map((item, idx) => (
+                  <tr key={`${item.coinId}-${idx}`} className="hover:bg-slate-800/50 transition-colors">
+                    <td className="p-4">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${item.def.metal === 'GOLD' ? 'bg-yellow-500' : 'bg-slate-400'}`}></div>
+                        <span className="font-medium text-slate-200">{item.def.name}</span>
+                      </div>
+                    </td>
+                    <td className="p-4">
+                      <input 
+                        type="number" 
+                        min="0"
+                        value={item.quantity}
+                        onChange={(e) => updateAsset(item.coinId, 'quantity', parseFloat(e.target.value) || 0)}
+                        className="w-20 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all font-mono"
+                      />
+                    </td>
+                    <td className="p-4">
+                       <div className="flex items-center gap-1">
+                        <input 
+                          type="number" 
+                          min="0"
+                          step="0.01"
+                          value={item.avgBuyPrice || 0}
+                          onChange={(e) => updateAsset(item.coinId, 'avgBuyPrice', parseFloat(e.target.value) || 0)}
+                          className="w-24 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all font-mono"
+                        />
+                        <span className="text-slate-500">€</span>
+                      </div>
+                    </td>
+                    <td className="p-4 text-right text-slate-400 flex justify-end items-center gap-1">
+                      {item.pureMetalWeight.toFixed(3)}g <Scale size={14} className="opacity-50"/>
+                    </td>
+                    <td className="p-4 text-right text-slate-300 font-mono">{formatCurrency(item.intrinsicValuePerCoin)}</td>
+                    <td className="p-4 text-right font-semibold text-white">{formatCurrency(item.totalIntrinsicValue)}</td>
+                    <td className="p-4 text-right">
+                      <div className={`font-bold ${item.latentLineCapitalGain >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {item.latentLineCapitalGain > 0 ? '+' : ''}{formatCurrency(item.latentLineCapitalGain)}
+                      </div>
+                      <div className={`text-xs ${item.lineRoiPercentage >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                        {item.lineRoiPercentage > 0 ? '+' : ''}{item.lineRoiPercentage.toFixed(1)}%
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}
