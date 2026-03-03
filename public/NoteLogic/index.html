@@ -231,6 +231,15 @@
         
         body.light-theme .bell-icon { color: #475569 !important; }
         body.light-theme .bell-icon:hover { color: #000000 !important; }
+
+        /* --- BATCH PRINTING STYLES --- */
+        .print-only { display: none; }
+        @media print {
+            body.batch-printing > *:not(#batch-print-container) { display: none !important; }
+            #batch-print-container { display: block !important; background: white; color: black; padding: 2cm; }
+            #batch-print-container h1, #batch-print-container h2 { color: black; break-after: avoid; }
+            #batch-print-container .page-break { page-break-after: always; }
+        }
     </style>
 </head>
 <body class="flex-col md:flex-row">
@@ -1698,10 +1707,10 @@ Structure ta réponse exactement ainsi :
 
             const Slash = {
                 COMMANDS: [
-                    { id: 'h1', icon: 'H1', label: 'Titre Principal', keys: ['h1', 'titre1', 'titre'] },
-                    { id: 'h2', icon: 'H2', label: 'Titre Secondaire', keys: ['h2', 'titre2'] },
-                    { id: 'h3', icon: 'H3', label: 'Sous-titre', keys: ['h3', 'titre3', 'sous'] },
-                    { id: 'quote', icon: '❝', label: 'Citation', keys: ['quote', 'citation', 'q'] },
+                    { id: 'cmd_new', title: 'Nouvelle Note', desc: 'Créer une note vierge', icon: '📝', action: 'newPage', keys: 'nouveau,new,creer,note,>nouvelle' },
+                    { id: 'cmd_zen', title: 'Mode Focus / Stealth', desc: 'Masquer toute l\'interface (Alt+Z)', icon: '👁️', action: 'toggleZenMode', keys: 'zen,focus,stealth,immersion,>zen' },
+                    { id: 'cmd_export_batch', title: 'Export NotebookLM (Top 10)', desc: 'Génère un PDF des 10 notes prioritaires', icon: '📚', action: 'exportTop10', keys: 'export,batch,pdf,notebooklm,>export' },
+                    { id: 'cmd_sitrep', title: 'Rapport Stratégique (SITREP)', desc: 'Ouvrir le tableau de bord global', icon: '📡', action: 'triggerSitrep', keys: 'sitrep,dashboard,rapport,index,>sitrep' },
                     { id: 'todo', icon: '☐', label: 'Tâche (Todo)', keys: ['todo', 'tache', 'check'] },
                     { id: 'date', icon: '📅', label: 'Date du jour', keys: ['date', 'jour', 'today'] },
                     { id: 'tag', icon: '⚡', label: 'Nouveau Tag', keys: ['tag', 'index'] }
@@ -1775,43 +1784,57 @@ Structure ta réponse exactement ainsi :
             };
             
             const IO = {
-                exportData: async () => { const pages = await Storage.getPages(); const draft = await Storage.db.meta.get('draft'); const blob = new Blob([JSON.stringify({version: "v1.31", date: new Date(), pages, draft}, null, 2)], {type: 'application/json'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); const now = new Date(); const d = now.getFullYear() + "-" + String(now.getMonth()+1).padStart(2, '0') + "-" + String(now.getDate()).padStart(2, '0'); const t = String(now.getHours()).padStart(2, '0') + "-" + String(now.getMinutes()).padStart(2, '0'); a.download = `NoteLogic_Backup_${d}_${t}.json`; a.click(); Renderer.toast("BACKUP GÉNÉRÉ"); },
-                importData: (file) => { if(!file) return; const r = new FileReader(); r.onload = async (e) => { try { const d = JSON.parse(e.target.result); if(d.pages) for(let x of d.pages) await Storage.db.pages.add({ title: x.title, content: x.content, updated: x.updated || Date.now(), pinned: x.pinned || false, encrypted: x.encrypted || false }); if(d.draft && d.draft.content) await Storage.saveDraft(d.draft.content, true); Renderer.toast("IMPORT OK"); Bus.renderBinder(); } catch(err) { console.error(err); Renderer.toast("ERREUR FICHIER"); } }; r.readAsText(file); },
-                generatePDF: () => { const element = document.getElementById('main-editor'); if(!element.innerText.trim()) { Renderer.toast("NOTE VIDE"); return; } const now = new Date(); const d = now.getFullYear() + "-" + String(now.getMonth()+1).padStart(2, '0') + "-" + String(now.getDate()).padStart(2, '0'); const cleanText = element.innerText.trim(); let titleMatch = null; const tagRegex = /\[([a-zA-Z0-9\u00C0-\u00FF\s_\-'’]+)\]/g; let match; while ((match = tagRegex.exec(cleanText)) !== null) { const tag = match[1].trim(); if (!tag.toLowerCase().includes("points clefs") && !tag.match(/^(\d+(?:px|%|rem|em)|#[0-9a-fA-F]{3,6})$/)) { titleMatch = tag; break; } } let rawTitle = titleMatch ? titleMatch : (cleanText.split('\n').find(l => l.trim().length > 0)?.substring(0, 30).trim() || "Sans Titre"); const safeTitle = rawTitle.replace(/[^a-zA-Z0-9\u00C0-\u00FF\-_]/g, '_'); const fname = `NoteLogic_${safeTitle}_${d}.pdf`; const opt = { margin: 10, filename: fname, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } }; const clone = element.cloneNode(true); clone.style.color = '#000000'; clone.style.background = '#ffffff'; clone.style.padding = '20px'; clone.style.width = '100%'; clone.style.fontFamily = 'Inter, sans-serif'; const container = document.createElement('div'); container.appendChild(clone); container.style.position = 'absolute'; container.style.left = '-9999px'; container.style.top = '0'; document.body.appendChild(container); html2pdf().set(opt).from(clone).save().then(() => { document.body.removeChild(container); Renderer.toast("PDF GÉNÉRÉ"); }).catch(err => { console.error(err); Renderer.toast("ERREUR PDF"); }); }
-            };
+                exportData: async () => { /* ... existing code ... */ },
+                importData: (file) => { /* ... existing code ... */ },
+                
+                exportTop10: async () => {
+                    const pages = await Storage.getPages();
+                    if (pages.length === 0) {
+                        Renderer.toast("AUCUNE DONNÉE À EXPORTER");
+                        return;
+                    }
 
-            const Nexus = {
-                async render(tag) { const container = document.getElementById('ui-nexus-content'); container.innerHTML = `<div class="p-8 text-center text-sm text-slate-400">Scan Neural: [${tag}]...</div>`; const all = await Storage.getPages(); const hits = all.filter(e => !e.encrypted && e.content.includes(tag)).sort((a,b)=>b.updated - a.updated); const relations = {}; hits.forEach(h => { const tags = (h.content.match(/\[([a-zA-Z0-9_\-]+)\]/g)||[]).map(t=>t.replace(/[\[\]]/g,'')); tags.forEach(t => { if(t!==tag) relations[t]=(relations[t]||0)+1; }); }); const topRel = Object.entries(relations).sort((a,b)=>b[1]-a[1]).slice(0,8); const netHTML = topRel.length ? topRel.map(([t,c]) => `<div class="network-item" data-action="openNexus" data-tag="${t}"><span class="text-blue-300 font-bold pointer-events-none">${t}</span><span class="text-xs text-slate-400 pointer-events-none">${c}</span></div>`).join('') : '<div class="p-4 text-sm text-slate-400">Aucune corrélation.</div>'; container.innerHTML = `<div class="nexus-header"><div class="nexus-title">${tag}</div><div class="nexus-meta">Vol: ${hits.length}</div></div><div class="nexus-section-title">Réseau Neuronal</div><div class="flex flex-col">${netHTML}</div><div class="nexus-section-title">Pages Liées</div><div class="flex flex-col">${hits.slice(0,5).map(h => `<div class="network-item" data-action="openPage" data-id="${h.id}"><span class="text-xs text-slate-300 font-mono pointer-events-none">${h.title}</span></div>`).join('')}</div>`; },
-                async renderGlobal() { 
-                    const container = document.getElementById('ui-nexus-content'); 
-                    const all = await Storage.getPages(); 
-                    const tagCounts = {}, tagActivity = {}, now = new Date();
-                    all.forEach(e => { 
-                        if (e.encrypted) return;
-                        const matches = e.content.match(/\[([a-zA-Z0-9_\-]+)\]/g) || []; 
-                        matches.forEach(t => { 
-                            const tag = t.replace(/[\[\]]/g,''); if (tag.match(/^(\d+(?:px|%|rem|em)|#[0-9a-f]+)$/)) return; 
-                            tagCounts[tag] = (tagCounts[tag]||0)+1; 
-                            if(!tagActivity[tag]) tagActivity[tag] = new Array(12).fill(0);
-                            const pageDate = new Date(e.updated);
-                            const diffMonths = (now.getFullYear() - pageDate.getFullYear()) * 12 + (now.getMonth() - pageDate.getMonth());
-                            if(diffMonths >= 0 && diffMonths < 12) tagActivity[tag][11 - diffMonths] = (tagActivity[tag][11 - diffMonths] || 0) + 1;
-                        }); 
-                    }); 
-                    const sorted = Object.entries(tagCounts).sort((a,b) => b[1] - a[1]); 
-                    if(sorted.length === 0) { container.innerHTML = '<div class="p-8 text-center text-sm text-slate-400">Aucun tag détecté.</div>'; return; } 
-                    const listHTML = sorted.map(([t, c]) => {
-                        const activity = tagActivity[t] || new Array(12).fill(0);
-                        const sparkBars = activity.map(val => {
-                            let colorClass = 'empty', styleHeight = '2px';
-                            if (val >= 4) { colorClass = 'high'; styleHeight = '14px'; }
-                            else if (val >= 2) { colorClass = 'med'; styleHeight = '8px'; }
-                            else if (val > 0) { colorClass = 'low'; styleHeight = '4px'; }
-                            return `<div class="spark-bar ${colorClass}" style="height: ${styleHeight}"></div>`;
-                        }).join('');
-                        return `<div class="network-item" data-action="openNexus" data-tag="${t}"><div class="flex items-center"><span class="text-blue-300 font-bold font-mono tracking-wide pointer-events-none mr-2">${t}</span></div><div class="flex items-center"><div class="sparkline-container" title="Activité (12 derniers mois)">${sparkBars}</div><span class="text-xs text-slate-400 w-4 text-right pointer-events-none font-bold">${c}</span></div></div>`;
-                    }).join(''); 
-                    container.innerHTML = `<div class="nexus-header"><div class="nexus-title">INDEX GLOBAL</div><div class="nexus-meta">Tags: ${sorted.length}</div></div><div class="nexus-section-title">Fréquence & Activité</div><div class="flex flex-col">${listHTML}</div>`; 
+                    // Tri : Épinglées en premier, puis par date de modification la plus récente
+                    pages.sort((a, b) => {
+                        if (a.pinned === b.pinned) return b.updated - a.updated;
+                        return a.pinned ? -1 : 1;
+                    });
+
+                    const top10 = pages.slice(0, 10);
+                    
+                    const printDiv = document.createElement('div');
+                    printDiv.id = 'batch-print-container';
+                    printDiv.className = 'print-only font-sans';
+                    
+                    let htmlContent = `
+                        <div style="margin-bottom: 2rem; border-bottom: 2px solid black; padding-bottom: 1rem;">
+                            <h1 style="font-size: 24px; font-weight: bold; margin: 0; text-transform: uppercase;">Corpus Stratégique (NotebookLM)</h1>
+                            <p style="font-size: 12px; font-family: monospace; color: #555;">Généré le ${new Date().toLocaleString('fr-FR')} - ${top10.length} documents</p>
+                        </div>
+                    `;
+                    
+                    top10.forEach((p, i) => {
+                        const dateStr = new Date(p.updated).toLocaleString('fr-FR');
+                        const isLast = i === top10.length - 1;
+                        htmlContent += `
+                            <div class="${isLast ? '' : 'page-break'}" style="margin-bottom: 2rem; max-width: 800px; margin-left: auto; margin-right: auto;">
+                                <h2 style="font-size: 20px; font-weight: bold; margin-bottom: 0.5rem; color: #111;">${p.title || 'Note sans titre'}</h2>
+                                <div style="font-size: 11px; font-family: monospace; color: #666; margin-bottom: 1.5rem;">MAJ: ${dateStr} ${p.pinned ? ' | PRIORITÉ HAUTE (ÉPINGLÉ)' : ''}</div>
+                                <div style="font-size: 14px; line-height: 1.6; color: #000;">${p.content}</div>
+                            </div>
+                        `;
+                    });
+                    
+                    printDiv.innerHTML = htmlContent;
+                    document.body.appendChild(printDiv);
+                    document.body.classList.add('batch-printing');
+                    
+                    setTimeout(() => {
+                        window.print();
+                        document.body.classList.remove('batch-printing');
+                        printDiv.remove();
+                        Renderer.toast("EXPORT BATCH TERMINÉ");
+                    }, 500);
                 }
             };
 
@@ -1897,6 +1920,7 @@ Structure ta réponse exactement ainsi :
                         if(menu && btn) { const rect = btn.getBoundingClientRect(); menu.style.top = `${rect.bottom + 8}px`; menu.style.left = `${Math.max(10, rect.right - 160)}px`; menu.classList.toggle('active'); }
                     }
                     if(act==='toggleZenMode') { document.body.classList.toggle('zen-mode'); Renderer.toast(document.body.classList.contains('zen-mode') ? "MODE STEALTH ACTIVÉ (Alt+Z)" : "MODE STANDARD"); }
+                    if(act==='exportTop10') IO.exportTop10();
                     if(act==='toggleTheme') { document.body.classList.toggle('light-theme'); localStorage.setItem('notelogic_theme', document.body.classList.contains('light-theme') ? 'light' : 'dark'); }
                     if(act==='toggleEncryption') {
                         if (!State.currentPageId) { Renderer.toast("SAUVEGARDER OU OUVRIR UNE NOTE D'ABORD"); return; }
