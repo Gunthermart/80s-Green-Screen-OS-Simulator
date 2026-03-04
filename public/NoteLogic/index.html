@@ -652,6 +652,16 @@
         </div>
     </div>
 
+    <!-- MULTI-TAB WARNING OVERLAY -->
+    <div id="multi-tab-warning" class="fixed inset-0 z-[10000] bg-[#0b1120] flex flex-col items-center justify-center hidden">
+        <div class="border border-red-500/50 bg-[#0f172a] p-8 rounded-lg max-w-md text-center shadow-[0_0_50px_rgba(239,68,68,0.2)]">
+            <div class="text-4xl mb-4">⚠️</div>
+            <h2 class="text-red-500 font-black text-xl mb-2 tracking-widest uppercase">Violation d'accès</h2>
+            <p class="text-slate-300 text-sm mb-6 leading-relaxed">NoteLogic est déjà ouvert dans un autre onglet. Pour prévenir la corruption de la base de données locale (IndexedDB), cette session a été verrouillée.</p>
+            <button onclick="window.close()" class="px-6 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded uppercase tracking-widest transition-colors">Fermer cet onglet</button>
+        </div>
+    </div>
+
     <!-- MACROS MODAL -->
     <div id="modal-macros" class="modal-overlay" data-action="closeModals">
         <div class="modal-box bg-[#0f172a] border border-blue-900/50 max-w-md" onclick="event.stopPropagation()">
@@ -693,7 +703,7 @@
     <div id="hover-peek"><div class="peek-title"></div><div class="peek-content"></div></div>
 
     <!-- SLASH MENU -->
-    <div id="slash-menu"></div>
+        <div id="slash-menu"></div>
 
     <script>
         const System = (() => {
@@ -715,6 +725,20 @@
                     return true;
                 }
             });
+
+            const TabManager = {
+                channel: new BroadcastChannel('notelogic_sync'),
+                init() {
+                    this.channel.onmessage = (e) => {
+                        if (e.data === 'PING') {
+                            this.channel.postMessage('PONG');
+                        } else if (e.data === 'PONG') {
+                            document.getElementById('multi-tab-warning').style.display = 'flex';
+                        }
+                    };
+                    this.channel.postMessage('PING');
+                }
+            };
 
             const TimeEngine = {
                 parse(text, anchorDateMs = Date.now()) {
@@ -2147,6 +2171,7 @@ Utilise HTML (<span class="text-indigo-400 font-bold">, etc.). Ton direct et ana
 
             const init = async () => {
                 try {
+                    TabManager.init();
                     window.Bus = Bus; await Storage.init(); Engine.gfx.init(); Intelligence.initVoice(); await Intelligence.checkReminders();
                     window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); State.deferredPrompt = e; document.getElementById('btn-install-pwa').classList.remove('hidden'); document.getElementById('btn-install-pwa').classList.add('flex'); });
                     document.addEventListener('mousemove', (e) => {
