@@ -665,6 +665,22 @@
         </div>
     </div>
 
+    <!-- CONFIRM MODAL -->
+    <div id="modal-confirm" class="modal-overlay" data-action="cancelConfirm">
+        <div class="modal-box bg-[#0f172a] border border-red-900/50 max-w-sm" onclick="event.stopPropagation()">
+            <div class="p-4 border-b border-white/10 flex justify-between items-center bg-red-900/20 shrink-0">
+                <span class="text-xs font-black text-red-400 uppercase tracking-widest flex items-center gap-2">⚠️ CONFIRMATION REQUISE</span>
+            </div>
+            <div class="p-5 flex flex-col gap-4 text-center">
+                <p id="confirm-msg" class="text-sm text-slate-300 font-bold"></p>
+                <div class="flex gap-3 mt-2">
+                    <button data-action="cancelConfirm" class="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded uppercase tracking-widest transition-colors border border-slate-600">Annuler</button>
+                    <button data-action="executeConfirm" class="flex-1 py-2 bg-red-600/80 hover:bg-red-500 text-white text-xs font-bold rounded uppercase tracking-widest transition-colors shadow-lg shadow-red-900/20">Confirmer</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- MACROS MODAL -->
     <div id="modal-macros" class="modal-overlay" data-action="closeModals">
         <div class="modal-box bg-[#0f172a] border border-blue-900/50 max-w-md" onclick="event.stopPropagation()">
@@ -720,7 +736,7 @@
             // --- CORE DECLARATION ---
             let Bus; 
 
-            const State = new Proxy({ currentPageId: null, isReadMode: false, activeTagFilter: null, macros: { ...CONFIG.MACROS_DEFAULT }, recognition: null, isRecording: false, deferredPrompt: null, searchIndex: -1, searchResults: [], chordBuffer: [], chordTimer: null, slash: { active: false, query: '', index: 0, results: [] }, unlockedNotes: {}, cryptoContext: null }, {
+            const State = new Proxy({ currentPageId: null, isReadMode: false, activeTagFilter: null, macros: { ...CONFIG.MACROS_DEFAULT }, recognition: null, isRecording: false, deferredPrompt: null, searchIndex: -1, searchResults: [], chordBuffer: [], chordTimer: null, slash: { active: false, query: '', index: 0, results: [] }, unlockedNotes: {}, cryptoContext: null, pendingConfirmCallback: null }, {
                 set(target, prop, value) {
                     target[prop] = value;
                     if (prop === 'isReadMode' && Bus) Bus.emit('mode:changed', value);
@@ -1955,20 +1971,10 @@ Utilise HTML (<span class="text-indigo-400 font-bold">, etc.). Ton direct et ana
                     });
                 },
                 hidePeek() { const peekEl = document.getElementById('hover-peek'); if(peekEl) { peekEl.classList.remove('visible'); peekEl.style.display = 'none'; } },
-                confirmAction(el, callback) {
-                    if (el.dataset.confirming === 'true') {
-                        callback();
-                    } else {
-                        const originalHtml = el.innerHTML;
-                        el.dataset.confirming = 'true';
-                        el.innerHTML = '<span class="text-[9px] font-black text-red-500 bg-red-900/30 px-1 py-0.5 rounded uppercase">Sûr?</span>';
-                        setTimeout(() => {
-                            if (el && el.dataset.confirming === 'true') {
-                                el.dataset.confirming = 'false';
-                                el.innerHTML = originalHtml;
-                            }
-                        }, 3000);
-                    }
+                confirmAction(el, callback, msg) {
+                    State.pendingConfirmCallback = callback;
+                    document.getElementById('confirm-msg').textContent = msg || "Confirmer cette action ?";
+                    document.getElementById('modal-confirm').style.display = 'flex';
                 },
                 async dispatchAction(act, d) {
                     if(act==='executeCommand') { this.dispatchAction('closeModals'); setTimeout(() => this.dispatchAction(d.cmd), 50); }
@@ -2082,13 +2088,16 @@ Utilise HTML (<span class="text-indigo-400 font-bold">, etc.). Ton direct et ana
                     if(act==='formatTime') { this.toggleTimeWrapper(); this.checkSelection(); }
                     if(act==='addMacro') { const k = document.getElementById('new-macro-key').value.toLowerCase(), v = document.getElementById('new-macro-val').innerHTML; if(k && v && v !== '<br>'){ Storage.addMacro(k,v).then(() => { Renderer.renderMacroManager(); document.getElementById('new-macro-key').value = ''; document.getElementById('new-macro-val').innerHTML = ''; Renderer.toast(`MACRO [${k.toUpperCase()}] CRÉÉE`); }); } else Renderer.toast("CHAMPS VIDES"); }
                     if(act==='removeMacro') Storage.removeMacro(d.trigger).then(() => Renderer.renderMacroManager());
-                    if(act==='hardReset') this.confirmAction(d.el, () => Storage.nuke());
+                    if(act==='hardReset') this.confirmAction(d.el, () => Storage.nuke(), "DANGER CRITIQUE : Effacer l'intégralité de la base de données ? Cette action est irréversible.");
+                    if(act==='cancelConfirm') { State.pendingConfirmCallback = null; document.getElementById('modal-confirm').style.display = 'none'; }
+                    if(act==='executeConfirm') { if (State.pendingConfirmCallback) { State.pendingConfirmCallback(); State.pendingConfirmCallback = null; } document.getElementById('modal-confirm').style.display = 'none'; }
                     if(act==='closeModals') { 
                         document.querySelectorAll('.modal-overlay').forEach(el=>el.style.display='none'); 
                         document.getElementById('search-input').value = ''; 
                         document.getElementById('sitrep-briefing-container')?.classList.add('hidden'); 
+                        State.pendingConfirmCallback = null;
                     }
-                    if(act==='pageDelete') this.confirmAction(d.el, async()=>{ await Storage.deletePage(d.id); this.renderBinder(); });
+                    if(act==='pageDelete') this.confirmAction(d.el, async()=>{ await Storage.deletePage(d.id); this.renderBinder(); }, "Effacer définitivement cette note ?");
                     if(act==='togglePin') { await Storage.togglePinPage(d.id); this.renderBinder(); }
                     if(act==='openPage') { this.openPage(d.id); document.querySelectorAll('.modal-overlay').forEach(el=>el.style.display='none'); }
                     if(act==='ioExport') IO.exportData();
