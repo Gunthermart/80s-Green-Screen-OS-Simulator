@@ -658,7 +658,10 @@
             <div class="text-4xl mb-4">⚠️</div>
             <h2 class="text-red-500 font-black text-xl mb-2 tracking-widest uppercase">Violation d'accès</h2>
             <p class="text-slate-300 text-sm mb-6 leading-relaxed">NoteLogic est déjà ouvert dans un autre onglet. Pour prévenir la corruption de la base de données locale (IndexedDB), cette session a été verrouillée.</p>
-            <button onclick="window.close()" class="px-6 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded uppercase tracking-widest transition-colors">Fermer cet onglet</button>
+            <div class="flex flex-col gap-3">
+                <button onclick="window.close()" class="px-6 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded uppercase tracking-widest transition-colors">Fermer cet onglet</button>
+                <button onclick="System.TabManager.requestFlash()" class="px-6 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded uppercase tracking-widest transition-colors border border-slate-600">Faire clignoter l'onglet actif</button>
+            </div>
         </div>
     </div>
 
@@ -728,15 +731,39 @@
 
             const TabManager = {
                 channel: new BroadcastChannel('notelogic_sync'),
+                originalTitle: document.title,
+                flashInterval: null,
                 init() {
                     this.channel.onmessage = (e) => {
                         if (e.data === 'PING') {
                             this.channel.postMessage('PONG');
                         } else if (e.data === 'PONG') {
                             document.getElementById('multi-tab-warning').style.display = 'flex';
+                        } else if (e.data === 'FLASH') {
+                            this.flashTab();
                         }
                     };
                     this.channel.postMessage('PING');
+                    
+                    window.addEventListener('focus', () => this.stopFlash());
+                },
+                flashTab() {
+                    if (this.flashInterval) return;
+                    let isFlashing = false;
+                    this.flashInterval = setInterval(() => {
+                        document.title = isFlashing ? "⚠️ ICI - NoteLogic" : this.originalTitle;
+                        isFlashing = !isFlashing;
+                    }, 500);
+                },
+                stopFlash() {
+                    if (this.flashInterval) {
+                        clearInterval(this.flashInterval);
+                        this.flashInterval = null;
+                        document.title = this.originalTitle;
+                    }
+                },
+                requestFlash() {
+                    this.channel.postMessage('FLASH');
                 }
             };
 
@@ -2249,7 +2276,7 @@ Utilise HTML (<span class="text-indigo-400 font-bold">, etc.). Ton direct et ana
                     setTimeout(() => { document.getElementById('splash-screen').style.opacity=0; setTimeout(()=>document.getElementById('splash-screen').remove(),700); }, 1000);
                 } catch(e) { console.error(e); Renderer.toast("ERR KERNEL"); }
             };
-            return { init };
+            return { init, TabManager };
         })();
         window.onload = System.init;
     </script>
