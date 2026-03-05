@@ -736,7 +736,7 @@
             // --- CORE DECLARATION ---
             let Bus; 
 
-            const State = new Proxy({ currentPageId: null, isReadMode: false, activeTagFilter: null, macros: { ...CONFIG.MACROS_DEFAULT }, recognition: null, isRecording: false, deferredPrompt: null, searchIndex: -1, searchResults: [], chordBuffer: [], chordTimer: null, slash: { active: false, query: '', index: 0, results: [] }, unlockedNotes: {}, cryptoContext: null, pendingConfirmCallback: null }, {
+            const State = new Proxy({ currentPageId: null, isReadMode: false, activeTagFilter: null, macros: { ...CONFIG.MACROS_DEFAULT }, recognition: null, isRecording: false, deferredPrompt: null, searchIndex: -1, searchResults: [], chordBuffer: [], chordTimer: null, slash: { active: false, query: '', index: 0, results: [] }, unlockedNotes: {}, cryptoContext: null, pendingConfirmCallback: null, lastSavedHTML: '' }, {
                 set(target, prop, value) {
                     target[prop] = value;
                     if (prop === 'isReadMode' && Bus) Bus.emit('mode:changed', value);
@@ -1899,6 +1899,12 @@ Utilise HTML (<span class="text-indigo-400 font-bold">, etc.). Ton direct et ana
 
             Bus = {
                 listeners: {}, peekTimer: null, currentPeekTarget: null, lastMouseX: 0, lastMouseY: 0,
+                isDraftDirty() {
+                    const currentHTML = document.getElementById('main-editor').innerHTML;
+                    if (currentHTML === State.lastSavedHTML) return false;
+                    if (State.lastSavedHTML === '' && document.getElementById('main-editor').innerText.trim() === '') return false;
+                    return true;
+                },
                 on(e,f) { (this.listeners[e]=this.listeners[e]||[]).push(f); },
                 emit(e,d) { (this.listeners[e]||[]).forEach(f=>f(d)); },
                 handle(e) {
@@ -2044,7 +2050,10 @@ Utilise HTML (<span class="text-indigo-400 font-bold">, etc.). Ton direct et ana
                     if(act==='openNexus') { this.dispatchAction('toggleView',{view:'index'}); Nexus.render(d.tag); }
                     if(act==='clearDraft') { if(d.type === 'dblclick' || !d.type) { document.getElementById('main-editor').innerHTML=''; Storage.saveDraft(''); Renderer.toast("VIDÉ"); } else Renderer.toast("Double-clic pour vider"); }
                     if(act==='dispatchToPage') this.dispatchDraftToPage();
-                    if(act==='newPage') { State.currentPageId = null; document.getElementById('main-editor').innerHTML=''; document.getElementById('btn-crypto').classList.remove('text-red-500'); Storage.saveDraft(''); document.getElementById('main-editor').focus(); Renderer.toast("NOUVELLE NOTE PRÊTE"); }
+                    if(act==='newPage') { 
+                        const doNew = () => { State.currentPageId = null; document.getElementById('main-editor').innerHTML=''; document.getElementById('btn-crypto').classList.remove('text-red-500'); Storage.saveDraft(''); document.getElementById('main-editor').focus(); Renderer.toast("NOUVELLE NOTE PRÊTE"); State.lastSavedHTML = ''; };
+                        if (this.isDraftDirty()) this.confirmAction(null, doNew, "Brouillon non sauvegardé. Écraser la zone de travail ?"); else doNew();
+                    }
                     if(act==='insertIndex') this.toggleIndexWrapper();
                     if(act==='openSearch') { document.getElementById('modal-search').style.display='flex'; const inp = document.getElementById('search-input'); inp.value = ''; inp.focus(); Intelligence.performSearch(''); }
                     if(act==='openHelp') document.getElementById('modal-help').style.display='flex';
@@ -2099,7 +2108,10 @@ Utilise HTML (<span class="text-indigo-400 font-bold">, etc.). Ton direct et ana
                     }
                     if(act==='pageDelete') this.confirmAction(d.el, async()=>{ await Storage.deletePage(d.id); this.renderBinder(); }, "Effacer définitivement cette note ?");
                     if(act==='togglePin') { await Storage.togglePinPage(d.id); this.renderBinder(); }
-                    if(act==='openPage') { this.openPage(d.id); document.querySelectorAll('.modal-overlay').forEach(el=>el.style.display='none'); }
+                    if(act==='openPage') { 
+                        const doOpen = () => { this.openPage(d.id); document.querySelectorAll('.modal-overlay').forEach(el=>el.style.display='none'); };
+                        if (this.isDraftDirty()) this.confirmAction(null, doOpen, "Brouillon non sauvegardé. Écraser la zone de travail ?"); else doOpen();
+                    }
                     if(act==='ioExport') IO.exportData();
                     if(act==='exportToPDF') IO.generatePDF();
                     if(act==='triggerImport') document.getElementById('import-input').click();
@@ -2177,7 +2189,7 @@ Utilise HTML (<span class="text-indigo-400 font-bold">, etc.). Ton direct et ana
                         Renderer.toast(`NOUVELLE PAGE: [${title}]`); 
                     }
                     
-                    State.currentPageId = null; editor.innerHTML = ''; document.getElementById('btn-crypto').classList.remove('text-red-500'); await Storage.saveDraft('', true); this.renderBinder();
+                    State.currentPageId = null; editor.innerHTML = ''; document.getElementById('btn-crypto').classList.remove('text-red-500'); await Storage.saveDraft('', true); State.lastSavedHTML = ''; this.renderBinder();
                 },
                 async openPage(id) { 
                     const page = await Storage.getPage(id); if(!page) return;
@@ -2186,12 +2198,12 @@ Utilise HTML (<span class="text-indigo-400 font-bold">, etc.). Ton direct et ana
                             try {
                                 const plain = await CryptoEngine.decrypt(page.content, State.unlockedNotes[id]);
                                 State.currentPageId = page.id; document.getElementById('main-editor').innerHTML = Renderer.processContent(plain);
-                                document.getElementById('btn-crypto').classList.add('text-red-500'); await Storage.saveDraft('', true);
+                                document.getElementById('btn-crypto').classList.add('text-red-500'); await Storage.saveDraft('', true); State.lastSavedHTML = document.getElementById('main-editor').innerHTML;
                             } catch(e) { delete State.unlockedNotes[id]; this.promptUnlock(page.id); }
                         } else this.promptUnlock(page.id);
                     } else {
                         State.currentPageId = page.id; document.getElementById('main-editor').innerHTML = Renderer.processContent(page.content); 
-                        Storage.saveDraft(page.content, true); document.getElementById('btn-crypto').classList.remove('text-red-500');
+                        Storage.saveDraft(page.content, true); document.getElementById('btn-crypto').classList.remove('text-red-500'); State.lastSavedHTML = document.getElementById('main-editor').innerHTML;
                     }
                 },
                 async renderBinder() {
