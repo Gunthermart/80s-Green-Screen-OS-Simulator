@@ -3,15 +3,25 @@ exports.handler = async function(event, context) {
         return { statusCode: 405, body: "Method Not Allowed" };
     }
 
+    // Sécurité : Blocage immédiat si le mot de passe ne correspond pas à la variable d'environnement Netlify APP_SECRET
+    const clientToken = event.headers.authorization?.split(' ')[1];
+    if (!process.env.APP_SECRET || clientToken !== process.env.APP_SECRET) {
+        return { 
+            statusCode: 401, 
+            body: JSON.stringify({ error: "Accès non autorisé. Le mot de passe système est invalide ou APP_SECRET n'est pas configuré sur Netlify." }) 
+        };
+    }
+
     const apiKey = process.env.vinted_key;
     if (!apiKey) {
         return { 
             statusCode: 500, 
-            body: JSON.stringify({ error: "Configuration serveur invalide : clé API manquante." }) 
+            body: JSON.stringify({ error: "Configuration serveur invalide : clé API Google manquante." }) 
         };
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+    // Utilisation du modèle de production stable, fini les versions preview instables
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
     try {
         const response = await fetch(url, {
@@ -22,10 +32,10 @@ exports.handler = async function(event, context) {
 
         if (!response.ok) {
             const errorText = await response.text();
-            console.error("Erreur API Gemini:", errorText);
+            console.error("Erreur API Google:", errorText);
             return { 
                 statusCode: response.status, 
-                body: JSON.stringify({ error: "Échec de la requête vers le LLM.", details: errorText }) 
+                body: JSON.stringify({ error: "Échec de la requête vers l'IA.", details: errorText }) 
             };
         }
 
@@ -38,7 +48,7 @@ exports.handler = async function(event, context) {
         };
 
     } catch (error) {
-        console.error("Erreur d'exécution de la fonction:", error);
+        console.error("Erreur interne:", error);
         return { 
             statusCode: 500, 
             body: JSON.stringify({ error: "Erreur interne du serveur proxy." }) 
