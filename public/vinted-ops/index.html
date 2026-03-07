@@ -1,1 +1,638 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vinted Optimizer Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: system-ui, -apple-system, sans-serif; background-color: #f3f4f6; color: #111827; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .spinner { border: 3px solid rgba(0,0,0,0.1); border-radius: 50%; border-top: 3px solid #3b82f6; width: 24px; height: 24px; animation: spin 1s linear infinite; display: inline-block; vertical-align: middle; margin-right: 8px;}
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        .step-container { border-left: 2px solid #e5e7eb; padding-left: 1.5rem; position: relative; }
+        .step-container::before { content: ''; position: absolute; left: -0.5625rem; top: 0; width: 1rem; height: 1rem; border-radius: 50%; background-color: #111827; }
+    </style>
+</head>
+<body class="h-screen flex flex-col md:flex-row overflow-hidden relative">
 
+    <div id="auth-overlay" class="absolute inset-0 bg-gray-900 z-50 flex flex-col items-center justify-center px-4 transition-opacity duration-300">
+        <div class="bg-white p-8 rounded-lg shadow-2xl max-w-sm w-full">
+            <h2 class="text-xl font-bold text-gray-900 mb-2">Verrouillage de sécurité</h2>
+            <p class="text-sm text-gray-600 mb-6">Accès restreint. Le proxy requiert le mot de passe défini dans APP_SECRET.</p>
+            <input type="password" id="auth-password" class="w-full border border-gray-300 rounded-md p-3 mb-4 focus:ring-gray-900 focus:border-gray-900" placeholder="Mot de passe système" onkeypress="if(event.key === 'Enter') unlockSystem()">
+            <button onclick="unlockSystem()" class="w-full bg-gray-900 text-white font-medium py-3 rounded-md hover:bg-gray-800 transition">Déverrouiller le terminal</button>
+            <div id="auth-error" class="hidden text-red-600 text-sm mt-3 text-center font-medium"></div>
+        </div>
+    </div>
+
+    <aside class="w-full md:w-64 bg-gray-900 text-white flex flex-col flex-shrink-0 z-10 shadow-md md:shadow-none">
+        <div class="p-4 md:p-6 flex justify-between items-center md:block">
+            <div>
+                <h1 class="text-xl font-bold tracking-tight">Vinted Ops</h1>
+                <p class="text-xs text-gray-400 mt-1 hidden md:block">Ligne d'assemblage</p>
+            </div>
+            <button onclick="lockSystem()" class="md:hidden text-gray-400 hover:text-white">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+            </button>
+        </div>
+        <nav class="flex md:flex-col overflow-x-auto px-2 md:px-4 pb-2 md:pb-0 md:space-y-2 space-x-2 md:space-x-0 scrollbar-hide">
+            <button onclick="switchTab('studio')" id="nav-studio" class="flex-shrink-0 flex items-center px-4 py-2 text-sm font-medium rounded-md bg-gray-800 text-white transition-colors">
+                <svg class="w-5 h-5 mr-2 md:mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                <span class="whitespace-nowrap">Studio (Création)</span>
+            </button>
+            <button onclick="switchTab('strategy')" id="nav-strategy" class="flex-shrink-0 flex items-center px-4 py-2 text-sm font-medium rounded-md text-gray-300 hover:bg-gray-800 hover:text-white transition-colors">
+                <svg class="w-5 h-5 mr-2 md:mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                <span class="whitespace-nowrap">Stratégie</span>
+            </button>
+            <button onclick="switchTab('saved')" id="nav-saved" class="flex-shrink-0 flex items-center px-4 py-2 text-sm font-medium rounded-md text-gray-300 hover:bg-gray-800 hover:text-white transition-colors">
+                <svg class="w-5 h-5 mr-2 md:mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path></svg>
+                <span class="whitespace-nowrap">Historique</span>
+            </button>
+        </nav>
+        <div class="mt-auto p-4 hidden md:block">
+            <button onclick="lockSystem()" class="w-full flex items-center justify-center px-4 py-2 text-xs font-medium rounded-md text-gray-400 hover:bg-gray-800 hover:text-white transition-colors">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                Verrouiller session
+            </button>
+        </div>
+    </aside>
+
+    <main class="flex-1 flex flex-col overflow-y-auto bg-white">
+        
+        <div id="tab-studio" class="tab-content active p-4 md:p-8 max-w-3xl mx-auto w-full pb-24">
+            <h2 class="text-xl md:text-2xl font-bold mb-8 text-gray-800 border-b pb-2">Ligne d'assemblage</h2>
+            
+            <div class="step-container mb-8">
+                <h3 class="text-lg font-bold text-gray-900 mb-2">1. Capture Visuelle</h3>
+                <p class="text-sm text-gray-600 mb-4">Ajoute jusqu'à 3 photos (Face, Dos/Détail, Étiquette). C'est la matière première.</p>
+                
+                <div id="photo-grid" class="grid grid-cols-3 gap-3 mb-4">
+                    <label id="upload-btn" for="file-upload" class="col-span-1 aspect-square border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition-colors">
+                        <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        <span class="text-xs text-gray-500 mt-2 font-medium">Ajouter</span>
+                        <input id="file-upload" type="file" accept="image/*" capture="environment" class="hidden" multiple onchange="handleFiles(event)">
+                    </label>
+                </div>
+                <div class="flex justify-between items-center">
+                    <button onclick="clearPhotos()" class="text-sm text-red-600 font-medium hover:text-red-800 hidden" id="btn-clear-photos">Vider les photos</button>
+                    <span id="photo-count" class="text-xs text-gray-500 font-medium">0/3</span>
+                </div>
+
+                <div class="mt-4 pt-4 border-t border-gray-100">
+                    <p class="text-xs text-gray-500 font-bold uppercase tracking-wider mb-2">Contexte manuel (Optionnel)</p>
+                    <input type="text" id="ctx-notes" class="w-full border border-gray-200 rounded-md p-2 text-sm bg-gray-50 focus:bg-white focus:ring-gray-900 focus:border-gray-900" placeholder="Ex: Défaut au col, taille M mais taille petit, marque inconnue...">
+                </div>
+
+                <button id="btn-generate" onclick="generateFromPhotos()" class="mt-6 w-full bg-blue-600 text-white font-medium py-3 rounded-md hover:bg-blue-700 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
+                    Extraire & Générer l'annonce
+                </button>
+                <div id="gen-error" class="hidden text-red-600 text-sm mt-2 font-medium"></div>
+            </div>
+
+            <div id="step-editor" class="step-container mb-8 opacity-50 pointer-events-none transition-opacity duration-300">
+                <h3 class="text-lg font-bold text-gray-900 mb-2">2. Édition & Optimisation</h3>
+                <p class="text-sm text-gray-600 mb-4">Données extraites. Modifie le texte avant publication.</p>
+                
+                <div id="w-internal-notes-container" class="hidden mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <h4 class="text-xs font-bold text-yellow-800 uppercase tracking-wider mb-2">Analyse Interne (Non visible par l'acheteur)</h4>
+                    <p id="edit-internal-notes" class="text-sm text-yellow-900 leading-relaxed"></p>
+                </div>
+
+                <div class="space-y-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Titre SEO</label>
+                        <input type="text" id="edit-title" class="w-full border border-gray-300 rounded-md p-2 font-medium text-gray-900 bg-white focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Description</label>
+                        <textarea id="edit-desc" rows="8" class="w-full border border-gray-300 rounded-md p-2 text-sm text-gray-800 bg-white focus:ring-blue-500"></textarea>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Prix Estimé (€)</label>
+                            <input type="text" id="edit-price" class="w-full border border-gray-300 rounded-md p-2 font-bold text-green-700 bg-white focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Hashtags</label>
+                            <input type="text" id="edit-tags" class="w-full border border-gray-300 rounded-md p-2 text-sm text-blue-600 bg-white focus:ring-blue-500">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex gap-3 mt-4">
+                    <button id="btn-audit" onclick="auditDraft()" class="flex-1 bg-gray-900 text-white font-medium py-2 rounded-md hover:bg-gray-800 transition text-sm">Auditer ce brouillon</button>
+                    <button onclick="copyAd()" class="flex-1 bg-white border border-gray-300 text-gray-700 font-medium py-2 rounded-md hover:bg-gray-50 transition text-sm">Copier pour Vinted</button>
+                </div>
+                <div id="audit-error" class="hidden text-red-600 text-sm mt-2 font-medium"></div>
+            </div>
+
+            <div id="step-audit" class="step-container hidden">
+                <h3 class="text-lg font-bold text-gray-900 mb-2">3. Résultat de l'Audit</h3>
+                <div class="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm mt-4">
+                    <div class="bg-gray-50 px-4 py-3 border-b border-gray-200 flex justify-between items-center">
+                        <span class="text-sm font-semibold text-gray-700">Cohérence visuel/texte</span>
+                        <div>
+                            <span id="audit-score" class="text-2xl font-bold"></span><span class="text-gray-500">/10</span>
+                        </div>
+                    </div>
+                    <div class="p-4 space-y-4">
+                        <div>
+                            <h4 class="text-xs font-bold text-red-600 uppercase mb-1">Critique Factuelle</h4>
+                            <p id="audit-critique" class="text-sm text-gray-800"></p>
+                        </div>
+                        <div>
+                            <h4 class="text-xs font-bold text-orange-600 uppercase mb-1">Actions requises</h4>
+                            <ul id="audit-actions" class="list-disc pl-5 text-sm text-gray-800 space-y-1"></ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <div id="tab-strategy" class="tab-content p-4 md:p-8 max-w-4xl mx-auto w-full h-full flex flex-col">
+            <h2 class="text-xl md:text-2xl font-bold mb-4 md:mb-6 text-gray-800 border-b pb-2">Conseiller Stratégique Vinted</h2>
+            <p class="text-sm text-gray-600 mb-6">Pose des questions sur ta stratégie de prix, tes négociations ou la gestion de ton stock.</p>
+            
+            <div class="flex-1 bg-gray-50 border border-gray-200 rounded-lg flex flex-col overflow-hidden">
+                <div id="chat-history" class="flex-1 p-4 overflow-y-auto space-y-4">
+                    <div class="flex gap-4">
+                        <div class="w-8 h-8 rounded bg-gray-900 flex items-center justify-center text-white font-bold text-xs flex-shrink-0">SYS</div>
+                        <div class="bg-white p-3 rounded-lg border border-gray-200 shadow-sm text-sm text-gray-800">
+                            Système initialisé. Analyse des tendances de vente prête. Quel est ton problème de conversion actuel ?
+                        </div>
+                    </div>
+                </div>
+                <div class="p-4 bg-white border-t border-gray-200">
+                    <div class="flex gap-2">
+                        <input type="text" id="s-input" class="flex-1 border border-gray-300 rounded-md p-2 text-sm focus:ring-gray-900 focus:border-gray-900" placeholder="Ex: Comment gérer les acheteurs qui négocient 50% du prix ?" onkeypress="if(event.key === 'Enter') askStrategy()">
+                        <button id="btn-strategy" onclick="askStrategy()" class="bg-gray-900 text-white px-4 py-2 rounded-md font-medium hover:bg-gray-800">Envoyer</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-saved" class="tab-content p-4 md:p-8 max-w-4xl mx-auto w-full">
+            <h2 class="text-xl md:text-2xl font-bold mb-4 md:mb-6 text-gray-800 border-b pb-2">Base de données des annonces</h2>
+            <p class="text-sm text-gray-600 mb-6">Annonces traitées lors de cette session.</p>
+            
+            <div id="saved-list" class="space-y-4">
+            </div>
+            <div id="saved-empty" class="text-center text-gray-500 py-12 border-2 border-dashed border-gray-300 rounded-lg">
+                Aucune donnée enregistrée pour le moment.
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const state = { 
+            savedAds: [],
+            currentImages: [] 
+        };
+        
+        document.addEventListener("DOMContentLoaded", () => {
+            const token = localStorage.getItem('vinted_ops_token');
+            if (token) {
+                document.getElementById('auth-overlay').classList.add('hidden');
+            }
+        });
+
+        function unlockSystem() {
+            const pass = document.getElementById('auth-password').value.trim();
+            const errorDiv = document.getElementById('auth-error');
+            
+            if(!pass) {
+                errorDiv.textContent = "Mot de passe requis.";
+                errorDiv.classList.remove('hidden');
+                return;
+            }
+            
+            localStorage.setItem('vinted_ops_token', pass);
+            document.getElementById('auth-error').classList.add('hidden');
+            document.getElementById('auth-overlay').classList.add('opacity-0');
+            setTimeout(() => {
+                document.getElementById('auth-overlay').classList.add('hidden');
+                document.getElementById('auth-password').value = '';
+            }, 300);
+        }
+
+        function lockSystem() {
+            localStorage.removeItem('vinted_ops_token');
+            const overlay = document.getElementById('auth-overlay');
+            overlay.classList.remove('hidden');
+            setTimeout(() => {
+                overlay.classList.remove('opacity-0');
+            }, 10);
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('nav button').forEach(el => {
+                if(el.id.startsWith('nav-')) {
+                    el.classList.remove('bg-gray-800', 'text-white');
+                    el.classList.add('text-gray-300');
+                }
+            });
+            
+            const targetTab = document.getElementById(`tab-${tabId}`);
+            if(targetTab) targetTab.classList.add('active');
+            
+            const navBtn = document.getElementById(`nav-${tabId}`);
+            if(navBtn) {
+                navBtn.classList.add('bg-gray-800', 'text-white');
+                navBtn.classList.remove('text-gray-300');
+            }
+
+            if(tabId === 'saved') renderSavedAds();
+        }
+
+        async function callGemini(prompt, schema = null, isJson = false, images = []) {
+            const isPreviewEnv = window.location.protocol === 'blob:' || window.location.hostname.includes('usercontent.goog');
+            if (isPreviewEnv) {
+                throw new Error("Opération bloquée en prévisualisation locale. Ce code doit tourner sur ton serveur Netlify.");
+            }
+
+            const token = localStorage.getItem('vinted_ops_token');
+            if (!token) {
+                lockSystem();
+                throw new Error("Authentification requise.");
+            }
+
+            const baseUrl = window.location.origin !== "null" ? window.location.origin : "http://localhost:8888";
+            const url = new URL('/.netlify/functions/vinted', baseUrl).href;
+            
+            const parts = [{ text: prompt }];
+            
+            images.forEach(img => {
+                parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
+            });
+
+            const payload = {
+                contents: [{ role: "user", parts: parts }],
+                systemInstruction: {
+                    parts: [{ text: "Tu es un conseiller e-commerce et expert Vinted brutalement honnête, pragmatique et focalisé sur le ROI. Tes réponses sont en français, factuelles, directes. Si les photos sont mauvaises, dis-le." }]
+                }
+            };
+
+            if (isJson && schema) {
+                payload.generationConfig = { responseMimeType: "application/json", responseSchema: schema };
+            }
+
+            const delays = [1000, 2000, 4000, 8000];
+            
+            for (let i = 0; i < delays.length + 1; i++) {
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (response.status === 401 || response.status === 403) {
+                        lockSystem();
+                        throw new Error("Accès refusé. Mot de passe invalide ou configuration serveur Netlify erronée.");
+                    }
+
+                    if (!response.ok) {
+                        const err = await response.json().catch(() => ({}));
+                        throw new Error(`Erreur serveur ${response.status}: ${err.error || "Échec API"}`);
+                    }
+                    
+                    const data = await response.json();
+                    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                    
+                    if (!text) throw new Error("Réponse vide ou mal formatée du LLM.");
+                    
+                    return isJson ? JSON.parse(text) : text;
+                } catch (e) {
+                    if (e.message.includes("Authentification") || e.message.includes("Accès refusé") || e.message.includes("bloquée")) throw e;
+                    if (i === delays.length) {
+                        console.error("Échec API final:", e);
+                        throw new Error(e.message || "Erreur réseau ou proxy injoignable.");
+                    }
+                    await new Promise(r => setTimeout(r, delays[i]));
+                }
+            }
+        }
+
+        function handleFiles(event) {
+            const files = Array.from(event.target.files);
+            if (files.length === 0) return;
+
+            const remainingSlots = 3 - state.currentImages.length;
+            const filesToProcess = files.slice(0, remainingSlots);
+
+            filesToProcess.forEach(file => {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const img = new Image();
+                    img.onload = function() {
+                        const canvas = document.createElement('canvas');
+                        const MAX = 640; 
+                        let w = img.width;
+                        let h = img.height;
+
+                        if (w > h) { if (w > MAX) { h *= MAX / w; w = MAX; } } 
+                        else { if (h > MAX) { w *= MAX / h; h = MAX; } }
+
+                        canvas.width = w;
+                        canvas.height = h;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, w, h);
+
+                        const dataUrl = canvas.toDataURL('image/png');
+                        
+                        state.currentImages.push({
+                            mimeType: 'image/png',
+                            base64: dataUrl.split(',')[1],
+                            displayUrl: dataUrl
+                        });
+                        
+                        updatePhotoUI();
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+            
+            event.target.value = '';
+        }
+
+        function updatePhotoUI() {
+            const grid = document.getElementById('photo-grid');
+            const uploadBtn = document.getElementById('upload-btn');
+            
+            document.querySelectorAll('.photo-thumb').forEach(el => el.remove());
+
+            state.currentImages.forEach((img) => {
+                const div = document.createElement('div');
+                div.className = 'photo-thumb col-span-1 aspect-square rounded-lg bg-gray-100 overflow-hidden relative border border-gray-200';
+                div.innerHTML = `<img src="${img.displayUrl}" class="w-full h-full object-cover">`;
+                grid.insertBefore(div, uploadBtn);
+            });
+
+            if (state.currentImages.length >= 3) {
+                uploadBtn.classList.add('hidden');
+            } else {
+                uploadBtn.classList.remove('hidden');
+            }
+
+            document.getElementById('photo-count').textContent = `${state.currentImages.length}/3`;
+            
+            const btnClear = document.getElementById('btn-clear-photos');
+            if (state.currentImages.length > 0) btnClear.classList.remove('hidden');
+            else btnClear.classList.add('hidden');
+        }
+
+        function clearPhotos() {
+            state.currentImages = [];
+            updatePhotoUI();
+            
+            document.getElementById('step-editor').classList.add('opacity-50', 'pointer-events-none');
+            document.getElementById('step-audit').classList.add('hidden');
+            
+            document.getElementById('edit-internal-notes').textContent = '';
+            document.getElementById('w-internal-notes-container').classList.add('hidden');
+            document.getElementById('edit-title').value = '';
+            document.getElementById('edit-desc').value = '';
+            document.getElementById('edit-price').value = '';
+            document.getElementById('edit-tags').value = '';
+        }
+
+        async function generateFromPhotos() {
+            if (state.currentImages.length === 0) {
+                const err = document.getElementById('gen-error');
+                err.textContent = "Impossible de générer une annonce sans matière première visuelle. Ajoute une photo.";
+                err.classList.remove('hidden');
+                return;
+            }
+            document.getElementById('gen-error').classList.add('hidden');
+
+            const btn = document.getElementById('btn-generate');
+            const originalText = btn.textContent;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner" style="width:16px;height:16px;border-width:2px;border-top-color:#ffffff;margin-right:8px"></span>Analyse visuelle et génération...';
+
+            const userContext = document.getElementById('ctx-notes').value.trim();
+            const prompt = `Agis comme un expert e-commerce impitoyable. Analyse les photos fournies pour ce vêtement/objet. 
+${userContext ? `L'utilisateur précise ce contexte additionnel : "${userContext}". ` : ''}
+Sépare strictement ton analyse interne (pour le vendeur) du contenu final de l'annonce (pour l'acheteur).
+1. Analyse interne : Sois brutal. Dis ce qui cloche sur les photos, l'état réel de l'objet, et justifie ton estimation de prix.
+2. Annonce : Rédige la description finale, factuelle, optimisée SEO, prête à être copiée-collée par l'acheteur, SANS tes commentaires internes.`;
+
+            const schema = {
+                type: "OBJECT",
+                properties: {
+                    analyse_interne: { type: "STRING", description: "Tes remarques privées, brutales et factuelles pour le vendeur" },
+                    titre: { type: "STRING", description: "Titre SEO (Ex: Nike Air Force 1 Blanche T42 Très bon état)" },
+                    description: { type: "STRING", description: "Le corps de l'annonce EXACT pour l'acheteur, prêt à être copié, sans aucun commentaire d'IA" },
+                    prix_conseille: { type: "STRING", description: "Prix en euros" },
+                    hashtags: { type: "STRING", description: "Mots-clés séparés par des espaces" }
+                },
+                required: ["analyse_interne", "titre", "description", "prix_conseille", "hashtags"]
+            };
+
+            try {
+                const result = await callGemini(prompt, schema, true, state.currentImages);
+                
+                document.getElementById('edit-internal-notes').textContent = result.analyse_interne;
+                document.getElementById('w-internal-notes-container').classList.remove('hidden');
+                document.getElementById('edit-title').value = result.titre;
+                document.getElementById('edit-desc').value = result.description;
+                document.getElementById('edit-price').value = result.prix_conseille;
+                document.getElementById('edit-tags').value = result.hashtags;
+                
+                document.getElementById('step-editor').classList.remove('opacity-50', 'pointer-events-none');
+                document.getElementById('step-audit').classList.add('hidden');
+                document.getElementById('step-editor').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+            } catch (error) {
+                const errDiv = document.getElementById('gen-error');
+                errDiv.textContent = error.message;
+                errDiv.classList.remove('hidden');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
+        }
+
+        async function auditDraft() {
+            const title = document.getElementById('edit-title').value.trim();
+            const desc = document.getElementById('edit-desc').value.trim();
+            const price = document.getElementById('edit-price').value.trim();
+            
+            const btn = document.getElementById('btn-audit');
+            const errorDiv = document.getElementById('audit-error');
+            const resultDiv = document.getElementById('step-audit');
+            
+            errorDiv.classList.add('hidden');
+            resultDiv.classList.add('hidden');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner" style="width:16px;height:16px;border-width:2px;border-top-color:#ffffff;margin-right:8px"></span>Audit en cours...';
+
+            const prompt = `Voici mon brouillon d'annonce Vinted et les photos correspondantes.
+Titre: "${title}"
+Description: "${desc}"
+Prix: "${price}"
+
+Fais un audit brutal. Le texte omet-il un défaut visible sur la photo ? Le titre manque-t-il de mots-clés évidents ? Le prix semble-t-il déconnecté de l'état visuel de l'objet ? Est-ce que les photos elles-mêmes sont un frein à la vente (floues, sombres) ?`;
+
+            const schema = {
+                type: "OBJECT",
+                properties: {
+                    note: { type: "INTEGER", description: "Note globale de viabilité de l'annonce (texte + photos) sur 10" },
+                    critique_factuelle: { type: "STRING", description: "Critique directe en 2-3 phrases des incohérences ou faiblesses" },
+                    actions_correctives: { type: "ARRAY", items: { type: "STRING", description: "Ce qu'il faut modifier immédiatement" } }
+                },
+                required: ["note", "critique_factuelle", "actions_correctives"]
+            };
+
+            try {
+                const result = await callGemini(prompt, schema, true, state.currentImages);
+                
+                const scoreEl = document.getElementById('audit-score');
+                scoreEl.textContent = result.note;
+                scoreEl.className = `text-2xl font-bold ${result.note < 5 ? 'text-red-600' : (result.note < 8 ? 'text-orange-500' : 'text-green-600')}`;
+                
+                document.getElementById('audit-critique').textContent = result.critique_factuelle;
+                
+                const actionsList = document.getElementById('audit-actions');
+                actionsList.innerHTML = '';
+                result.actions_correctives.forEach(a => { actionsList.innerHTML += `<li>${a}</li>`; });
+                
+                resultDiv.classList.remove('hidden');
+                resultDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+            } catch (error) {
+                errorDiv.textContent = error.message;
+                errorDiv.classList.remove('hidden');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Auditer ce brouillon';
+            }
+        }
+
+        function copyAd() {
+            const title = document.getElementById('edit-title').value;
+            const desc = document.getElementById('edit-desc').value;
+            const tags = document.getElementById('edit-tags').value;
+            const price = document.getElementById('edit-price').value;
+            
+            if(!title && !desc) return;
+
+            const textToCopy = `${title}\n\n${desc}\n\n${tags}`;
+            
+            const textArea = document.createElement("textarea");
+            textArea.value = textToCopy;
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                saveToHistory(title, price);
+                
+                const msgBox = document.createElement('div');
+                msgBox.textContent = "Texte copié. Prêt à coller sur Vinted.";
+                msgBox.className = "fixed bottom-4 right-4 bg-gray-900 text-white px-4 py-3 rounded-lg text-sm shadow-xl z-50 transition-opacity duration-300 font-medium";
+                document.body.appendChild(msgBox);
+                setTimeout(() => { msgBox.style.opacity = '0'; setTimeout(()=>msgBox.remove(),300); }, 2500);
+            } catch (err) {
+                console.error('Erreur de copie', err);
+            }
+            document.body.removeChild(textArea);
+        }
+
+        function saveToHistory(title, price) {
+            state.savedAds.unshift({
+                date: new Date().toLocaleTimeString(),
+                title: title || "Annonce sans titre",
+                price: price || "-"
+            });
+            if(state.savedAds.length > 20) state.savedAds.pop();
+        }
+
+        function renderSavedAds() {
+            const container = document.getElementById('saved-list');
+            const emptyState = document.getElementById('saved-empty');
+            
+            container.innerHTML = '';
+            
+            if(state.savedAds.length === 0) {
+                emptyState.classList.remove('hidden');
+                return;
+            }
+            
+            emptyState.classList.add('hidden');
+            
+            state.savedAds.forEach(ad => {
+                container.innerHTML += `
+                    <div class="bg-gray-50 border border-gray-200 p-4 rounded-lg flex justify-between items-center">
+                        <div class="truncate mr-4">
+                            <span class="text-xs text-gray-500 font-mono block mb-1">${ad.date}</span>
+                            <h4 class="font-medium text-gray-900 text-sm truncate">${ad.title}</h4>
+                        </div>
+                        <div class="text-right flex-shrink-0">
+                            <span class="text-sm font-bold text-gray-900 bg-white px-2 py-1 rounded border">${ad.price}</span>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        async function askStrategy() {
+            const inputEl = document.getElementById('s-input');
+            const question = inputEl.value.trim();
+            if(!question) return;
+
+            inputEl.value = '';
+            appendMessage('USR', question);
+
+            const btn = document.getElementById('btn-strategy');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner" style="width:16px;height:16px;border-width:2px;"></span>';
+
+            const historyNodes = document.querySelectorAll('#chat-history > div');
+            let context = "";
+            const startIndex = Math.max(0, historyNodes.length - 3);
+            for(let i = startIndex; i < historyNodes.length; i++) {
+                 context += historyNodes[i].innerText + "\n";
+            }
+
+            const prompt = `Contexte de la conversation : ${context}\n\nL'utilisateur demande : ${question}\nRéponds de manière stratégique, brutale et pragmatique. Démystifie les illusions sur la vente en ligne. Fournis un plan d'action si applicable.`;
+
+            try {
+                const response = await callGemini(prompt, null, false);
+                appendMessage('SYS', response);
+            } catch (error) {
+                appendMessage('ERR', error.message || "Erreur système.");
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Envoyer';
+            }
+        }
+
+        function appendMessage(sender, text) {
+            const history = document.getElementById('chat-history');
+            const isSys = sender === 'SYS';
+            const isErr = sender === 'ERR';
+            const bgClass = isSys ? 'bg-gray-900' : (isErr ? 'bg-red-600' : 'bg-blue-600');
+            const msgClass = isSys ? 'bg-white border-gray-200 text-gray-800 shadow-sm' : (isErr ? 'bg-red-50 text-red-800' : 'bg-blue-50 border-blue-100 text-blue-900');
+            
+            const html = `
+                <div class="flex gap-4 ${!isSys && !isErr ? 'flex-row-reverse' : ''}">
+                    <div class="w-8 h-8 rounded ${bgClass} flex items-center justify-center text-white font-bold text-xs flex-shrink-0">${sender}</div>
+                    <div class="${msgClass} p-3 rounded-lg border max-w-[80%] text-sm whitespace-pre-wrap">${text}</div>
+                </div>
+            `;
+            history.insertAdjacentHTML('beforeend', html);
+            history.scrollTop = history.scrollHeight;
+        }
+    </script>
+</body>
+</html>
