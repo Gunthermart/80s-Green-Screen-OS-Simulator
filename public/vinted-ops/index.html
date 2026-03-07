@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vinted Optimizer Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: system-ui, -apple-system, sans-serif; background-color: #f3f4f6; color: #111827; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .spinner { border: 3px solid rgba(0,0,0,0.1); border-radius: 50%; border-top: 3px solid #3b82f6; width: 24px; height: 24px; animation: spin 1s linear infinite; display: inline-block; vertical-align: middle; margin-right: 8px;}
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="h-screen flex flex-col md:flex-row overflow-hidden">
+
+    <!-- Sidebar -->
+    <aside class="w-full md:w-64 bg-gray-900 text-white flex flex-col flex-shrink-0 z-10 shadow-md md:shadow-none">
+        <div class="p-4 md:p-6 flex justify-between items-center md:block">
+            <div>
+                <h1 class="text-xl font-bold tracking-tight">Vinted Ops</h1>
+                <p class="text-xs text-gray-400 mt-1 hidden md:block">Terminal de gestion</p>
+            </div>
+        </div>
+        <nav class="flex md:flex-col overflow-x-auto px-2 md:px-4 pb-2 md:pb-0 md:space-y-2 space-x-2 md:space-x-0 scrollbar-hide">
+            <button onclick="switchTab('write')" id="nav-write" class="flex-shrink-0 flex items-center px-4 py-2 text-sm font-medium rounded-md bg-gray-800 text-white transition-colors">
+                <svg class="w-5 h-5 mr-2 md:mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                <span class="whitespace-nowrap">Générer</span>
+            </button>
+            <button onclick="switchTab('evaluate')" id="nav-evaluate" class="flex-shrink-0 flex items-center px-4 py-2 text-sm font-medium rounded-md text-gray-300 hover:bg-gray-800 hover:text-white transition-colors">
+                <svg class="w-5 h-5 mr-2 md:mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
+                <span class="whitespace-nowrap">Évaluer</span>
+            </button>
+            <button onclick="switchTab('vision')" id="nav-vision" class="flex-shrink-0 flex items-center px-4 py-2 text-sm font-medium rounded-md text-gray-300 hover:bg-gray-800 hover:text-white transition-colors">
+                <svg class="w-5 h-5 mr-2 md:mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                <span class="whitespace-nowrap">Audit Photo</span>
+            </button>
+            <button onclick="switchTab('strategy')" id="nav-strategy" class="flex-shrink-0 flex items-center px-4 py-2 text-sm font-medium rounded-md text-gray-300 hover:bg-gray-800 hover:text-white transition-colors">
+                <svg class="w-5 h-5 mr-2 md:mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                <span class="whitespace-nowrap">Stratégie</span>
+            </button>
+            <button onclick="switchTab('saved')" id="nav-saved" class="flex-shrink-0 flex items-center px-4 py-2 text-sm font-medium rounded-md text-gray-300 hover:bg-gray-800 hover:text-white transition-colors">
+                <svg class="w-5 h-5 mr-2 md:mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path></svg>
+                <span class="whitespace-nowrap">Historique</span>
+            </button>
+        </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col overflow-y-auto bg-white">
+        
+        <!-- Generate Tab -->
+        <div id="tab-write" class="tab-content active p-4 md:p-8 max-w-4xl mx-auto w-full">
+            <h2 class="text-xl md:text-2xl font-bold mb-4 md:mb-6 text-gray-800 border-b pb-2">Génération d'annonce optimisée</h2>
+            <p class="text-sm text-gray-600 mb-6">Fournis des données brutes. Le système construira une annonce orientée conversion (SEO Vinted).</p>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Marque / Modèle</label>
+                        <input type="text" id="w-brand" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500" placeholder="ex: Nike Air Force 1">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Type de vêtement/objet</label>
+                        <input type="text" id="w-type" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" placeholder="ex: Baskets montantes">
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Taille</label>
+                            <input type="text" id="w-size" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" placeholder="ex: 42">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Couleur</label>
+                            <input type="text" id="w-color" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" placeholder="ex: Blanc">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">État et Défauts (sois factuel)</label>
+                        <textarea id="w-condition" rows="3" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" placeholder="ex: Très bon état, légère éraflure sur le côté droit"></textarea>
+                    </div>
+                    <button id="btn-generate" onclick="generateAd()" class="w-full bg-blue-600 text-white px-4 py-2 rounded-md font-medium hover:bg-blue-700 transition">Exécuter la génération</button>
+                    <div id="w-error" class="hidden text-red-600 text-sm mt-2 font-medium"></div>
+                </div>
+
+                <div class="bg-gray-50 p-4 md:p-6 rounded-lg border border-gray-200 flex flex-col">
+                    <h3 class="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">Résultat de sortie</h3>
+                    <div id="w-output-container" class="hidden flex-1 flex flex-col space-y-4">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase">Titre optimisé</label>
+                            <div id="out-title" class="text-md font-medium text-gray-900 bg-white p-2 border rounded mt-1"></div>
+                        </div>
+                        <div class="flex-1">
+                            <label class="block text-xs font-bold text-gray-500 uppercase">Description (Copywriting)</label>
+                            <div id="out-desc" class="text-sm text-gray-800 bg-white p-3 border rounded mt-1 whitespace-pre-wrap h-48 overflow-y-auto"></div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase">Hashtags</label>
+                            <div id="out-tags" class="text-sm text-blue-600 bg-white p-2 border rounded mt-1"></div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase">Prix conseillé estimé</label>
+                            <div id="out-price" class="text-sm text-green-700 font-bold bg-white p-2 border rounded mt-1"></div>
+                        </div>
+                        <div class="flex gap-2 pt-2">
+                            <button onclick="copyToClipboard('w-output-container')" class="flex-1 bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded text-sm hover:bg-gray-50">Copier</button>
+                            <button onclick="saveAdLocally()" class="flex-1 bg-gray-900 text-white px-3 py-1.5 rounded text-sm hover:bg-gray-800">Sauvegarder</button>
+                        </div>
+                    </div>
+                    <div id="w-loading" class="hidden flex-1 flex items-center justify-center flex-col text-gray-400">
+                        <div class="spinner mb-2"></div>
+                        <span class="text-sm">Traitement LLM en cours...</span>
+                    </div>
+                    <div id="w-idle" class="flex-1 flex items-center justify-center text-gray-400 text-sm py-8 md:py-0">
+                        En attente des données d'entrée.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Evaluate Tab -->
+        <div id="tab-evaluate" class="tab-content p-4 md:p-8 max-w-4xl mx-auto w-full">
+            <h2 class="text-xl md:text-2xl font-bold mb-4 md:mb-6 text-gray-800 border-b pb-2">Audit d'annonce existante</h2>
+            <p class="text-sm text-gray-600 mb-6">Colle ton annonce actuelle. Le système identifiera les failles de conversion et le manque de clarté.</p>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Contenu de l'annonce (Titre + Description)</label>
+                    <textarea id="e-content" rows="6" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3 focus:ring-blue-500 focus:border-blue-500" placeholder="Colle le texte brut ici..."></textarea>
+                </div>
+                <button id="btn-evaluate" onclick="evaluateAd()" class="w-full md:w-auto bg-blue-600 text-white px-6 py-2 rounded-md font-medium hover:bg-blue-700 transition">Lancer l'audit</button>
+                <div id="e-error" class="hidden text-red-600 text-sm mt-2 font-medium"></div>
+            </div>
+
+            <div id="e-result" class="hidden mt-8 bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+                <div class="bg-gray-50 px-4 md:px-6 py-4 border-b border-gray-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
+                    <h3 class="text-lg font-medium text-gray-900">Rapport d'audit</h3>
+                    <div class="flex items-center">
+                        <span class="text-sm text-gray-500 mr-2">Score de viabilité:</span>
+                        <span id="out-score" class="text-2xl font-bold text-gray-900"></span><span class="text-lg text-gray-500">/10</span>
+                    </div>
+                </div>
+                <div class="p-4 md:p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <h4 class="text-sm font-bold text-red-600 uppercase mb-2">Critique brutale</h4>
+                        <p id="out-critique" class="text-sm text-gray-700 bg-red-50 p-3 rounded border border-red-100"></p>
+                    </div>
+                    <div class="space-y-4">
+                        <div>
+                            <h4 class="text-sm font-bold text-green-600 uppercase mb-2">Ce qui fonctionne</h4>
+                            <ul id="out-pros" class="list-disc pl-5 text-sm text-gray-700 space-y-1"></ul>
+                        </div>
+                        <div>
+                            <h4 class="text-sm font-bold text-orange-600 uppercase mb-2">Ce qu'il faut corriger d'urgence</h4>
+                            <ul id="out-cons" class="list-disc pl-5 text-sm text-gray-700 space-y-1"></ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Vision Tab -->
+        <div id="tab-vision" class="tab-content p-4 md:p-8 max-w-4xl mx-auto w-full">
+            <h2 class="text-xl md:text-2xl font-bold mb-4 md:mb-6 text-gray-800 border-b pb-2">Audit Visuel Impitoyable</h2>
+            <p class="text-sm text-gray-600 mb-6">Soumets ta photo. Le système évaluera la qualité marchande de l'image (lumière, fond, présentation) et en extraira les données.</p>
+            
+            <div class="space-y-4">
+                <div class="flex items-center justify-center w-full">
+                    <label for="v-file" class="flex flex-col items-center justify-center w-full h-56 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 relative overflow-hidden transition-colors">
+                        <div class="flex flex-col items-center justify-center pt-5 pb-6 transition-opacity duration-300" id="v-upload-ui">
+                            <svg class="w-10 h-10 mb-4 text-gray-500" aria-hidden="true" fill="none" viewBox="0 0 20 16"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 13h3a3 3 0 0 0 0-6h-.025A5.56 5.56 0 0 0 16 6.5 5.5 5.5 0 0 0 5.207 5.021C5.137 5.017 5.071 5 5 5a4 4 0 0 0 0 8h2.167M10 15V6m0 0L8 8m2-2 2 2"/></svg>
+                            <p class="mb-2 text-sm text-gray-500"><span class="font-semibold">Prendre une photo</span> ou sélectionner</p>
+                            <p class="text-xs text-gray-500">Accès direct caméra sur smartphone</p>
+                        </div>
+                        <img id="v-preview" class="hidden absolute inset-0 w-full h-full object-contain bg-black/5" />
+                        <input id="v-file" type="file" accept="image/*" capture="environment" class="hidden" onchange="previewImage(event)" />
+                    </label>
+                </div>
+                
+                <button id="btn-vision" onclick="analyzePhoto()" class="w-full bg-gray-900 text-white px-6 py-3 rounded-md font-medium hover:bg-gray-800 transition hidden">Analyser la rentabilité de la photo</button>
+                <div id="v-error" class="hidden text-red-600 text-sm mt-2 font-medium"></div>
+            </div>
+
+            <div id="v-loading" class="hidden flex-col items-center justify-center text-gray-500 mt-12">
+                <div class="spinner mb-3" style="width:32px;height:32px;"></div>
+                <span class="text-sm font-medium">Extraction et analyse visuelle en cours...</span>
+            </div>
+
+            <div id="v-result" class="hidden mt-8 bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+                <div class="bg-gray-50 px-4 md:px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                    <h3 class="text-lg font-medium text-gray-900">Diagnostic</h3>
+                    <div class="flex items-center">
+                        <span id="v-score" class="text-3xl font-bold text-gray-900"></span><span class="text-lg text-gray-500 ml-1">/10</span>
+                    </div>
+                </div>
+                <div class="p-4 md:p-6 space-y-5">
+                    <div>
+                        <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Analyse Technique</h4>
+                        <p id="v-tech" class="text-sm text-gray-800 bg-gray-50 p-4 rounded border border-gray-200 leading-relaxed"></p>
+                    </div>
+                    <div>
+                        <h4 class="text-xs font-bold text-red-600 uppercase tracking-wider mb-2">Verdict Commercial</h4>
+                        <p id="v-verdict" class="text-sm text-red-900 bg-red-50 p-4 rounded border border-red-100 font-medium"></p>
+                    </div>
+                    <div>
+                        <h4 class="text-xs font-bold text-blue-600 uppercase tracking-wider mb-2">Données extraites</h4>
+                        <p id="v-data" class="text-sm text-blue-900 bg-blue-50 p-4 rounded border border-blue-100 font-mono"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Strategy Tab -->
+        <div id="tab-strategy" class="tab-content p-4 md:p-8 max-w-4xl mx-auto w-full h-full flex flex-col">
+            <h2 class="text-xl md:text-2xl font-bold mb-4 md:mb-6 text-gray-800 border-b pb-2">Conseiller Stratégique Vinted</h2>
+            <p class="text-sm text-gray-600 mb-6">Pose des questions sur ta stratégie de prix, tes négociations ou la gestion de ton stock. Attends-toi à des réponses directes.</p>
+            
+            <div class="flex-1 bg-gray-50 border border-gray-200 rounded-lg flex flex-col overflow-hidden">
+                <div id="chat-history" class="flex-1 p-4 overflow-y-auto space-y-4">
+                    <div class="flex gap-4">
+                        <div class="w-8 h-8 rounded bg-gray-900 flex items-center justify-center text-white font-bold text-xs flex-shrink-0">SYS</div>
+                        <div class="bg-white p-3 rounded-lg border border-gray-200 shadow-sm text-sm text-gray-800">
+                            Système initialisé. Analyse des tendances de vente prête. Quel est ton problème de conversion actuel ?
+                        </div>
+                    </div>
+                </div>
+                <div class="p-4 bg-white border-t border-gray-200">
+                    <div class="flex gap-2">
+                        <input type="text" id="s-input" class="flex-1 border border-gray-300 rounded-md p-2 text-sm focus:ring-gray-900 focus:border-gray-900" placeholder="Ex: Comment gérer les acheteurs qui négocient 50% du prix ?" onkeypress="if(event.key === 'Enter') askStrategy()">
+                        <button id="btn-strategy" onclick="askStrategy()" class="bg-gray-900 text-white px-4 py-2 rounded-md font-medium hover:bg-gray-800">Envoyer</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Saved Ads Tab -->
+        <div id="tab-saved" class="tab-content p-4 md:p-8 max-w-4xl mx-auto w-full">
+            <h2 class="text-xl md:text-2xl font-bold mb-4 md:mb-6 text-gray-800 border-b pb-2">Base de données des annonces</h2>
+            <p class="text-sm text-gray-600 mb-6">Annonces générées lors de cette session en mémoire RAM. Elles seront perdues au rechargement (conception éphémère voulue pour le traitement par lots).</p>
+            
+            <div id="saved-list" class="space-y-4">
+                <!-- Injected via JS -->
+            </div>
+            <div id="saved-empty" class="text-center text-gray-500 py-12 border-2 border-dashed border-gray-300 rounded-lg">
+                Aucune donnée enregistrée pour le moment.
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // System Config
+        let currentDraft = null;
+        const state = { savedAds: [] };
+        
+        // Vision State
+        let currentImageBase64 = null;
+        let currentImageMimeType = null;
+
+        // UI Management
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('nav button').forEach(el => {
+                el.classList.remove('bg-gray-800', 'text-white');
+                el.classList.add('text-gray-300');
+            });
+            
+            const targetTab = document.getElementById(`tab-${tabId}`);
+            if(targetTab) targetTab.classList.add('active');
+            
+            const navBtn = document.getElementById(`nav-${tabId}`);
+            if(navBtn) {
+                navBtn.classList.add('bg-gray-800', 'text-white');
+                navBtn.classList.remove('text-gray-300');
+            }
+
+            if(tabId === 'saved') renderSavedAds();
+        }
+
+        // Gemini API Core with Exponential Backoff
+        async function callGemini(prompt, schema = null, isJson = false, imageParams = null) {
+            const url = `/.netlify/functions/vinted`;
+            
+            const payload = {
+                contents: [{
+                    role: "user",
+                    parts: [{ text: prompt }]
+                }],
+                systemInstruction: {
+                    parts: [{ text: "Tu es un conseiller e-commerce et expert Vinted brutalement honnête, pragmatique et focalisé sur le ROI. Tes réponses sont en français, factuelles, sans émojis, sans formatage excessif. Tu vas droit au but." }]
+                }
+            };
+
+            if (imageParams && imageParams.base64) {
+                payload.contents[0].parts.push({
+                    inlineData: {
+                        mimeType: "image/png",
+                        data: imageParams.base64
+                    }
+                });
+            }
+
+            if (isJson && schema) {
+                payload.generationConfig = {
+                    responseMimeType: "application/json",
+                    responseSchema: schema
+                };
+            }
+
+            const delays = [1000, 2000, 4000, 8000, 16000];
+            
+            for (let i = 0; i < delays.length + 1; i++) {
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    
+                    const data = await response.json();
+                    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                    
+                    if (!text) throw new Error("Réponse API vide ou mal formatée.");
+                    
+                    return isJson ? JSON.parse(text) : text;
+                } catch (e) {
+                    if (i === delays.length) {
+                        console.error("Échec API après toutes les tentatives.", e);
+                        throw new Error("Erreur de connexion à l'API système. Vérifie ta configuration réseau.");
+                    }
+                    await new Promise(r => setTimeout(r, delays[i]));
+                }
+            }
+        }
+
+        // Vision Features
+        function previewImage(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    // Resize image to ensure payload isn't too large (prevents 401/413 errors)
+                    const canvas = document.createElement('canvas');
+                    const MAX_WIDTH = 640;
+                    const MAX_HEIGHT = 640;
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > height) {
+                        if (width > MAX_WIDTH) {
+                            height *= MAX_WIDTH / width;
+                            width = MAX_WIDTH;
+                        }
+                    } else {
+                        if (height > MAX_HEIGHT) {
+                            width *= MAX_HEIGHT / height;
+                            height = MAX_HEIGHT;
+                        }
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    const dataUrl = canvas.toDataURL('image/png');
+                    
+                    const previewEl = document.getElementById('v-preview');
+                    previewEl.src = dataUrl;
+                    previewEl.classList.remove('hidden');
+                    document.getElementById('v-upload-ui').classList.add('opacity-0');
+                    
+                    currentImageMimeType = 'image/png';
+                    currentImageBase64 = dataUrl.split(',')[1];
+                    
+                    document.getElementById('btn-vision').classList.remove('hidden');
+                    document.getElementById('v-result').classList.add('hidden');
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        async function analyzePhoto() {
+            if (!currentImageBase64) return;
+            
+            const btn = document.getElementById('btn-vision');
+            const errorDiv = document.getElementById('v-error');
+            const resultDiv = document.getElementById('v-result');
+            const loadingDiv = document.getElementById('v-loading');
+            
+            errorDiv.classList.add('hidden');
+            resultDiv.classList.add('hidden');
+            btn.disabled = true;
+            btn.classList.add('opacity-50');
+            loadingDiv.classList.remove('hidden');
+            loadingDiv.classList.add('flex');
+
+            const prompt = `Analyse cette photo de vêtement destinée à la vente en ligne (Vinted). Fais une critique brutale et objective.
+1. Évalue techniquement : lumière (sombre, contre-jour), arrière-plan (désordre, distractif), cadrage, et présentation (vêtement froissé, mal posé).
+2. Donne un verdict commercial strict : est-ce que cette photo inspire confiance et donne envie de cliquer ?
+3. Extrais les caractéristiques factuelles visibles du produit (type, couleur, marque, état apparent).`;
+
+            const schema = {
+                type: "OBJECT",
+                properties: {
+                    note_photo: { type: "INTEGER", description: "Note de rentabilité visuelle sur 10" },
+                    analyse_technique: { type: "STRING", description: "Critique directe de l'éclairage, du fond et de la mise en valeur" },
+                    verdict_commercial: { type: "STRING", description: "Conclusion sur l'impact potentiel sur les ventes (taux de clic)" },
+                    donnees_extraites: { type: "STRING", description: "Ce qui est factuellement reconnaissable sur l'objet" }
+                },
+                required: ["note_photo", "analyse_technique", "verdict_commercial", "donnees_extraites"]
+            };
+
+            try {
+                const result = await callGemini(prompt, schema, true, { base64: currentImageBase64, mimeType: currentImageMimeType });
+                
+                document.getElementById('v-score').textContent = result.note_photo;
+                const scoreColor = result.note_photo < 5 ? 'text-red-600' : (result.note_photo < 8 ? 'text-orange-500' : 'text-green-600');
+                document.getElementById('v-score').className = `text-3xl font-bold ${scoreColor}`;
+                
+                document.getElementById('v-tech').textContent = result.analyse_technique;
+                document.getElementById('v-verdict').textContent = result.verdict_commercial;
+                document.getElementById('v-data').textContent = result.donnees_extraites;
+                
+                resultDiv.classList.remove('hidden');
+            } catch (error) {
+                errorDiv.textContent = error.message;
+                errorDiv.classList.remove('hidden');
+            } finally {
+                btn.disabled = false;
+                btn.classList.remove('opacity-50');
+                loadingDiv.classList.add('hidden');
+                loadingDiv.classList.remove('flex');
+            }
+        }
+
+        // Feature: Generate Ad
+        async function generateAd() {
+            const brand = document.getElementById('w-brand').value.trim();
+            const type = document.getElementById('w-type').value.trim();
+            const size = document.getElementById('w-size').value.trim();
+            const color = document.getElementById('w-color').value.trim();
+            const condition = document.getElementById('w-condition').value.trim();
+            const errorDiv = document.getElementById('w-error');
+
+            if(!type || !condition) {
+                errorDiv.textContent = "Erreur logique : Le type d'objet et son état sont des variables obligatoires.";
+                errorDiv.classList.remove('hidden');
+                return;
+            }
+            errorDiv.classList.add('hidden');
+
+            const btn = document.getElementById('btn-generate');
+            setLoadingState('write', true, btn);
+
+            const prompt = `Crée une annonce Vinted optimisée pour l'algorithme de recherche. 
+Données d'entrée: Marque: ${brand || 'Non spécifiée'}, Type: ${type}, Taille: ${size || 'Non spécifiée'}, Couleur: ${color || 'Non spécifiée'}, État/Défauts: ${condition}.
+Génère un titre clair, une description structurée qui donne envie tout en étant transparente sur les défauts, une estimation réaliste du prix de vente, et 5-8 hashtags pertinents.`;
+
+            const schema = {
+                type: "OBJECT",
+                properties: {
+                    titre: { type: "STRING", description: "Titre optimisé pour la recherche Vinted" },
+                    description: { type: "STRING", description: "Description complète avec sauts de ligne" },
+                    prix_conseille: { type: "STRING", description: "Fourchette de prix en euros, ex: 15€ - 20€" },
+                    hashtags: { type: "STRING", description: "Liste de hashtags séparés par des espaces" }
+                },
+                required: ["titre", "description", "prix_conseille", "hashtags"]
+            };
+
+            try {
+                const result = await callGemini(prompt, schema, true);
+                currentDraft = result;
+                
+                document.getElementById('out-title').textContent = result.titre;
+                document.getElementById('out-desc').textContent = result.description;
+                document.getElementById('out-tags').textContent = result.hashtags;
+                document.getElementById('out-price').textContent = result.prix_conseille;
+                
+                document.getElementById('w-idle').classList.add('hidden');
+                document.getElementById('w-output-container').classList.remove('hidden');
+            } catch (error) {
+                errorDiv.textContent = error.message;
+                errorDiv.classList.remove('hidden');
+            } finally {
+                setLoadingState('write', false, btn, "Exécuter la génération");
+            }
+        }
+
+        // Feature: Evaluate Ad
+        async function evaluateAd() {
+            const content = document.getElementById('e-content').value.trim();
+            const errorDiv = document.getElementById('e-error');
+
+            if(!content || content.length < 20) {
+                errorDiv.textContent = "Données insuffisantes. Fournis le texte complet de l'annonce pour une analyse viable.";
+                errorDiv.classList.remove('hidden');
+                return;
+            }
+            errorDiv.classList.add('hidden');
+
+            const btn = document.getElementById('btn-evaluate');
+            setLoadingState('evaluate', true, btn);
+            document.getElementById('e-result').classList.add('hidden');
+
+            const prompt = `Analyse cette annonce Vinted de manière impitoyable. Cherche ce qui empêche la vente (manque d'infos, ton non approprié, mots-clés manquants). Annonce : "${content}"`;
+
+            const schema = {
+                type: "OBJECT",
+                properties: {
+                    note: { type: "INTEGER", description: "Note de l'annonce sur 10 concernant son potentiel de conversion" },
+                    critique: { type: "STRING", description: "Une analyse brutale et directe des défauts de l'annonce en 2-3 phrases" },
+                    points_forts: { type: "ARRAY", items: { type: "STRING" } },
+                    points_faibles: { type: "ARRAY", items: { type: "STRING" } }
+                },
+                required: ["note", "critique", "points_forts", "points_faibles"]
+            };
+
+            try {
+                const result = await callGemini(prompt, schema, true);
+                
+                document.getElementById('out-score').textContent = result.note;
+                
+                const scoreColor = result.note < 5 ? 'text-red-600' : (result.note < 8 ? 'text-orange-500' : 'text-green-600');
+                document.getElementById('out-score').className = `text-2xl font-bold ${scoreColor}`;
+                
+                document.getElementById('out-critique').textContent = result.critique;
+                
+                const prosList = document.getElementById('out-pros');
+                prosList.innerHTML = '';
+                result.points_forts.forEach(p => { prosList.innerHTML += `<li>${p}</li>`; });
+                
+                const consList = document.getElementById('out-cons');
+                consList.innerHTML = '';
+                result.points_faibles.forEach(c => { consList.innerHTML += `<li>${c}</li>`; });
+
+                document.getElementById('e-result').classList.remove('hidden');
+            } catch (error) {
+                errorDiv.textContent = error.message;
+                errorDiv.classList.remove('hidden');
+            } finally {
+                setLoadingState('evaluate', false, btn, "Lancer l'audit");
+            }
+        }
+
+        // Feature: Strategy Chat
+        async function askStrategy() {
+            const inputEl = document.getElementById('s-input');
+            const question = inputEl.value.trim();
+            if(!question) return;
+
+            inputEl.value = '';
+            appendMessage('USR', question);
+
+            const btn = document.getElementById('btn-strategy');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner" style="width:16px;height:16px;border-width:2px;"></span>';
+
+            const historyNodes = document.querySelectorAll('#chat-history > div');
+            let context = "";
+            // Keep last 3 messages for context to save tokens and maintain focus
+            const startIndex = Math.max(0, historyNodes.length - 3);
+            for(let i = startIndex; i < historyNodes.length; i++) {
+                 context += historyNodes[i].innerText + "\n";
+            }
+
+            const prompt = `Contexte de la conversation : ${context}\n\nL'utilisateur demande : ${question}\nRéponds de manière stratégique, brutale et pragmatique. Démystifie les illusions sur la vente en ligne. Fournis un plan d'action si applicable.`;
+
+            try {
+                const response = await callGemini(prompt, null, false);
+                appendMessage('SYS', response);
+            } catch (error) {
+                appendMessage('ERR', "Erreur de communication système.");
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Envoyer';
+            }
+        }
+
+        function appendMessage(sender, text) {
+            const history = document.getElementById('chat-history');
+            const isSys = sender === 'SYS';
+            const isErr = sender === 'ERR';
+            const bgClass = isSys ? 'bg-gray-900' : (isErr ? 'bg-red-600' : 'bg-blue-600');
+            const msgClass = isSys ? 'bg-white border-gray-200 text-gray-800 shadow-sm' : (isErr ? 'bg-red-50 text-red-800' : 'bg-blue-50 border-blue-100 text-blue-900');
+            
+            const html = `
+                <div class="flex gap-4 ${!isSys && !isErr ? 'flex-row-reverse' : ''}">
+                    <div class="w-8 h-8 rounded ${bgClass} flex items-center justify-center text-white font-bold text-xs flex-shrink-0">${sender}</div>
+                    <div class="${msgClass} p-3 rounded-lg border max-w-[80%] text-sm whitespace-pre-wrap">${text}</div>
+                </div>
+            `;
+            history.insertAdjacentHTML('beforeend', html);
+            history.scrollTop = history.scrollHeight;
+        }
+
+        // Utilities
+        function setLoadingState(context, isLoading, btnElement, originalText = "") {
+            const loadingDiv = document.getElementById(`${context === 'write' ? 'w' : 'e'}-loading`);
+            const outputContainer = document.getElementById(`${context === 'write' ? 'w' : 'e'}-output-container`);
+            const idleDiv = document.getElementById(`${context === 'write' ? 'w' : 'e'}-idle`);
+
+            btnElement.disabled = isLoading;
+            
+            if (isLoading) {
+                btnElement.classList.add('opacity-50', 'cursor-not-allowed');
+                btnElement.innerHTML = '<span class="spinner" style="width:16px;height:16px;border-width:2px;margin-right:8px"></span>Traitement...';
+                if(context === 'write') {
+                    if(outputContainer) outputContainer.classList.add('hidden');
+                    if(idleDiv) idleDiv.classList.add('hidden');
+                    if(loadingDiv) {
+                        loadingDiv.classList.remove('hidden');
+                        loadingDiv.classList.add('flex');
+                    }
+                }
+            } else {
+                btnElement.classList.remove('opacity-50', 'cursor-not-allowed');
+                btnElement.textContent = originalText;
+                if(context === 'write') {
+                    if(loadingDiv) {
+                        loadingDiv.classList.add('hidden');
+                        loadingDiv.classList.remove('flex');
+                    }
+                }
+            }
+        }
+
+        function copyToClipboard(containerId) {
+            const title = document.getElementById('out-title').innerText;
+            const desc = document.getElementById('out-desc').innerText;
+            const tags = document.getElementById('out-tags').innerText;
+            
+            const textToCopy = `${title}\n\n${desc}\n\n${tags}`;
+            
+            const textArea = document.createElement("textarea");
+            textArea.value = textToCopy;
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                const msgBox = document.createElement('div');
+                msgBox.textContent = "Texte copié dans le presse-papier.";
+                msgBox.className = "fixed bottom-4 right-4 bg-gray-900 text-white px-4 py-2 rounded text-sm shadow-lg z-50 transition-opacity duration-300";
+                document.body.appendChild(msgBox);
+                setTimeout(() => { msgBox.style.opacity = '0'; setTimeout(()=>msgBox.remove(),300); }, 2000);
+            } catch (err) {
+                console.error('Erreur de copie', err);
+            }
+            document.body.removeChild(textArea);
+        }
+
+        function saveAdLocally() {
+            if(!currentDraft) return;
+            state.savedAds.push({
+                date: new Date().toLocaleTimeString(),
+                title: currentDraft.titre,
+                price: currentDraft.prix_conseille
+            });
+            const msgBox = document.createElement('div');
+            msgBox.textContent = "Annonce ajoutée à la base de données de session.";
+            msgBox.className = "fixed bottom-4 right-4 bg-green-600 text-white px-4 py-2 rounded text-sm shadow-lg z-50 transition-opacity duration-300";
+            document.body.appendChild(msgBox);
+            setTimeout(() => { msgBox.style.opacity = '0'; setTimeout(()=>msgBox.remove(),300); }, 2000);
+        }
+
+        function renderSavedAds() {
+            const container = document.getElementById('saved-list');
+            const emptyState = document.getElementById('saved-empty');
+            
+            container.innerHTML = '';
+            
+            if(state.savedAds.length === 0) {
+                emptyState.classList.remove('hidden');
+                return;
+            }
+            
+            emptyState.classList.add('hidden');
+            
+            state.savedAds.forEach((ad, index) => {
+                container.innerHTML += `
+                    <div class="bg-white border border-gray-200 p-4 rounded-lg flex justify-between items-center">
+                        <div>
+                            <span class="text-xs text-gray-500 font-mono">${ad.date}</span>
+                            <h4 class="font-medium text-gray-900">${ad.title}</h4>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-sm font-bold text-green-700 block">${ad.price}</span>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+    </script>
+</body>
+</html>
