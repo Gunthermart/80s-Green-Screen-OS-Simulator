@@ -19,17 +19,6 @@
 </head>
 <body class="h-screen flex flex-col md:flex-row overflow-hidden relative">
 
-    <!-- Auth Overlay -->
-    <div id="auth-overlay" class="absolute inset-0 bg-gray-900 z-50 flex flex-col items-center justify-center px-4 transition-opacity duration-300">
-        <div class="bg-white p-8 rounded-lg shadow-2xl max-w-sm w-full">
-            <h2 class="text-xl font-bold text-gray-900 mb-2">Verrouillage de sécurité</h2>
-            <p class="text-sm text-gray-600 mb-6">Accès restreint. Le proxy requiert le mot de passe défini dans APP_SECRET.</p>
-            <input type="password" id="auth-password" class="w-full border border-gray-300 rounded-md p-3 mb-4 focus:ring-gray-900 focus:border-gray-900" placeholder="Mot de passe système" onkeypress="if(event.key === 'Enter') unlockSystem()">
-            <button onclick="unlockSystem()" class="w-full bg-gray-900 text-white font-medium py-3 rounded-md hover:bg-gray-800 transition">Déverrouiller le terminal</button>
-            <div id="auth-error" class="hidden text-red-600 text-sm mt-3 text-center font-medium"></div>
-        </div>
-    </div>
-
     <!-- Sidebar -->
     <aside class="w-full md:w-64 bg-gray-900 text-white flex flex-col flex-shrink-0 z-10 shadow-md md:shadow-none">
         <div class="p-4 md:p-6 flex justify-between items-center md:block">
@@ -37,9 +26,6 @@
                 <h1 class="text-xl font-bold tracking-tight">Vinted Ops</h1>
                 <p class="text-xs text-gray-400 mt-1 hidden md:block">Ligne d'assemblage</p>
             </div>
-            <button onclick="lockSystem()" class="md:hidden text-gray-400 hover:text-white">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
-            </button>
         </div>
         <nav class="flex md:flex-col overflow-x-auto px-2 md:px-4 pb-2 md:pb-0 md:space-y-2 space-x-2 md:space-x-0 scrollbar-hide">
             <button onclick="switchTab('studio')" id="nav-studio" class="flex-shrink-0 flex items-center px-4 py-2 text-sm font-medium rounded-md bg-gray-800 text-white transition-colors">
@@ -55,12 +41,6 @@
                 <span class="whitespace-nowrap">Historique</span>
             </button>
         </nav>
-        <div class="mt-auto p-4 hidden md:block">
-            <button onclick="lockSystem()" class="w-full flex items-center justify-center px-4 py-2 text-xs font-medium rounded-md text-gray-400 hover:bg-gray-800 hover:text-white transition-colors">
-                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
-                Verrouiller session
-            </button>
-        </div>
     </aside>
 
     <!-- Main Content -->
@@ -105,6 +85,11 @@
                 <h3 class="text-lg font-bold text-gray-900 mb-2">2. Édition & Optimisation</h3>
                 <p class="text-sm text-gray-600 mb-4">Données extraites. Modifie le texte avant publication.</p>
                 
+                <div id="w-internal-notes-container" class="hidden mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <h4 class="text-xs font-bold text-yellow-800 uppercase tracking-wider mb-2">Analyse Interne (Non visible par l'acheteur)</h4>
+                    <p id="edit-internal-notes" class="text-sm text-yellow-900 leading-relaxed"></p>
+                </div>
+
                 <div class="space-y-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
                     <div>
                         <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Titre SEO</label>
@@ -202,42 +187,6 @@
             currentImages: [] // Array of { base64, mimeType }
         };
         
-        // Auth Management
-        document.addEventListener("DOMContentLoaded", () => {
-            const token = localStorage.getItem('vinted_ops_token');
-            if (token) {
-                document.getElementById('auth-overlay').classList.add('hidden');
-            }
-        });
-
-        function unlockSystem() {
-            const pass = document.getElementById('auth-password').value.trim();
-            const errorDiv = document.getElementById('auth-error');
-            
-            if(!pass) {
-                errorDiv.textContent = "Mot de passe requis.";
-                errorDiv.classList.remove('hidden');
-                return;
-            }
-            
-            localStorage.setItem('vinted_ops_token', pass);
-            document.getElementById('auth-error').classList.add('hidden');
-            document.getElementById('auth-overlay').classList.add('opacity-0');
-            setTimeout(() => {
-                document.getElementById('auth-overlay').classList.add('hidden');
-                document.getElementById('auth-password').value = '';
-            }, 300);
-        }
-
-        function lockSystem() {
-            localStorage.removeItem('vinted_ops_token');
-            const overlay = document.getElementById('auth-overlay');
-            overlay.classList.remove('hidden');
-            setTimeout(() => {
-                overlay.classList.remove('opacity-0');
-            }, 10);
-        }
-
         // UI Management
         function switchTab(tabId) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
@@ -266,12 +215,6 @@
             const isPreviewEnv = window.location.protocol === 'blob:' || window.location.hostname.includes('usercontent.goog');
             if (isPreviewEnv) {
                 throw new Error("Opération bloquée : Le proxy Netlify n'existe pas dans cet environnement de prévisualisation local. Déploie ce code sur ton serveur Netlify pour exécuter les requêtes.");
-            }
-
-            const token = localStorage.getItem('vinted_ops_token');
-            if (!token) {
-                lockSystem();
-                throw new Error("Authentification requise.");
             }
 
             // Construction robuste de l'URL absolue pour éviter le plantage du parser sur certains navigateurs
@@ -308,16 +251,10 @@
                     const response = await fetch(url, {
                         method: 'POST',
                         headers: { 
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${token}`
+                            'Content-Type': 'application/json'
                         },
                         body: JSON.stringify(payload)
                     });
-
-                    if (response.status === 401 || response.status === 403) {
-                        lockSystem();
-                        throw new Error("Accès refusé. Mot de passe système invalide.");
-                    }
 
                     if (!response.ok) {
                         const err = await response.json().catch(() => ({}));
@@ -331,7 +268,7 @@
                     
                     return isJson ? JSON.parse(text) : text;
                 } catch (e) {
-                    if (e.message.includes("Authentification") || e.message.includes("Accès refusé") || e.message.includes("Opération bloquée")) throw e;
+                    if (e.message.includes("Opération bloquée")) throw e;
                     if (i === delays.length) {
                         console.error("Échec API final:", e);
                         throw new Error(e.message || "Erreur réseau ou proxy injoignable.");
@@ -425,6 +362,8 @@
             document.getElementById('step-audit').classList.add('hidden');
             
             // Clear editor fields
+            document.getElementById('edit-internal-notes').textContent = '';
+            document.getElementById('w-internal-notes-container').classList.add('hidden');
             document.getElementById('edit-title').value = '';
             document.getElementById('edit-desc').value = '';
             document.getElementById('edit-price').value = '';
@@ -448,24 +387,28 @@
             const userContext = document.getElementById('ctx-notes').value.trim();
             const prompt = `Agis comme un expert e-commerce impitoyable. Analyse les photos fournies pour ce vêtement/objet. 
 ${userContext ? `L'utilisateur précise ce contexte additionnel : "${userContext}". ` : ''}
-Extrais factuellement la marque, la couleur, le type de vêtement et l'état visible.
-Génère une annonce optimisée pour l'algorithme de recherche Vinted. Le titre doit être ultra-descriptif. La description doit être structurée, donner envie d'acheter, mais être transparente sur le moindre défaut visible. Estime un prix de vente agressif et réaliste pour vendre vite. Liste 5 hashtags pertinents.`;
+Sépare strictement ton analyse interne (pour le vendeur) du contenu final de l'annonce (pour l'acheteur).
+1. Analyse interne : Sois brutal. Dis ce qui cloche sur les photos, l'état réel de l'objet, et justifie ton estimation de prix.
+2. Annonce : Rédige la description finale, factuelle, optimisée SEO, prête à être copiée-collée par l'acheteur, SANS tes commentaires internes.`;
 
             const schema = {
                 type: "OBJECT",
                 properties: {
+                    analyse_interne: { type: "STRING", description: "Tes remarques privées, brutales et factuelles pour le vendeur" },
                     titre: { type: "STRING", description: "Titre SEO (Ex: Nike Air Force 1 Blanche T42 Très bon état)" },
-                    description: { type: "STRING", description: "Le corps de l'annonce, structuré avec des sauts de ligne" },
+                    description: { type: "STRING", description: "Le corps de l'annonce EXACT pour l'acheteur, prêt à être copié, sans aucun commentaire d'IA" },
                     prix_conseille: { type: "STRING", description: "Prix en euros" },
                     hashtags: { type: "STRING", description: "Mots-clés séparés par des espaces" }
                 },
-                required: ["titre", "description", "prix_conseille", "hashtags"]
+                required: ["analyse_interne", "titre", "description", "prix_conseille", "hashtags"]
             };
 
             try {
                 const result = await callGemini(prompt, schema, true, state.currentImages);
                 
                 // Populate Editor
+                document.getElementById('edit-internal-notes').textContent = result.analyse_interne;
+                document.getElementById('w-internal-notes-container').classList.remove('hidden');
                 document.getElementById('edit-title').value = result.titre;
                 document.getElementById('edit-desc').value = result.description;
                 document.getElementById('edit-price').value = result.prix_conseille;
