@@ -174,25 +174,6 @@
             savedAds: [],
             currentImages: [] 
         };
-        
-        document.addEventListener("DOMContentLoaded", () => {
-            const urlParams = new URLSearchParams(window.location.search);
-            const tokenFromUrl = urlParams.get('token');
-
-            if (tokenFromUrl) {
-                localStorage.setItem('vinted_ops_token', tokenFromUrl);
-                window.history.replaceState({}, document.title, window.location.pathname);
-            }
-
-            if (!localStorage.getItem('vinted_ops_token')) {
-                document.body.innerHTML = '<div class="h-screen flex items-center justify-center bg-gray-900 text-red-500 font-mono text-sm p-4 text-center">Accès verrouillé. Ouvre l\'application via ton lien sécurisé contenant ton paramètre ?token=</div>';
-            }
-        });
-
-        function lockSystem() {
-            localStorage.removeItem('vinted_ops_token');
-            location.reload();
-        }
 
         function switchTab(tabId) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
@@ -216,13 +197,14 @@
         }
 
         async function callGemini(prompt, schema = null, isJson = false, images = []) {
-            const token = localStorage.getItem('vinted_ops_token');
-            if (!token) {
-                throw new Error("Authentification requise. Ouvre l'application via ton lien sécurisé.");
+            const isPreviewEnv = window.location.protocol === 'blob:' || window.location.hostname.includes('usercontent.goog');
+            if (isPreviewEnv) {
+                throw new Error("Opération bloquée en prévisualisation locale. Ce code doit tourner sur ton serveur Netlify.");
             }
 
             // Routage strict vers la fonction Netlify à la racine du domaine
-            const url = '/.netlify/functions/vinted';
+            const baseUrl = window.location.origin !== "null" ? window.location.origin : "http://localhost:8888";
+            const url = new URL('/.netlify/functions/vinted', baseUrl).href;
             
             const parts = [{ text: prompt }];
             
@@ -248,16 +230,10 @@
                     const response = await fetch(url, {
                         method: 'POST',
                         headers: { 
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${token}`
+                            'Content-Type': 'application/json'
                         },
                         body: JSON.stringify(payload)
                     });
-
-                    if (response.status === 401 || response.status === 403) {
-                        lockSystem();
-                        throw new Error("Accès refusé. Token invalide. Vérifie le paramètre de ton URL.");
-                    }
 
                     if (!response.ok) {
                         const err = await response.json().catch(() => ({}));
@@ -271,7 +247,7 @@
                     
                     return isJson ? JSON.parse(text) : text;
                 } catch (e) {
-                    if (e.message.includes("Authentification") || e.message.includes("Accès refusé")) throw e;
+                    if (e.message.includes("bloquée")) throw e;
                     if (i === delays.length) {
                         console.error("Échec API final:", e);
                         throw new Error(e.message || "Erreur réseau ou proxy injoignable.");
