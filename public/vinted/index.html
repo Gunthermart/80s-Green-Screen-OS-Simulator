@@ -19,25 +19,12 @@
 </head>
 <body class="h-screen flex flex-col md:flex-row overflow-hidden relative">
 
-    <div id="auth-overlay" class="absolute inset-0 bg-gray-900 z-50 flex flex-col items-center justify-center px-4 transition-opacity duration-300">
-        <div class="bg-white p-8 rounded-lg shadow-2xl max-w-sm w-full">
-            <h2 class="text-xl font-bold text-gray-900 mb-2">Verrouillage de sécurité</h2>
-            <p class="text-sm text-gray-600 mb-6">Accès restreint. Le proxy requiert le mot de passe défini dans APP_SECRET.</p>
-            <input type="password" id="auth-password" class="w-full border border-gray-300 rounded-md p-3 mb-4 focus:ring-gray-900 focus:border-gray-900" placeholder="Mot de passe système" onkeypress="if(event.key === 'Enter') unlockSystem()">
-            <button onclick="unlockSystem()" class="w-full bg-gray-900 text-white font-medium py-3 rounded-md hover:bg-gray-800 transition">Déverrouiller le terminal</button>
-            <div id="auth-error" class="hidden text-red-600 text-sm mt-3 text-center font-medium"></div>
-        </div>
-    </div>
-
     <aside class="w-full md:w-64 bg-gray-900 text-white flex flex-col flex-shrink-0 z-10 shadow-md md:shadow-none">
         <div class="p-4 md:p-6 flex justify-between items-center md:block">
             <div>
                 <h1 class="text-xl font-bold tracking-tight">Vinted Ops</h1>
                 <p class="text-xs text-gray-400 mt-1 hidden md:block">Ligne d'assemblage</p>
             </div>
-            <button onclick="lockSystem()" class="md:hidden text-gray-400 hover:text-white">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
-            </button>
         </div>
         <nav class="flex md:flex-col overflow-x-auto px-2 md:px-4 pb-2 md:pb-0 md:space-y-2 space-x-2 md:space-x-0 scrollbar-hide">
             <button onclick="switchTab('studio')" id="nav-studio" class="flex-shrink-0 flex items-center px-4 py-2 text-sm font-medium rounded-md bg-gray-800 text-white transition-colors">
@@ -53,12 +40,6 @@
                 <span class="whitespace-nowrap">Historique</span>
             </button>
         </nav>
-        <div class="mt-auto p-4 hidden md:block">
-            <button onclick="lockSystem()" class="w-full flex items-center justify-center px-4 py-2 text-xs font-medium rounded-md text-gray-400 hover:bg-gray-800 hover:text-white transition-colors">
-                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
-                Verrouiller session
-            </button>
-        </div>
     </aside>
 
     <main class="flex-1 flex flex-col overflow-y-auto bg-white">
@@ -195,38 +176,22 @@
         };
         
         document.addEventListener("DOMContentLoaded", () => {
-            const token = localStorage.getItem('vinted_ops_token');
-            if (token) {
-                document.getElementById('auth-overlay').classList.add('hidden');
+            const urlParams = new URLSearchParams(window.location.search);
+            const tokenFromUrl = urlParams.get('token');
+
+            if (tokenFromUrl) {
+                localStorage.setItem('vinted_ops_token', tokenFromUrl);
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+
+            if (!localStorage.getItem('vinted_ops_token')) {
+                document.body.innerHTML = '<div class="h-screen flex items-center justify-center bg-gray-900 text-red-500 font-mono text-sm p-4 text-center">Accès verrouillé. Ouvre l\'application via ton lien sécurisé contenant ton paramètre ?token=</div>';
             }
         });
 
-        function unlockSystem() {
-            const pass = document.getElementById('auth-password').value.trim();
-            const errorDiv = document.getElementById('auth-error');
-            
-            if(!pass) {
-                errorDiv.textContent = "Mot de passe requis.";
-                errorDiv.classList.remove('hidden');
-                return;
-            }
-            
-            localStorage.setItem('vinted_ops_token', pass);
-            document.getElementById('auth-error').classList.add('hidden');
-            document.getElementById('auth-overlay').classList.add('opacity-0');
-            setTimeout(() => {
-                document.getElementById('auth-overlay').classList.add('hidden');
-                document.getElementById('auth-password').value = '';
-            }, 300);
-        }
-
         function lockSystem() {
             localStorage.removeItem('vinted_ops_token');
-            const overlay = document.getElementById('auth-overlay');
-            overlay.classList.remove('hidden');
-            setTimeout(() => {
-                overlay.classList.remove('opacity-0');
-            }, 10);
+            location.reload();
         }
 
         function switchTab(tabId) {
@@ -258,8 +223,7 @@
 
             const token = localStorage.getItem('vinted_ops_token');
             if (!token) {
-                lockSystem();
-                throw new Error("Authentification requise.");
+                throw new Error("Authentification requise. Ouvre l'application via ton lien sécurisé.");
             }
 
             const baseUrl = window.location.origin !== "null" ? window.location.origin : "http://localhost:8888";
@@ -297,7 +261,7 @@
 
                     if (response.status === 401 || response.status === 403) {
                         lockSystem();
-                        throw new Error("Accès refusé. Mot de passe invalide ou configuration serveur Netlify erronée.");
+                        throw new Error("Accès refusé. Token invalide. Vérifie le paramètre de ton URL.");
                     }
 
                     if (!response.ok) {
