@@ -8,12 +8,12 @@ exports.handler = async function(event, context) {
         'Access-Control-Allow-Methods': 'POST, OPTIONS'
     };
 
-    // Gestion des requêtes de pré-vérification du navigateur (Preflight)
+    // Autoriser les requêtes Preflight du navigateur
     if (event.httpMethod === 'OPTIONS') {
         return { statusCode: 200, headers, body: '' };
     }
 
-    // Blocage strict si la requête ne vient pas de ton site
+    // Sécurité stricte : blocage si l'origine n'est pas ton domaine exact
     if (requestOrigin && requestOrigin !== allowedOrigin) {
         return {
             statusCode: 403,
@@ -26,12 +26,13 @@ exports.handler = async function(event, context) {
         return { statusCode: 405, headers, body: "Method Not Allowed" };
     }
 
-    const apiKey = process.env.Vinted_key;
+    // Récupération de la clé (tolérance sur la majuscule)
+    const apiKey = process.env.vinted_key || process.env.Vinted_key;
     if (!apiKey) {
         return { 
             statusCode: 500, 
             headers,
-            body: JSON.stringify({ error: "Clé API Vinted_key manquante." }) 
+            body: JSON.stringify({ error: "Clé API manquante dans les variables d'environnement Netlify." }) 
         };
     }
 
@@ -49,7 +50,7 @@ exports.handler = async function(event, context) {
             return { 
                 statusCode: response.status, 
                 headers,
-                body: JSON.stringify({ error: "Erreur API", details: errorText }) 
+                body: JSON.stringify({ error: "Erreur API LLM", details: errorText }) 
             };
         }
 
