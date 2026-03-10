@@ -50,7 +50,7 @@ exports.handler = async function(event, context) {
         };
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`;
 
     // 2. Mécanisme de Timeout (limite à 8000ms pour anticiper la coupure Netlify de 10s)
     const controller = new AbortController();
