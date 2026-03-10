@@ -1,20 +1,7 @@
 exports.handler = async function(event, context) {
-    const requestOrigin = event.headers.origin || event.headers.Origin || "";
-
-    // 1. Liste blanche tolérante (inclut le www. et les environnements de test)
-    const allowedOrigins = [
-        "https://leonce-equity.com",
-        "https://www.leonce-equity.com",
-        "http://localhost:8888",
-        "http://127.0.0.1:5500",
-        "null"
-    ];
-
-    const isOriginAllowed = allowedOrigins.includes(requestOrigin) || requestOrigin.endsWith('.netlify.app');
-    const corsOrigin = isOriginAllowed ? requestOrigin : "https://leonce-equity.com";
-
+    // Sécurité désactivée : acceptation de toutes les origines
     const headers = {
-        'Access-Control-Allow-Origin': corsOrigin,
+        'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         'Access-Control-Allow-Methods': 'POST, OPTIONS'
     };
@@ -23,20 +10,10 @@ exports.handler = async function(event, context) {
         return { statusCode: 200, headers, body: '' };
     }
 
-    // 2. Blocage des requêtes externes non autorisées (Erreur 403)
-    if (requestOrigin && !isOriginAllowed) {
-        return {
-            statusCode: 403,
-            headers,
-            body: JSON.stringify({ error: `Accès refusé. Origine non autorisée : ${requestOrigin}` })
-        };
-    }
-
     if (event.httpMethod !== "POST") {
         return { statusCode: 405, headers, body: "Method Not Allowed" };
     }
 
-    // 3. Validation stricte du payload
     let payload;
     try {
         payload = JSON.parse(event.body);
@@ -60,7 +37,6 @@ exports.handler = async function(event, context) {
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`;
     
-    // 4. Timeout pour éviter le crash de la fonction (Erreur 504)
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
 
@@ -77,12 +53,11 @@ exports.handler = async function(event, context) {
         if (!response.ok) {
             const errorText = await response.text();
             
-            // 5. Interception de la clé API morte (Erreur 401 de Google)
             if (response.status === 401 || response.status === 403) {
                 return { 
                     statusCode: response.status, 
                     headers, 
-                    body: JSON.stringify({ error: "Ta clé API Google est morte, invalide ou révoquée. Va sur Google AI Studio en générer une nouvelle.", details: errorText }) 
+                    body: JSON.stringify({ error: "La clé API Google est invalide ou révoquée.", details: errorText }) 
                 };
             }
 
