@@ -170,7 +170,6 @@
     </main>
 
     <script>
-        // Initialisation Dexie (IndexedDB)
         const db = new Dexie('MarketplaceOpsDB');
         db.version(1).stores({
             ads: '++id, date, title, price, platform'
@@ -195,22 +194,39 @@
         }
 
         async function callGemini(prompt, schema = null, isJson = false, images = []) {
-            const url = '/.netlify/functions/vinted';
-            const parts = [{ text: prompt }];
-            images.forEach(img => parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } }));
-            
-            const payload = {
-                contents: [{ role: "user", parts: parts }],
-                systemInstruction: { parts: [{ text: "Expert e-commerce brutal et pragmatique. Répond en français, direct, sans fioritures." }] }
-            };
+            const url = `/.netlify/functions/vinted`;
+            const payload = { prompt, schema, isJson, images };
 
-            if (isJson) payload.generationConfig = { responseMimeType: "application/json", responseSchema: schema };
+            const delays = [1000, 2000, 4000, 8000, 16000];
+            let lastError = null;
 
-            const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-            if (!response.ok) throw new Error("Échec API");
-            const data = await response.json();
-            const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            return isJson ? JSON.parse(text) : text;
+            for (let i = 0; i <= delays.length; i++) {
+                try {
+                    const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                    
+                    if (!response.ok) {
+                        const errData = await response.text();
+                        throw new Error(`Code ${response.status} : ${errData}`);
+                    }
+                    
+                    const data = await response.json();
+                    let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                    
+                    if (!text) throw new Error("Réponse vide de l'API.");
+
+                    if (isJson) {
+                        text = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+                        return JSON.parse(text);
+                    }
+                    return text;
+                } catch (error) {
+                    lastError = error;
+                    if (i < delays.length) {
+                        await new Promise(resolve => setTimeout(resolve, delays[i]));
+                    }
+                }
+            }
+            throw new Error("Échec critique de l'API après 5 tentatives. " + lastError.message);
         }
 
         function handleFiles(e) {
@@ -244,7 +260,7 @@
                 div.innerHTML = `<img src="${img.displayUrl}" class="w-full h-full object-cover">`;
                 grid.insertBefore(div, document.getElementById('upload-btn'));
             });
-            document.getElementById('upload-btn').className = state.currentImages.length >= 5 ? 'hidden' : 'col-span-1 aspect-square border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center';
+            document.getElementById('upload-btn').className = state.currentImages.length >= 5 ? 'hidden' : 'col-span-1 aspect-square border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition-colors';
             document.getElementById('photo-count').textContent = `${state.currentImages.length}/5`;
             document.getElementById('btn-clear-photos').classList.toggle('hidden', state.currentImages.length === 0);
         }
@@ -253,9 +269,11 @@
 
         async function generateFromPhotos() {
             const btn = document.getElementById('btn-generate');
-            btn.disabled = true; btn.textContent = 'Analyse Leonce IA...';
+            btn.disabled = true; btn.textContent = 'Analyse en cours...';
+            document.getElementById('gen-error').classList.add('hidden');
+            
             const context = document.getElementById('ctx-notes').value;
-            const prompt = `Analyse photos pour ${state.platform}. Contexte: ${context}. Extrais marque, état, couleur. Génère titre SEO, description pro pour acheteur, prix réaliste, mots-clés.`;
+            const prompt = `Analyse ces photos pour la plateforme ${state.platform}. Contexte ajouté : ${context}. Extrais la marque, l'état, la couleur. Génère un titre optimisé pour le SEO, une description professionnelle et vendeuse, un prix de vente réaliste, et des mots-clés pertinents.`;
             const schema = {
                 type: "OBJECT",
                 properties: {
@@ -276,15 +294,20 @@
                 document.getElementById('edit-price').value = res.prix_conseille;
                 document.getElementById('edit-tags').value = res.hashtags;
                 document.getElementById('step-editor').className = 'step-container mb-8 transition-opacity duration-300';
-                document.getElementById('step-editor').scrollIntoView();
-            } catch(e) { alert(e.message); }
+                document.getElementById('step-editor').scrollIntoView({behavior: "smooth"});
+            } catch(e) { 
+                document.getElementById('gen-error').textContent = e.message;
+                document.getElementById('gen-error').classList.remove('hidden');
+            }
             btn.disabled = false; btn.textContent = 'Générer (Leonce IA)';
         }
 
         async function auditDraft() {
             const btn = document.getElementById('btn-audit');
-            btn.disabled = true;
-            const prompt = `Audit annonce ${state.platform}. Titre: ${document.getElementById('edit-title').value}. Desc: ${document.getElementById('edit-desc').value}. Compare aux photos. Note /10, critique factuelle, actions.`;
+            btn.disabled = true; btn.textContent = 'Audit...';
+            document.getElementById('audit-error').classList.add('hidden');
+            
+            const prompt = `Fais un audit de cette annonce pour ${state.platform}. Titre : ${document.getElementById('edit-title').value}. Description : ${document.getElementById('edit-desc').value}. Compare le texte aux photos fournies. Donne une note sur 10, une critique factuelle et brutale, et une liste d'actions correctives.`;
             const schema = {
                 type: "OBJECT",
                 properties: {
@@ -296,21 +319,24 @@
             };
             try {
                 const res = await callGemini(prompt, schema, true, state.currentImages);
-                document.getElementById('audit-score').textContent = res.note;
+                document.getElementById('audit-score').textContent = res.note + "/10";
                 document.getElementById('audit-critique').textContent = res.critique;
                 const ul = document.getElementById('audit-actions');
                 ul.innerHTML = '';
                 res.actions.forEach(a => ul.innerHTML += `<li>${a}</li>`);
                 document.getElementById('step-audit').classList.remove('hidden');
-                document.getElementById('step-audit').scrollIntoView();
-            } catch(e) { alert(e.message); }
-            btn.disabled = false;
+                document.getElementById('step-audit').scrollIntoView({behavior: "smooth"});
+            } catch(e) { 
+                document.getElementById('audit-error').textContent = e.message;
+                document.getElementById('audit-error').classList.remove('hidden');
+            }
+            btn.disabled = false; btn.textContent = 'Audit Express';
         }
 
         async function analyzeTracking() {
             const btn = document.getElementById('btn-track');
-            btn.disabled = true;
-            const prompt = `Plateforme: ${state.platform}. Jours: ${document.getElementById('trk-days').value}. Vues: ${document.getElementById('trk-views').value}. Favoris: ${document.getElementById('trk-likes').value}. Prix: ${document.getElementById('trk-price').value}. Diagnostic binaire, action stricte.`;
+            btn.disabled = true; btn.textContent = 'Analyse...';
+            const prompt = `Plateforme : ${state.platform}. L'annonce est en ligne depuis ${document.getElementById('trk-days').value} jours. Vues : ${document.getElementById('trk-views').value}. Favoris : ${document.getElementById('trk-likes').value}. Prix actuel : ${document.getElementById('trk-price').value}€. Fais un diagnostic binaire de la situation de cette annonce et donne une action stricte et pragmatique à exécuter.`;
             const schema = {
                 type: "OBJECT",
                 properties: {
@@ -324,29 +350,44 @@
                 const res = await callGemini(prompt, schema, true);
                 document.getElementById('trk-diagnosis').textContent = res.diag;
                 document.getElementById('trk-action').textContent = res.action;
-                document.getElementById('trk-action-container').className = `rounded-lg p-5 border bg-${res.color}-50 border-${res.color}-200 text-${res.color}-900`;
+                // Basic mapping to ensure tailwind classes exist
+                const validColors = ['red', 'green', 'yellow', 'blue', 'gray'];
+                const safeColor = validColors.includes(res.color) ? res.color : 'gray';
+                document.getElementById('trk-action-container').className = `rounded-lg p-5 border bg-${safeColor}-50 border-${safeColor}-200 text-${safeColor}-900`;
                 document.getElementById('trk-result').classList.remove('hidden');
-            } catch(e) { alert(e.message); }
-            btn.disabled = false;
+            } catch(e) { 
+                alert("Erreur de suivi : " + e.message); 
+            }
+            btn.disabled = false; btn.textContent = 'Diagnostiquer';
         }
 
         function copyAd() {
             const txt = `${document.getElementById('edit-title').value}\n\n${document.getElementById('edit-desc').value}\n\n${document.getElementById('edit-tags').value}`;
-            navigator.clipboard.writeText(txt).then(async () => {
-                await db.ads.add({
+            
+            // Fallback for document.execCommand if clipboard API fails in specific contexts
+            try {
+                const textArea = document.createElement("textarea");
+                textArea.value = txt;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand("copy");
+                document.body.removeChild(textArea);
+                
+                db.ads.add({
                     date: new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString(),
                     title: document.getElementById('edit-title').value || "Annonce sans titre",
                     price: document.getElementById('edit-price').value || "-",
                     platform: state.platform.toUpperCase()
                 });
                 
-                // Feedback visuel discret
                 const msgBox = document.createElement('div');
-                msgBox.textContent = `Copié et sauvegardé dans Dexie.`;
+                msgBox.textContent = `Copié et sauvegardé.`;
                 msgBox.className = "fixed bottom-4 right-4 bg-gray-900 text-white px-4 py-3 rounded-lg text-sm shadow-xl z-50 transition-opacity duration-300 font-medium";
                 document.body.appendChild(msgBox);
                 setTimeout(() => { msgBox.style.opacity = '0'; setTimeout(()=>msgBox.remove(),300); }, 2000);
-            });
+            } catch (err) {
+                alert("Erreur lors de la copie.");
+            }
         }
 
         async function deleteAd(id) {
@@ -355,19 +396,34 @@
         }
 
         async function clearHistory() {
-            if (confirm("Confirmation brutale : Es-tu sûr de vouloir détruire tout l'historique local ? Cette action est irréversible.")) {
+            const modal = document.createElement('div');
+            modal.innerHTML = `
+                <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div class="bg-white p-6 rounded-lg max-w-sm w-full shadow-xl">
+                        <h3 class="text-lg font-bold text-gray-900 mb-2">Purger l'historique ?</h3>
+                        <p class="text-sm text-gray-600 mb-4">Cette action est irréversible. Toutes les annonces sauvegardées seront détruites.</p>
+                        <div class="flex gap-3 justify-end">
+                            <button id="cancel-purge" class="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900">Annuler</button>
+                            <button id="confirm-purge" class="px-4 py-2 text-sm font-medium bg-red-600 text-white rounded hover:bg-red-700">Purger</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            
+            document.getElementById('cancel-purge').onclick = () => modal.remove();
+            document.getElementById('confirm-purge').onclick = async () => {
                 await db.ads.clear();
                 renderSavedAds();
-            }
+                modal.remove();
+            };
         }
 
         async function renderSavedAds() {
             const list = document.getElementById('saved-list');
             list.innerHTML = '';
             
-            // Récupère les 50 dernières annonces stockées
             const ads = await db.ads.orderBy('id').reverse().limit(50).toArray();
-            
             document.getElementById('saved-empty').classList.toggle('hidden', ads.length > 0);
             
             ads.forEach(ad => {
@@ -391,17 +447,29 @@
 
         async function askStrategy() {
             const input = document.getElementById('s-input');
-            const q = input.value; if(!q) return;
-            appendMsg('USR', q); input.value = '';
+            const q = input.value; 
+            if(!q) return;
+            
+            appendMsg('Toi', q); 
+            input.value = '';
+            
             try {
-                const res = await callGemini(`Question: ${q}. Réponds brutalement et stratégiquement.`, null, false);
-                appendMsg('SYS', res);
-            } catch(e) { appendMsg('ERR', e.message); }
+                const res = await callGemini(`Le contexte : je gère un business de revente sur marketplaces. Question : ${q}. Réponds brutalement, stratégiquement, sans me ménager. Analyse les coûts d'opportunité.`, null, false);
+                appendMsg('Leonce IA', res);
+            } catch(e) { 
+                appendMsg('Erreur', e.message); 
+            }
         }
 
-        function appendMsg(s, t) {
+        function appendMsg(sender, text) {
+            const isUser = sender === 'Toi';
             const h = document.getElementById('chat-history');
-            h.innerHTML += `<div class="flex gap-2 ${s==='USR'?'flex-row-reverse':''}"><div class="text-xs font-bold">${s}:</div><div class="text-sm p-2 bg-white border rounded shadow-sm">${t}</div></div>`;
+            h.innerHTML += `
+                <div class="flex gap-2 ${isUser ? 'flex-row-reverse' : ''}">
+                    <div class="text-xs font-bold text-gray-500 mt-2">${sender}</div>
+                    <div class="text-sm p-3 ${isUser ? 'bg-blue-50 border-blue-100' : 'bg-white border-gray-200'} border rounded-lg shadow-sm max-w-[85%] whitespace-pre-wrap leading-relaxed">${text}</div>
+                </div>
+            `;
             h.scrollTop = h.scrollHeight;
         }
     </script>
