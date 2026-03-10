@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Marketplace Optimizer Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
     <style>
         body { font-family: system-ui, -apple-system, sans-serif; background-color: #f3f4f6; color: #111827; }
         .tab-content { display: none; }
@@ -158,14 +159,24 @@
         </div>
 
         <div id="tab-saved" class="tab-content p-4 md:p-8 max-w-4xl mx-auto w-full">
-            <h2 class="text-xl md:text-2xl font-bold mb-4 border-b pb-2">Historique Session</h2>
+            <div class="flex justify-between items-center mb-4 border-b pb-2">
+                <h2 class="text-xl md:text-2xl font-bold text-gray-800">Historique Local</h2>
+                <button onclick="clearHistory()" class="text-xs text-red-600 hover:text-red-800 font-medium px-2 py-1 border border-red-200 rounded bg-red-50 transition-colors">Purger la base</button>
+            </div>
+            <p class="text-sm text-gray-600 mb-6">Annonces sauvegardées via IndexedDB. Persistantes après rechargement.</p>
             <div id="saved-list" class="space-y-4"></div>
-            <div id="saved-empty" class="text-center text-gray-500 py-12 border-2 border-dashed border-gray-300 rounded-lg">Vide.</div>
+            <div id="saved-empty" class="text-center text-gray-500 py-12 border-2 border-dashed border-gray-300 rounded-lg">Base de données vide.</div>
         </div>
     </main>
 
     <script>
-        const state = { savedAds: [], currentImages: [], platform: 'vinted' };
+        // Initialisation Dexie (IndexedDB)
+        const db = new Dexie('MarketplaceOpsDB');
+        db.version(1).stores({
+            ads: '++id, date, title, price, platform'
+        });
+
+        const state = { currentImages: [], platform: 'vinted' };
 
         function setPlatform(p) {
             state.platform = p;
@@ -321,18 +332,60 @@
 
         function copyAd() {
             const txt = `${document.getElementById('edit-title').value}\n\n${document.getElementById('edit-desc').value}\n\n${document.getElementById('edit-tags').value}`;
-            navigator.clipboard.writeText(txt).then(() => {
-                state.savedAds.unshift({ date: new Date().toLocaleTimeString(), title: document.getElementById('edit-title').value, platform: state.platform });
-                alert("Copié.");
+            navigator.clipboard.writeText(txt).then(async () => {
+                await db.ads.add({
+                    date: new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString(),
+                    title: document.getElementById('edit-title').value || "Annonce sans titre",
+                    price: document.getElementById('edit-price').value || "-",
+                    platform: state.platform.toUpperCase()
+                });
+                
+                // Feedback visuel discret
+                const msgBox = document.createElement('div');
+                msgBox.textContent = `Copié et sauvegardé dans Dexie.`;
+                msgBox.className = "fixed bottom-4 right-4 bg-gray-900 text-white px-4 py-3 rounded-lg text-sm shadow-xl z-50 transition-opacity duration-300 font-medium";
+                document.body.appendChild(msgBox);
+                setTimeout(() => { msgBox.style.opacity = '0'; setTimeout(()=>msgBox.remove(),300); }, 2000);
             });
         }
 
-        function renderSavedAds() {
+        async function deleteAd(id) {
+            await db.ads.delete(id);
+            renderSavedAds();
+        }
+
+        async function clearHistory() {
+            if (confirm("Confirmation brutale : Es-tu sûr de vouloir détruire tout l'historique local ? Cette action est irréversible.")) {
+                await db.ads.clear();
+                renderSavedAds();
+            }
+        }
+
+        async function renderSavedAds() {
             const list = document.getElementById('saved-list');
             list.innerHTML = '';
-            document.getElementById('saved-empty').classList.toggle('hidden', state.savedAds.length > 0);
-            state.savedAds.forEach(ad => {
-                list.innerHTML += `<div class="bg-gray-50 border p-3 rounded-lg flex justify-between"><div><span class="text-xs text-gray-500">${ad.date} [${ad.platform}]</span><div class="text-sm font-medium">${ad.title}</div></div></div>`;
+            
+            // Récupère les 50 dernières annonces stockées
+            const ads = await db.ads.orderBy('id').reverse().limit(50).toArray();
+            
+            document.getElementById('saved-empty').classList.toggle('hidden', ads.length > 0);
+            
+            ads.forEach(ad => {
+                list.innerHTML += `
+                    <div class="bg-gray-50 border border-gray-200 p-4 rounded-lg flex justify-between items-center group">
+                        <div class="truncate mr-4 flex-1">
+                            <div class="flex items-center mb-1">
+                                <span class="text-xs text-gray-500 font-mono mr-2">${ad.date}</span>
+                                <span class="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-gray-200 text-gray-700">${ad.platform}</span>
+                            </div>
+                            <h4 class="font-medium text-gray-900 text-sm truncate">${ad.title}</h4>
+                        </div>
+                        <div class="text-right flex-shrink-0 flex items-center gap-4">
+                            <span class="text-sm font-bold text-gray-900 bg-white px-2 py-1 rounded border">${ad.price}</span>
+                            <button onclick="deleteAd(${ad.id})" class="text-xs text-red-500 hover:text-red-700 font-medium opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100">Supprimer</button>
+                        </div>
+                    </div>
+                `;
             });
         }
 
