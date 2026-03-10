@@ -1,9 +1,23 @@
 exports.handler = async function(event, context) {
-    const allowedOrigin = "https://leonce-equity.com";
     const requestOrigin = event.headers.origin || event.headers.Origin || "";
 
+    // 1. Définition de la liste blanche des environnements de travail
+    const allowedOrigins = [
+        "https://leonce-equity.com",
+        "https://www.leonce-equity.com",
+        "http://localhost:8888",
+        "http://localhost:3000",
+        "http://127.0.0.1:5500"
+    ];
+
+    // Vérification : l'origine est-elle dans la liste, ou est-ce une URL de test Netlify ?
+    const isOriginAllowed = allowedOrigins.includes(requestOrigin) || requestOrigin.endsWith('.netlify.app');
+    
+    // Assignation dynamique de l'en-tête CORS
+    const corsOrigin = isOriginAllowed ? requestOrigin : "https://leonce-equity.com";
+
     const headers = {
-        'Access-Control-Allow-Origin': allowedOrigin,
+        'Access-Control-Allow-Origin': corsOrigin,
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         'Access-Control-Allow-Methods': 'POST, OPTIONS'
     };
@@ -12,11 +26,13 @@ exports.handler = async function(event, context) {
         return { statusCode: 200, headers, body: '' };
     }
 
-    if (requestOrigin && requestOrigin !== allowedOrigin) {
+    // Blocage de l'intrusion si l'origine n'est pas validée
+    if (requestOrigin && !isOriginAllowed) {
+        console.warn(`Blocage sécurité CORS. Origine tentée : ${requestOrigin}`);
         return {
             statusCode: 403,
             headers,
-            body: JSON.stringify({ error: "Accès refusé. Origine non autorisée." })
+            body: JSON.stringify({ error: `Accès refusé. Origine (${requestOrigin}) non autorisée.` })
         };
     }
 
@@ -24,12 +40,11 @@ exports.handler = async function(event, context) {
         return { statusCode: 405, headers, body: "Method Not Allowed" };
     }
 
-    // 1. Validation stricte du payload
+    // Validation stricte du payload
     let payload;
     try {
         payload = JSON.parse(event.body);
         
-        // Vérification de la structure minimale attendue par l'API Gemini
         if (!payload || typeof payload !== 'object' || !payload.contents || !Array.isArray(payload.contents)) {
             throw new Error("Structure de données non conforme aux attentes de l'API LLM.");
         }
@@ -46,13 +61,12 @@ exports.handler = async function(event, context) {
         return { 
             statusCode: 500, 
             headers,
-            body: JSON.stringify({ error: "Clé API manquante." }) 
+            body: JSON.stringify({ error: "Clé API manquante dans les variables d'environnement Netlify." }) 
         };
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`;
 
-    // 2. Mécanisme de Timeout (limite à 8000ms pour anticiper la coupure Netlify de 10s)
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
 
@@ -60,7 +74,7 @@ exports.handler = async function(event, context) {
         const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload), // On renvoie le payload validé et parsé
+            body: JSON.stringify(payload),
             signal: controller.signal
         });
 
@@ -68,6 +82,15 @@ exports.handler = async function(event, context) {
 
         if (!response.ok) {
             const errorText = await response.text();
+            
+            if (response.status === 401 || response.status === 403) {
+                return { 
+                    statusCode: response.status, 
+                    headers, 
+                    body: JSON.stringify({ error: "La clé API Google Gemini est invalide, révoquée ou expirée.", details: errorText }) 
+                };
+            }
+
             return { 
                 statusCode: response.status, 
                 headers, 
@@ -81,7 +104,6 @@ exports.handler = async function(event, context) {
     } catch (error) {
         clearTimeout(timeoutId);
         
-        // Gestion spécifique de l'erreur de délai
         if (error.name === 'AbortError') {
             return { 
                 statusCode: 504, 
