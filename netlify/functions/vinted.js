@@ -1,19 +1,16 @@
 exports.handler = async function(event, context) {
     const requestOrigin = event.headers.origin || event.headers.Origin || "";
 
-    // 1. Définition de la liste blanche des environnements de travail
+    // 1. Liste blanche tolérante (inclut le www. et les environnements de test)
     const allowedOrigins = [
         "https://leonce-equity.com",
         "https://www.leonce-equity.com",
         "http://localhost:8888",
-        "http://localhost:3000",
-        "http://127.0.0.1:5500"
+        "http://127.0.0.1:5500",
+        "null"
     ];
 
-    // Vérification : l'origine est-elle dans la liste, ou est-ce une URL de test Netlify ?
     const isOriginAllowed = allowedOrigins.includes(requestOrigin) || requestOrigin.endsWith('.netlify.app');
-    
-    // Assignation dynamique de l'en-tête CORS
     const corsOrigin = isOriginAllowed ? requestOrigin : "https://leonce-equity.com";
 
     const headers = {
@@ -26,13 +23,12 @@ exports.handler = async function(event, context) {
         return { statusCode: 200, headers, body: '' };
     }
 
-    // Blocage de l'intrusion si l'origine n'est pas validée
+    // 2. Blocage des requêtes externes non autorisées (Erreur 403)
     if (requestOrigin && !isOriginAllowed) {
-        console.warn(`Blocage sécurité CORS. Origine tentée : ${requestOrigin}`);
         return {
             statusCode: 403,
             headers,
-            body: JSON.stringify({ error: `Accès refusé. Origine (${requestOrigin}) non autorisée.` })
+            body: JSON.stringify({ error: `Accès refusé. Origine non autorisée : ${requestOrigin}` })
         };
     }
 
@@ -40,14 +36,11 @@ exports.handler = async function(event, context) {
         return { statusCode: 405, headers, body: "Method Not Allowed" };
     }
 
-    // Validation stricte du payload
+    // 3. Validation stricte du payload
     let payload;
     try {
         payload = JSON.parse(event.body);
-        
-        if (!payload || typeof payload !== 'object' || !payload.contents || !Array.isArray(payload.contents)) {
-            throw new Error("Structure de données non conforme aux attentes de l'API LLM.");
-        }
+        if (!payload || !payload.contents) throw new Error("Structure JSON invalide pour l'API Gemini.");
     } catch (e) {
         return {
             statusCode: 400,
@@ -61,12 +54,13 @@ exports.handler = async function(event, context) {
         return { 
             statusCode: 500, 
             headers,
-            body: JSON.stringify({ error: "Clé API manquante dans les variables d'environnement Netlify." }) 
+            body: JSON.stringify({ error: "Clé API manquante dans l'infrastructure Netlify." }) 
         };
     }
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`;
-
+    
+    // 4. Timeout pour éviter le crash de la fonction (Erreur 504)
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
 
@@ -83,17 +77,18 @@ exports.handler = async function(event, context) {
         if (!response.ok) {
             const errorText = await response.text();
             
+            // 5. Interception de la clé API morte (Erreur 401 de Google)
             if (response.status === 401 || response.status === 403) {
                 return { 
                     statusCode: response.status, 
                     headers, 
-                    body: JSON.stringify({ error: "La clé API Google Gemini est invalide, révoquée ou expirée.", details: errorText }) 
+                    body: JSON.stringify({ error: "Ta clé API Google est morte, invalide ou révoquée. Va sur Google AI Studio en générer une nouvelle.", details: errorText }) 
                 };
             }
 
             return { 
                 statusCode: response.status, 
-                headers, 
+                headers,
                 body: JSON.stringify({ error: "Erreur API LLM", details: errorText }) 
             };
         }
@@ -103,19 +98,9 @@ exports.handler = async function(event, context) {
 
     } catch (error) {
         clearTimeout(timeoutId);
-        
         if (error.name === 'AbortError') {
-            return { 
-                statusCode: 504, 
-                headers, 
-                body: JSON.stringify({ error: "Délai d'attente dépassé (Timeout). L'API Google n'a pas répondu à temps." }) 
-            };
+            return { statusCode: 504, headers, body: JSON.stringify({ error: "Délai dépassé (Timeout). Google n'a pas répondu." }) };
         }
-
-        return { 
-            statusCode: 500, 
-            headers, 
-            body: JSON.stringify({ error: "Erreur interne du proxy.", details: error.message }) 
-        };
+        return { statusCode: 500, headers, body: JSON.stringify({ error: "Erreur interne proxy.", details: error.message }) };
     }
 };
