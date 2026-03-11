@@ -175,7 +175,7 @@
             ads: '++id, date, title, price, platform'
         });
 
-        const state = { currentImages: [], platform: 'vinted' };
+        const state = { currentImages: [], platform: 'vinted', lastUsage: { promptTokenCount: 0, candidatesTokenCount: 0, totalTokenCount: 0 } };
 
         function setPlatform(p) {
             state.platform = p;
@@ -211,6 +211,7 @@
                     
                     const data = await response.json();
                     let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                    state.lastUsage = data.usageMetadata || { promptTokenCount: 0, candidatesTokenCount: 0, totalTokenCount: 0 };
                     
                     if (!text) throw new Error("Réponse vide de l'API.");
 
@@ -232,6 +233,7 @@
         function handleFiles(e) {
             const files = Array.from(e.target.files).slice(0, 5 - state.currentImages.length);
             files.forEach(file => {
+                const originalSize = file.size;
                 const reader = new FileReader();
                 reader.onload = (ev) => {
                     const img = new Image();
@@ -243,13 +245,16 @@
                         canvas.width = w; canvas.height = h;
                         canvas.getContext('2d').drawImage(img, 0, 0, w, h);
                         
-                        // Compression JPEG à 60% au lieu du PNG natif lourd
                         const compressedData = canvas.toDataURL('image/jpeg', 0.6);
+                        const base64Str = compressedData.split(',')[1];
+                        const compressedSize = Math.floor((base64Str.length * 3) / 4);
                         
                         state.currentImages.push({ 
                             mimeType: 'image/jpeg', 
-                            base64: compressedData.split(',')[1], 
-                            displayUrl: compressedData 
+                            base64: base64Str, 
+                            displayUrl: compressedData,
+                            originalSize: originalSize,
+                            compressedSize: compressedSize
                         });
                         updatePhotoUI();
                     };
@@ -295,7 +300,31 @@
             };
             try {
                 const res = await callGemini(prompt, schema, true, state.currentImages);
-                document.getElementById('edit-internal-notes').textContent = res.analyse_interne;
+                
+                let totalOrig = 0, totalComp = 0;
+                state.currentImages.forEach(img => {
+                    totalOrig += img.originalSize || 0;
+                    totalComp += img.compressedSize || 0;
+                });
+                const origMb = (totalOrig / (1024*1024)).toFixed(2);
+                const compMb = (totalComp / (1024*1024)).toFixed(2);
+                const ratio = totalOrig > 0 ? Math.round((1 - (totalComp / totalOrig)) * 100) : 0;
+                const u = state.lastUsage;
+                
+                const telemetryHtml = `
+                    <div class="mt-3 pt-3 border-t border-yellow-200/60 text-xs font-mono text-yellow-800 opacity-90">
+                        <div class="flex justify-between mb-1">
+                            <span>TOKENS: ${u.totalTokenCount}</span>
+                            <span>[IN: ${u.promptTokenCount} | OUT: ${u.candidatesTokenCount}]</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>PAYLOAD: ${origMb}Mo &rarr; ${compMb}Mo</span>
+                            <span>COMPRESSION: -${ratio}%</span>
+                        </div>
+                    </div>
+                `;
+
+                document.getElementById('edit-internal-notes').innerHTML = res.analyse_interne + telemetryHtml;
                 document.getElementById('w-internal-notes-container').classList.remove('hidden');
                 document.getElementById('edit-title').value = res.titre;
                 document.getElementById('edit-desc').value = res.description;
