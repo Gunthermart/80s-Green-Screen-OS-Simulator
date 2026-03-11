@@ -14,7 +14,7 @@ exports.handler = async function(event, context) {
             };
         }
 
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`;
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
         
         const parts = [{ text: prompt }];
         if (images && Array.isArray(images)) {
