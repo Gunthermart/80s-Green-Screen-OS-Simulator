@@ -78,10 +78,11 @@
 
                 <div class="mt-4 pt-4 border-t border-gray-100">
                     <p class="text-xs text-gray-500 font-bold uppercase tracking-wider mb-2">Plateforme Cible</p>
-                    <div class="flex gap-2">
-                        <button type="button" id="plat-vinted" onclick="setPlatform('vinted')" class="flex-1 py-2 px-3 text-sm font-medium rounded-md border-2 border-gray-900 bg-gray-900 text-white transition-colors">Vinted</button>
-                        <button type="button" id="plat-leboncoin" onclick="setPlatform('leboncoin')" class="flex-1 py-2 px-3 text-sm font-medium rounded-md border-2 border-gray-200 text-gray-600 hover:border-gray-900 hover:text-gray-900 transition-colors">Leboncoin</button>
-                        <button type="button" id="plat-ebay" onclick="setPlatform('ebay')" class="flex-1 py-2 px-3 text-sm font-medium rounded-md border-2 border-gray-200 text-gray-600 hover:border-gray-900 hover:text-gray-900 transition-colors">eBay</button>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                        <button type="button" id="plat-vinted" onclick="setPlatform('vinted')" class="py-2 px-3 text-sm font-medium rounded-md border-2 border-gray-900 bg-gray-900 text-white transition-colors">Vinted</button>
+                        <button type="button" id="plat-leboncoin" onclick="setPlatform('leboncoin')" class="py-2 px-3 text-sm font-medium rounded-md border-2 border-gray-200 text-gray-600 hover:border-gray-900 hover:text-gray-900 transition-colors">Leboncoin</button>
+                        <button type="button" id="plat-ebay" onclick="setPlatform('ebay')" class="py-2 px-3 text-sm font-medium rounded-md border-2 border-gray-200 text-gray-600 hover:border-gray-900 hover:text-gray-900 transition-colors">eBay</button>
+                        <button type="button" id="plat-facebook" onclick="setPlatform('facebook')" class="py-2 px-3 text-sm font-medium rounded-md border-2 border-gray-200 text-gray-600 hover:border-gray-900 hover:text-gray-900 transition-colors">Facebook</button>
                     </div>
                 </div>
 
@@ -169,7 +170,14 @@
         <div id="tab-saved" class="tab-content p-4 md:p-8 max-w-4xl mx-auto w-full">
             <div class="flex justify-between items-center mb-4 border-b pb-2">
                 <h2 class="text-xl md:text-2xl font-bold text-gray-800">Historique Local</h2>
-                <button onclick="clearHistory()" class="text-xs text-red-600 hover:text-red-800 font-medium px-2 py-1 border border-red-200 rounded bg-red-50 transition-colors">Purger la base</button>
+                <div class="flex gap-2">
+                    <button onclick="exportHistory()" class="text-xs text-gray-700 hover:text-gray-900 font-medium px-3 py-1.5 border border-gray-300 rounded bg-white transition-colors">Exporter</button>
+                    <label class="text-xs text-gray-700 hover:text-gray-900 font-medium px-3 py-1.5 border border-gray-300 rounded bg-white transition-colors cursor-pointer">
+                        Importer
+                        <input type="file" accept=".json" class="hidden" onchange="importHistory(event)">
+                    </label>
+                    <button onclick="clearHistory()" class="text-xs text-red-600 hover:text-red-800 font-medium px-3 py-1.5 border border-red-200 rounded bg-red-50 transition-colors">Purger</button>
+                </div>
             </div>
             <p class="text-sm text-gray-600 mb-6">Annonces sauvegardées via IndexedDB. Persistantes après rechargement.</p>
             <div id="saved-list" class="space-y-4"></div>
@@ -187,9 +195,9 @@
 
         function setPlatform(p) {
             state.platform = p;
-            ['vinted', 'leboncoin', 'ebay'].forEach(id => {
+            ['vinted', 'leboncoin', 'ebay', 'facebook'].forEach(id => {
                 const b = document.getElementById(`plat-${id}`);
-                b.className = (id === p) ? 'flex-1 py-2 px-3 text-sm font-medium rounded-md border-2 border-gray-900 bg-gray-900 text-white' : 'flex-1 py-2 px-3 text-sm font-medium rounded-md border-2 border-gray-200 text-gray-600';
+                b.className = (id === p) ? 'py-2 px-3 text-sm font-medium rounded-md border-2 border-gray-900 bg-gray-900 text-white' : 'py-2 px-3 text-sm font-medium rounded-md border-2 border-gray-200 text-gray-600 hover:border-gray-900 hover:text-gray-900';
             });
         }
 
@@ -428,7 +436,11 @@
                     date: new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString(),
                     title: document.getElementById('edit-title').value || "Annonce sans titre",
                     price: document.getElementById('edit-price').value || "-",
-                    platform: state.platform.toUpperCase()
+                    platform: state.platform.toUpperCase(),
+                    description: document.getElementById('edit-desc').value,
+                    tags: document.getElementById('edit-tags').value,
+                    internalNotes: document.getElementById('edit-internal-notes').innerHTML,
+                    images: JSON.parse(JSON.stringify(state.currentImages)) // Copie profonde pour détacher l'état
                 });
                 
                 const msgBox = document.createElement('div');
@@ -439,6 +451,35 @@
             } catch (err) {
                 alert("Erreur lors de la copie.");
             }
+        }
+
+        async function loadAd(id) {
+            const ad = await db.ads.get(id);
+            if (!ad) return;
+
+            // Restauration de l'état
+            setPlatform(ad.platform.toLowerCase());
+            state.currentImages = ad.images || [];
+            updatePhotoUI();
+
+            // Restauration des données textuelles
+            document.getElementById('edit-title').value = ad.title !== "Annonce sans titre" ? ad.title : "";
+            document.getElementById('edit-price').value = ad.price !== "-" ? ad.price : "";
+            document.getElementById('edit-desc').value = ad.description || "";
+            document.getElementById('edit-tags').value = ad.tags || "";
+
+            const notesContainer = document.getElementById('w-internal-notes-container');
+            if (ad.internalNotes) {
+                document.getElementById('edit-internal-notes').innerHTML = ad.internalNotes;
+                notesContainer.classList.remove('hidden');
+            } else {
+                notesContainer.classList.add('hidden');
+            }
+
+            // Déverrouillage de l'éditeur et bascule d'onglet
+            document.getElementById('step-editor').className = 'step-container mb-8 transition-opacity duration-300';
+            switchTab('studio');
+            document.getElementById('step-editor').scrollIntoView({behavior: "smooth"});
         }
 
         async function deleteAd(id) {
@@ -470,6 +511,57 @@
             };
         }
 
+        async function exportHistory() {
+            try {
+                const ads = await db.ads.toArray();
+                if (ads.length === 0) return;
+                
+                const dataStr = JSON.stringify(ads);
+                const blob = new Blob([dataStr], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `marketplace-ops-backup-${new Date().toISOString().slice(0,10)}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            } catch (e) {
+                console.error("Erreur d'export:", e);
+            }
+        }
+
+        async function importHistory(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if (!Array.isArray(data)) throw new Error("Format JSON invalide. Un tableau d'annonces est attendu.");
+                    
+                    await db.ads.bulkPut(data);
+                    await renderSavedAds();
+                    
+                    const msgBox = document.createElement('div');
+                    msgBox.textContent = `${data.length} annonces importées avec succès.`;
+                    msgBox.className = "fixed bottom-4 right-4 bg-gray-900 text-white px-4 py-3 rounded-lg text-sm shadow-xl z-50 transition-opacity duration-300 font-medium";
+                    document.body.appendChild(msgBox);
+                    setTimeout(() => { msgBox.style.opacity = '0'; setTimeout(()=>msgBox.remove(),300); }, 3000);
+                } catch (err) {
+                    const errorBox = document.createElement('div');
+                    errorBox.textContent = "Erreur d'importation : " + err.message;
+                    errorBox.className = "fixed bottom-4 right-4 bg-red-600 text-white px-4 py-3 rounded-lg text-sm shadow-xl z-50 transition-opacity duration-300 font-medium";
+                    document.body.appendChild(errorBox);
+                    setTimeout(() => { errorBox.style.opacity = '0'; setTimeout(()=>errorBox.remove(),300); }, 4000);
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = '';
+        }
+
         async function renderSavedAds() {
             const list = document.getElementById('saved-list');
             list.innerHTML = '';
@@ -478,17 +570,26 @@
             document.getElementById('saved-empty').classList.toggle('hidden', ads.length > 0);
             
             ads.forEach(ad => {
+                const hasImage = ad.images && ad.images.length > 0;
+                const imgTag = hasImage ? `<img src="${ad.images[0].displayUrl}" class="w-full h-full object-cover">` : `<div class="w-full h-full bg-gray-200"></div>`;
+                
                 list.innerHTML += `
                     <div class="bg-gray-50 border border-gray-200 p-4 rounded-lg flex justify-between items-center group">
-                        <div class="truncate mr-4 flex-1">
-                            <div class="flex items-center mb-1">
-                                <span class="text-xs text-gray-500 font-mono mr-2">${ad.date}</span>
-                                <span class="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-gray-200 text-gray-700">${ad.platform}</span>
+                        <div class="flex items-center gap-4 flex-1 overflow-hidden">
+                            <div class="w-12 h-12 rounded object-cover flex-shrink-0 border border-gray-300 overflow-hidden bg-white">
+                                ${imgTag}
                             </div>
-                            <h4 class="font-medium text-gray-900 text-sm truncate">${ad.title}</h4>
+                            <div class="truncate mr-4 flex-1">
+                                <div class="flex items-center mb-1">
+                                    <span class="text-xs text-gray-500 font-mono mr-2">${ad.date}</span>
+                                    <span class="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-gray-200 text-gray-700">${ad.platform}</span>
+                                </div>
+                                <h4 class="font-medium text-gray-900 text-sm truncate">${ad.title}</h4>
+                            </div>
                         </div>
-                        <div class="text-right flex-shrink-0 flex items-center gap-4">
+                        <div class="text-right flex-shrink-0 flex items-center gap-3">
                             <span class="text-sm font-bold text-gray-900 bg-white px-2 py-1 rounded border">${ad.price}</span>
+                            <button onclick="loadAd(${ad.id})" class="text-xs text-blue-600 hover:text-blue-800 font-medium opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100">Éditer</button>
                             <button onclick="deleteAd(${ad.id})" class="text-xs text-red-500 hover:text-red-700 font-medium opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100">Supprimer</button>
                         </div>
                     </div>
