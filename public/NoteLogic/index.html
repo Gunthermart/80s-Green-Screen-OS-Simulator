@@ -1802,7 +1802,7 @@ Utilise HTML (<span class="text-indigo-400 font-bold">, etc.). Ton direct et ana
             };
             
             const IO = {
-                exportData: async () => { const pages = await Storage.getPages(); const draft = await Storage.db.meta.get('draft'); const blob = new Blob([JSON.stringify({version: "v1.36", date: new Date(), pages, draft}, null, 2)], {type: 'application/json'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); const now = new Date(); const d = now.getFullYear() + "-" + String(now.getMonth()+1).padStart(2, '0') + "-" + String(now.getDate()).padStart(2, '0'); const t = String(now.getHours()).padStart(2, '0') + "-" + String(now.getMinutes()).padStart(2, '0'); a.download = `NoteLogic_Backup_${d}_${t}.json`; a.click(); Renderer.toast("BACKUP GÉNÉRÉ"); },
+                exportData: async () => { const pages = await Storage.getPages(); const draft = await Storage.db.meta.get('draft'); const blob = new Blob([JSON.stringify({version: "v1.36", date: new Date(), pages, draft}, null, 2)], {type: 'application/json'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); const now = new Date(); const d = now.getFullYear() + "-" + String(now.getMonth()+1).padStart(2, '0') + "-" + String(now.getDate()).padStart(2, '0'); const t = String(now.getHours()).padStart(2, '0') + "-" + String(now.getMinutes()).padStart(2, '0'); a.download = `NoteLogic_Backup_${d}_${t}.json`; a.click(); localStorage.setItem('notelogic_last_backup', Date.now().toString()); Renderer.toast("BACKUP GÉNÉRÉ"); },
                 importData: (file) => { 
                     if(!file) return; 
                     const r = new FileReader(); 
@@ -2309,7 +2309,16 @@ Utilise HTML (<span class="text-indigo-400 font-bold">, etc.). Ton direct et ana
                     if(localStorage.getItem('notelogic_theme') === 'light') document.body.classList.add('light-theme');
 
                     Bus.renderBinder(); Renderer.renderHUD(State.macros);
-                    setTimeout(() => { document.getElementById('splash-screen').style.opacity=0; setTimeout(()=>document.getElementById('splash-screen').remove(),700); }, 1000);
+                    setTimeout(() => { 
+                        document.getElementById('splash-screen').style.opacity=0; 
+                        setTimeout(()=> {
+                            document.getElementById('splash-screen').remove();
+                            const lastBackup = localStorage.getItem('notelogic_last_backup');
+                            if (!lastBackup || (Date.now() - parseInt(lastBackup)) > 86400000) {
+                                Bus.confirmAction(null, () => Bus.dispatchAction('ioExport', {}), "VULNÉRABILITÉ DÉTECTÉE : Aucun backup depuis plus de 24h. Exporter une archive JSON maintenant ?");
+                            }
+                        }, 700); 
+                    }, 1000);
                 } catch(e) { console.error(e); Renderer.toast("ERR KERNEL"); }
             };
             return { init, TabManager };
