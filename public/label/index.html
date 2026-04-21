@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Générateur d'Étiquettes Pro</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --ui-width: 350px;
+        }
+
+        body {
+            background-color: #2c3e50;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex;
+        }
+
+        /* --- UI PANEL --- */
+        .ui-panel {
+            width: var(--ui-width);
+            height: 100vh;
+            background: #1a1a1a;
+            color: #ecf0f1;
+            padding: 25px;
+            position: fixed;
+            left: 0;
+            top: 0;
+            overflow-y: auto;
+            z-index: 1000;
+            border-right: 1px solid #333;
+            transition: transform 0.3s ease;
+        }
+
+        body.menu-collapsed .ui-panel {
+            transform: translateX(-100%);
+        }
+
+        .toggle-btn {
+            position: fixed;
+            top: 25px;
+            left: var(--ui-width);
+            width: 40px;
+            height: 45px;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-left: none;
+            color: #ecf0f1;
+            cursor: pointer;
+            border-radius: 0 4px 4px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1001;
+            transition: left 0.3s ease;
+            font-size: 18px;
+        }
+
+        body.menu-collapsed .toggle-btn {
+            left: 0;
+            border-left: 1px solid #333;
+        }
+
+        .ui-panel h2 { margin-bottom: 20px; font-size: 1.2rem; color: #3498db; }
+        
+        .config-group {
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #333;
+        }
+
+        .config-group label {
+            display: block;
+            font-size: 0.8rem;
+            margin-bottom: 8px;
+            color: #bdc3c7;
+        }
+
+        .config-group input, .config-group select {
+            width: 100%;
+            padding: 8px;
+            background: #2c3e50;
+            border: 1px solid #444;
+            color: white;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            font-size: 16px; /* Bloque le zoom auto iOS */
+        }
+        
+        textarea {
+            font-size: 16px !important; /* Bloque le zoom auto iOS */
+        }
+
+        /* --- Grille visuelle d'offset --- */
+        .offset-grid {
+            display: grid;
+            gap: 2px;
+            background: #2c3e50;
+            padding: 4px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            border: 1px solid #444;
+        }
+        .offset-cell {
+            background: #ecf0f1;
+            aspect-ratio: 1.5;
+            cursor: pointer;
+            border-radius: 2px;
+            transition: 0.2s;
+        }
+        .offset-cell:hover { background: #bdc3c7; }
+        .offset-cell.skipped { background: #e74c3c; opacity: 0.2; }
+        .offset-cell.start { background: #2ecc71; border: 2px solid white; }
+        .offset-cell.used { background: #3498db; }
+
+        .btn-print {
+            width: 100%;
+            padding: 12px;
+            background: #27ae60;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 1rem;
+        }
+
+        .btn-print:hover { background: #2ecc71; }
+
+        /* --- ZONE D'IMPRESSION --- */
+        #viewport {
+            margin-left: var(--ui-width);
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px;
+            transition: margin-left 0.3s ease;
+        }
+
+        body.menu-collapsed #viewport {
+            margin-left: 0;
+        }
+
+        @media print {
+            .no-print { display: none !important; }
+            #viewport { margin-left: 0; padding: 0; background: white; }
+            body { background: white; }
+            @page { size: A4; margin: 0; }
+        }
+
+        .page {
+            width: 210mm;
+            height: 297mm;
+            background: white;
+            margin-bottom: 20px;
+            position: relative;
+            box-shadow: 0 0 20px rgba(0,0,0,0.3);
+            page-break-after: always;
+        }
+
+        @media print {
+            .page { margin-bottom: 0; box-shadow: none; }
+        }
+
+        .label {
+            display: flex;
+            padding: 4mm;
+            border: 0.1mm dashed #eee;
+            overflow: hidden;
+        }
+
+        @media print { .label { border: none; } }
+
+        .label-content { 
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            overflow: hidden;
+        }
+
+        .label-name { 
+            font-weight: bold; 
+            width: 100%;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .label-price { 
+            font-weight: 900; 
+            width: 100%;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .label-extra { 
+            color: #333; 
+            width: 100%;
+            border-top: 1px solid #ccc;
+            padding-top: 1mm;
+            text-transform: uppercase;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .fit-text {
+            display: inline-block;
+            max-width: 100%;
+            max-height: 100%;
+            line-height: 1.1;
+            word-wrap: break-word;
+        }
+
+        .empty-label { border: none !important; }
+
+        .label-frame {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            padding: 2mm;
+        }
+
+        /* --- MODE CALIBRATION --- */
+        @media print {
+            .calibration-mode .label {
+                border: 0.5mm solid black !important;
+            }
+            .calibration-mode .label-content {
+                display: none !important;
+            }
+        }
+
+        /* --- RESPONSIVE MOBILE & TABLETTE --- */
+        @media (max-width: 768px) {
+            :root {
+                --ui-width: 100vw;
+            }
+            .ui-panel {
+                padding-top: 80px;
+            }
+            .toggle-btn {
+                left: auto !important;
+                right: 15px;
+                top: 15px;
+                border: 1px solid #444;
+                border-radius: 4px;
+                background: #2c3e50;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+            }
+            #viewport {
+                margin-left: 0;
+                padding: 15px 10px;
+                width: 100vw;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="ui-panel no-print">
+        <h2>Configuration</h2>
+        
+        <div class="config-group">
+            <label>Format (Préréglages)</label>
+            <select id="presetSelect" onchange="applyPreset()">
+                <option value="custom">Personnalisé</option>
+                <option value="L7160">Avery L7160 (3x7 - 63.5x38.1)</option>
+                <option value="L7163">Avery L7163 (2x7 - 99.1x38.1)</option>
+                <option value="L7159">Avery L7159 (3x8 - 63.5x33.9)</option>
+                <option value="L7161">Avery L7161 (3x6 - 63.5x46.6)</option>
+                <option value="L7162">Avery L7162 (2x8 - 99.1x33.9)</option>
+                <option value="L7165">Avery L7165 (2x4 - 99.1x67.7)</option>
+                <option value="L7167">Avery L7167 (1x1 - 199.6x289.1)</option>
+                <option value="L7168">Avery L7168 (1x2 - 199.6x143.5)</option>
+                <option value="L7169">Avery L7169 (2x2 - 99.1x139)</option>
+            </select>
+        </div>
+
+        <div class="config-group">
+            <label>Cadre intérieur imprimé</label>
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                <input type="checkbox" id="enableFrame" onchange="updateRender()" style="width: auto; margin: 0;">
+                <label for="enableFrame" style="margin:0; cursor:pointer;">Activer le cadre</label>
+            </div>
+            <div style="display: flex; gap: 5px;">
+                <div style="flex: 1;">
+                    <label>Retrait (mm)</label>
+                    <input type="number" id="frameMargin" value="2" step="0.5" oninput="updateRender()">
+                </div>
+                <div style="flex: 1;">
+                    <label>Épaisseur (mm)</label>
+                    <input type="number" id="frameThickness" value="0.5" step="0.1" oninput="updateRender()">
+                </div>
+            </div>
+        </div>
+
+        <div class="config-group">
+            <label>Position de départ (cliquez sur la grille)</label>
+            <div id="offsetGrid" class="offset-grid"></div>
+        </div>
+
+        <div class="config-group">
+            <label>Dimensions Étiquette (Largeur x Hauteur mm)</label>
+            <div style="display: flex; gap: 5px;">
+                <input type="number" id="labelWidth" value="63.5" step="0.1" oninput="updateRender()">
+                <input type="number" id="labelHeight" value="38.1" step="0.1" oninput="updateRender()">
+            </div>
+            <label>Marges Page (Haut x Gauche mm)</label>
+            <div style="display: flex; gap: 5px;">
+                <input type="number" id="marginTop" value="15.2" step="0.1" oninput="updateRender()">
+                <input type="number" id="marginLeft" value="7.2" step="0.1" oninput="updateRender()">
+            </div>
+            <label>Grille (Colonnes x Lignes)</label>
+            <div style="display: flex; gap: 5px;">
+                <input type="number" id="cols" value="3" oninput="updateRender()">
+                <input type="number" id="rows" value="7" oninput="updateRender()">
+            </div>
+        </div>
+
+        <div class="config-group">
+            <label>Données (Un article par ligne, séparé par des ;)</label>
+            <textarea id="dataInput" style="width: 100%; height: 150px; background: #2c3e50; color: white; border: 1px solid #444; padding: 5px; font-size: 12px;" oninput="updateRender()">Produit A; 19.99; Top
+Produit B; 24.50; Promo
+Produit C; 12.00; Standard</textarea>
+        </div>
+
+        <button class="btn-print" style="margin-bottom: 10px;" onclick="window.print()">Imprimer les étiquettes</button>
+        <button class="btn-print" style="background: #e67e22;" onclick="printCalibrationMode()">Mire de test (Alignement)</button>
+    </div>
+
+    <button class="toggle-btn no-print" onclick="toggleMenu()">✕</button>
+
+    <div id="viewport">
+        <div id="pages-container"></div>
+    </div>
+
+    <script>
+        let currentOffset = 0;
+
+        function toggleMenu() {
+            document.body.classList.toggle('menu-collapsed');
+            const btn = document.querySelector('.toggle-btn');
+            btn.innerHTML = document.body.classList.contains('menu-collapsed') ? '☰' : '✕';
+        }
+
+        const presets = {
+            'L7160': { width: 63.5, height: 38.1, top: 15.2, left: 7.2, cols: 3, rows: 7 },
+            'L7163': { width: 99.1, height: 38.1, top: 15.1, left: 4.7, cols: 2, rows: 7 },
+            'L7159': { width: 63.5, height: 33.9, top: 12.9, left: 7.2, cols: 3, rows: 8 },
+            'L7161': { width: 63.5, height: 46.6, top: 8.7, left: 7.2, cols: 3, rows: 6 },
+            'L7162': { width: 99.1, height: 33.9, top: 12.9, left: 4.7, cols: 2, rows: 8 },
+            'L7165': { width: 99.1, height: 67.7, top: 13.1, left: 4.7, cols: 2, rows: 4 },
+            'L7167': { width: 199.6, height: 289.1, top: 3.9, left: 5.2, cols: 1, rows: 1 },
+            'L7168': { width: 199.6, height: 143.5, top: 5.0, left: 5.2, cols: 1, rows: 2 },
+            'L7169': { width: 99.1, height: 139.0, top: 9.5, left: 4.7, cols: 2, rows: 2 }
+        };
+
+        function applyPreset() {
+            const val = document.getElementById('presetSelect').value;
+            if (presets[val]) {
+                const p = presets[val];
+                document.getElementById('labelWidth').value = p.width;
+                document.getElementById('labelHeight').value = p.height;
+                document.getElementById('marginTop').value = p.top;
+                document.getElementById('marginLeft').value = p.left;
+                document.getElementById('cols').value = p.cols;
+                document.getElementById('rows').value = p.rows;
+                updateRender();
+            }
+        }
+
+        function loadSavedConfig() {
+            const saved = localStorage.getItem('labelConfig');
+            if (saved) {
+                try {
+                    const conf = JSON.parse(saved);
+                    document.getElementById('labelWidth').value = conf.width || 63.5;
+                    document.getElementById('labelHeight').value = conf.height || 38.1;
+                    document.getElementById('marginTop').value = conf.top || 15.2;
+                    document.getElementById('marginLeft').value = conf.left || 7.2;
+                    document.getElementById('cols').value = conf.cols || 3;
+                    document.getElementById('rows').value = conf.rows || 7;
+                    
+                    document.getElementById('enableFrame').checked = conf.enableFrame || false;
+                    document.getElementById('frameMargin').value = conf.frameMargin !== undefined ? conf.frameMargin : 2;
+                    document.getElementById('frameThickness').value = conf.frameThickness || 0.5;
+                    
+                    if (conf.data !== undefined) {
+                        document.getElementById('dataInput').value = conf.data;
+                    }
+                    if (conf.offset !== undefined) {
+                        currentOffset = conf.offset;
+                    }
+                } catch (e) {
+                    console.error("Configuration corrompue");
+                }
+            }
+        }
+
+        function printCalibrationMode() {
+            document.body.classList.add('calibration-mode');
+            window.print();
+            setTimeout(() => document.body.classList.remove('calibration-mode'), 1000);
+        }
+
+        function updateRender() {
+            const config = {
+                offset: currentOffset,
+                width: parseFloat(document.getElementById('labelWidth').value),
+                height: parseFloat(document.getElementById('labelHeight').value),
+                top: parseFloat(document.getElementById('marginTop').value),
+                left: parseFloat(document.getElementById('marginLeft').value),
+                cols: parseInt(document.getElementById('cols').value),
+                rows: parseInt(document.getElementById('rows').value),
+                enableFrame: document.getElementById('enableFrame').checked,
+                frameMargin: parseFloat(document.getElementById('frameMargin').value),
+                frameThickness: parseFloat(document.getElementById('frameThickness').value),
+                data: document.getElementById('dataInput').value
+            };
+
+            localStorage.setItem('labelConfig', JSON.stringify(config));
+
+            const presetSelect = document.getElementById('presetSelect');
+            const match = Object.keys(presets).find(k => 
+                presets[k].width === config.width && 
+                presets[k].height === config.height && 
+                presets[k].top === config.top && 
+                presets[k].left === config.left && 
+                presets[k].cols === config.cols && 
+                presets[k].rows === config.rows
+            );
+            presetSelect.value = match ? match : 'custom';
+
+            const rawData = document.getElementById('dataInput').value.split('\n').filter(line => line.trim() !== '');
+            const data = rawData.map(line => {
+                const parts = line.split(';');
+                return { 
+                    name: parts[0]?.trim() || 'N/A', 
+                    price: parts[1]?.trim() || '',
+                    extra: parts[2]?.trim() || ''
+                };
+            });
+
+            renderOffsetGrid(config.cols, config.rows, data.length);
+
+            // Ajout des étiquettes vides pour l'offset
+            const finalData = [...Array(config.offset).fill(null), ...data];
+            
+            render(config, finalData);
+        }
+
+        function renderOffsetGrid(cols, rows, dataCount) {
+            const grid = document.getElementById('offsetGrid');
+            grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+            grid.innerHTML = '';
+            
+            const totalCells = cols * rows;
+            for (let i = 0; i < totalCells; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'offset-cell';
+                
+                if (i < currentOffset) {
+                    cell.classList.add('skipped');
+                    cell.title = "Étiquette manquante (chute)";
+                } else if (i === currentOffset) {
+                    cell.classList.add('start');
+                    cell.title = "Départ de l'impression";
+                } else if (i < currentOffset + dataCount && i < totalCells) {
+                    cell.classList.add('used');
+                    cell.title = "Emplacement utilisé";
+                }
+
+                cell.onclick = () => {
+                    currentOffset = i;
+                    updateRender();
+                };
+                grid.appendChild(cell);
+            }
+        }
+
+        function render(config, data) {
+            const container = document.getElementById('pages-container');
+            container.innerHTML = '';
+            
+            const labelsPerPage = config.cols * config.rows;
+            
+            for (let i = 0; i < data.length; i += labelsPerPage) {
+                const pageData = data.slice(i, i + labelsPerPage);
+                const page = document.createElement('div');
+                page.className = 'page';
+                
+                page.style.display = 'grid';
+                page.style.gridTemplateColumns = `repeat(${config.cols}, ${config.width}mm)`;
+                page.style.gridTemplateRows = `repeat(${config.rows}, ${config.height}mm)`;
+                page.style.paddingTop = `${config.top}mm`;
+                page.style.paddingLeft = `${config.left}mm`;
+
+                pageData.forEach(item => {
+                    const el = document.createElement('div');
+                    if (item) {
+                        el.className = 'label';
+                        el.style.padding = config.enableFrame ? `${config.frameMargin}mm` : '4mm';
+
+                        const borderStyle = config.enableFrame ? `${config.frameThickness}mm solid #000` : 'none';
+
+                        el.innerHTML = `
+                            <div class="label-frame" style="border: ${borderStyle};">
+                                <div class="label-content">
+                                    <div class="label-name"><span class="fit-text" data-max="12">${item.name}</span></div>
+                                    <div class="label-price"><span class="fit-text" data-max="18">${item.price}</span></div>
+                                    ${item.extra ? `<div class="label-extra"><span class="fit-text" data-max="9">${item.extra}</span></div>` : ''}
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        el.className = 'label empty-label';
+                    }
+                    page.appendChild(el);
+                });
+
+                container.appendChild(page);
+            }
+
+            applyAutoFit();
+        }
+
+        function applyAutoFit() {
+            const elements = document.querySelectorAll('.fit-text');
+            elements.forEach(span => {
+                const container = span.parentElement;
+                const maxPt = parseFloat(span.getAttribute('data-max'));
+                let currentPt = maxPt;
+                
+                span.style.fontSize = currentPt + 'pt';
+                
+                // Réduction itérative stricte tant que le texte dépasse les limites physiques du conteneur
+                while ((span.offsetWidth > container.offsetWidth || span.offsetHeight > container.offsetHeight) && currentPt > 5) {
+                    currentPt -= 0.5;
+                    span.style.fontSize = currentPt + 'pt';
+                }
+            });
+        }
+
+        window.onload = () => {
+            loadSavedConfig();
+            updateRender();
+        };
+    </script>
+</body>
+</html>
