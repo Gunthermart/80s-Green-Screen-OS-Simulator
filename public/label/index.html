@@ -372,6 +372,9 @@
                 <select id="labelType" onchange="updateRender()">
                     <option value="product">Produit (Nom + Prix + Extra)</option>
                     <option value="folder">Texte Simple (Classeur / Archive)</option>
+                    <option value="shipping">Expédition (Destinataire + Adresse + Ville)</option>
+                    <option value="inventory">Inventaire (Référence + Emplacement + Qté)</option>
+                    <option value="warning">Signalétique (Avertissement + Consigne)</option>
                 </select>
             </div>
 
@@ -388,7 +391,8 @@
                     <button class="btn-example" onclick="loadExample('retail')">Boutique</button>
                     <button class="btn-example" onclick="loadExample('stock')">Inventaire</button>
                     <button class="btn-example" onclick="loadExample('archive')">Archives</button>
-                    <button class="btn-example" onclick="loadExample('badge')">Badges</button>
+                    <button class="btn-example" onclick="loadExample('shipping')">Expédition</button>
+                    <button class="btn-example" onclick="loadExample('warning')">Signalétique</button>
                 </div>
                 <textarea id="dataInput" style="width: 100%; height: 35vh; background: #2c3e50; color: white; border: 1px solid #444; padding: 10px; font-size: 14px; line-height: 1.4; resize: vertical;" oninput="updateRender()">Produit A; 19.99; Top
 Produit B; 24.50; Promo
@@ -473,14 +477,17 @@ Produit C; 12.00; Standard</textarea>
                 typeSelect.value = 'product';
                 input.value = "T-Shirt Coton Noir; 19.99 €; NOUVEAU\nJean Denim Brut; 49.50 €; PROMO\nChaussettes (Lot 3); 9.00 €; TOP";
             } else if (type === 'stock') {
-                typeSelect.value = 'product';
-                input.value = "REF: XJ-9000; QTE: 144; RACK A12\nREF: YK-2010; QTE: 12; RACK B04\nREF: ZZ-0001; QTE: 0; RUPTURE";
+                typeSelect.value = 'inventory';
+                input.value = "REF-XJ-9000; RACK A12; 144\nREF-YK-2010; RACK B04; 12\nREF-ZZ-0001; ZONE 3; 0";
             } else if (type === 'archive') {
                 typeSelect.value = 'folder';
                 input.value = "Comptabilité 2025; Factures Fournisseurs\nRessources Humaines; Contrats de travail\nProjet Alpha; Spécifications techniques";
-            } else if (type === 'badge') {
-                typeSelect.value = 'folder';
-                input.value = "Jean Dupont; Visiteur\nMarie Curie; Intervenante\nAlan Turing; Staff Technique";
+            } else if (type === 'shipping') {
+                typeSelect.value = 'shipping';
+                input.value = "Client Dupont; 123 Rue de la Logistique; 75000 PARIS\nEntreprise XYZ; Zone Industrielle Nord; 69000 LYON\nMarie Martin; 45 Avenue des Champs; 33000 BORDEAUX";
+            } else if (type === 'warning') {
+                typeSelect.value = 'warning';
+                input.value = "FRAGILE; Manipuler avec précaution; \nDANGER; Produit inflammable; \nURGENT; Livrer avant midi; ";
             }
             updateRender();
         }
@@ -666,14 +673,47 @@ Produit C; 12.00; Standard</textarea>
 
                         if (config.labelType === 'folder') {
                             el.innerHTML = `
-                                <div class="label-frame" style="border: ${borderStyle}; justify-content: center; align-items: center; text-align: center;">
-                                    <div class="label-content" style="justify-content: center; align-items: center;">
-                                        <div class="label-name" style="margin-bottom: 0; justify-content: center; width: 100%;">
-                                            <span class="fit-text" data-max="36">${item.name}</span>
+                                <div class="label-frame" style="border: ${borderStyle}; justify-content: center; align-items: center;">
+                                    <div class="label-content" style="justify-content: center; align-items: center; text-align: center;">
+                                        <div class="label-name" style="margin-bottom: 0; justify-content: center; align-items: center; text-align: center; width: 100%;">
+                                            <span class="fit-text" data-max="36" style="text-align: center;">${item.name}</span>
                                         </div>
-                                        ${item.price ? `<div style="margin-top: 3mm; color: #555; width: 100%; display: flex; justify-content: center;">
-                                            <span class="fit-text" data-max="16">${item.price}</span>
+                                        ${item.price ? `<div style="margin-top: 3mm; color: #555; width: 100%; display: flex; justify-content: center; align-items: center; text-align: center;">
+                                            <span class="fit-text" data-max="16" style="text-align: center;">${item.price}</span>
                                         </div>` : ''}
+                                    </div>
+                                </div>
+                            `;
+                        } else if (config.labelType === 'shipping') {
+                            el.innerHTML = `
+                                <div class="label-frame" style="border: ${borderStyle}; justify-content: flex-start; align-items: flex-start; text-align: left;">
+                                    <div class="label-content" style="justify-content: center; align-items: flex-start; width: 100%;">
+                                        <div style="font-weight: bold; margin-bottom: 2mm; width: 100%;"><span class="fit-text" data-max="14">${item.name}</span></div>
+                                        <div style="width: 100%; margin-bottom: 1mm;"><span class="fit-text" data-max="12">${item.price}</span></div>
+                                        ${item.extra ? `<div style="width: 100%;"><span class="fit-text" data-max="12">${item.extra}</span></div>` : ''}
+                                    </div>
+                                </div>
+                            `;
+                        } else if (config.labelType === 'inventory') {
+                            el.innerHTML = `
+                                <div class="label-frame" style="border: ${borderStyle};">
+                                    <div style="display: flex; justify-content: space-between; width: 100%; border-bottom: 1px solid #ccc; padding-bottom: 1mm; margin-bottom: 2mm;">
+                                        <div style="font-weight: bold; color: #555;"><span class="fit-text" data-max="10">${item.price}</span></div>
+                                        ${item.extra ? `<div style="font-weight: bold; background: #eee; padding: 0 1mm;"><span class="fit-text" data-max="10">QTÉ: ${item.extra}</span></div>` : ''}
+                                    </div>
+                                    <div style="flex-grow: 1; display: flex; align-items: center; justify-content: center; width: 100%;">
+                                        <span class="fit-text" data-max="28" style="font-weight: 900; font-family: monospace;">${item.name}</span>
+                                    </div>
+                                </div>
+                            `;
+                        } else if (config.labelType === 'warning') {
+                            el.innerHTML = `
+                                <div class="label-frame" style="border: ${borderStyle}; justify-content: center; align-items: center;">
+                                    <div class="label-content" style="justify-content: center; align-items: center; width: 100%; text-align: center;">
+                                        <div style="background: black; color: white; padding: 2mm; width: 100%; font-weight: 900; margin-bottom: 2mm; border-radius: 2px;">
+                                            <span class="fit-text" data-max="24" style="text-align: center;">${item.name}</span>
+                                        </div>
+                                        ${item.price ? `<div style="width: 100%; font-weight: bold; color: #333;"><span class="fit-text" data-max="14" style="text-align: center;">${item.price}</span></div>` : ''}
                                     </div>
                                 </div>
                             `;
