@@ -137,30 +137,6 @@
             font-size: 16px !important; /* Bloque le zoom auto iOS */
         }
 
-        /* --- BARRE D'EXEMPLES --- */
-        .example-bar {
-            display: flex;
-            gap: 5px;
-            margin-bottom: 8px;
-            flex-wrap: wrap;
-        }
-
-        .btn-example {
-            background: #34495e;
-            color: #ecf0f1;
-            border: 1px solid #444;
-            padding: 5px 8px;
-            font-size: 0.75rem;
-            border-radius: 3px;
-            cursor: pointer;
-            transition: 0.2s;
-        }
-
-        .btn-example:hover {
-            background: #3498db;
-            border-color: #2980b9;
-        }
-
         /* --- Grille visuelle d'offset --- */
         .offset-grid {
             display: grid;
@@ -197,6 +173,20 @@
 
         .btn-print:hover { background: #2ecc71; }
 
+        .viewport-header {
+            width: 100%;
+            max-width: 210mm;
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 20px;
+        }
+
+        .viewport-header .btn-print {
+            width: auto;
+            padding: 12px 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
         /* --- ZONE D'IMPRESSION --- */
         #viewport {
             margin-left: var(--ui-width);
@@ -230,7 +220,7 @@
         }
 
         @media print {
-            .page { margin-bottom: 0; box-shadow: none; }
+            .page { margin-bottom: 0; box-shadow: none; zoom: 1 !important; }
         }
 
         .label {
@@ -346,13 +336,27 @@
             }
             #viewport {
                 margin-left: 0;
-                padding: 15px 10px;
+                padding: 15px 0;
                 width: 100vw;
-                overflow-x: auto;
-                -webkit-overflow-scrolling: touch;
+                overflow-x: hidden;
+            }
+            .page {
+                zoom: 0.45;
+                margin: 0 auto 20px auto;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .page {
+                zoom: 0.40;
             }
         }
 
+        @media (max-width: 380px) {
+            .page {
+                zoom: 0.35;
+            }
+        }
     </style>
 </head>
 <body>
@@ -379,27 +383,28 @@
             </div>
 
             <div class="config-group">
-                <label>Position de départ (cliquez sur la grille)</label>
-                <div id="offsetGrid" class="offset-grid"></div>
-            </div>
-
-            <div class="config-group">
                 <label style="display: flex; justify-content: space-between; align-items: center;">
                     Données (Un article par ligne, séparé par des ;)
                 </label>
-                <div class="example-bar">
-                    <button class="btn-example" onclick="loadExample('retail')">Boutique</button>
-                    <button class="btn-example" onclick="loadExample('stock')">Inventaire</button>
-                    <button class="btn-example" onclick="loadExample('archive')">Archives</button>
-                    <button class="btn-example" onclick="loadExample('shipping')">Expédition</button>
-                    <button class="btn-example" onclick="loadExample('warning')">Signalétique</button>
-                </div>
+                <select id="exampleSelect" onchange="handleExampleSelect()" style="margin-bottom: 8px;">
+                    <option value="">-- Charger un modèle de données --</option>
+                    <option value="retail">Boutique & Vente</option>
+                    <option value="stock">Inventaire & Stock</option>
+                    <option value="archive">Archives & Dossiers</option>
+                    <option value="badge">Badges Événement</option>
+                    <option value="shipping">Expédition & Logistique</option>
+                    <option value="assets">Parc Informatique / Immos</option>
+                    <option value="food">Alimentaire & DLC</option>
+                </select>
                 <textarea id="dataInput" style="width: 100%; height: 35vh; background: #2c3e50; color: white; border: 1px solid #444; padding: 10px; font-size: 14px; line-height: 1.4; resize: vertical;" oninput="updateRender()">Produit A; 19.99; Top
 Produit B; 24.50; Promo
 Produit C; 12.00; Standard</textarea>
             </div>
 
-            <button class="btn-print" style="margin-bottom: 10px;" onclick="window.print()">Imprimer les étiquettes</button>
+            <div class="config-group">
+                <label>Position de départ (cliquez sur la grille)</label>
+                <div id="offsetGrid" class="offset-grid"></div>
+            </div>
         </div>
 
         <!-- ONGLET 2 : SETUP ET STRUCTURE -->
@@ -463,11 +468,23 @@ Produit C; 12.00; Standard</textarea>
     <button class="toggle-btn no-print" onclick="toggleMenu()">✕</button>
 
     <div id="viewport">
+        <div class="viewport-header no-print">
+            <button class="btn-print" onclick="window.print()">Imprimer les étiquettes</button>
+        </div>
         <div id="pages-container"></div>
     </div>
 
     <script>
         let currentOffset = 0;
+
+        function handleExampleSelect() {
+            const select = document.getElementById('exampleSelect');
+            const type = select.value;
+            if (type) {
+                loadExample(type);
+                select.value = ''; // Réinitialise pour permettre le rechargement
+            }
+        }
 
         function loadExample(type) {
             const input = document.getElementById('dataInput');
@@ -477,17 +494,23 @@ Produit C; 12.00; Standard</textarea>
                 typeSelect.value = 'product';
                 input.value = "T-Shirt Coton Noir; 19.99 €; NOUVEAU\nJean Denim Brut; 49.50 €; PROMO\nChaussettes (Lot 3); 9.00 €; TOP";
             } else if (type === 'stock') {
-                typeSelect.value = 'inventory';
-                input.value = "REF-XJ-9000; RACK A12; 144\nREF-YK-2010; RACK B04; 12\nREF-ZZ-0001; ZONE 3; 0";
+                typeSelect.value = 'product';
+                input.value = "REF: XJ-9000; QTE: 144; RACK A12\nREF: YK-2010; QTE: 12; RACK B04\nREF: ZZ-0001; QTE: 0; RUPTURE";
             } else if (type === 'archive') {
                 typeSelect.value = 'folder';
                 input.value = "Comptabilité 2025; Factures Fournisseurs\nRessources Humaines; Contrats de travail\nProjet Alpha; Spécifications techniques";
+            } else if (type === 'badge') {
+                typeSelect.value = 'folder';
+                input.value = "Jean Dupont; Visiteur\nMarie Curie; Intervenante\nAlan Turing; Staff Technique";
             } else if (type === 'shipping') {
-                typeSelect.value = 'shipping';
-                input.value = "Client Dupont; 123 Rue de la Logistique; 75000 PARIS\nEntreprise XYZ; Zone Industrielle Nord; 69000 LYON\nMarie Martin; 45 Avenue des Champs; 33000 BORDEAUX";
-            } else if (type === 'warning') {
-                typeSelect.value = 'warning';
-                input.value = "FRAGILE; Manipuler avec précaution; \nDANGER; Produit inflammable; \nURGENT; Livrer avant midi; ";
+                typeSelect.value = 'product';
+                input.value = "Client: Martin Paul; 75001 Paris; CHRONOPOST\nClient: Dubois Sophie; 69002 Lyon; COLISSIMO\nClient: Leroy Marc; 13008 Marseille; UPS";
+            } else if (type === 'assets') {
+                typeSelect.value = 'product';
+                input.value = "PC Portable Dell XPS; S/N: 89432X; IT-DEPT\nÉcran Dell 27p; S/N: 11223Y; DESIGN\nImprimante HP; S/N: 99887Z; COMPTA";
+            } else if (type === 'food') {
+                typeSelect.value = 'product';
+                input.value = "Salade César (250g); 4.50 €; DLC: 24/04\nSandwich Poulet; 3.90 €; DLC: 23/04\nJus d'Orange Frais; 2.50 €; A CONSERVER AU FRAIS";
             }
             updateRender();
         }
