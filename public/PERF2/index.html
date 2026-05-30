@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Autopsie et Grand Livre</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
+    
+    <style>
+        body { background-color: #0f172a; color: #e2e8f0; font-family: 'Inter', sans-serif; }
+        html { scroll-behavior: smooth; }
+        .card { background-color: #1e293b; border: 1px solid #334155; border-radius: 0.5rem; padding: 1.5rem; }
+        .drop-zone { border: 2px dashed #475569; transition: all 0.3s; position: relative; }
+        .drop-zone.dragover { border-color: #38bdf8; background-color: #1e293b; }
+        .drop-zone.loaded { border-color: #22c55e; border-style: solid; }
+        select { background-color: #334155; color: white; border: 1px solid #475569; padding: 0.5rem; border-radius: 0.25rem; width: 100%; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-7xl mx-auto space-y-6">
+        <!-- Header -->
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+                <h1 class="text-3xl font-bold text-white tracking-tight">Autopsie & Grand Livre</h1>
+                <p class="text-slate-400 text-sm mt-1">Analyse factuelle des exécutions passées et du risque latent.</p>
+            </div>
+            <div class="flex items-center gap-4 flex-wrap">
+                <button onclick="generatePDFReport()" id="pdf-btn" class="hidden bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white px-4 py-2 rounded text-xs font-bold uppercase tracking-wider transition-colors">
+                    Extraire Rapport PDF
+                </button>
+            </div>
+        </div>
+
+        <!-- Input Section -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div id="drop-zone-pos" class="drop-zone rounded-lg p-6 text-center cursor-pointer hover:bg-slate-800">
+                <input type="file" id="csvInputPos" accept=".csv,.xls,.xlsx" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                <div class="text-sm font-medium text-slate-300 pointer-events-none">
+                    <span class="block text-lg mb-1 text-white">1. Positions Actuelles</span>
+                    <span id="label-pos" class="text-slate-400">Glisse 'portefeuille.csv' ici</span>
+                </div>
+            </div>
+            <div id="drop-zone-hist" class="drop-zone rounded-lg p-6 text-center cursor-pointer hover:bg-slate-800">
+                <input type="file" id="csvInputHist" accept=".csv,.xls,.xlsx" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                <div class="text-sm font-medium text-slate-300 pointer-events-none">
+                    <span class="block text-lg mb-1 text-white">2. Historique</span>
+                    <span id="label-hist" class="text-slate-400">Glisse 'historique-portefeuille.csv' ici</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- DETAILED ANALYSIS SECTION -->
+        <div id="detail-section" style="display:none;" class="space-y-6 mt-8 pt-8 border-t border-slate-700">
+            <div class="flex flex-col md:flex-row justify-between items-center">
+                <h2 class="text-2xl font-bold text-white">Autopsie par Titre</h2>
+                <div class="w-full md:w-64 mt-4 md:mt-0">
+                    <select id="stock-selector">
+                        <option value="">-- Choisir une valeur --</option>
+                    </select>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="card lg:col-span-1 space-y-6">
+                    <div>
+                        <div class="text-slate-400 text-xs uppercase font-bold">Total Gain/Perte Réalisé</div>
+                        <div class="text-xl font-bold" id="detail-total-pnl">--</div>
+                    </div>
+                    <div>
+                        <div class="text-slate-400 text-xs uppercase font-bold">Dividendes Cumulés</div>
+                        <div class="text-lg font-semibold text-emerald-400" id="detail-divs">--</div>
+                    </div>
+                    <div>
+                        <div class="text-slate-400 text-xs uppercase font-bold">Frais Totaux</div>
+                        <div class="text-lg font-semibold text-red-400" id="detail-fees">--</div>
+                    </div>
+                    
+                    <div id="detail-portfolio-data" style="display:none;" class="pt-4 border-t border-slate-700 space-y-4">
+                        <div class="text-slate-500 text-xs uppercase font-bold mb-2">Exposition Actuelle (Portefeuille)</div>
+                        <div>
+                            <div class="text-slate-400 text-xs uppercase font-bold">Valeur Actuelle</div>
+                            <div class="text-xl font-bold text-blue-400" id="detail-current-val">--</div>
+                        </div>
+                        <div>
+                            <div class="text-slate-400 text-xs uppercase font-bold">PnL Latent</div>
+                            <div class="text-lg font-semibold" id="detail-unrealized-pnl">--</div>
+                        </div>
+                        <div>
+                            <div class="text-slate-400 text-xs uppercase font-bold">Prix de Revient (PRU)</div>
+                            <div class="text-lg font-semibold text-slate-300" id="detail-pru">--</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="lg:col-span-2 space-y-4">
+                    <div class="card min-h-[350px] flex flex-col">
+                        <h3 class="text-lg font-semibold mb-2 text-white">Historique d'Exécution</h3>
+                        <div id="execution-chart" class="flex-grow w-full h-full"></div>
+                    </div>
+                    <div class="card min-h-[300px] flex flex-col">
+                        <h3 class="text-lg font-semibold mb-2 text-white">Évolution Gains/Pertes Cumulés</h3>
+                        <div id="pnl-chart" class="flex-grow w-full h-full"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- GRAND LIVRE COMPTABLE -->
+        <div id="ledger-section" style="display:none;" class="space-y-6 mt-8 pt-8 border-t border-slate-700">
+            <h2 class="text-2xl font-bold text-white">Grand Livre Comptable (Données Brutes)</h2>
+            <p class="text-slate-400 text-sm mb-4">L'exhaustivité des transactions croisée avec les positions ouvertes. Bilan mathématique, sans biais.</p>
+            
+            <div id="ledger-portfolio-section" style="display:none;" class="mb-6">
+                <h3 class="text-lg font-semibold text-slate-300 mb-2">Positions Actives</h3>
+                <div class="card bg-slate-800/50 overflow-x-auto p-0 border-slate-700">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead class="bg-slate-900 shadow">
+                            <tr class="border-b border-slate-600 text-slate-400 uppercase tracking-wider">
+                                <th class="p-3 font-bold">Titre</th>
+                                <th class="p-3 font-bold text-right">Quantité (Est.)</th>
+                                <th class="p-3 font-bold text-right">PRU</th>
+                                <th class="p-3 font-bold text-right">Cours Actuel</th>
+                                <th class="p-3 font-bold text-right">Valeur Actuelle</th>
+                                <th class="p-3 font-bold text-right">PnL Latent</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ledger-portfolio-tbody" class="text-slate-300"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <h3 class="text-lg font-semibold text-slate-300 mb-2 mt-6">Historique des Transactions</h3>
+            <div class="card bg-slate-800/50 overflow-x-auto p-0 border-slate-700 max-h-[600px] overflow-y-auto">
+                <table class="w-full text-left border-collapse text-xs">
+                    <thead class="sticky top-0 bg-slate-900 shadow">
+                        <tr class="border-b border-slate-600 text-slate-400 uppercase tracking-wider">
+                            <th class="p-3 font-bold">Date</th>
+                            <th class="p-3 font-bold">Type</th>
+                            <th class="p-3 font-bold">Titre</th>
+                            <th class="p-3 font-bold text-right">Qté</th>
+                            <th class="p-3 font-bold text-right">Prix</th>
+                            <th class="p-3 font-bold text-right">Frais</th>
+                            <th class="p-3 font-bold text-right">Montant Total</th>
+                            <th class="p-3 font-bold text-right">PnL Réalisé</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ledger-tbody" class="text-slate-300"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="empty-state" class="text-center py-10 text-slate-500">
+            <p id="empty-state-text">Charge les fichiers CSV pour générer l'analyse combinée. Attente synchronisation cloud...</p>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        let globalHistory = [];
+        let globalPortfolio = [];
+        let currentUser = null;
+        let db = null;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        if (typeof __firebase_config !== 'undefined') {
+            const firebaseConfig = JSON.parse(__firebase_config);
+            const app = initializeApp(firebaseConfig);
+            const auth = getAuth(app);
+            db = getFirestore(app);
+
+            const initAuth = async () => {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            };
+            
+            initAuth().then(() => {
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        currentUser = user;
+                        document.getElementById('empty-state-text').textContent = "Authentification cloud établie. Chargement des données...";
+                        await loadDataFromCloud();
+                    }
+                });
+            });
+        }
+
+        async function loadDataFromCloud() {
+            if (!currentUser || !db) return;
+            const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'financial_data', 'state');
+            try {
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    if (data.history) globalHistory = JSON.parse(data.history);
+                    if (data.portfolio) globalPortfolio = JSON.parse(data.portfolio);
+                    updateDashboard();
+                } else {
+                    document.getElementById('empty-state-text').textContent = "Aucune donnée cloud trouvée. Charge tes CSV pour initialiser la base.";
+                }
+            } catch (e) {
+                console.error("Erreur de chargement Firebase:", e);
+            }
+        }
+
+        async function saveDataToCloud() {
+            if (!currentUser || !db) return;
+            const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'financial_data', 'state');
+            try {
+                await setDoc(docRef, {
+                    history: JSON.stringify(globalHistory),
+                    portfolio: JSON.stringify(globalPortfolio)
+                });
+            } catch (e) {
+                console.error("Erreur de sauvegarde Firebase:", e);
+            }
+        }
+
+        const parseFrenchNumber = (str) => { if (!str) return 0; let num = parseFloat(str.toString().replace(/\s/g, '').replace('€', '').replace(',', '.')); return isNaN(num) ? 0 : num; };
+        const parseFrenchDate = (str) => { if (!str) return null; const parts = str.split('/'); return parts.length === 3 ? new Date(`${parts[2]}-${parts[1]}-${parts[0]}`) : null; };
+        const formatCurrency = (num) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(num).replace(/[\u202f\u00a0]/g, ' ');
+
+        function updateDashboard() {
+            if (globalHistory.length > 0 || globalPortfolio.length > 0) {
+                document.getElementById('empty-state').style.display = 'none';
+                document.getElementById('pdf-btn').style.display = 'block';
+                populateStockSelector();
+                document.getElementById('detail-section').style.display = 'block';
+                renderLedger(globalHistory, globalPortfolio);
+            }
+        }
+
+        function parseHistory(data) {
+            return data.map(row => ({ 
+                date: parseFrenchDate(row['Date']), 
+                type: row['Opération'], 
+                stock: row['Valeur'], 
+                price: parseFrenchNumber(row['Prix']), 
+                qty: parseFrenchNumber(row['Quantité']), 
+                fees: parseFrenchNumber(row['Frais']), 
+                amount: parseFrenchNumber(row['Prix']) * parseFrenchNumber(row['Quantité']) 
+            })).filter(d => d.date !== null).sort((a, b) => a.date - b.date); 
+        }
+
+        function populateStockSelector() {
+            const sel = document.getElementById('stock-selector'); 
+            const histStocks = globalHistory.map(r => r['Valeur']).filter(n=>n);
+            const portStocks = globalPortfolio.map(r => r['Titre']).filter(n=>n);
+            const stocks = [...new Set([...histStocks, ...portStocks])].sort(); 
+            
+            sel.innerHTML = '<option value="">-- Choisir une valeur --</option>'; 
+            stocks.forEach(s => sel.appendChild(new Option(s, s))); 
+            sel.onchange = (e) => { if(e.target.value) analyzeStock(e.target.value); };
+        }
+
+        function analyzeStock(stock) {
+            if (!stock) return;
+            
+            // Intégration des données du portefeuille courant
+            const portRow = globalPortfolio.find(r => r['Titre'] === stock);
+            const portContainer = document.getElementById('detail-portfolio-data');
+            
+            if (portRow && parseFrenchNumber(portRow['valeur actuelle']) > 0) {
+                portContainer.style.display = 'block';
+                const currentVal = parseFrenchNumber(portRow['valeur actuelle']);
+                const pnlLatent = parseFrenchNumber(portRow['gain ou perte en euros']);
+                const pru = parseFrenchNumber(portRow['prix de revient']);
+                
+                document.getElementById('detail-current-val').textContent = formatCurrency(currentVal);
+                const pnlEl = document.getElementById('detail-unrealized-pnl');
+                pnlEl.textContent = formatCurrency(pnlLatent);
+                pnlEl.className = `text-lg font-semibold ${pnlLatent >= 0 ? 'text-emerald-400' : 'text-red-500'}`;
+                document.getElementById('detail-pru').textContent = formatCurrency(pru);
+            } else {
+                portContainer.style.display = 'none';
+            }
+
+            // Calcul sur l'historique
+            const txs = parseHistory(globalHistory).filter(t => t.stock === stock);
+            let realizedPnl = 0, totalDivs = 0, totalFees = 0;
+            let qty = 0, cost = 0, pmp = 0;
+
+            let execDates = [], execPrices = [], execTexts = [], execColors = [], execSymbols = [];
+            let pnlDates = [], cumPnl = [], currentCumPnl = 0;
+
+            txs.forEach(t => {
+                totalFees += t.fees;
+                execDates.push(t.date);
+                execPrices.push(t.price);
+
+                if (t.type === 'Dividende') {
+                    totalDivs += t.amount;
+                    currentCumPnl += t.amount;
+                    execColors.push('#3b82f6'); execSymbols.push('circle');
+                    execTexts.push(`Div: +${formatCurrency(t.amount)}`);
+                } else if (t.type === 'Achat') {
+                    cost += (t.price * t.qty);
+                    qty += t.qty;
+                    currentCumPnl -= t.fees;
+                    execColors.push('#22c55e'); execSymbols.push('triangle-up');
+                    execTexts.push(`Achat: ${t.qty} @ ${formatCurrency(t.price)}`);
+                } else if (t.type === 'Vente') {
+                    let tradePnl = 0;
+                    if (qty > 0) {
+                        pmp = cost / qty;
+                        tradePnl = ((t.price * t.qty) - t.fees) - (pmp * t.qty);
+                        realizedPnl += tradePnl;
+                        qty -= t.qty;
+                        cost -= (pmp * t.qty);
+                        if (qty <= 0) cost = 0;
+                    } else {
+                        tradePnl = -t.fees;
+                    }
+                    currentCumPnl += tradePnl;
+                    execColors.push('#ef4444'); execSymbols.push('triangle-down');
+                    execTexts.push(`Vente: ${t.qty} @ ${formatCurrency(t.price)} (PnL: ${formatCurrency(tradePnl)})`);
+                }
+                pnlDates.push(t.date);
+                cumPnl.push(currentCumPnl);
+            });
+
+            document.getElementById('detail-total-pnl').textContent = formatCurrency(realizedPnl);
+            document.getElementById('detail-total-pnl').className = `text-xl font-bold ${realizedPnl >= 0 ? 'text-emerald-400' : 'text-red-500'}`;
+            document.getElementById('detail-divs').textContent = formatCurrency(totalDivs);
+            document.getElementById('detail-fees').textContent = formatCurrency(totalFees);
+
+            const traceExec = {
+                x: execDates, y: execPrices, text: execTexts, hoverinfo: 'text',
+                mode: 'markers+lines', type: 'scatter', name: 'Exécution',
+                marker: { color: execColors, symbol: execSymbols, size: 10 },
+                line: { color: '#475569', dash: 'dot', width: 1 }
+            };
+            Plotly.newPlot('execution-chart', [traceExec], {
+                paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+                font: { color: '#94a3b8' }, margin: { t: 10, l: 40, r: 20, b: 30 },
+                xaxis: { gridcolor: '#334155' }, yaxis: { gridcolor: '#334155' }
+            }, { displayModeBar: false });
+
+            const tracePnl = {
+                x: pnlDates, y: cumPnl, mode: 'lines+markers', type: 'scatter', name: 'PnL Cumulé',
+                line: { color: '#8b5cf6', width: 2 }, marker: { size: 6, color: '#8b5cf6' },
+                fill: 'tozeroy', fillcolor: 'rgba(139, 92, 246, 0.1)'
+            };
+            Plotly.newPlot('pnl-chart', [tracePnl], {
+                paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+                font: { color: '#94a3b8' }, margin: { t: 10, l: 40, r: 20, b: 30 },
+                xaxis: { gridcolor: '#334155' }, yaxis: { gridcolor: '#334155' }
+            }, { displayModeBar: false });
+        }
+
+        function renderLedger(historyData, portfolioData) {
+            document.getElementById('ledger-section').style.display = 'block';
+
+            // Rendu des positions ouvertes (Portefeuille)
+            if (portfolioData && portfolioData.length > 0) {
+                document.getElementById('ledger-portfolio-section').style.display = 'block';
+                const pBody = document.getElementById('ledger-portfolio-tbody');
+                pBody.innerHTML = '';
+                
+                portfolioData.forEach(r => {
+                    const val = parseFrenchNumber(r['valeur actuelle']);
+                    if (val <= 0) return;
+                    
+                    const pnl = parseFrenchNumber(r['gain ou perte en euros']);
+                    const pnlClass = pnl >= 0 ? 'text-emerald-400 font-bold' : 'text-red-500 font-bold';
+                    const price = parseFrenchNumber(r['cours actuel']);
+                    const pru = parseFrenchNumber(r['prix de revient']);
+                    const qty = price > 0 ? (val / price).toFixed(2) : '-';
+                    
+                    const tr = document.createElement('tr');
+                    tr.className = "border-b border-slate-700/50 hover:bg-slate-800/50";
+                    tr.innerHTML = `
+                        <td class="p-3 font-semibold text-white">${r['Titre']}</td>
+                        <td class="p-3 text-right">${qty}</td>
+                        <td class="p-3 text-right">${formatCurrency(pru)}</td>
+                        <td class="p-3 text-right">${formatCurrency(price)}</td>
+                        <td class="p-3 text-right text-blue-400">${formatCurrency(val)}</td>
+                        <td class="p-3 text-right ${pnlClass}">${formatCurrency(pnl)}</td>
+                    `;
+                    pBody.appendChild(tr);
+                });
+            }
+
+            // Rendu de l'historique brut
+            const txs = parseHistory(historyData);
+            const tbody = document.getElementById('ledger-tbody');
+            tbody.innerHTML = '';
+            
+            let fwdInventory = {};
+            txs.forEach(t => {
+                const s = t.stock;
+                if (!fwdInventory[s]) fwdInventory[s] = { qty: 0, cost: 0 };
+                t.tradePnl = null;
+                
+                if (t.type === 'Achat') {
+                    fwdInventory[s].cost += (t.price * t.qty) + t.fees;
+                    fwdInventory[s].qty += t.qty;
+                } else if (t.type === 'Vente') {
+                    if (fwdInventory[s].qty > 0) {
+                        const pmp = fwdInventory[s].cost / fwdInventory[s].qty;
+                        t.tradePnl = ((t.price * t.qty) - t.fees) - (pmp * t.qty);
+                        fwdInventory[s].qty -= t.qty;
+                        fwdInventory[s].cost -= (pmp * t.qty);
+                        if (fwdInventory[s].qty <= 0) fwdInventory[s].cost = 0;
+                    } else {
+                        t.tradePnl = -t.fees;
+                    }
+                } else if (t.type === 'Dividende') {
+                    t.tradePnl = t.amount;
+                }
+            });
+
+            const reversedTxs = [...txs].reverse();
+            
+            reversedTxs.forEach(t => {
+                const tr = document.createElement('tr');
+                tr.className = "border-b border-slate-700/50 hover:bg-slate-800/50";
+                
+                let pnlDisplay = "-";
+                let pnlClass = "";
+                if (t.tradePnl !== null) {
+                    pnlDisplay = formatCurrency(t.tradePnl);
+                    pnlClass = t.tradePnl >= 0 ? "text-emerald-400 font-bold" : "text-red-500 font-bold";
+                }
+
+                let typeClass = "text-slate-300";
+                if (t.type === 'Achat') typeClass = "text-blue-400";
+                if (t.type === 'Vente') typeClass = "text-purple-400";
+                if (t.type === 'Dividende') typeClass = "text-emerald-400";
+
+                tr.innerHTML = `
+                    <td class="p-3">${t.date.toLocaleDateString('fr-FR')}</td>
+                    <td class="p-3 ${typeClass}">${t.type}</td>
+                    <td class="p-3 font-semibold text-white">${t.stock}</td>
+                    <td class="p-3 text-right">${t.qty || '-'}</td>
+                    <td class="p-3 text-right">${t.price ? formatCurrency(t.price) : '-'}</td>
+                    <td class="p-3 text-right text-red-400">${t.fees ? formatCurrency(t.fees) : '-'}</td>
+                    <td class="p-3 text-right">${formatCurrency(t.amount)}</td>
+                    <td class="p-3 text-right ${pnlClass}">${pnlDisplay}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // --- Fonctions d'analyse pour le PDF ---
+        function getPnLMatrix(historyData) {
+            const txs = parseHistory(historyData);
+            const matrix = {};
+            const years = new Set();
+            const state = {};
+
+            txs.forEach(t => {
+                const s = t.stock;
+                const y = t.date.getFullYear().toString();
+                years.add(y);
+
+                if (!state[s]) state[s] = { qty: 0, cost: 0 };
+                if (!matrix[s]) matrix[s] = { total: 0 };
+                if (!matrix[s][y]) matrix[s][y] = 0;
+
+                if (t.type === 'Dividende') {
+                    matrix[s][y] += t.amount;
+                    matrix[s].total += t.amount;
+                } else if (t.type === 'Achat') {
+                    state[s].cost += (t.price * t.qty) + t.fees;
+                    state[s].qty += t.qty;
+                } else if (t.type === 'Vente') {
+                    let tradePnl = 0;
+                    if (state[s].qty > 0) {
+                        const pmp = state[s].cost / state[s].qty;
+                        tradePnl = ((t.price * t.qty) - t.fees) - (pmp * t.qty);
+                        state[s].qty -= t.qty;
+                        state[s].cost -= (pmp * t.qty);
+                        if (state[s].qty <= 0) state[s].cost = 0;
+                    } else {
+                        tradePnl = -t.fees;
+                    }
+                    matrix[s][y] += tradePnl;
+                    matrix[s].total += tradePnl;
+                }
+            });
+
+            return { matrix, sortedYears: Array.from(years).sort() };
+        }
+
+        function extractCyclesFromHistory(historyData) {
+            const txs = parseHistory(historyData); 
+            const cycles = [], active = {};
+            txs.forEach(t => {
+                const s = t.stock; 
+                if (!active[s]) active[s] = { qty: 0, cost: 0, pnl: 0, first: t.date, downs: 0, pmp: 0, fees: 0, capital: 0 }; 
+                let c = active[s];
+                if (t.type === 'Achat') { 
+                    if (c.qty > 0 && t.price < c.pmp) c.downs++; 
+                    c.qty += t.qty; 
+                    c.cost += (t.price * t.qty) + t.fees; 
+                    c.capital += (t.price * t.qty);
+                    c.fees += t.fees;
+                    c.pmp = c.cost / c.qty; 
+                } 
+                else if (t.type === 'Vente') { 
+                    if (c.qty > 0) { 
+                        c.fees += t.fees;
+                        c.pnl += ((t.price * t.qty) - t.fees) - (c.pmp * t.qty); 
+                        c.qty -= t.qty; 
+                        if (c.qty <= 0) { 
+                            cycles.push({ stock: s, pnl: c.pnl, days: (t.date - c.first)/86400000, avgDowns: c.downs, fees: c.fees, capital: c.capital }); 
+                            delete active[s]; 
+                        } 
+                    } 
+                }
+            });
+            return cycles;
+        }
+
+        // --- Generateur de PDF ---
+        function generatePDFReport() {
+            if (globalHistory.length === 0 && globalPortfolio.length === 0) return;
+            const { jsPDF } = window.jspdf; 
+            const doc = new jsPDF(); 
+            let yPos = 20;
+
+            doc.setFontSize(22); doc.setTextColor(30, 41, 59); 
+            doc.text("BILAN FACTUEL D'EXECUTION", 14, yPos); yPos += 10;
+            doc.setFontSize(10); doc.setTextColor(100, 100, 100); 
+            doc.text(`Edite le : ${new Date().toLocaleString('fr-FR')}`, 14, yPos); yPos += 15;
+
+            // 1. Portefeuille (Positions Actuelles)
+            if (globalPortfolio.length > 0) {
+                doc.setFontSize(14); doc.setTextColor(0, 0, 0); 
+                doc.text("1. EXPOSITION ACTUELLE (RISQUE LATENT)", 14, yPos); yPos += 5;
+                
+                let totalVal = 0, totalPnl = 0;
+                const portData = globalPortfolio.filter(r => parseFrenchNumber(r['valeur actuelle']) > 0).map(r => {
+                    const val = parseFrenchNumber(r['valeur actuelle']);
+                    const pnl = parseFrenchNumber(r['gain ou perte en euros']);
+                    totalVal += val; totalPnl += pnl;
+                    return [r['Titre'], formatCurrency(val), formatCurrency(parseFrenchNumber(r['prix de revient'])), formatCurrency(pnl)];
+                });
+                
+                doc.autoTable({
+                    startY: yPos,
+                    head: [['Titre', 'Valeur Actuelle', 'PRU', 'PnL Latent']],
+                    body: portData,
+                    foot: [['TOTAL', formatCurrency(totalVal), '-', formatCurrency(totalPnl)]],
+                    theme: 'grid', headStyles: { fillColor: [30, 41, 59] }, footStyles: { fillColor: [241, 245, 249], textColor: [0,0,0], fontStyle: 'bold' }
+                });
+                yPos = doc.lastAutoTable.finalY + 15;
+            }
+
+            if (globalHistory.length > 0) {
+                // 2. Pires Opérations Clôturées
+                if(yPos > 250) { doc.addPage(); yPos = 20; }
+                doc.setFontSize(14); doc.setTextColor(0, 0, 0); 
+                doc.text("2. DESTRUCTION DE CAPITAL (PIRES OPERATIONS CLOTUREES)", 14, yPos); yPos += 5;
+                
+                const cycles = extractCyclesFromHistory(globalHistory).filter(c => c.pnl < 0).sort((a,b) => a.pnl - b.pnl).slice(0, 10);
+                const tableData = cycles.map(c => [
+                    c.stock, formatCurrency(c.pnl), Math.round(c.days) + ' jours', formatCurrency(c.fees)
+                ]);
+
+                if(tableData.length > 0) {
+                    doc.autoTable({
+                        startY: yPos,
+                        head: [['Titre', 'PnL Net Realise', 'Duree Detention', 'Frais Payes']],
+                        body: tableData,
+                        theme: 'striped',
+                        headStyles: { fillColor: [220, 38, 38] },
+                        didParseCell: function (data) {
+                            if (data.section === 'body' && data.column.index === 1) {
+                                data.cell.styles.textColor = [220, 38, 38];
+                            }
+                        }
+                    });
+                    yPos = doc.lastAutoTable.finalY + 15;
+                } else {
+                    doc.setFontSize(10); doc.setTextColor(50, 50, 50);
+                    doc.text("Aucune perte cloturee enregistree.", 14, yPos);
+                    yPos += 10;
+                }
+
+                // 3. Matrice de Performance
+                if(yPos > 230) { doc.addPage(); yPos = 20; }
+                doc.setFontSize(14); doc.setTextColor(0, 0, 0); 
+                doc.text("3. MATRICE DE RENTABILITE REALISEE PAR AN", 14, yPos); yPos += 5;
+
+                const pnlData = getPnLMatrix(globalHistory);
+                const headRow = ['Titre', ...pnlData.sortedYears, 'Total Net'];
+
+                const matrixRows = Object.keys(pnlData.matrix).map(stock => {
+                    const rowData = pnlData.matrix[stock];
+                    const row = [stock];
+                    pnlData.sortedYears.forEach(y => {
+                        row.push(rowData[y] ? formatCurrency(rowData[y]) : "-");
+                    });
+                    row.push(formatCurrency(rowData.total));
+                    return { raw: row, totalVal: rowData.total, rawData: rowData };
+                }).sort((a, b) => b.totalVal - a.totalVal);
+
+                if(matrixRows.length > 0) {
+                    doc.autoTable({
+                        startY: yPos,
+                        head: [headRow],
+                        body: matrixRows.map(r => r.raw),
+                        theme: 'grid',
+                        headStyles: { fillColor: [30, 41, 59] },
+                        styles: { fontSize: 8 },
+                        didParseCell: function (data) {
+                            if (data.section === 'body' && data.column.index > 0) {
+                                const cellData = matrixRows[data.row.index];
+                                let numVal = 0;
+                                if (data.column.index === headRow.length - 1) {
+                                    numVal = cellData.totalVal;
+                                } else {
+                                    const year = pnlData.sortedYears[data.column.index - 1];
+                                    numVal = cellData.rawData[year] || 0;
+                                }
+
+                                if (numVal < 0) data.cell.styles.textColor = [220, 38, 38];
+                                else if (numVal > 0) data.cell.styles.textColor = [34, 197, 94];
+                            }
+                        }
+                    });
+                }
+            }
+
+            doc.save("autopsie_portefeuille.pdf");
+        }
+
+        window.generatePDFReport = generatePDFReport;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const setupDropZone = (id, inputId, labelId, isPos) => {
+                const zone = document.getElementById(id);
+                const input = document.getElementById(inputId);
+                const label = document.getElementById(labelId);
+
+                const handleFile = (file) => {
+                    if (!file) return; 
+                    label.textContent = file.name; 
+                    zone.classList.add('loaded');
+                    Papa.parse(file, { 
+                        header: true, 
+                        skipEmptyLines: true, 
+                        complete: async function(res) { 
+                            if(isPos) globalPortfolio = res.data;
+                            else globalHistory = res.data; 
+                            await saveDataToCloud();
+                            updateDashboard(); 
+                        } 
+                    });
+                };
+
+                zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragover'); });
+                zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+                zone.addEventListener('drop', (e) => { e.preventDefault(); zone.classList.remove('dragover'); handleFile(e.dataTransfer.files[0]); });
+                input.addEventListener('change', (e) => handleFile(e.target.files[0]));
+            };
+
+            setupDropZone('drop-zone-pos', 'csvInputPos', 'label-pos', true);
+            setupDropZone('drop-zone-hist', 'csvInputHist', 'label-hist', false);
+        });
+    </script>
+</body>
+</html>
