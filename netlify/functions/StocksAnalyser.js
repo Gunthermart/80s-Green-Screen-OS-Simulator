@@ -1,4 +1,4 @@
-/* netlify/functions/StocksAnalyser.js */
+// netlify/functions/StocksAnalyser.js
 export async function handler(event, context) {
   if (event.httpMethod !== "POST") {
     return { 
