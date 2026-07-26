@@ -1107,6 +1107,9 @@ Réponds obligatoirement en respectant le schéma JSON demandé.`;
 
         async function fetchNetlifyFunction(payload, retries = 3, delay = 1000) {
             const netlifyEndpoint = '/.netlify/functions/StocksAnalyser';
+        async function fetchGeminiWithRetry(payload, retries = 3, delay = 1000) {
+            // Updated to use absolute origin to fix pathing issues in subdirectories
+            const netlifyEndpoint = window.location.origin + '/.netlify/functions/StocksAnalyser';
 
             for (let i = 0; i < retries; i++) {
                 try {
@@ -1120,16 +1123,13 @@ Réponds obligatoirement en respectant le schéma JSON demandé.`;
                         return await response.json();
                     }
 
-                    // On handle 502/504 as potential timeouts or temporary failures
                     if (response.status === 429 || response.status >= 500) {
                         await new Promise(r => setTimeout(r, delay * Math.pow(2, i)));
                         continue;
                     }
 
                     const errBody = await response.text();
-                    let errMessage = errBody;
-                    try { errMessage = JSON.parse(errBody).error; } catch(e) {}
-                    throw new Error(`Erreur serveur Netlify (${response.status}): ${errMessage}`);
+                    throw new Error(`Erreur serveur (${response.status}): ${errBody}`);
                 } catch (err) {
                     if (i === retries - 1) throw err;
                     await new Promise(r => setTimeout(r, delay * Math.pow(2, i)));
