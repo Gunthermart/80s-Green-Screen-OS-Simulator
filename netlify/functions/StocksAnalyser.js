@@ -8,7 +8,6 @@ export async function handler(event, context) {
     };
   }
 
-  // Supporte la majuscule 'StocksAnalyserKey' configurée sur Netlify (et fallback minuscules)
   const apiKey = process.env.StocksAnalyserKey || process.env.StocksAnalyserkey;
 
   if (!apiKey || apiKey.trim() === "") {
@@ -16,12 +15,12 @@ export async function handler(event, context) {
       statusCode: 400, 
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ 
-        error: "La variable d'environnement 'StocksAnalyserKey' est manquante ou vide sur Netlify. Vérifiez vos paramètres Netlify." 
+        error: "La variable d'environnement 'StocksAnalyserKey' est manquante ou vide sur Netlify. Veuillez la configurer dans Site settings > Environment variables." 
       }) 
     };
   }
 
-  // Modèle Google Gemini 2.5 Flash
+  // Utilisation de Gemini 2.5 Flash avec Google Search Grounding
   const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
 
   try {
@@ -47,7 +46,7 @@ export async function handler(event, context) {
     return {
       statusCode: 500,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ error: error.message })
+      body: JSON.stringify({ error: error.message || "Erreur interne du serveur lors de l'appel à l'IA." })
     };
   }
 }
