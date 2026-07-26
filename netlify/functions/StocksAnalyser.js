@@ -8,14 +8,16 @@ export async function handler(event, context) {
     };
   }
 
-  // Récupération de la variable secrète configurée dans Netlify
-  const apiKey = process.env.StocksAnalyserKey;
+  // Supporte la majuscule 'StocksAnalyserKey' configurée sur Netlify (et fallback minuscules)
+  const apiKey = process.env.StocksAnalyserKey || process.env.StocksAnalyserkey;
 
   if (!apiKey || apiKey.trim() === "") {
     return { 
       statusCode: 400, 
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ error: "La variable d'environnement 'StocksAnalyserkey' est manquante ou vide sur Netlify." }) 
+      body: JSON.stringify({ 
+        error: "La variable d'environnement 'StocksAnalyserKey' est manquante ou vide sur Netlify. Vérifiez vos paramètres Netlify." 
+      }) 
     };
   }
 
