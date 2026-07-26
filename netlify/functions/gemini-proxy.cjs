@@ -1,7 +1,7 @@
 exports.handler = async function(event, context) {
     const allowedOrigins = [
         'https://leonce.fyi',
-        'https://www.leonce-.fyi', 
+        'https://www.leonce.fyi', 
         'http://localhost:8888'
     ]; 
     const origin = event.headers.origin;
