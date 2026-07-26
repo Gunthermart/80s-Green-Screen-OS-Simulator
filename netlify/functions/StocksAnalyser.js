@@ -1,19 +1,30 @@
 exports.handler = async function(event, context) {
   if (event.httpMethod !== "POST") {
-    return { statusCode: 405, body: JSON.stringify({ error: "Méthode non autorisée" }) };
+    return { 
+      statusCode: 405, 
+      body: JSON.stringify({ error: "Méthode non autorisée" }) 
+    };
   }
 
+  // Récupération de la clé secrète configurée dans Netlify
   const apiKey = process.env.StocksAnalyserkey;
-  if (!apiKey) {
-    return { statusCode: 500, body: JSON.stringify({ error: "Variable StocksAnalyserkey manquante" }) };
+
+  if (!apiKey || apiKey.trim() === "") {
+    return { 
+      statusCode: 500, 
+      body: JSON.stringify({ 
+        error: {
+          message: "La variable d'environnement StocksAnalyserkey est vide ou non définie sur Netlify." 
+        }
+      }) 
+    };
   }
 
-  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
   try {
     const payload = JSON.parse(event.body);
 
-    // Injection explicite de l'en-tête Referer pour valider la restriction Google Cloud
     const response = await fetch(apiUrl, {
       method: "POST",
       headers: {
