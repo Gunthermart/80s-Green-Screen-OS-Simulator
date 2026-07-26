@@ -21,8 +21,8 @@ export async function handler(event, context) {
     };
   }
 
-  // Appel de l'API Google Gemini 3.6 Flash
-  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
+  // Modèle Google Gemini 2.5 Flash
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
   try {
     const payload = JSON.parse(event.body);
