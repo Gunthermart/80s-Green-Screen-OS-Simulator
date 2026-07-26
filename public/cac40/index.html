@@ -141,7 +141,7 @@
                 <div class="h-6 w-[1px] bg-slate-800"></div>
                 <div class="flex items-center space-x-2 text-xs font-mono text-slate-400 bg-slate-900/80 px-3 py-1.5 rounded-lg border border-slate-800">
                     <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span class="hidden md:inline">Gemini Flash 2.5</span>
+                    <span class="hidden md:inline">Gemini 3 Flash</span>
                     <i class="fa-brands fa-google text-slate-400"></i>
                 </div>
             </div>
@@ -249,7 +249,7 @@
                 </div>
             </div>
             <div class="space-y-2 max-w-md mx-auto">
-                <h3 id="loadingStatusText" class="text-lg font-bold text-white">Analyse en cours via Google Gemini Flash...</h3>
+                <h3 id="loadingStatusText" class="text-lg font-bold text-white">Analyse en cours via Google Gemini 3 Flash...</h3>
                 <p class="text-xs text-slate-400 font-mono">Calcul des ratios clés (vert/rouge) et collecte des données financières Euronext en temps réel...</p>
             </div>
             <div class="flex justify-center items-center space-x-6 text-xs text-slate-400 font-mono">
@@ -720,7 +720,7 @@
     <!-- Application Footer -->
     <footer class="glass-panel border-t border-slate-800/80 py-6 mt-12 no-print">
         <div class="max-w-7xl mx-auto px-4 text-center text-xs text-slate-500 space-y-2">
-            <p>Euronext FactCheck AI • Propulsé par Google Gemini Flash & Google Search Grounding API</p>
+            <p>Euronext FactCheck AI • Propulsé par Google Gemini 3 Flash & Google Search Grounding API</p>
             <p class="text-[11px] text-slate-600">Couverture intégrale des marchés Euronext Paris, Amsterdam, Bruxelles, Lisbonne, Milan, Oslo, Dublin, Growth & Access.</p>
         </div>
     </footer>
@@ -893,7 +893,7 @@ Pour l'entreprise demandée, tu dois identifier sa cotation exacte sur Euronext,
 7. Facteurs de risques et gouvernance.
 Interdiction d'émettre des conseils d'investissement personnels, spéculations ou jugements de valeur non étayés.`;
 
-            const userPrompt = `Effectue une analyse strictement factuelle, récente et à jour à la date d'aujourd'hui (${todayFormatted}) pour la société cotée suivante sur Euronext : "${query}".
+            const userPrompt = `Effectue une analyse strictly factuelle, récente et à jour à la date d'aujourd'hui (${todayFormatted}) pour la société cotée suivante sur Euronext : "${query}".
 ${marketFilter !== 'ALL' ? 'Marché privilégié à vérifier : ' + marketFilter : ''}
 
 Extraie au moins 4 à 6 ratios financiers clés (PER, EV/EBITDA, Dette Nette/EBITDA, ROE, Rendement, etc.) et qualifie chaque ratio comme 'positive' (sain/attractif), 'warning' (attention/élevé) ou 'neutral'.
@@ -1071,6 +1071,11 @@ Réponds obligatoirement en respectant le schéma JSON demandé.`;
 
             try {
                 const apiResult = await fetchGeminiWithRetry(payload);
+                
+                if (apiResult.error) {
+                    throw new Error(typeof apiResult.error === 'string' ? apiResult.error : JSON.stringify(apiResult.error));
+                }
+
                 const candidate = apiResult.candidates?.[0];
 
                 if (!candidate || !candidate.content?.parts?.[0]?.text) {
@@ -1104,7 +1109,6 @@ Réponds obligatoirement en respectant le schéma JSON demandé.`;
         }
 
         async function fetchGeminiWithRetry(payload, retries = 3, delay = 1000) {
-            // Absolute path ensuring proper targeting regardless of subdirectory depth
             const netlifyEndpoint = window.location.origin + '/.netlify/functions/StocksAnalyser';
 
             for (let i = 0; i < retries; i++) {
