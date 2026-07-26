@@ -22,7 +22,7 @@ export async function handler(event, context) {
   }
 
   // Modèle Google Gemini 2.5 Flash
-  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
 
   try {
     const payload = JSON.parse(event.body);
