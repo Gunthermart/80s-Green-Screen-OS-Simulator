@@ -9,7 +9,7 @@ export async function handler(event, context) {
   }
 
   // Récupération de la variable secrète configurée dans Netlify
-  const apiKey = process.env.StocksAnalyserkey;
+  const apiKey = process.env.StocksAnalyserKey;
 
   if (!apiKey || apiKey.trim() === "") {
     return { 
