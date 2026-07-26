@@ -690,55 +690,33 @@
             executeAnalysis(`${name} (${ticker})`, marketSelect.value);
         };
 
-        async function fetchGeminiWithRetry(payload, retries = 3, delay = 3000) {
+        async function fetchNetlifyFunction(payload) {
             const netlifyEndpoint = window.location.origin + '/.netlify/functions/StocksAnalyser';
-            let lastError = null;
 
-            for (let i = 0; i < retries; i++) {
-                try {
-                    const response = await fetch(netlifyEndpoint, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
+            const response = await fetch(netlifyEndpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
 
-                    if (response.ok) {
-                        return await response.json();
-                    }
-
-                    const errText = await response.text();
-                    let parsedMessage = errText;
-                    try {
-                        const jsonErr = JSON.parse(errText);
-                        if (jsonErr.error) {
-                            parsedMessage = typeof jsonErr.error === 'string' ? jsonErr.error : (jsonErr.error.message || errText);
-                        }
-                    } catch(e) {}
-
-                    if (response.status === 429) {
-                        lastError = new Error(`Quota de requêtes dépassé (Erreur 429 - Too Many Requests). L'API Google Gemini est temporairement saturée. Veuillez patienter une minute avant d'effectuer une nouvelle recherche.`);
-                        if (i < retries - 1) {
-                            await new Promise(r => setTimeout(r, delay * Math.pow(2, i)));
-                            continue;
-                        }
-                    } else if (response.status >= 500) {
-                        lastError = new Error(`Erreur serveur Netlify (${response.status}): ${parsedMessage}`);
-                        if (i < retries - 1) {
-                            await new Promise(r => setTimeout(r, delay * Math.pow(2, i)));
-                            continue;
-                        }
-                    } else {
-                        throw new Error(`Erreur serveur (${response.status}): ${parsedMessage}`);
-                    }
-                } catch (err) {
-                    lastError = err;
-                    if (i < retries - 1) {
-                        await new Promise(r => setTimeout(r, delay * Math.pow(2, i)));
-                    }
-                }
+            // Si HTTP 429, on ne retente pas en boucle pour éviter le flood de la console
+            if (response.status === 429) {
+                throw new Error("Quota de requêtes dépassé (Erreur 429 - Too Many Requests). L'API Google Gemini est temporairement saturée ou le quota gratuit est atteint. Veuillez patienter 1 minute avant d'effectuer une nouvelle recherche.");
             }
 
-            throw lastError || new Error("Erreur de communication avec le serveur.");
+            if (!response.ok) {
+                const errText = await response.text();
+                let parsedMessage = errText;
+                try {
+                    const jsonErr = JSON.parse(errText);
+                    if (jsonErr.error) {
+                        parsedMessage = typeof jsonErr.error === 'string' ? jsonErr.error : (jsonErr.error.message || errText);
+                    }
+                } catch(e) {}
+                throw new Error(`Erreur serveur Netlify (${response.status}): ${parsedMessage}`);
+            }
+
+            return await response.json();
         }
 
         async function executeAnalysis(query, marketFilter) {
@@ -919,7 +897,7 @@ Réponds obligatoirement en JSON selon le schéma demandé.`;
             };
 
             try {
-                const apiResult = await fetchGeminiWithRetry(payload);
+                const apiResult = await fetchNetlifyFunction(payload);
 
                 if (!apiResult) {
                     throw new Error("Aucune réponse n'a été reçue du serveur.");
@@ -955,7 +933,14 @@ Réponds obligatoirement en JSON selon le schéma demandé.`;
                 console.error("Netlify Function Exec Error:", err);
                 loadingContainer.classList.add('hidden');
                 errorContainer.classList.remove('hidden');
-                errorMessage.innerText = err.message || "Erreur lors de la communication avec la fonction Netlify.";
+                
+                if (err.message && err.message.includes('429')) {
+                    document.getElementById('errorTitle').innerText = "Quota d'API temporairement atteint (HTTP 429)";
+                    errorMessage.innerText = err.message;
+                } else {
+                    document.getElementById('errorTitle').innerText = "Erreur d'analyse";
+                    errorMessage.innerText = err.message || "Erreur lors de la communication avec le serveur.";
+                }
             }
         }
 
