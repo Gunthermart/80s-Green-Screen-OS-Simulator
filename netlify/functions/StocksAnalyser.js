@@ -1,48 +1,67 @@
+const https = require('https');
+
 exports.handler = async function(event, context) {
+  // 1. Accepter uniquement les requêtes POST
   if (event.httpMethod !== "POST") {
-    return { 
-      statusCode: 405, 
-      body: JSON.stringify({ error: "Méthode non autorisée" }) 
+    return {
+      statusCode: 405,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ error: "Méthode non autorisée" })
     };
   }
 
+  // 2. Vérifier la présence de la clé d'environnement
   const apiKey = process.env.StocksAnalyserkey;
-
   if (!apiKey || apiKey.trim() === "") {
-    return { 
-      statusCode: 500, 
-      body: JSON.stringify({ 
-        error: "La variable d'environnement StocksAnalyserkey est manquante ou vide sur Netlify." 
-      }) 
+    return {
+      statusCode: 400,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ error: "La variable d'environnement 'StocksAnalyserkey' est manquante sur Netlify." })
     };
   }
 
-  // URL mise à jour avec l'identifiant exact de Gemini 3.6 Flash
-  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
+  // Target le modèle Google Gemini 2.5 Flash
+  const path = `/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
-  try {
-    const payload = JSON.parse(event.body);
+  return new Promise((resolve) => {
+    const postData = event.body || "";
 
-    const response = await fetch(apiUrl, {
-      method: "POST",
+    const options = {
+      hostname: 'generativelanguage.googleapis.com',
+      port: 443,
+      path: path,
+      method: 'POST',
       headers: {
-        "Content-Type": "application/json",
-        "Referer": "https://www.leonce.fyi/"
-      },
-      body: JSON.stringify(payload)
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(postData),
+        'Referer': 'https://www.leonce.fyi/'
+      }
+    };
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        resolve({
+          statusCode: res.statusCode,
+          headers: { 
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*" 
+          },
+          body: data
+        });
+      });
     });
 
-    const data = await response.json();
+    req.on('error', (e) => {
+      resolve({
+        statusCode: 500,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ error: `Erreur de connexion à l'API Google: ${e.message}` })
+      });
+    });
 
-    return {
-      statusCode: response.status,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data)
-    };
-  } catch (error) {
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: error.message })
-    };
-  }
+    req.write(postData);
+    req.end();
+  });
 };
