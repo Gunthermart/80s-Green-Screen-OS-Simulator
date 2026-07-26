@@ -1,5 +1,5 @@
 /* netlify/functions/StocksAnalyser.js */
-exports.handler = async function(event, context) {
+export async function handler(event, context) {
   if (event.httpMethod !== "POST") {
     return { 
       statusCode: 405, 
@@ -8,7 +8,7 @@ exports.handler = async function(event, context) {
     };
   }
 
-  // Récupération de la variable secrète
+  // Récupération de la variable secrète configurée dans Netlify
   const apiKey = process.env.StocksAnalyserkey;
 
   if (!apiKey || apiKey.trim() === "") {
@@ -19,7 +19,7 @@ exports.handler = async function(event, context) {
     };
   }
 
-  // Modèle Google Gemini 2.5 Flash
+  // Appel de l'API Google Gemini 2.5 Flash
   const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
   try {
@@ -48,4 +48,4 @@ exports.handler = async function(event, context) {
       body: JSON.stringify({ error: error.message })
     };
   }
-};
+}
