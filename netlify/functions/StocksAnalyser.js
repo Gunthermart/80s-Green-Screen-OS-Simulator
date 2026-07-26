@@ -6,21 +6,20 @@ exports.handler = async function(event, context) {
     };
   }
 
-  // Récupération de la clé secrète configurée dans Netlify
+  // Récupération de la clé depuis les variables Netlify
   const apiKey = process.env.StocksAnalyserkey;
 
   if (!apiKey || apiKey.trim() === "") {
     return { 
       statusCode: 500, 
       body: JSON.stringify({ 
-        error: {
-          message: "La variable d'environnement StocksAnalyserkey est vide ou non définie sur Netlify." 
-        }
+        error: "La variable d'environnement StocksAnalyserkey est manquante ou vide sur Netlify." 
       }) 
     };
   }
 
-  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  // URL vers le modèle Gemini Flash 3.6
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
 
   try {
     const payload = JSON.parse(event.body);
