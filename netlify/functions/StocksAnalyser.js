@@ -6,7 +6,6 @@ exports.handler = async function(event, context) {
     };
   }
 
-  // Récupération de la clé depuis les variables Netlify
   const apiKey = process.env.StocksAnalyserkey;
 
   if (!apiKey || apiKey.trim() === "") {
@@ -18,8 +17,8 @@ exports.handler = async function(event, context) {
     };
   }
 
-  // URL vers le modèle Gemini Flash 3.6
-  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+  // URL mise à jour avec l'identifiant exact de Gemini 3.6 Flash
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
 
   try {
     const payload = JSON.parse(event.body);
