@@ -69,6 +69,25 @@
             box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.4);
         }
 
+        /* Styles Rouge Fluo Néon pour les éléments négatifs / alertes */
+        .text-neon-red {
+            color: #ff2a6d !important;
+            text-shadow: 0 0 8px rgba(255, 42, 109, 0.6);
+        }
+
+        .neon-red-badge {
+            background-color: rgba(255, 42, 109, 0.18) !important;
+            color: #ff2a6d !important;
+            border: 1px solid rgba(255, 42, 109, 0.7) !important;
+            box-shadow: 0 0 10px rgba(255, 42, 109, 0.4);
+        }
+
+        .neon-red-card {
+            background: rgba(45, 10, 22, 0.75) !important;
+            border: 1px solid rgba(255, 42, 109, 0.6) !important;
+            box-shadow: 0 0 18px -2px rgba(255, 42, 109, 0.35);
+        }
+
         ::-webkit-scrollbar {
             width: 6px;
             height: 6px;
@@ -241,12 +260,12 @@
         </div>
 
         <!-- Erreur -->
-        <div id="errorContainer" class="hidden p-6 rounded-2xl bg-rose-950/40 border border-rose-800/60 text-rose-200 space-y-3 no-print">
+        <div id="errorContainer" class="hidden p-6 rounded-2xl neon-red-card space-y-3 no-print">
             <div class="flex items-start space-x-3">
-                <i class="fa-solid fa-triangle-exclamation text-rose-400 text-xl mt-0.5 shrink-0"></i>
+                <i class="fa-solid fa-triangle-exclamation text-neon-red text-xl mt-0.5 shrink-0 animate-pulse"></i>
                 <div class="space-y-1">
-                    <h4 class="font-bold text-rose-100" id="errorTitle">Erreur d'analyse</h4>
-                    <p class="text-sm text-rose-300" id="errorMessage">Impossible de récupérer les données pour cette entreprise.</p>
+                    <h4 class="font-bold text-neon-red" id="errorTitle">Erreur d'analyse</h4>
+                    <p class="text-sm text-rose-200" id="errorMessage">Impossible de récupérer les données pour cette entreprise.</p>
                 </div>
             </div>
         </div>
@@ -1112,13 +1131,25 @@ Fournis :
             document.getElementById('piotroskiBadge').innerText = `F-Score: ${health.piotroskiScore || 'N/A'}`;
             document.getElementById('piotroskiAnalysis').innerText = health.piotroskiAnalysis || 'Diagnostic de rentabilité et efficacité.';
 
+            const isAltmanRisky = health.altmanStatus && (health.altmanStatus.toLowerCase().includes('détresse') || health.altmanStatus.toLowerCase().includes('gris') || health.altmanStatus.toLowerCase().includes('risque'));
             document.getElementById('altmanValue').innerText = health.altmanZScore || 'N/A';
-            document.getElementById('altmanBadge').innerText = health.altmanStatus || 'Zone Sûre';
+            const altmanBadgeEl = document.getElementById('altmanBadge');
+            altmanBadgeEl.innerText = health.altmanStatus || 'Zone Sûre';
+            altmanBadgeEl.className = isAltmanRisky 
+                ? 'text-xs px-2 py-0.5 rounded font-mono font-bold neon-red-badge' 
+                : 'text-xs px-2 py-0.5 rounded font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20';
+
             document.getElementById('altmanAnalysis').innerText = 'Indicateur prédictif de solvabilité à 24 mois.';
 
             document.getElementById('dividendYieldValue').innerText = div.yield || 'N/A';
             document.getElementById('fcfYieldValue').innerText = div.fcfYield || 'N/A';
-            document.getElementById('dividendSafetyBadge').innerText = div.safetyGrade || 'Sous surveillance';
+            const isDivRisky = div.safetyGrade && (div.safetyGrade.toLowerCase().includes('coupe') || div.safetyGrade.toLowerCase().includes('risque') || div.safetyGrade.toLowerCase().includes('vigilance') || div.safetyGrade.toLowerCase().includes('surveillance'));
+            const divSafetyBadgeEl = document.getElementById('dividendSafetyBadge');
+            divSafetyBadgeEl.innerText = div.safetyGrade || 'Sous surveillance';
+            divSafetyBadgeEl.className = isDivRisky 
+                ? 'text-xs px-2 py-0.5 rounded font-mono font-bold neon-red-badge' 
+                : 'text-xs px-2 py-0.5 rounded font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+
             document.getElementById('dividendAnalysis').innerText = `${div.analysis || 'Soutenabilité'} (Payout FCF: ${div.payoutRatio || 'N/A'})`;
 
             const tableBody = document.getElementById('metricsTableBody');
@@ -1150,25 +1181,31 @@ Fournis :
             if (ratios.length > 0) {
                 ratiosContainer.innerHTML = ratios.map(r => {
                     const isPositive = r.status === 'positive';
-                    const isWarning = r.status === 'warning';
+                    const isWarning = r.status === 'warning' || r.status === 'negative';
 
                     const cardBg = isPositive 
                         ? 'bg-emerald-950/20 border-emerald-500/40' 
                         : isWarning 
-                            ? 'bg-rose-950/20 border-rose-500/40' 
+                            ? 'neon-red-card' 
                             : 'bg-slate-900/60 border-slate-800/80';
 
                     const valueColor = isPositive 
                         ? 'text-emerald-400' 
                         : isWarning 
-                            ? 'text-rose-400' 
+                            ? 'text-neon-red font-bold' 
                             : 'text-slate-100';
 
+                    const badgeStyle = isPositive 
+                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+                        : isWarning 
+                            ? 'neon-red-badge' 
+                            : 'bg-slate-800 text-slate-300';
+
                     return `
-                        <div class="p-4 rounded-xl border ${cardBg} space-y-2">
+                        <div class="p-4 rounded-xl ${cardBg} space-y-2">
                             <div class="flex items-center justify-between">
                                 <span class="text-xs font-mono font-semibold text-slate-200">${r.ratioName}</span>
-                                <span class="text-[11px] font-mono px-2 py-0.5 rounded ${isPositive ? 'bg-emerald-500/10 text-emerald-400' : isWarning ? 'bg-rose-500/10 text-rose-400' : 'bg-slate-800 text-slate-300'}">
+                                <span class="text-[11px] font-mono px-2 py-0.5 rounded ${badgeStyle}">
                                     ${r.status || 'neutre'}
                                 </span>
                             </div>
@@ -1261,9 +1298,12 @@ Fournis :
             const risksContainer = document.getElementById('risksContainer');
             if (risks.length > 0) {
                 risksContainer.innerHTML = risks.map(r => `
-                    <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1">
-                        <div class="text-xs font-mono text-rose-400 font-semibold">${r.category}</div>
-                        <p class="text-xs text-slate-300">${r.description}</p>
+                    <div class="p-4 rounded-xl neon-red-card space-y-1">
+                        <div class="text-xs font-mono text-neon-red font-bold flex items-center space-x-1.5">
+                            <i class="fa-solid fa-circle-exclamation"></i>
+                            <span>${r.category}</span>
+                        </div>
+                        <p class="text-xs text-slate-200 leading-relaxed">${r.description}</p>
                     </div>
                 `).join('');
             } else {
