@@ -131,7 +131,7 @@
                 <div class="h-6 w-[1px] bg-slate-800"></div>
                 <div class="flex items-center space-x-2 text-xs font-mono text-slate-400 bg-slate-900/80 px-3 py-1.5 rounded-lg border border-slate-800">
                     <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span class="hidden md:inline">Gemini 3.6 Flash</span>
+                    <span class="hidden md:inline">Gemini 3.5 Flash-Lite</span>
                     <i class="fa-brands fa-google text-slate-400"></i>
                 </div>
             </div>
@@ -152,7 +152,7 @@
                         Analysez n'importe quelle entreprise cotée sur <span class="text-transparent bg-clip-text bg-gradient-to-r from-sky-400 via-teal-300 to-emerald-400">Euronext</span>
                     </h1>
                     <p class="mt-2 text-sm text-slate-400">
-                        Recherche en temps réel via Google Gemini avec vérification des faits, ratios financiers évalués, gouvernance et facteurs de risques.
+                        Recherche ultra-rapide en temps réel via Google Gemini avec vérification des faits, ratios financiers, gouvernance et facteurs de risques.
                     </p>
                 </div>
 
@@ -231,8 +231,8 @@
                 </div>
             </div>
             <div class="space-y-2 max-w-md mx-auto">
-                <h3 id="loadingStatusText" class="text-lg font-bold text-white">Analyse en cours via Google Gemini...</h3>
-                <p class="text-xs text-slate-400 font-mono">Calcul des ratios clés et collecte des données financières Euronext en temps réel...</p>
+                <h3 id="loadingStatusText" class="text-lg font-bold text-white">Analyse en cours via Google Gemini 3.5 Flash-Lite...</h3>
+                <p class="text-xs text-slate-400 font-mono">Calcul rapide des ratios et synthèse des données financières Euronext...</p>
             </div>
         </div>
 
@@ -255,7 +255,7 @@
                 </div>
                 <h3 class="text-xl font-bold text-white">Prêt à analyser le marché Euronext</h3>
                 <p class="text-sm text-slate-400 leading-relaxed">
-                    Saisissez le nom d'une société, son ticker ou son code ISIN pour obtenir un rapport factuel structuré et vérifié.
+                    Saisissez le nom d'une société, son ticker ou son code ISIN pour obtenir un rapport factuel synthétique et vérifié.
                 </p>
             </div>
         </div>
@@ -735,6 +735,10 @@
                     return resData;
                 }
 
+                if (response.status === 504) {
+                    throw new Error("Délai d'exécution dépassé (504 Gateway Timeout). L'analyse a pris plus de 10s. Essayez avec le Ticker direct pour accélérer le traitement (ex: MC pour LVMH).");
+                }
+
                 if (response.status === 429) {
                     throw new Error("Quota de requêtes atteint (429). Veuillez patienter une minute avant de relancer l'analyse.");
                 }
@@ -754,28 +758,24 @@
 
             const now = new Date();
             const todayFormatted = now.toLocaleDateString('fr-FR', {
-                weekday: 'long',
                 day: 'numeric',
                 month: 'long',
                 year: 'numeric'
             });
 
-            loadingStatusText.innerText = `Analyse factuelle en cours pour "${query}"...`;
+            loadingStatusText.innerText = `Analyse rapide pour "${query}"...`;
 
-            const systemPrompt = `Tu es un analyste financier factuel spécialisé sur le marché Euronext.
-Date du jour : ${todayFormatted}.
-Pour l'entreprise demandée, tu dois identifier sa cotation exacte sur Euronext, son code ISIN/Ticker, puis effectuer une recherche web en temps réel pour fournir les informations les plus récentes :
-1. Cours / Chiffres clés récents.
-2. Ratios financiers pertinents (ex: PER, EV/EBITDA, Dette Nette/EBITDA, ROE, Rendement du dividende) avec un statut : 'positive' (sain/attractif), 'warning' (vigilance) ou 'neutral'.
-3. Analyse complète de la CROISSANCE.
-4. Perspectives et guidance officielle.
-5. Consensus récent des analystes.
-6. Dernières news et communiqués.
-7. Facteurs de risques et gouvernance.`;
+            const systemPrompt = `Tu es un analyste financier factuel et synthétique spécialisé sur Euronext. Date: ${todayFormatted}.
+IMPORTANT: Sois extrêmement concis, rapide et direct. Limite chaque synthèse à 1 ou 2 phrases très courtes.
+Identifie l'entreprise cotée Euronext, son ticker/ISIN et effectue une recherche web rapide:
+1. Chiffres clés récents.
+2. 3 à 4 Ratios financiers max ('positive', 'warning' ou 'neutral').
+3. Croissance synthétique.
+4. Guidance officielle.
+5. Consensus analystes court.
+6. 2 news récentes max et 2 risques principaux.`;
 
-            const userPrompt = `Effectue une analyse factuelle et récente pour la société cotée suivante sur Euronext : "${query}".
-${marketFilter !== 'ALL' ? 'Marché privilégié : ' + marketFilter : ''}
-Réponds obligatoirement en respectant le schéma JSON demandé.`;
+            const userPrompt = `Analyse factuelle rapide pour la société Euronext : "${query}". ${marketFilter !== 'ALL' ? 'Marché: ' + marketFilter : ''}. Sois ultra concis.`;
 
             const payload = {
                 contents: [{ parts: [{ text: userPrompt }] }],
