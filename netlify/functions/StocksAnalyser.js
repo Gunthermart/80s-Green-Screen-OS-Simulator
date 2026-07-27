@@ -20,8 +20,8 @@ export async function handler(event, context) {
     };
   }
 
-  // Utilisation de Gemini 2.5 Flash avec Google Search Grounding
-  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
+  // Utilisation de Gemini 3.6 Flash avec Google Search Grounding
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
 
   try {
     const payload = JSON.parse(event.body);
