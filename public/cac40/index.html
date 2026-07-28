@@ -730,11 +730,22 @@
                                 <p class="text-xs text-slate-400">Niveaux clés d'exécution, cadrage des risques et objectifs de cours</p>
                             </div>
                         </div>
-                        <div class="flex items-center space-x-2">
-                            <span class="text-xs font-mono uppercase text-slate-400">Ratio R/R :</span>
-                            <span id="planRiskReward" class="text-base font-black font-mono px-3 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                                1:--
-                            </span>
+                        <div class="flex items-center space-x-3">
+                            <button id="btnSharePlan" title="Exporter" class="p-2 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 text-slate-400 hover:text-slate-200 border border-slate-700/50 text-xs transition flex items-center justify-center">
+                                <i class="fa-solid fa-share-nodes"></i>
+                            </button>
+                            <div class="flex items-center space-x-2">
+                                <span class="text-xs font-mono uppercase text-slate-400">Probabilité :</span>
+                                <span id="planWinProb" class="text-base font-black font-mono px-3 py-1 rounded-lg bg-sky-500/20 text-sky-300 border border-sky-500/40">
+                                    --%
+                                </span>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <span class="text-xs font-mono uppercase text-slate-400">Ratio R/R :</span>
+                                <span id="planRiskReward" class="text-base font-black font-mono px-3 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                                    1:--
+                                </span>
+                            </div>
                         </div>
                     </div>
 
@@ -848,6 +859,7 @@
         const btnPrint = document.getElementById('btnPrint');
         const btnExportPDF = document.getElementById('btnExportPDF');
         const btnCopyJSON = document.getElementById('btnCopyJSON');
+        const btnSharePlan = document.getElementById('btnSharePlan');
 
         window.addEventListener('DOMContentLoaded', () => {
             initEventListeners();
@@ -901,6 +913,37 @@
             btnPrint.addEventListener('click', () => window.print());
             btnExportPDF.addEventListener('click', generatePDFExport);
             btnCopyJSON.addEventListener('click', copyJSONToClipboard);
+            if (btnSharePlan) {
+                btnSharePlan.addEventListener('click', shareTradingPlan);
+            }
+        }
+
+        function shareTradingPlan() {
+            if (!currentReportData || !currentReportData.tradingPlan) return;
+            const ticker = currentReportData.companyInfo?.ticker || 'EUR';
+            const t = currentReportData.tradingPlan;
+            const rawText = `${ticker} | In: ${t.entryZone || '-'} | SL: ${t.stopLoss || '-'} | TP1: ${t.tp1 || '-'} | Prob: ${t.winProbability || '-'} | R/R: ${t.riskRewardRatio || '-'}`;
+            const text = rawText.substring(0, 140);
+
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+            } catch (err) {
+                console.error('Erreur lors du traitement', err);
+            }
+            document.body.removeChild(textarea);
+
+            if (btnSharePlan) {
+                btnSharePlan.innerHTML = `<i class="fa-solid fa-check text-emerald-400"></i>`;
+                setTimeout(() => {
+                    btnSharePlan.innerHTML = `<i class="fa-solid fa-share-nodes"></i>`;
+                }, 2000);
+            }
         }
 
         function showSuggestions(val) {
@@ -995,9 +1038,9 @@ Fournis :
 4. Health scores: Piotroski F-Score (ex: "7/9"), Altman Z-Score (ex: "3.1"), Sécurité du Dividende.
 5. Croissance, gouvernance, guidance et consensus.
 6. Diagnostic décisionnel leonceDiagnostic: overallScore (0 à 100), shortTermSignal, shortTermAnalysis, mediumTermSignal, mediumTermAnalysis.
-7. Un plan de trading moyen terme tradingPlan: entryZone (ex: "580€ - 595€"), stopLoss (ex: "545€ (-7.5%)"), tp1 (ex: "650€ (+10%)"), tp2 (ex: "720€ (+22%)"), riskRewardRatio (ex: "1:2.8"), thesis (explication courte), invalidation (critère de sortie strict).`;
+7. Un plan de trading moyen terme tradingPlan: entryZone (ex: "580€ - 595€"), stopLoss (ex: "545€ (-7.5%)"), tp1 (ex: "650€ (+10%)"), tp2 (ex: "720€ (+22%)"), riskRewardRatio (ex: "1:2.8"), winProbability (taux estimé en % basé sur la confluence du score Piotroski, Z-score, consensus analystes, niveau technique et ratio R/R, ex: "68%"), thesis (explication courte), invalidation (critère de sortie strict).`;
 
-            const userPrompt = `Analyse factuelle rapide pour la société Euronext : "${query}". ${marketFilter !== 'ALL' ? 'Marché: ' + marketFilter : ''}. Sois synthétique et fournis tous les champs y compris le plan de trading moyen terme.`;
+            const userPrompt = `Analyse factuelle rapide pour la société Euronext : "${query}". ${marketFilter !== 'ALL' ? 'Marché: ' + marketFilter : ''}. Sois synthétique et fournis tous les champs y compris le plan de trading moyen terme avec sa probabilité de réussite.`;
 
             const payload = {
                 contents: [{ parts: [{ text: userPrompt }] }],
@@ -1214,10 +1257,11 @@ Fournis :
                                     tp1: { type: "STRING" },
                                     tp2: { type: "STRING" },
                                     riskRewardRatio: { type: "STRING" },
+                                    winProbability: { type: "STRING" },
                                     thesis: { type: "STRING" },
                                     invalidation: { type: "STRING" }
                                 },
-                                required: ["entryZone", "stopLoss", "tp1", "tp2", "riskRewardRatio", "thesis", "invalidation"]
+                                required: ["entryZone", "stopLoss", "tp1", "tp2", "riskRewardRatio", "winProbability", "thesis", "invalidation"]
                             }
                         },
                         required: ["companyInfo", "financialKPIs", "financialRatios", "growthAnalysis", "governanceAndCapital", "perspectives", "analystConsensusAndNews", "documentedRisks", "recentAnnouncements", "leonceDiagnostic", "tradingPlan"]
@@ -1538,6 +1582,22 @@ Fournis :
             document.getElementById('planTP1').innerText = trading.tp1 || 'N/A';
             document.getElementById('planTP2').innerText = trading.tp2 || 'N/A';
             document.getElementById('planRiskReward').innerText = trading.riskRewardRatio || '1:--';
+
+            // Stylisation dynamique de la probabilité de réussite
+            const winProbEl = document.getElementById('planWinProb');
+            const winProbVal = trading.winProbability || '--%';
+            winProbEl.innerText = winProbVal;
+            const probNum = parseInt(winProbVal, 10);
+            if (!isNaN(probNum)) {
+                if (probNum >= 65) {
+                    winProbEl.className = 'text-base font-black font-mono px-3 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
+                } else if (probNum >= 50) {
+                    winProbEl.className = 'text-base font-black font-mono px-3 py-1 rounded-lg bg-sky-500/20 text-sky-300 border border-sky-500/40';
+                } else {
+                    winProbEl.className = 'text-base font-black font-mono px-3 py-1 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/40';
+                }
+            }
+
             document.getElementById('planThesis').innerText = trading.thesis || 'Aucune thèse spécifiée.';
             document.getElementById('planInvalidation').innerText = trading.invalidation || 'Critère non défini.';
 
