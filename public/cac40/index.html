@@ -1182,51 +1182,68 @@
         }
 
         async function saveCurrentTradeToDB() {
-            if (!currentReportData || !currentReportData.tradingPlan) return;
-            const info = currentReportData.companyInfo || {};
-            const t = currentReportData.tradingPlan;
-            const todayIso = new Date().toISOString().slice(0, 10);
+            try {
+                if (!currentReportData || !currentReportData.tradingPlan) return;
+                const info = currentReportData.companyInfo || {};
+                const t = currentReportData.tradingPlan;
+                const todayIso = new Date().toISOString().slice(0, 10);
 
-            const mm = calculateMoneyManagement() || {};
-            const capitalVal = mm.capital !== undefined ? mm.capital : (parseFloat(mmCapitalInput.value) || 0);
-            
-            // Règle : Si Capital > 0 => Actif, Sinon => Inactif
-            const tradeStatus = capitalVal > 0 ? 'actif' : 'inactif';
+                const mm = calculateMoneyManagement() || {};
+                const capitalVal = mm.capital !== undefined ? mm.capital : (parseFloat(mmCapitalInput ? mmCapitalInput.value : 0) || 0);
+                
+                // Règle : Si Capital > 0 => Actif, Sinon => Inactif
+                const tradeStatus = capitalVal > 0 ? 'actif' : 'inactif';
 
-            const tradeObj = {
-                companyName: info.name || 'Société',
-                ticker: info.ticker || 'EUR',
-                isin: info.isin || 'N/A',
-                entryZone: t.entryZone || '-',
-                stopLoss: t.stopLoss || '-',
-                tp1: t.tp1 || '-',
-                tp2: t.tp2 || '-',
-                riskRewardRatio: t.riskRewardRatio || '-',
-                winProbability: t.winProbability || '-',
-                thesis: t.thesis || '-',
-                invalidation: t.invalidation || '-',
-                status: tradeStatus,
-                startDate: todayIso,       // Date Début
-                openDate: todayIso,        // Date Ouverture
-                closeDate: '',             // Date Clôture
-                exitPrice: 0,
-                realizedPnL: 0,
-                capital: capitalVal,
-                riskPercent: mm.riskPct || 1.0,
-                riskAmountEur: mm.riskEuro || 0,
-                sharesCount: mm.sharesCount || 0,
-                positionSizeEur: mm.positionSize || 0,
-                allocationPercent: mm.allocationPct || 0,
-                createdAt: new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-                timestamp: Date.now()
-            };
+                const tradeObj = {
+                    companyName: info.name || 'Société',
+                    ticker: info.ticker || 'EUR',
+                    isin: info.isin || 'N/A',
+                    entryZone: t.entryZone || '-',
+                    stopLoss: t.stopLoss || '-',
+                    tp1: t.tp1 || '-',
+                    tp2: t.tp2 || '-',
+                    riskRewardRatio: t.riskRewardRatio || '-',
+                    winProbability: t.winProbability || '-',
+                    thesis: t.thesis || '-',
+                    invalidation: t.invalidation || '-',
+                    status: tradeStatus,
+                    startDate: todayIso,       // Date Début
+                    openDate: todayIso,        // Date Ouverture
+                    closeDate: '',             // Date Clôture
+                    exitPrice: 0,
+                    realizedPnL: 0,
+                    capital: capitalVal,
+                    riskPercent: mm.riskPct || 1.0,
+                    riskAmountEur: mm.riskEuro || 0,
+                    sharesCount: mm.sharesCount || 0,
+                    positionSizeEur: mm.positionSize || 0,
+                    allocationPercent: mm.allocationPct || 0,
+                    createdAt: new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+                    timestamp: Date.now()
+                };
 
-            await db.trades.add(tradeObj);
+                await db.trades.add(tradeObj);
+                await renderTradesJournal(true);
 
-            btnSaveTrade.innerHTML = `<i class="fa-solid fa-check text-emerald-400"></i> <span>Trade (${tradeStatus.toUpperCase()}) Enregistré !</span>`;
-            setTimeout(() => {
-                btnSaveTrade.innerHTML = `<i class="fa-solid fa-bookmark"></i> <span>Enregistrer Trade</span>`;
-            }, 2000);
+                btnSaveTrade.classList.remove('bg-sky-600', 'hover:bg-sky-500');
+                btnSaveTrade.classList.add('bg-emerald-600', 'hover:bg-emerald-500');
+                btnSaveTrade.innerHTML = `<i class="fa-solid fa-check text-white"></i> <span>Trade (${tradeStatus.toUpperCase()}) Enregistré !</span>`;
+                setTimeout(() => {
+                    btnSaveTrade.classList.remove('bg-emerald-600', 'hover:bg-emerald-500');
+                    btnSaveTrade.classList.add('bg-sky-600', 'hover:bg-sky-500');
+                    btnSaveTrade.innerHTML = `<i class="fa-solid fa-bookmark"></i> <span>Enregistrer Trade</span>`;
+                }, 3000);
+            } catch (err) {
+                console.error("Erreur d'enregistrement du trade:", err);
+                btnSaveTrade.classList.remove('bg-sky-600', 'hover:bg-sky-500');
+                btnSaveTrade.classList.add('bg-rose-600', 'hover:bg-rose-500');
+                btnSaveTrade.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> <span>Erreur !</span>`;
+                setTimeout(() => {
+                    btnSaveTrade.classList.remove('bg-rose-600', 'hover:bg-rose-500');
+                    btnSaveTrade.classList.add('bg-sky-600', 'hover:bg-sky-500');
+                    btnSaveTrade.innerHTML = `<i class="fa-solid fa-bookmark"></i> <span>Enregistrer Trade</span>`;
+                }, 3000);
+            }
         }
 
         async function updateCategoryDateBounds(categoryTrades) {
