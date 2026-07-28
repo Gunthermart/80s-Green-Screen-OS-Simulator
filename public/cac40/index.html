@@ -1525,13 +1525,30 @@
         }
 
         async function generateJournalPDF() {
+            const btnPrint = document.getElementById('btnPrintJournalPDF');
             const filteredTrades = await getFilteredTrades();
-            if (filteredTrades.length === 0) return;
+            
+            if (filteredTrades.length === 0) {
+                if (btnPrint) {
+                    const originalHTML = btnPrint.innerHTML;
+                    btnPrint.innerHTML = `<i class="fa-solid fa-triangle-exclamation text-amber-400"></i> <span>Aucun trade</span>`;
+                    setTimeout(() => { btnPrint.innerHTML = originalHTML; }, 2500);
+                }
+                return;
+            }
+
+            if (btnPrint) {
+                btnPrint.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> <span>Génération...</span>`;
+            }
 
             const startDateVal = document.getElementById('journalFilterStartDate')?.value || 'Début';
             const endDateVal = document.getElementById('journalFilterEndDate')?.value || 'Aujourd\'hui';
 
             const printContainer = document.createElement('div');
+            printContainer.style.position = 'absolute';
+            printContainer.style.left = '-9999px';
+            printContainer.style.top = '0';
+            printContainer.style.width = '1050px';
             printContainer.className = 'p-6 bg-slate-950 text-slate-100 font-sans space-y-4';
 
             let totalAllocated = 0;
@@ -1600,6 +1617,9 @@
                 </div>
             `;
 
+            // On attache impérativement l'élément au DOM pour qu'html2canvas puisse calculer sa géométrie
+            document.body.appendChild(printContainer);
+
             const opt = {
                 margin:       [0.3, 0.3, 0.3, 0.3],
                 filename:     `Journal_Trades_MT_${startDateVal}_${endDateVal}.pdf`,
@@ -1608,7 +1628,18 @@
                 jsPDF:        { unit: 'in', format: 'a4', orientation: 'landscape' }
             };
 
-            html2pdf().set(opt).from(printContainer).save();
+            try {
+                await html2pdf().set(opt).from(printContainer).save();
+            } catch (err) {
+                console.error("Erreur lors de la génération du PDF du journal :", err);
+            } finally {
+                if (document.body.contains(printContainer)) {
+                    document.body.removeChild(printContainer);
+                }
+                if (btnPrint) {
+                    btnPrint.innerHTML = `<i class="fa-solid fa-file-pdf text-rose-400"></i> <span>PDF Période</span>`;
+                }
+            }
         }
 
         async function exportTradesJSON() {
