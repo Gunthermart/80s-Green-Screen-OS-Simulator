@@ -619,13 +619,22 @@
                             <div>
                                 <div class="flex items-center justify-between mb-1">
                                     <label class="text-xs text-slate-400 font-medium">Risque Max / Trade (%)</label>
-                                    <button type="button" id="btnApplySmartRisk" class="text-[10px] text-sky-400 hover:text-sky-300 font-mono font-semibold flex items-center space-x-1" title="Calculer selon Kelly adaptatif, volatilité et santé financière">
-                                        <i class="fa-solid fa-wand-magic-sparkles"></i>
-                                        <span>IA Auto</span>
-                                    </button>
+                                    <div class="flex items-center space-x-1">
+                                        <select id="mmMethodSelect" class="bg-slate-900 border border-slate-700 rounded text-[10px] font-mono text-slate-300 px-1.5 py-0.5 focus:outline-none focus:border-sky-500 cursor-pointer">
+                                            <option value="auto">IA Auto (Kelly + Santé)</option>
+                                            <option value="fixed">Fixed (3% Alloc)</option>
+                                            <option value="health">Santé Bilan</option>
+                                            <option value="kelly">Kelly Modéré</option>
+                                            <option value="volatility">Volatilité Relative</option>
+                                        </select>
+                                        <button type="button" id="btnApplySmartRisk" class="text-[10px] text-sky-400 hover:text-sky-300 font-mono font-semibold flex items-center space-x-1" title="Calculer le risque max">
+                                            <i class="fa-solid fa-wand-magic-sparkles"></i>
+                                            <span>IA</span>
+                                        </button>
+                                    </div>
                                 </div>
-                                <input type="number" id="mmRiskPercentInput" value="1.0" min="0.1" max="10" step="0.1" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm font-mono text-white focus:outline-none focus:border-sky-500" />
-                                <span id="mmSmartRiskExplanation" class="text-[10px] text-sky-400/90 block mt-1 font-mono">Modèle Kelly & Volatilité</span>
+                                <input type="number" id="mmRiskPercentInput" value="0.15" min="0.01" max="10" step="0.01" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm font-mono text-white focus:outline-none focus:border-sky-500" />
+                                <span id="mmSmartRiskExplanation" class="text-[10px] text-sky-400/90 block mt-1 font-mono">Modèle 1% à 5% Allocation</span>
                             </div>
                             <div>
                                 <label class="text-xs text-slate-400 block mb-1 font-medium">Montant à Risquer (€)</label>
@@ -846,7 +855,7 @@
             const riskInput = document.getElementById('mmRiskPercentInput');
 
             const capital = parseFloat(capitalInput ? capitalInput.value : 0) || 0;
-            const riskPct = parseFloat(riskInput ? riskInput.value : 1.0) || 1.0;
+            const riskPct = parseFloat(riskInput ? riskInput.value : 0.15) || 0.15;
 
             const entryVal = parsePriceValue(t.entryZone);
             const stopLossVal = parsePriceValue(t.stopLoss);
@@ -897,7 +906,7 @@
             return { riskEuro, sharesCount, positionSize, allocationPct, gainTp1, gainTp2, capital, riskPct };
         }
 
-        function calculateSmartRiskPercent() {
+        function calculateSmartRiskPercent(method = 'auto') {
             if (!currentReportData || !currentReportData.tradingPlan) return 0.15;
 
             const t = currentReportData.tradingPlan;
@@ -911,41 +920,67 @@
                 slPct = ((entryVal - stopLossVal) / entryVal) * 100;
             }
 
-            // 2. Probabilité de réussite
-            let winProb = 0.50;
-            if (t.winProbability) {
-                const probNum = parseInt(t.winProbability.replace('%', ''), 10);
-                if (!isNaN(probNum) && probNum > 0) winProb = probNum / 100;
-            }
+            let targetAllocationPct = 3.0; // Baseline 3%
 
-            // 3. Ratio R/R
-            let rrRatio = 2.0;
-            if (t.riskRewardRatio) {
-                const parts = t.riskRewardRatio.split(':');
-                if (parts.length === 2) {
-                    const parsed = parseFloat(parts[1].replace(',', '.'));
-                    if (!isNaN(parsed) && parsed > 0) rrRatio = parsed;
+            if (method === 'fixed') {
+                targetAllocationPct = 3.0;
+            } else if (method === 'health') {
+                let piotroskiNum = 5;
+                if (health.piotroskiScore) {
+                    const pMatch = health.piotroskiScore.match(/\d+/);
+                    if (pMatch) piotroskiNum = parseInt(pMatch[0], 10);
                 }
-            }
+                if (piotroskiNum >= 7) targetAllocationPct = 4.5;
+                else if (piotroskiNum >= 4) targetAllocationPct = 3.0;
+                else targetAllocationPct = 1.5;
+            } else if (method === 'kelly') {
+                let winProb = 0.50;
+                if (t.winProbability) {
+                    const probNum = parseInt(t.winProbability.replace('%', ''), 10);
+                    if (!isNaN(probNum) && probNum > 0) winProb = probNum / 100;
+                }
+                let rrRatio = 2.0;
+                if (t.riskRewardRatio) {
+                    const parts = t.riskRewardRatio.split(':');
+                    if (parts.length === 2) {
+                        const parsed = parseFloat(parts[1].replace(',', '.'));
+                        if (!isNaN(parsed) && parsed > 0) rrRatio = parsed;
+                    }
+                }
+                let kelly = winProb - ((1 - winProb) / rrRatio);
+                if (kelly <= 0) kelly = 0.1;
+                targetAllocationPct = 1.0 + (kelly * 4.0);
+            } else if (method === 'volatility') {
+                targetAllocationPct = Math.min(5.0, Math.max(1.0, 25.0 / slPct));
+            } else { // 'auto' combined
+                let winProb = 0.50;
+                if (t.winProbability) {
+                    const probNum = parseInt(t.winProbability.replace('%', ''), 10);
+                    if (!isNaN(probNum) && probNum > 0) winProb = probNum / 100;
+                }
+                let rrRatio = 2.0;
+                if (t.riskRewardRatio) {
+                    const parts = t.riskRewardRatio.split(':');
+                    if (parts.length === 2) {
+                        const parsed = parseFloat(parts[1].replace(',', '.'));
+                        if (!isNaN(parsed) && parsed > 0) rrRatio = parsed;
+                    }
+                }
+                let kelly = winProb - ((1 - winProb) / rrRatio);
+                if (kelly <= 0) kelly = 0.1;
+                targetAllocationPct = 1.0 + (kelly * 4.0);
 
-            // 4. Critère de Kelly modéré
-            let kelly = winProb - ((1 - winProb) / rrRatio);
-            if (kelly <= 0) kelly = 0.1;
+                let piotroskiNum = 5;
+                if (health.piotroskiScore) {
+                    const pMatch = health.piotroskiScore.match(/\d+/);
+                    if (pMatch) piotroskiNum = parseInt(pMatch[0], 10);
+                }
+                if (piotroskiNum >= 7) targetAllocationPct += 0.5;
+                else if (piotroskiNum <= 3) targetAllocationPct -= 0.5;
 
-            // Allocation cible du portefeuille : strictement contenue entre 1% et 5% du capital
-            let targetAllocationPct = 1.0 + (kelly * 4.0); // kelly [0..1] -> allocation [1% .. 5%]
-
-            // Ajustement selon santé financière (Piotroski & Altman Z)
-            let piotroskiNum = 5;
-            if (health.piotroskiScore) {
-                const pMatch = health.piotroskiScore.match(/\d+/);
-                if (pMatch) piotroskiNum = parseInt(pMatch[0], 10);
-            }
-            if (piotroskiNum >= 7) targetAllocationPct += 0.5;
-            else if (piotroskiNum <= 3) targetAllocationPct -= 0.5;
-
-            if (health.altmanStatus && (health.altmanStatus.toLowerCase().includes('détresse') || health.altmanStatus.toLowerCase().includes('risque'))) {
-                targetAllocationPct -= 0.5;
+                if (health.altmanStatus && (health.altmanStatus.toLowerCase().includes('détresse') || health.altmanStatus.toLowerCase().includes('risque'))) {
+                    targetAllocationPct -= 0.5;
+                }
             }
 
             // Plafonnement strict entre 1.0% et 5.0% d'allocation totale du capital
@@ -954,7 +989,6 @@
             // Risque Max / Trade (%) = (Allocation Cible % * Distance SL %) / 100
             let recommendedRisk = (targetAllocationPct * slPct) / 100;
 
-            // Arrondi propre à 2 décimales
             recommendedRisk = Math.max(0.01, parseFloat(recommendedRisk.toFixed(2)));
             return recommendedRisk;
         }
@@ -1058,8 +1092,22 @@
             safeAddListener('mmCapitalInput', 'input', calculateMoneyManagement);
             safeAddListener('mmRiskPercentInput', 'input', calculateMoneyManagement);
 
+            const mmMethodSelect = document.getElementById('mmMethodSelect');
+            if (mmMethodSelect) {
+                mmMethodSelect.addEventListener('change', () => {
+                    const method = mmMethodSelect.value;
+                    const smartRisk = calculateSmartRiskPercent(method);
+                    const riskInput = document.getElementById('mmRiskPercentInput');
+                    if (riskInput) {
+                        riskInput.value = smartRisk;
+                        calculateMoneyManagement();
+                    }
+                });
+            }
+
             safeAddListener('btnApplySmartRisk', 'click', () => {
-                const smartRisk = calculateSmartRiskPercent();
+                const method = mmMethodSelect ? mmMethodSelect.value : 'auto';
+                const smartRisk = calculateSmartRiskPercent(method);
                 const riskInput = document.getElementById('mmRiskPercentInput');
                 if (riskInput) {
                     riskInput.value = smartRisk;
@@ -1111,7 +1159,6 @@
                 const capitalInput = document.getElementById('mmCapitalInput');
                 const capitalVal = mm.capital !== undefined ? mm.capital : (parseFloat(capitalInput ? capitalInput.value : 0) || 0);
                 
-                // Règle : Si Capital > 0 => Actif, Sinon => Inactif
                 const tradeStatus = capitalVal > 0 ? 'actif' : 'inactif';
 
                 const tradeObj = {
@@ -1133,7 +1180,7 @@
                     exitPrice: 0,
                     realizedPnL: 0,
                     capital: capitalVal,
-                    riskPercent: mm.riskPct || 1.0,
+                    riskPercent: mm.riskPct || 0.15,
                     riskAmountEur: mm.riskEuro || 0,
                     sharesCount: mm.sharesCount || 0,
                     positionSizeEur: mm.positionSize || 0,
@@ -1524,7 +1571,6 @@
                 </div>
             `;
 
-            // On attache impérativement l'élément au DOM pour qu'html2canvas puisse calculer sa géométrie
             document.body.appendChild(printContainer);
 
             const opt = {
@@ -1705,7 +1751,7 @@
 
             if (welcomeContainer) welcomeContainer.classList.add('hidden');
             if (resultsContainer) resultsContainer.classList.add('hidden');
-            if (errorContainer) errorContainer.classList.add('hidden');
+            if (errorContainer) errorContainer.classList.remove('hidden');
             if (loadingContainer) loadingContainer.classList.remove('hidden');
 
             const now = new Date();
@@ -2421,7 +2467,9 @@ Fournis :
             if (planInval) planInval.innerText = trading.invalidation || 'Critère non défini.';
 
             // Calcul et pré-remplissage du risque intelligent IA
-            const smartRiskVal = calculateSmartRiskPercent();
+            const mmMethodSelect = document.getElementById('mmMethodSelect');
+            const selectedMethod = mmMethodSelect ? mmMethodSelect.value : 'auto';
+            const smartRiskVal = calculateSmartRiskPercent(selectedMethod);
             const riskInput = document.getElementById('mmRiskPercentInput');
             if (riskInput) riskInput.value = smartRiskVal;
 
