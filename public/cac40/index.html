@@ -920,9 +920,12 @@
                 }
             }
 
-            // 3. Formule de Kelly Fractionnaire (Quarter Kelly) : K% = W - ((1 - W) / R)
+            // 3. Formule de Kelly Fractionnaire ajustée au Risque par Trade
             let kelly = winProb - ((1 - winProb) / rrRatio);
-            let recommendedRisk = kelly * 0.25 * 100;
+            if (kelly <= 0) return 0.5;
+
+            // Correction : multiplicateur ajusté à 2.5 (au lieu de 25) pour cibler un risque prudent (ex: ~1.0% à 2.0% max)
+            let recommendedRisk = kelly * 2.5;
 
             // 4. Modificateur Santé Financière (Piotroski & Altman Z)
             let piotroskiNum = 5;
@@ -931,11 +934,11 @@
                 if (pMatch) piotroskiNum = parseInt(pMatch[0], 10);
             }
 
-            if (piotroskiNum >= 7) recommendedRisk += 0.3;
-            else if (piotroskiNum <= 3) recommendedRisk -= 0.4;
+            if (piotroskiNum >= 7) recommendedRisk += 0.2;
+            else if (piotroskiNum <= 3) recommendedRisk -= 0.3;
 
             if (health.altmanStatus && (health.altmanStatus.toLowerCase().includes('détresse') || health.altmanStatus.toLowerCase().includes('risque'))) {
-                recommendedRisk -= 0.5;
+                recommendedRisk -= 0.3;
             }
 
             // 5. Ajustement Volatilité / Distance au Stop Loss
@@ -947,8 +950,8 @@
                 else if (slPct < 4) recommendedRisk *= 0.9;
             }
 
-            // Bornes prudentes : entre 0.5% et 2.5% max
-            recommendedRisk = Math.max(0.5, Math.min(2.5, recommendedRisk));
+            // Bornes prudentes : entre 0.2% et 2.5% max par trade
+            recommendedRisk = Math.max(0.2, Math.min(2.5, recommendedRisk));
             return parseFloat(recommendedRisk.toFixed(1));
         }
 
