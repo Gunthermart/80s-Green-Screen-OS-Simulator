@@ -120,7 +120,6 @@
             box-shadow: 0 0 18px -2px rgba(255, 42, 109, 0.35);
         }
 
-        /* Anti-chevauchement strict pour Impression et PDF */
         .page-break-avoid, section, .pdf-block {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
@@ -2114,15 +2113,19 @@
             executeAnalysis(`${name} (${ticker})`, marketSelect ? marketSelect.value : 'ALL');
         };
 
-        async function fetchGeminiWithRetry(payload) {
+        async function fetchGeminiWithRetry(payload, timeoutMs = 45000) {
             const netlifyEndpoint = window.location.origin + '/.netlify/functions/StocksAnalyser';
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
             try {
                 const response = await fetch(netlifyEndpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify(payload),
+                    signal: controller.signal
                 });
+                clearTimeout(timeoutId);
 
                 const resData = await response.json().catch(() => null);
 
@@ -2140,6 +2143,10 @@
                 const errMsg = resData?.error?.message || resData?.error || `Erreur serveur (${response.status})`;
                 throw new Error(errMsg);
             } catch (err) {
+                clearTimeout(timeoutId);
+                if (err.name === 'AbortError') {
+                    throw new Error("La requête a expiré (délai d'attente dépassé). Veuillez réessayer.");
+                }
                 throw err;
             }
         }
@@ -2469,7 +2476,8 @@ Fournis :
             const companyName = currentReportData.companyInfo?.name || 'Société';
             const isin = currentReportData.companyInfo?.isin || '';
 
-            const originalHTML = btnElement.innerHTML;
+            const originalHTML = btnElement.getAttribute('data-original-html') || btnElement.innerHTML;
+            btnElement.setAttribute('data-original-html', originalHTML);
             btnElement.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> <span>Analyse IA...</span>`;
             btnElement.disabled = true;
 
@@ -2508,35 +2516,41 @@ Fournis :
             try {
                 const result = await fetchGeminiWithRetry(payload);
                 const candidate = result?.candidates?.[0];
-                if (candidate && candidate.content?.parts?.[0]?.text) {
-                    const parsed = cleanAndParseJSON(candidate.content.parts[0].text);
-                    if (parsed) {
-                        if (parsed[sectionKey]) {
-                            currentReportData[sectionKey] = parsed[sectionKey];
-                        } else {
-                            currentReportData[sectionKey] = parsed;
-                        }
-                        renderReport(currentReportData, true);
+                const textPart = candidate?.content?.parts?.find(p => p.text);
+                const text = textPart ? textPart.text : null;
 
-                        window.scrollTo({
-                            top: currentScrollOffset,
-                            behavior: 'instant'
-                        });
-
-                        btnElement.innerHTML = `<i class="fa-solid fa-check text-emerald-400"></i> <span>Approfondi !</span>`;
-                        setTimeout(() => {
-                            btnElement.innerHTML = originalHTML;
-                            btnElement.disabled = false;
-                        }, 2500);
-                    }
+                if (!text) {
+                    throw new Error("Réponse IA vide ou inattendue.");
                 }
-            } catch (err) {
-                console.error("Erreur approfondissement IA:", err);
-                btnElement.innerHTML = `<i class="fa-solid fa-triangle-exclamation text-rose-400"></i> <span>Erreur</span>`;
+
+                const parsed = cleanAndParseJSON(text);
+                if (!parsed) {
+                    throw new Error("Impossible de décoder le JSON renvoyé par l'IA.");
+                }
+
+                const sectionData = parsed[sectionKey] ? parsed[sectionKey] : parsed;
+                currentReportData[sectionKey] = sectionData;
+
+                renderReport(currentReportData, true);
+
+                window.scrollTo({
+                    top: currentScrollOffset,
+                    behavior: 'instant'
+                });
+
+                btnElement.innerHTML = `<i class="fa-solid fa-check text-emerald-400"></i> <span>Approfondi !</span>`;
                 setTimeout(() => {
                     btnElement.innerHTML = originalHTML;
                     btnElement.disabled = false;
                 }, 2500);
+
+            } catch (err) {
+                console.error("Erreur approfondissement IA:", err);
+                btnElement.innerHTML = `<i class="fa-solid fa-triangle-exclamation text-rose-400"></i> <span>Erreur !</span>`;
+                setTimeout(() => {
+                    btnElement.innerHTML = originalHTML;
+                    btnElement.disabled = false;
+                }, 3000);
             }
         }
 
@@ -3080,9 +3094,7 @@ Fournis :
             const div = currentReportData.dividendSafety || {};
             const ratios = currentReportData.financialRatios || [];
             const growth = currentReportData.growthAnalysis || {};
-            const gov = currentReportData.governanceAndCapital || {};
             const pers = currentReportData.perspectives || {};
-            const consensus = currentReportData.analystConsensusAndNews || {};
             const risks = currentReportData.documentedRisks || [];
             const diag = currentReportData.leonceDiagnostic || {};
             const trading = currentReportData.tradingPlan || {};
@@ -3092,7 +3104,6 @@ Fournis :
             const companyName = info.name || 'Factsheet';
             const todayStr = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
-            // On crée un conteneur dédié A4 off-screen extrêmement propre en Noir & Blanc
             const pdfWrapper = document.createElement('div');
             pdfWrapper.style.position = 'absolute';
             pdfWrapper.style.left = '-9999px';
@@ -3107,7 +3118,6 @@ Fournis :
             pdfWrapper.innerHTML = `
                 <div style="font-family: 'Inter', sans-serif; color: #0f172a; line-height: 1.4; font-size: 11px;">
                     
-                    <!-- EN-TÊTE PDF -->
                     <div style="border-bottom: 2px solid #0f172a; padding-bottom: 10px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: flex-end; page-break-inside: avoid; break-inside: avoid;">
                         <div>
                             <div style="font-size: 20px; font-weight: 900; color: #000000; tracking-tight: -0.5px;">${companyName}</div>
@@ -3125,7 +3135,6 @@ Fournis :
                         </div>
                     </div>
 
-                    <!-- BLOC 1: SCORE SYNTHÉTIQUE & PROFIL -->
                     <div style="border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; background: #f8fafc; margin-bottom: 14px; page-break-inside: avoid; break-inside: avoid;">
                         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 8px;">
                             <span style="font-weight: 800; font-size: 12px; text-transform: uppercase; color: #0f172a;">Diagnostic Synthétique & Score Global</span>
@@ -3146,7 +3155,6 @@ Fournis :
                         </div>
                     </div>
 
-                    <!-- BLOC 2: CHIFFRES CLÉS ET SANTÉ BILANCIELLE -->
                     <div style="border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 14px; page-break-inside: avoid; break-inside: avoid;">
                         <div style="font-weight: 800; font-size: 11px; text-transform: uppercase; color: #0f172a; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">
                             2. Chiffres Clés d'Exploitation & Scores de Santé Financière
@@ -3199,7 +3207,6 @@ Fournis :
                         ` : ''}
                     </div>
 
-                    <!-- BLOC 3: RATIOS FINANCIERS VS MÉDIANE SECTORIELLE -->
                     <div style="border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 14px; page-break-inside: avoid; break-inside: avoid;">
                         <div style="font-weight: 800; font-size: 11px; text-transform: uppercase; color: #0f172a; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">
                             3. Ratios Financiers & Benchmarks Sectoriels
@@ -3228,7 +3235,6 @@ Fournis :
                         </table>
                     </div>
 
-                    <!-- BLOC 4: PLAN DE TRADING ET MONEY MANAGEMENT -->
                     <div style="border: 1px dashed #0284c7; border-radius: 8px; padding: 12px; background: #f0f9ff; margin-bottom: 14px; page-break-inside: avoid; break-inside: avoid;">
                         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #bae6fd; padding-bottom: 6px; margin-bottom: 8px;">
                             <span style="font-weight: 800; font-size: 11px; text-transform: uppercase; color: #0369a1;">4. Cadre d'Exécution & Plan de Trading Moyen Terme</span>
@@ -3259,7 +3265,6 @@ Fournis :
                         </div>
                     </div>
 
-                    <!-- BLOC 5: GUIDANCE, RISQUES ET SHORT INTEREST -->
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; page-break-inside: avoid; break-inside: avoid;">
                         <div style="border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; background: #ffffff;">
                             <div style="font-weight: 800; font-size: 10px; uppercase; color: #0f172a; margin-bottom: 4px;">Guidance & Strategic Pillars</div>
@@ -3281,7 +3286,6 @@ Fournis :
                         </div>
                     </div>
 
-                    <!-- BLOC 6: SHORT INTEREST ET SOURCES -->
                     <div style="border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; background: #f8fafc; font-size: 9px; color: #475569; page-break-inside: avoid; break-inside: avoid;">
                         <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
                             <span><strong>Capital Vendu à Découvert (Short Interest):</strong> ${shortInfo.shortCapitalPct || '--- %'}</span>
