@@ -617,9 +617,15 @@
                                 <span class="text-[10px] text-slate-500">Si &gt; 0 = Actif, Sinon = Inactif</span>
                             </div>
                             <div>
-                                <label class="text-xs text-slate-400 block mb-1 font-medium">Risque Max / Trade (%)</label>
-                                <input type="number" id="mmRiskPercentInput" value="1.0" min="0.1" max="10" step="0.5" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm font-mono text-white focus:outline-none focus:border-sky-500" />
-                                <span class="text-[10px] text-slate-500">Règle des 1% à 2%</span>
+                                <div class="flex items-center justify-between mb-1">
+                                    <label class="text-xs text-slate-400 font-medium">Risque Max / Trade (%)</label>
+                                    <button type="button" id="btnApplySmartRisk" class="text-[10px] text-sky-400 hover:text-sky-300 font-mono font-semibold flex items-center space-x-1" title="Calculer selon Kelly adaptatif, volatilité et santé financière">
+                                        <i class="fa-solid fa-wand-magic-sparkles"></i>
+                                        <span>IA Auto</span>
+                                    </button>
+                                </div>
+                                <input type="number" id="mmRiskPercentInput" value="1.0" min="0.1" max="10" step="0.1" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm font-mono text-white focus:outline-none focus:border-sky-500" />
+                                <span id="mmSmartRiskExplanation" class="text-[10px] text-sky-400/90 block mt-1 font-mono">Modèle Kelly & Volatilité</span>
                             </div>
                             <div>
                                 <label class="text-xs text-slate-400 block mb-1 font-medium">Montant à Risquer (€)</label>
@@ -891,6 +897,61 @@
             return { riskEuro, sharesCount, positionSize, allocationPct, gainTp1, gainTp2, capital, riskPct };
         }
 
+        function calculateSmartRiskPercent() {
+            if (!currentReportData || !currentReportData.tradingPlan) return 1.0;
+
+            const t = currentReportData.tradingPlan;
+            const health = currentReportData.healthScores || {};
+
+            // 1. Probabilité de réussite
+            let winProb = 0.50;
+            if (t.winProbability) {
+                const probNum = parseInt(t.winProbability.replace('%', ''), 10);
+                if (!isNaN(probNum) && probNum > 0) winProb = probNum / 100;
+            }
+
+            // 2. Ratio Risque / Récompense (R/R)
+            let rrRatio = 2.0;
+            if (t.riskRewardRatio) {
+                const parts = t.riskRewardRatio.split(':');
+                if (parts.length === 2) {
+                    const parsed = parseFloat(parts[1].replace(',', '.'));
+                    if (!isNaN(parsed) && parsed > 0) rrRatio = parsed;
+                }
+            }
+
+            // 3. Formule de Kelly Fractionnaire (Quarter Kelly) : K% = W - ((1 - W) / R)
+            let kelly = winProb - ((1 - winProb) / rrRatio);
+            let recommendedRisk = kelly * 0.25 * 100;
+
+            // 4. Modificateur Santé Financière (Piotroski & Altman Z)
+            let piotroskiNum = 5;
+            if (health.piotroskiScore) {
+                const pMatch = health.piotroskiScore.match(/\d+/);
+                if (pMatch) piotroskiNum = parseInt(pMatch[0], 10);
+            }
+
+            if (piotroskiNum >= 7) recommendedRisk += 0.3;
+            else if (piotroskiNum <= 3) recommendedRisk -= 0.4;
+
+            if (health.altmanStatus && (health.altmanStatus.toLowerCase().includes('détresse') || health.altmanStatus.toLowerCase().includes('risque'))) {
+                recommendedRisk -= 0.5;
+            }
+
+            // 5. Ajustement Volatilité / Distance au Stop Loss
+            const entryVal = parsePriceValue(t.entryZone);
+            const stopLossVal = parsePriceValue(t.stopLoss);
+            if (entryVal > 0 && stopLossVal > 0 && entryVal > stopLossVal) {
+                const slPct = ((entryVal - stopLossVal) / entryVal) * 100;
+                if (slPct > 15) recommendedRisk *= 0.8; // Forte volatilité -> réduction de risque
+                else if (slPct < 4) recommendedRisk *= 0.9;
+            }
+
+            // Bornes prudentes : entre 0.5% et 2.5% max
+            recommendedRisk = Math.max(0.5, Math.min(2.5, recommendedRisk));
+            return parseFloat(recommendedRisk.toFixed(1));
+        }
+
         function initEventListeners() {
             const searchForm = document.getElementById('searchForm');
             const searchInput = document.getElementById('searchInput');
@@ -989,6 +1050,15 @@
 
             safeAddListener('mmCapitalInput', 'input', calculateMoneyManagement);
             safeAddListener('mmRiskPercentInput', 'input', calculateMoneyManagement);
+
+            safeAddListener('btnApplySmartRisk', 'click', () => {
+                const smartRisk = calculateSmartRiskPercent();
+                const riskInput = document.getElementById('mmRiskPercentInput');
+                if (riskInput) {
+                    riskInput.value = smartRisk;
+                    calculateMoneyManagement();
+                }
+            });
 
             document.querySelectorAll('.filter-status-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -2342,6 +2412,16 @@ Fournis :
 
             const planInval = document.getElementById('planInvalidation');
             if (planInval) planInval.innerText = trading.invalidation || 'Critère non défini.';
+
+            // Calcul et pré-remplissage du risque intelligent IA
+            const smartRiskVal = calculateSmartRiskPercent();
+            const riskInput = document.getElementById('mmRiskPercentInput');
+            if (riskInput) riskInput.value = smartRiskVal;
+
+            const smartRiskExp = document.getElementById('mmSmartRiskExplanation');
+            if (smartRiskExp) {
+                smartRiskExp.innerText = `⚡ IA Suggéré: ${smartRiskVal}% (Kelly + Volatilité)`;
+            }
 
             calculateMoneyManagement();
             if (resultsContainer) resultsContainer.scrollIntoView({ behavior: 'smooth' });
