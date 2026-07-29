@@ -886,9 +886,9 @@
             if (gainEl) gainEl.innerText = `TP1: +${gainTp1 > 0 ? gainTp1.toFixed(0) : '-'} € | TP2: +${gainTp2 > 0 ? gainTp2.toFixed(0) : '-'} €`;
 
             if (warningBadge) {
-                if (allocationPct > 25) {
+                if (allocationPct > 5) {
                     warningBadge.classList.remove('hidden');
-                    warningBadge.innerText = `⚠️ Sur-exposition (${allocationPct.toFixed(0)}% > 25%)`;
+                    warningBadge.innerText = `⚠️ Sur-exposition (${allocationPct.toFixed(1)}% > 5%)`;
                 } else {
                     warningBadge.classList.add('hidden');
                 }
@@ -898,19 +898,27 @@
         }
 
         function calculateSmartRiskPercent() {
-            if (!currentReportData || !currentReportData.tradingPlan) return 1.0;
+            if (!currentReportData || !currentReportData.tradingPlan) return 0.15;
 
             const t = currentReportData.tradingPlan;
             const health = currentReportData.healthScores || {};
 
-            // 1. Probabilité de réussite
+            // 1. Distance au Stop Loss en %
+            const entryVal = parsePriceValue(t.entryZone);
+            const stopLossVal = parsePriceValue(t.stopLoss);
+            let slPct = 5.0; // Distance au SL par défaut (5%)
+            if (entryVal > 0 && stopLossVal > 0 && entryVal > stopLossVal) {
+                slPct = ((entryVal - stopLossVal) / entryVal) * 100;
+            }
+
+            // 2. Probabilité de réussite
             let winProb = 0.50;
             if (t.winProbability) {
                 const probNum = parseInt(t.winProbability.replace('%', ''), 10);
                 if (!isNaN(probNum) && probNum > 0) winProb = probNum / 100;
             }
 
-            // 2. Ratio Risque / Récompense (R/R)
+            // 3. Ratio R/R
             let rrRatio = 2.0;
             if (t.riskRewardRatio) {
                 const parts = t.riskRewardRatio.split(':');
@@ -920,39 +928,35 @@
                 }
             }
 
-            // 3. Formule de Kelly Fractionnaire ajustée au Risque par Trade
+            // 4. Critère de Kelly modéré
             let kelly = winProb - ((1 - winProb) / rrRatio);
-            if (kelly <= 0) return 0.5;
+            if (kelly <= 0) kelly = 0.1;
 
-            // Correction : multiplicateur ajusté à 2.5 (au lieu de 25) pour cibler un risque prudent (ex: ~1.0% à 2.0% max)
-            let recommendedRisk = kelly * 2.5;
+            // Allocation cible du portefeuille : strictement contenue entre 1% et 5% du capital
+            let targetAllocationPct = 1.0 + (kelly * 4.0); // kelly [0..1] -> allocation [1% .. 5%]
 
-            // 4. Modificateur Santé Financière (Piotroski & Altman Z)
+            // Ajustement selon santé financière (Piotroski & Altman Z)
             let piotroskiNum = 5;
             if (health.piotroskiScore) {
                 const pMatch = health.piotroskiScore.match(/\d+/);
                 if (pMatch) piotroskiNum = parseInt(pMatch[0], 10);
             }
-
-            if (piotroskiNum >= 7) recommendedRisk += 0.2;
-            else if (piotroskiNum <= 3) recommendedRisk -= 0.3;
+            if (piotroskiNum >= 7) targetAllocationPct += 0.5;
+            else if (piotroskiNum <= 3) targetAllocationPct -= 0.5;
 
             if (health.altmanStatus && (health.altmanStatus.toLowerCase().includes('détresse') || health.altmanStatus.toLowerCase().includes('risque'))) {
-                recommendedRisk -= 0.3;
+                targetAllocationPct -= 0.5;
             }
 
-            // 5. Ajustement Volatilité / Distance au Stop Loss
-            const entryVal = parsePriceValue(t.entryZone);
-            const stopLossVal = parsePriceValue(t.stopLoss);
-            if (entryVal > 0 && stopLossVal > 0 && entryVal > stopLossVal) {
-                const slPct = ((entryVal - stopLossVal) / entryVal) * 100;
-                if (slPct > 15) recommendedRisk *= 0.8; // Forte volatilité -> réduction de risque
-                else if (slPct < 4) recommendedRisk *= 0.9;
-            }
+            // Plafonnement strict entre 1.0% et 5.0% d'allocation totale du capital
+            targetAllocationPct = Math.max(1.0, Math.min(5.0, targetAllocationPct));
 
-            // Bornes prudentes : entre 0.2% et 2.5% max par trade
-            recommendedRisk = Math.max(0.2, Math.min(2.5, recommendedRisk));
-            return parseFloat(recommendedRisk.toFixed(1));
+            // Risque Max / Trade (%) = (Allocation Cible % * Distance SL %) / 100
+            let recommendedRisk = (targetAllocationPct * slPct) / 100;
+
+            // Arrondi propre à 2 décimales
+            recommendedRisk = Math.max(0.01, parseFloat(recommendedRisk.toFixed(2)));
+            return recommendedRisk;
         }
 
         function initEventListeners() {
@@ -2423,7 +2427,7 @@ Fournis :
 
             const smartRiskExp = document.getElementById('mmSmartRiskExplanation');
             if (smartRiskExp) {
-                smartRiskExp.innerText = `⚡ IA Suggéré: ${smartRiskVal}% (Kelly + Volatilité)`;
+                smartRiskExp.innerText = `⚡ IA Suggéré: ${smartRiskVal}% (Taille position 1%-5% max)`;
             }
 
             calculateMoneyManagement();
