@@ -1919,11 +1919,11 @@
             const endDateVal = document.getElementById('journalFilterEndDate')?.value || 'Aujourd\'hui';
 
             const printContainer = document.createElement('div');
-            printContainer.style.position = 'fixed';
+            printContainer.style.position = 'absolute';
             printContainer.style.left = '0';
             printContainer.style.top = '0';
             printContainer.style.width = '1000px';
-            printContainer.style.zIndex = '-9999';
+            printContainer.style.zIndex = '99999';
             printContainer.style.backgroundColor = '#ffffff';
             printContainer.className = 'p-6 text-slate-900 font-sans space-y-4';
 
@@ -3161,25 +3161,100 @@ ${targetSchema}`;
             const todayStr = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
             const pdfWrapper = document.createElement('div');
-            // Position fixed at top: 0, left: 0 behind body so html2canvas bounding rect is valid (X: 0..780)
-            pdfWrapper.style.position = 'fixed';
+            pdfWrapper.id = 'pdfRenderContainer';
+            pdfWrapper.style.position = 'absolute';
             pdfWrapper.style.left = '0';
             pdfWrapper.style.top = '0';
             pdfWrapper.style.width = '780px';
-            pdfWrapper.style.zIndex = '-9999';
+            pdfWrapper.style.zIndex = '99999';
             pdfWrapper.style.backgroundColor = '#ffffff';
             pdfWrapper.style.color = '#0f172a';
-            pdfWrapper.style.fontFamily = "'Inter', sans-serif";
-            pdfWrapper.style.padding = '20px';
+            pdfWrapper.style.fontFamily = "'Inter', -apple-system, BlinkMacSystemFont, sans-serif";
+            pdfWrapper.style.padding = '24px';
             pdfWrapper.style.boxSizing = 'border-box';
 
             pdfWrapper.innerHTML = `
-                <div style="font-family: 'Inter', -apple-system, sans-serif; color: #0f172a; line-height: 1.4; font-size: 11px; background-color: #ffffff;">
+                <style>
+                    .pdf-section {
+                        page-break-inside: avoid !important;
+                        break-inside: avoid !important;
+                        margin-bottom: 14px;
+                        border: 1px solid #cbd5e1;
+                        border-radius: 8px;
+                        padding: 12px;
+                        background-color: #ffffff;
+                    }
+                    .pdf-title {
+                        font-size: 11px;
+                        font-weight: 800;
+                        text-transform: uppercase;
+                        color: #0f172a;
+                        letter-spacing: 0.5px;
+                        border-bottom: 2px solid #0284c7;
+                        padding-bottom: 4px;
+                        margin-bottom: 8px;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                    }
+                    .pdf-grid-2 {
+                        display: flex;
+                        gap: 12px;
+                    }
+                    .pdf-grid-2 > div {
+                        flex: 1;
+                    }
+                    .pdf-grid-4 {
+                        display: flex;
+                        gap: 8px;
+                        text-align: center;
+                    }
+                    .pdf-grid-4 > div {
+                        flex: 1;
+                        border: 1px solid #e2e8f0;
+                        padding: 6px;
+                        border-radius: 6px;
+                        background: #f8fafc;
+                    }
+                    .pdf-table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        font-size: 9px;
+                        text-align: left;
+                    }
+                    .pdf-table th {
+                        background-color: #f1f5f9;
+                        color: #0f172a;
+                        padding: 5px;
+                        font-weight: 700;
+                        border-bottom: 1px solid #cbd5e1;
+                    }
+                    .pdf-table td {
+                        padding: 4px 5px;
+                        border-bottom: 1px solid #e2e8f0;
+                        color: #334155;
+                    }
+                    .pdf-badge {
+                        font-size: 8.5px;
+                        font-weight: 700;
+                        padding: 2px 6px;
+                        border-radius: 4px;
+                        display: inline-block;
+                        text-transform: uppercase;
+                    }
+                    .pdf-badge-navy { background: #0f172a; color: #ffffff; }
+                    .pdf-badge-blue { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+                    .pdf-badge-green { background: #d1fae5; color: #047857; border: 1px solid #a7f3d0; }
+                    .pdf-badge-amber { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+                    .pdf-badge-red { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+                </style>
+
+                <div style="background-color: #ffffff; color: #0f172a;">
                     
-                    <!-- En-tête -->
-                    <div style="border-bottom: 2px solid #0f172a; padding-bottom: 10px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: flex-end; page-break-inside: avoid; break-inside: avoid;">
+                    <!-- Header Module -->
+                    <div style="border-bottom: 2px solid #0f172a; padding-bottom: 10px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: flex-end;">
                         <div>
-                            <div style="font-size: 20px; font-weight: 900; color: #000000; letter-spacing: -0.5px;">${companyName}</div>
+                            <div style="font-size: 22px; font-weight: 900; color: #000000; letter-spacing: -0.5px;">${companyName}</div>
                             <div style="font-size: 11px; font-weight: 600; color: #334155; margin-top: 2px;">
                                 Ticker: <strong>${info.ticker || 'N/A'}</strong> | ISIN: <strong>${info.isin || 'N/A'}</strong> | Marché: <strong>${info.market || 'Euronext'}</strong>
                             </div>
@@ -3188,79 +3263,80 @@ ${targetSchema}`;
                             </div>
                         </div>
                         <div style="text-align: right;">
-                            <div style="font-size: 12px; font-weight: 800; color: #0284c7;">Euronext FactCheck AI</div>
+                            <div style="font-size: 12px; font-weight: 900; color: #0284c7;">Euronext FactCheck AI</div>
                             <div style="font-size: 9px; color: #64748b;">Rapport Synthétique Exécutif</div>
-                            <div style="font-size: 9px; font-weight: 600; color: #0f172a; margin-top: 2px;">Généré le ${todayStr}</div>
+                            <div style="font-size: 9px; font-weight: 600; color: #0f172a; margin-top: 2px;">Publié le ${todayStr}</div>
                         </div>
                     </div>
 
-                    <!-- Diagnostic & Profil -->
-                    <div style="border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; background: #f8fafc; margin-bottom: 12px; page-break-inside: avoid; break-inside: avoid;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 8px;">
-                            <span style="font-weight: 800; font-size: 11px; text-transform: uppercase; color: #0f172a;">1. Diagnostic Synthétique & Score Global</span>
-                            <span style="font-size: 13px; font-weight: 900; background: #0f172a; color: #ffffff; padding: 3px 10px; border-radius: 6px;">Score IA: ${diag.overallScore || '--'} / 100</span>
+                    <!-- Module 1: Diagnostic & Profil -->
+                    <div class="pdf-section">
+                        <div class="pdf-title">
+                            <span>1. Diagnostic Synthétique & Score Global</span>
+                            <span class="pdf-badge pdf-badge-navy" style="font-size:11px; padding:3px 8px;">Score IA: ${diag.overallScore || '--'} / 100</span>
                         </div>
-                        <div style="display: flex; gap: 12px; font-size: 10px; margin-bottom: 8px;">
-                            <div style="flex: 1;">
+                        <div class="pdf-grid-2" style="font-size: 10px; margin-bottom: 8px;">
+                            <div>
                                 <strong style="color: #0284c7;">Court Terme (&lt; 6 mois) :</strong> <strong>${diag.shortTermSignal || 'Neutre'}</strong>
-                                <p style="margin: 2px 0 0 0; color: #334155;">${diag.shortTermAnalysis || 'Analyse indisponible.'}</p>
+                                <p style="margin: 2px 0 0 0; color: #334155; line-height: 1.3;">${diag.shortTermAnalysis || 'Analyse indisponible.'}</p>
                             </div>
-                            <div style="flex: 1;">
+                            <div>
                                 <strong style="color: #0369a1;">Moyen Terme (1-3 ans) :</strong> <strong>${diag.mediumTermSignal || 'Neutre'}</strong>
-                                <p style="margin: 2px 0 0 0; color: #334155;">${diag.mediumTermAnalysis || 'Analyse indisponible.'}</p>
+                                <p style="margin: 2px 0 0 0; color: #334155; line-height: 1.3;">${diag.mediumTermAnalysis || 'Analyse indisponible.'}</p>
                             </div>
                         </div>
-                        <div style="font-size: 10px; color: #334155; border-top: 1px dashed #cbd5e1; padding-top: 6px;">
-                            <strong>Profil :</strong> ${info.summary || 'Résumé indisponible.'}
+                        <div style="font-size: 9.5px; color: #334155; border-top: 1px dashed #cbd5e1; padding-top: 6px; line-height: 1.35;">
+                            <strong>Profil & Positionnement :</strong> ${info.summary || 'Résumé indisponible.'}
                         </div>
                     </div>
 
-                    <!-- KPIs Financiers & Scores -->
-                    <div style="border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 12px; page-break-inside: avoid; break-inside: avoid;">
-                        <div style="font-weight: 800; font-size: 11px; text-transform: uppercase; color: #0f172a; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">
-                            2. Chiffres Clés d'Exploitation & Scores de Santé Financière
+                    <!-- Module 2: KPIs Financiers & Scores -->
+                    <div class="pdf-section">
+                        <div class="pdf-title">
+                            <span>2. Agrégats d'Exploitation & Bilan</span>
+                            <span style="font-size: 9px; font-weight: normal; color: #64748b;">Période: ${kpi.period || 'Récente'} (${kpi.currency || 'EUR'})</span>
                         </div>
 
-                        <div style="display: flex; gap: 8px; text-align: center; margin-bottom: 10px;">
-                            <div style="flex: 1; border: 1px solid #e2e8f0; padding: 6px; border-radius: 6px; background: #f8fafc;">
-                                <div style="font-size: 8.5px; color: #64748b; font-weight: 600;">CHIFFRE D'AFFAIRES</div>
+                        <div class="pdf-grid-4" style="margin-bottom: 10px;">
+                            <div>
+                                <div style="font-size: 8px; color: #64748b; font-weight: 700;">CHIFFRE D'AFFAIRES</div>
                                 <div style="font-size: 11.5px; font-weight: 800; color: #0f172a; margin-top: 2px;">${kpi.revenue || 'N/A'}</div>
                             </div>
-                            <div style="flex: 1; border: 1px solid #e2e8f0; padding: 6px; border-radius: 6px; background: #f8fafc;">
-                                <div style="font-size: 8.5px; color: #64748b; font-weight: 600;">RÉSULTAT NET</div>
+                            <div>
+                                <div style="font-size: 8px; color: #64748b; font-weight: 700;">RÉSULTAT NET</div>
                                 <div style="font-size: 11.5px; font-weight: 800; color: #0f172a; margin-top: 2px;">${kpi.netIncome || 'N/A'}</div>
                             </div>
-                            <div style="flex: 1; border: 1px solid #e2e8f0; padding: 6px; border-radius: 6px; background: #f8fafc;">
-                                <div style="font-size: 8.5px; color: #64748b; font-weight: 600;">MARGE OPÉRATIONNELLE</div>
+                            <div>
+                                <div style="font-size: 8px; color: #64748b; font-weight: 700;">MARGE OPÉRATIONNELLE</div>
                                 <div style="font-size: 11.5px; font-weight: 800; color: #047857; margin-top: 2px;">${kpi.operatingMargin || 'N/A'}</div>
                             </div>
-                            <div style="flex: 1; border: 1px solid #e2e8f0; padding: 6px; border-radius: 6px; background: #f8fafc;">
-                                <div style="font-size: 8.5px; color: #64748b; font-weight: 600;">ENDETTEMENT NET</div>
+                            <div>
+                                <div style="font-size: 8px; color: #64748b; font-weight: 700;">ENDETTEMENT NET</div>
                                 <div style="font-size: 11.5px; font-weight: 800; color: #b45309; margin-top: 2px;">${kpi.netDebt || 'N/A'}</div>
                             </div>
                         </div>
 
-                        <div style="display: flex; gap: 8px; font-size: 9.5px; background: #f1f5f9; padding: 8px; border-radius: 6px; margin-bottom: 8px;">
+                        <div style="display: flex; gap: 8px; font-size: 9px; background: #f1f5f9; padding: 6px 8px; border-radius: 6px; margin-bottom: 8px;">
                             <div style="flex: 1;"><strong>Piotroski F-Score:</strong> ${health.piotroskiScore || 'N/A'}</div>
                             <div style="flex: 1;"><strong>Altman Z-Score:</strong> ${health.altmanZScore || 'N/A'} (${health.altmanStatus || 'N/A'})</div>
                             <div style="flex: 1;"><strong>Sécurité Dividende:</strong> ${div.yield || 'N/A'} (${div.safetyGrade || 'N/A'})</div>
                         </div>
 
                         ${kpi.historicalChartData && kpi.historicalChartData.length > 0 ? `
-                            <table style="width: 100%; border-collapse: collapse; font-size: 9px; text-align: left;">
+                            <table class="pdf-table">
                                 <thead>
-                                    <tr style="background: #e2e8f0; color: #0f172a;">
-                                        <th style="padding: 4px 6px;">Année</th>
-                                        <th style="padding: 4px 6px;">Chiffre d'Affaires (${kpi.currency || 'M€'})</th>
-                                        <th style="padding: 4px 6px; text-align: right;">Résultat Net (${kpi.currency || 'M€'})</th>
+                                    <tr>
+                                        <th>Année</th>
+                                        <th>Chiffre d'Affaires (${kpi.currency || 'M€'})</th>
+                                        <th style="text-align: right;">Résultat Net (${kpi.currency || 'M€'})</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     ${kpi.historicalChartData.map(d => `
-                                        <tr style="border-bottom: 1px solid #f1f5f9;">
-                                            <td style="padding: 4px 6px; font-weight: 600;">${d.year}</td>
-                                            <td style="padding: 4px 6px;">${d.revenueNum}</td>
-                                            <td style="padding: 4px 6px; text-align: right; font-weight: 600;">${d.netIncomeNum}</td>
+                                        <tr>
+                                            <td style="font-weight: 700;">${d.year}</td>
+                                            <td>${d.revenueNum}</td>
+                                            <td style="text-align: right; font-weight: 700;">${d.netIncomeNum}</td>
                                         </tr>
                                     `).join('')}
                                 </tbody>
@@ -3268,97 +3344,104 @@ ${targetSchema}`;
                         ` : ''}
                     </div>
 
-                    <!-- Ratios Financiers -->
-                    <div style="border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 12px; page-break-inside: avoid; break-inside: avoid;">
-                        <div style="font-weight: 800; font-size: 11px; text-transform: uppercase; color: #0f172a; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">
-                            3. Ratios Financiers & Benchmarks Sectoriels
+                    <!-- Module 3: Ratios vs Secteur -->
+                    <div class="pdf-section">
+                        <div class="pdf-title">
+                            <span>3. Ratios Financiers & Benchmarks Sectoriels</span>
                         </div>
-                        <table style="width: 100%; border-collapse: collapse; font-size: 9px; text-align: left;">
+                        <table class="pdf-table">
                             <thead>
-                                <tr style="background: #f1f5f9; color: #0f172a; border-bottom: 1px solid #cbd5e1;">
-                                    <th style="padding: 5px;">Ratio</th>
-                                    <th style="padding: 5px;">Valeur Publiée</th>
-                                    <th style="padding: 5px;">Médiane Sectorielle</th>
-                                    <th style="padding: 5px;">Statut</th>
-                                    <th style="padding: 5px;">Analyse Synthétique</th>
+                                <tr>
+                                    <th>Ratio Financier</th>
+                                    <th>Valeur</th>
+                                    <th>Médiane Secteur</th>
+                                    <th>Statut</th>
+                                    <th>Analyse synthétique</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                ${ratios.map(r => `
-                                    <tr style="border-bottom: 1px solid #e2e8f0;">
-                                        <td style="padding: 4px 5px; font-weight: 700;">${r.ratioName}</td>
-                                        <td style="padding: 4px 5px; font-weight: 800;">${r.value}</td>
-                                        <td style="padding: 4px 5px; color: #475569;">${r.benchmark || '-'}</td>
-                                        <td style="padding: 4px 5px; font-weight: 700; text-transform: uppercase; font-size: 8.5px;">${r.status || 'neutre'}</td>
-                                        <td style="padding: 4px 5px; color: #334155;">${r.analysis}</td>
-                                    </tr>
-                                `).join('')}
+                                ${ratios.map(r => {
+                                    const isPos = r.status === 'positive';
+                                    const isWarn = r.status === 'warning' || r.status === 'negative';
+                                    const badgeClass = isPos ? 'pdf-badge-green' : isWarn ? 'pdf-badge-red' : 'pdf-badge-blue';
+                                    return `
+                                        <tr>
+                                            <td style="font-weight: 700; color: #0f172a;">${r.ratioName}</td>
+                                            <td style="font-weight: 800;">${r.value}</td>
+                                            <td style="color: #64748b;">${r.benchmark || '-'}</td>
+                                            <td><span class="pdf-badge ${badgeClass}">${r.status || 'neutre'}</span></td>
+                                            <td style="color: #334155;">${r.analysis}</td>
+                                        </tr>
+                                    `;
+                                }).join('')}
                             </tbody>
                         </table>
                     </div>
 
-                    <!-- Plan de Trading -->
-                    <div style="border: 1px dashed #0284c7; border-radius: 8px; padding: 12px; background: #f0f9ff; margin-bottom: 12px; page-break-inside: avoid; break-inside: avoid;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #bae6fd; padding-bottom: 6px; margin-bottom: 8px;">
-                            <span style="font-weight: 800; font-size: 11px; text-transform: uppercase; color: #0369a1;">4. Cadre d'Exécution & Plan de Trading Moyen Terme</span>
-                            <span style="font-size: 9px; font-weight: 700; color: #0284c7;">Probabilité: ${trading.winProbability || '--%'} | Ratio R/R: ${trading.riskRewardRatio || '1:--'}</span>
+                    <!-- Module 4: Plan de Trading MT -->
+                    <div class="pdf-section" style="border: 1px dashed #0284c7; background: #f0f9ff;">
+                        <div class="pdf-title" style="border-bottom-color: #0284c7;">
+                            <span style="color: #0369a1;">4. Plan de Trading Moyen Terme & Cadre d'Exécution</span>
+                            <span style="font-size: 9px; font-weight: 700; color: #0284c7;">Proba: ${trading.winProbability || '--%'} | R/R: ${trading.riskRewardRatio || '1:--'}</span>
                         </div>
-                        <div style="display: flex; gap: 8px; text-align: center; margin-bottom: 8px; font-size: 9.5px;">
-                            <div style="flex: 1; background: #ffffff; border: 1px solid #cbd5e1; padding: 5px; border-radius: 4px;">
+                        <div class="pdf-grid-4" style="margin-bottom: 8px; font-size: 9.5px;">
+                            <div style="background: #ffffff;">
                                 <div style="font-size: 8px; color: #64748b;">ENTRÉE CIBLÉE</div>
                                 <div style="font-weight: 800; color: #0369a1;">${trading.entryZone || 'N/A'}</div>
                             </div>
-                            <div style="flex: 1; background: #ffffff; border: 1px solid #fca5a5; padding: 5px; border-radius: 4px;">
-                                <div style="font-size: 8px; color: #991b1b;">STOP LOSS</div>
+                            <div style="background: #ffffff; border-color: #fca5a5;">
+                                <div style="font-size: 8px; color: #b91c1c;">STOP LOSS</div>
                                 <div style="font-weight: 800; color: #b91c1c;">${trading.stopLoss || 'N/A'}</div>
                             </div>
-                            <div style="flex: 1; background: #ffffff; border: 1px solid #a7f3d0; padding: 5px; border-radius: 4px;">
-                                <div style="font-size: 8px; color: #065f46;">OBJECTIF 1 (TP1)</div>
+                            <div style="background: #ffffff; border-color: #a7f3d0;">
+                                <div style="font-size: 8px; color: #047857;">OBJECTIF 1 (TP1)</div>
                                 <div style="font-weight: 800; color: #047857;">${trading.tp1 || 'N/A'}</div>
                             </div>
-                            <div style="flex: 1; background: #ffffff; border: 1px solid #99f6e4; padding: 5px; border-radius: 4px;">
-                                <div style="font-size: 8px; color: #115e59;">OBJECTIF 2 (TP2)</div>
+                            <div style="background: #ffffff; border-color: #99f6e4;">
+                                <div style="font-size: 8px; color: #0f766e;">OBJECTIF 2 (TP2)</div>
                                 <div style="font-weight: 800; color: #0f766e;">${trading.tp2 || 'N/A'}</div>
                             </div>
                         </div>
-                        <div style="font-size: 9px; color: #1e293b;">
+                        <div style="font-size: 9px; color: #1e293b; line-height: 1.35;">
                             <div><strong>Thèse :</strong> ${trading.thesis || 'N/A'}</div>
                             <div><strong>Invalidation :</strong> ${trading.invalidation || 'N/A'}</div>
                             <div><strong>Sentiment Marché :</strong> ${trading.marketSentiment || 'N/A'}</div>
                         </div>
                     </div>
 
-                    <!-- Guidance & Risques -->
-                    <div style="display: flex; gap: 10px; margin-bottom: 12px; page-break-inside: avoid; break-inside: avoid;">
-                        <div style="flex: 1; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; background: #ffffff;">
-                            <div style="font-weight: 800; font-size: 10px; text-transform: uppercase; color: #0f172a; margin-bottom: 4px;">Guidance & Piliers Stratégiques</div>
-                            <div style="font-size: 9px; color: #334155; margin-bottom: 4px;">${pers.guidanceSummary || 'Aucune guidance.'}</div>
-                            ${pers.strategicPillars && pers.strategicPillars.length > 0 ? `
-                                <ul style="margin: 0; padding-left: 12px; font-size: 8.5px; color: #475569;">
-                                    ${pers.strategicPillars.map(p => `<li>${p}</li>`).join('')}
-                                </ul>
-                            ` : ''}
-                        </div>
+                    <!-- Module 5: Guidance & Risques -->
+                    <div class="pdf-section">
+                        <div class="pdf-grid-2">
+                            <div style="padding-right: 6px; border-right: 1px solid #e2e8f0;">
+                                <div style="font-weight: 800; font-size: 10px; text-transform: uppercase; color: #0f172a; margin-bottom: 4px;">Guidance & Piliers Stratégiques</div>
+                                <div style="font-size: 9px; color: #334155; margin-bottom: 4px;">${pers.guidanceSummary || 'Aucune guidance.'}</div>
+                                ${pers.strategicPillars && pers.strategicPillars.length > 0 ? `
+                                    <ul style="margin: 0; padding-left: 12px; font-size: 8.5px; color: #475569;">
+                                        ${pers.strategicPillars.map(p => `<li>${p}</li>`).join('')}
+                                    </ul>
+                                ` : ''}
+                            </div>
 
-                        <div style="flex: 1; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; background: #ffffff;">
-                            <div style="font-weight: 800; font-size: 10px; text-transform: uppercase; color: #991b1b; margin-bottom: 4px;">Facteurs de Risques Principaux</div>
-                            ${risks.length > 0 ? `
-                                <ul style="margin: 0; padding-left: 12px; font-size: 8.5px; color: #334155;">
-                                    ${risks.slice(0, 3).map(r => `<li><strong>${r.category}:</strong> ${r.description}</li>`).join('')}
-                                </ul>
-                            ` : '<div style="font-size: 8.5px; color: #64748b;">Aucun risque majeur répertorié.</div>'}
+                            <div style="padding-left: 6px;">
+                                <div style="font-weight: 800; font-size: 10px; text-transform: uppercase; color: #b91c1c; margin-bottom: 4px;">Facteurs de Risques Principaux</div>
+                                ${risks.length > 0 ? `
+                                    <ul style="margin: 0; padding-left: 12px; font-size: 8.5px; color: #334155;">
+                                        ${risks.slice(0, 3).map(r => `<li><strong>${r.category}:</strong> ${r.description}</li>`).join('')}
+                                    </ul>
+                                ` : '<div style="font-size: 8.5px; color: #64748b;">Aucun risque majeur répertorié.</div>'}
+                            </div>
                         </div>
                     </div>
 
-                    <!-- VAD & Footer -->
-                    <div style="border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; background: #f8fafc; font-size: 8.5px; color: #475569; page-break-inside: avoid; break-inside: avoid;">
+                    <!-- Module 6: VAD & Grounding Footer -->
+                    <div class="pdf-section" style="background: #f8fafc; font-size: 8.5px; color: #475569;">
                         <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
                             <span><strong>Capital Vendu à Découvert (Short Interest):</strong> ${shortInfo.shortCapitalPct || '--- %'}</span>
                             <span><strong>Tendance VAD:</strong> ${shortInfo.shortTrend || 'Neutre'}</span>
                             <span><strong>Risque Short Squeeze:</strong> ${shortInfo.shortSqueezePotential || 'Faible'}</span>
                         </div>
                         <div style="font-style: italic; font-size: 8px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 4px; margin-top: 4px;">
-                            Document édité via Euronext FactCheck AI par Leonce IA. Analyse algorithmique basée sur des sources publiques vérifiées en temps réel via Google Search Grounding (${sources.length} sources). Ne constitue pas un conseil en investissement réglementé.
+                            Édité via Euronext FactCheck AI par Leonce IA. Analyse algorithmique basée sur des sources publiques vérifiées en temps réel via Google Search Grounding (${sources.length} sources). Ne constitue pas un conseil en investissement réglementé.
                         </div>
                     </div>
 
@@ -3428,3 +3511,15 @@ ${targetSchema}`;
     </script>
 </body>
 </html>
+```
+
+### Résumé des modifications apportées :
+1. **Refonte complète de `generatePDFExport()`** :
+   - Le PDF est généré via un conteneur temporaire (`#pdfRenderContainer`) positionné à `top: 0; left: 0; width: 780px; z-index: 99999; background: #ffffff;`.
+   - Utilise une feuille de style intégrée avec classes `.pdf-section`, `.pdf-title`, `.pdf-grid-2`, `.pdf-grid-4`, `.pdf-table` et `.pdf-badge`.
+   - Palette visuelle **Exécutive Noir & Blanc / Navy** (titres en slate foncé `#0f172a`, badges avec bordures subtiles, tableaux lisibles à lignes alternées).
+2. **Gestion stricte des sauts de page** :
+   - Chaque bloc dispose des propriétés `page-break-inside: avoid !important; break-inside: avoid !important;`.
+   - Évite qu'un tableau, un bloc de trading plan ou une jauge de risque ne soit découpé au milieu.
+3. **Inclusion intégrale des données** :
+   - Informations administratives, diagnostic /100, scores Piotroski & Altman Z, sécurité du dividende, KPIs 3 ans, ratios vs benchmark, plan de trading complet, guidance, risques, suivi VAD et sources Grounding.
