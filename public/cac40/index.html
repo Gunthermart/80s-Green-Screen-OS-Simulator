@@ -1919,11 +1919,13 @@
             const endDateVal = document.getElementById('journalFilterEndDate')?.value || 'Aujourd\'hui';
 
             const printContainer = document.createElement('div');
-            printContainer.style.position = 'absolute';
-            printContainer.style.left = '-9999px';
+            printContainer.style.position = 'fixed';
+            printContainer.style.left = '0';
             printContainer.style.top = '0';
-            printContainer.style.width = '1050px';
-            printContainer.className = 'p-6 bg-white text-slate-900 font-sans space-y-4';
+            printContainer.style.width = '1000px';
+            printContainer.style.zIndex = '-9999';
+            printContainer.style.backgroundColor = '#ffffff';
+            printContainer.className = 'p-6 text-slate-900 font-sans space-y-4';
 
             let totalAllocated = 0;
             let totalRisk = 0;
@@ -1945,20 +1947,20 @@
                         <div style="text-align:right; font-size:11px; color:#64748b;">Généré le ${new Date().toLocaleDateString('fr-FR')}</div>
                     </div>
 
-                    <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:10px; margin-bottom:16px; font-size:11px; text-align:center;">
-                        <div style="background:#f1f5f9; padding:8px; border-radius:6px; border:1px solid #cbd5e1;">
+                    <div style="display:flex; gap:10px; margin-bottom:16px; font-size:11px; text-align:center;">
+                        <div style="flex:1; background:#f1f5f9; padding:8px; border-radius:6px; border:1px solid #cbd5e1;">
                             <div style="color:#475569;">Total Positions</div>
                             <div style="font-weight:bold; color:#0f172a; font-size:13px;">${filteredTrades.length}</div>
                         </div>
-                        <div style="background:#f1f5f9; padding:8px; border-radius:6px; border:1px solid #cbd5e1;">
+                        <div style="flex:1; background:#f1f5f9; padding:8px; border-radius:6px; border:1px solid #cbd5e1;">
                             <div style="color:#475569;">Capital Engagé</div>
                             <div style="font-weight:bold; color:#0284c7; font-size:13px;">${totalAllocated.toFixed(0)} €</div>
                         </div>
-                        <div style="background:#f1f5f9; padding:8px; border-radius:6px; border:1px solid #cbd5e1;">
+                        <div style="flex:1; background:#f1f5f9; padding:8px; border-radius:6px; border:1px solid #cbd5e1;">
                             <div style="color:#475569;">Risque Total</div>
                             <div style="font-weight:bold; color:#b91c1c; font-size:13px;">${totalRisk.toFixed(0)} €</div>
                         </div>
-                        <div style="background:#f1f5f9; padding:8px; border-radius:6px; border:1px solid #cbd5e1;">
+                        <div style="flex:1; background:#f1f5f9; padding:8px; border-radius:6px; border:1px solid #cbd5e1;">
                             <div style="color:#475569;">P&L Réalisé</div>
                             <div style="font-weight:bold; color:${totalPnl >= 0 ? '#047857' : '#b91c1c'}; font-size:13px;">${totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)} €</div>
                         </div>
@@ -1997,7 +1999,14 @@
                 margin:       [0.3, 0.3, 0.3, 0.3],
                 filename:     `Journal_Trades_MT_${startDateVal}_${endDateVal}.pdf`,
                 image:        { type: 'jpeg', quality: 0.98 },
-                html2canvas:  { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+                html2canvas:  { 
+                    scale: 2, 
+                    useCORS: true, 
+                    backgroundColor: '#ffffff',
+                    scrollX: 0,
+                    scrollY: 0,
+                    windowWidth: 1000
+                },
                 jsPDF:        { unit: 'in', format: 'a4', orientation: 'landscape' }
             };
 
@@ -2530,7 +2539,6 @@ Fournis :
             const targetSectionEl = document.getElementById(targetSectionId);
             const currentScrollOffset = targetSectionEl ? targetSectionEl.getBoundingClientRect().top + window.pageYOffset - 130 : window.pageYOffset;
 
-            // Définition d'un schéma textuel pour forcer le modèle à répondre exactement ce qu'on attend, sans utiliser responseMimeType
             const schemaMap = {
                 'companyInfo': `{ "name": "...", "ticker": "...", "isin": "...", "market": "...", "index": "...", "icbSector": "...", "headquarters": "...", "summary": "...", "competitivePositioning": "..." }`,
                 'financialKPIs': `{ "currency": "EUR", "period": "...", "revenue": "...", "netIncome": "...", "operatingMargin": "...", "netDebt": "...", "keyMetricsTable": [ { "label": "...", "value": "...", "trend": "..." } ], "financialHighlights": [ "..." ] }`,
@@ -2555,20 +2563,18 @@ ${targetSchema}`;
 
             const payload = {
                 contents: [{ parts: [{ text: promptText }] }],
-                tools: [{ "google_search": {} }],
-                // On retire responseMimeType pour éviter que l'API ne crashe si elle tente de renvoyer du markdown
+                tools: [{ "google_search": {} }]
             };
 
             try {
                 const result = await fetchGeminiWithRetry(payload);
                 const candidate = result?.candidates?.[0];
-                
+
                 if (!candidate) {
                     console.error("Résultat API brut (sans candidat):", result);
                     throw new Error(result?.promptFeedback?.blockReason ? `Bloqué par sécurité: ${result.promptFeedback.blockReason}` : "L'IA n'a renvoyé aucune donnée.");
                 }
 
-                // Recherche du texte dans toutes les parties, y compris s'il y a du grounding metadata
                 const textPart = candidate?.content?.parts?.find(p => p.text);
                 const text = textPart ? textPart.text : null;
 
@@ -2585,7 +2591,7 @@ ${targetSchema}`;
                 const sectionData = parsed[sectionKey] ? parsed[sectionKey] : parsed;
                 currentReportData[sectionKey] = sectionData;
 
-                renderReport(currentReportData, true); // true = skip global scroll
+                renderReport(currentReportData, true);
 
                 window.scrollTo({
                     top: currentScrollOffset,
@@ -3144,7 +3150,6 @@ ${targetSchema}`;
             const health = currentReportData.healthScores || {};
             const div = currentReportData.dividendSafety || {};
             const ratios = currentReportData.financialRatios || [];
-            const growth = currentReportData.growthAnalysis || {};
             const pers = currentReportData.perspectives || {};
             const risks = currentReportData.documentedRisks || [];
             const diag = currentReportData.leonceDiagnostic || {};
@@ -3156,22 +3161,25 @@ ${targetSchema}`;
             const todayStr = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
             const pdfWrapper = document.createElement('div');
-            pdfWrapper.style.position = 'absolute';
-            pdfWrapper.style.left = '-9999px';
+            // Position fixed at top: 0, left: 0 behind body so html2canvas bounding rect is valid (X: 0..780)
+            pdfWrapper.style.position = 'fixed';
+            pdfWrapper.style.left = '0';
             pdfWrapper.style.top = '0';
-            pdfWrapper.style.width = '800px';
+            pdfWrapper.style.width = '780px';
+            pdfWrapper.style.zIndex = '-9999';
             pdfWrapper.style.backgroundColor = '#ffffff';
             pdfWrapper.style.color = '#0f172a';
             pdfWrapper.style.fontFamily = "'Inter', sans-serif";
-            pdfWrapper.style.padding = '24px';
+            pdfWrapper.style.padding = '20px';
             pdfWrapper.style.boxSizing = 'border-box';
 
             pdfWrapper.innerHTML = `
-                <div style="font-family: 'Inter', sans-serif; color: #0f172a; line-height: 1.4; font-size: 11px;">
+                <div style="font-family: 'Inter', -apple-system, sans-serif; color: #0f172a; line-height: 1.4; font-size: 11px; background-color: #ffffff;">
                     
-                    <div style="border-bottom: 2px solid #0f172a; padding-bottom: 10px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: flex-end; page-break-inside: avoid; break-inside: avoid;">
+                    <!-- En-tête -->
+                    <div style="border-bottom: 2px solid #0f172a; padding-bottom: 10px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: flex-end; page-break-inside: avoid; break-inside: avoid;">
                         <div>
-                            <div style="font-size: 20px; font-weight: 900; color: #000000; tracking-tight: -0.5px;">${companyName}</div>
+                            <div style="font-size: 20px; font-weight: 900; color: #000000; letter-spacing: -0.5px;">${companyName}</div>
                             <div style="font-size: 11px; font-weight: 600; color: #334155; margin-top: 2px;">
                                 Ticker: <strong>${info.ticker || 'N/A'}</strong> | ISIN: <strong>${info.isin || 'N/A'}</strong> | Marché: <strong>${info.market || 'Euronext'}</strong>
                             </div>
@@ -3186,58 +3194,60 @@ ${targetSchema}`;
                         </div>
                     </div>
 
-                    <div style="border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; background: #f8fafc; margin-bottom: 14px; page-break-inside: avoid; break-inside: avoid;">
+                    <!-- Diagnostic & Profil -->
+                    <div style="border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; background: #f8fafc; margin-bottom: 12px; page-break-inside: avoid; break-inside: avoid;">
                         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 8px;">
-                            <span style="font-weight: 800; font-size: 12px; text-transform: uppercase; color: #0f172a;">Diagnostic Synthétique & Score Global</span>
-                            <span style="font-size: 14px; font-weight: 900; background: #0f172a; color: #ffffff; padding: 3px 10px; border-radius: 6px;">Score IA: ${diag.overallScore || '--'} / 100</span>
+                            <span style="font-weight: 800; font-size: 11px; text-transform: uppercase; color: #0f172a;">1. Diagnostic Synthétique & Score Global</span>
+                            <span style="font-size: 13px; font-weight: 900; background: #0f172a; color: #ffffff; padding: 3px 10px; border-radius: 6px;">Score IA: ${diag.overallScore || '--'} / 100</span>
                         </div>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 10px; margin-bottom: 8px;">
-                            <div>
+                        <div style="display: flex; gap: 12px; font-size: 10px; margin-bottom: 8px;">
+                            <div style="flex: 1;">
                                 <strong style="color: #0284c7;">Court Terme (&lt; 6 mois) :</strong> <strong>${diag.shortTermSignal || 'Neutre'}</strong>
                                 <p style="margin: 2px 0 0 0; color: #334155;">${diag.shortTermAnalysis || 'Analyse indisponible.'}</p>
                             </div>
-                            <div>
+                            <div style="flex: 1;">
                                 <strong style="color: #0369a1;">Moyen Terme (1-3 ans) :</strong> <strong>${diag.mediumTermSignal || 'Neutre'}</strong>
                                 <p style="margin: 2px 0 0 0; color: #334155;">${diag.mediumTermAnalysis || 'Analyse indisponible.'}</p>
                             </div>
                         </div>
-                        <div style="font-size: 10.5px; color: #334155; border-top: 1px dashed #cbd5e1; padding-top: 6px;">
+                        <div style="font-size: 10px; color: #334155; border-top: 1px dashed #cbd5e1; padding-top: 6px;">
                             <strong>Profil :</strong> ${info.summary || 'Résumé indisponible.'}
                         </div>
                     </div>
 
-                    <div style="border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 14px; page-break-inside: avoid; break-inside: avoid;">
+                    <!-- KPIs Financiers & Scores -->
+                    <div style="border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 12px; page-break-inside: avoid; break-inside: avoid;">
                         <div style="font-weight: 800; font-size: 11px; text-transform: uppercase; color: #0f172a; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">
                             2. Chiffres Clés d'Exploitation & Scores de Santé Financière
                         </div>
 
-                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; text-align: center; margin-bottom: 10px;">
-                            <div style="border: 1px solid #e2e8f0; padding: 6px; border-radius: 6px; background: #f8fafc;">
-                                <div style="font-size: 9px; color: #64748b; font-weight: 600;">CHIFFRE D'AFFAIRES</div>
-                                <div style="font-size: 12px; font-weight: 800; color: #0f172a; margin-top: 2px;">${kpi.revenue || 'N/A'}</div>
+                        <div style="display: flex; gap: 8px; text-align: center; margin-bottom: 10px;">
+                            <div style="flex: 1; border: 1px solid #e2e8f0; padding: 6px; border-radius: 6px; background: #f8fafc;">
+                                <div style="font-size: 8.5px; color: #64748b; font-weight: 600;">CHIFFRE D'AFFAIRES</div>
+                                <div style="font-size: 11.5px; font-weight: 800; color: #0f172a; margin-top: 2px;">${kpi.revenue || 'N/A'}</div>
                             </div>
-                            <div style="border: 1px solid #e2e8f0; padding: 6px; border-radius: 6px; background: #f8fafc;">
-                                <div style="font-size: 9px; color: #64748b; font-weight: 600;">RÉSULTAT NET</div>
-                                <div style="font-size: 12px; font-weight: 800; color: #0f172a; margin-top: 2px;">${kpi.netIncome || 'N/A'}</div>
+                            <div style="flex: 1; border: 1px solid #e2e8f0; padding: 6px; border-radius: 6px; background: #f8fafc;">
+                                <div style="font-size: 8.5px; color: #64748b; font-weight: 600;">RÉSULTAT NET</div>
+                                <div style="font-size: 11.5px; font-weight: 800; color: #0f172a; margin-top: 2px;">${kpi.netIncome || 'N/A'}</div>
                             </div>
-                            <div style="border: 1px solid #e2e8f0; padding: 6px; border-radius: 6px; background: #f8fafc;">
-                                <div style="font-size: 9px; color: #64748b; font-weight: 600;">MARGE OPÉRATIONNELLE</div>
-                                <div style="font-size: 12px; font-weight: 800; color: #047857; margin-top: 2px;">${kpi.operatingMargin || 'N/A'}</div>
+                            <div style="flex: 1; border: 1px solid #e2e8f0; padding: 6px; border-radius: 6px; background: #f8fafc;">
+                                <div style="font-size: 8.5px; color: #64748b; font-weight: 600;">MARGE OPÉRATIONNELLE</div>
+                                <div style="font-size: 11.5px; font-weight: 800; color: #047857; margin-top: 2px;">${kpi.operatingMargin || 'N/A'}</div>
                             </div>
-                            <div style="border: 1px solid #e2e8f0; padding: 6px; border-radius: 6px; background: #f8fafc;">
-                                <div style="font-size: 9px; color: #64748b; font-weight: 600;">ENDETTEMENT NET</div>
-                                <div style="font-size: 12px; font-weight: 800; color: #b45309; margin-top: 2px;">${kpi.netDebt || 'N/A'}</div>
+                            <div style="flex: 1; border: 1px solid #e2e8f0; padding: 6px; border-radius: 6px; background: #f8fafc;">
+                                <div style="font-size: 8.5px; color: #64748b; font-weight: 600;">ENDETTEMENT NET</div>
+                                <div style="font-size: 11.5px; font-weight: 800; color: #b45309; margin-top: 2px;">${kpi.netDebt || 'N/A'}</div>
                             </div>
                         </div>
 
-                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; font-size: 10px; background: #f1f5f9; padding: 8px; border-radius: 6px; margin-bottom: 8px;">
-                            <div><strong>Piotroski F-Score:</strong> ${health.piotroskiScore || 'N/A'}</div>
-                            <div><strong>Altman Z-Score:</strong> ${health.altmanZScore || 'N/A'} (${health.altmanStatus || 'N/A'})</div>
-                            <div><strong>Sécurité Dividende:</strong> ${div.yield || 'N/A'} (${div.safetyGrade || 'N/A'})</div>
+                        <div style="display: flex; gap: 8px; font-size: 9.5px; background: #f1f5f9; padding: 8px; border-radius: 6px; margin-bottom: 8px;">
+                            <div style="flex: 1;"><strong>Piotroski F-Score:</strong> ${health.piotroskiScore || 'N/A'}</div>
+                            <div style="flex: 1;"><strong>Altman Z-Score:</strong> ${health.altmanZScore || 'N/A'} (${health.altmanStatus || 'N/A'})</div>
+                            <div style="flex: 1;"><strong>Sécurité Dividende:</strong> ${div.yield || 'N/A'} (${div.safetyGrade || 'N/A'})</div>
                         </div>
 
                         ${kpi.historicalChartData && kpi.historicalChartData.length > 0 ? `
-                            <table style="width: 100%; border-collapse: collapse; font-size: 9.5px; text-align: left;">
+                            <table style="width: 100%; border-collapse: collapse; font-size: 9px; text-align: left;">
                                 <thead>
                                     <tr style="background: #e2e8f0; color: #0f172a;">
                                         <th style="padding: 4px 6px;">Année</th>
@@ -3258,11 +3268,12 @@ ${targetSchema}`;
                         ` : ''}
                     </div>
 
-                    <div style="border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 14px; page-break-inside: avoid; break-inside: avoid;">
+                    <!-- Ratios Financiers -->
+                    <div style="border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 12px; page-break-inside: avoid; break-inside: avoid;">
                         <div style="font-weight: 800; font-size: 11px; text-transform: uppercase; color: #0f172a; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">
                             3. Ratios Financiers & Benchmarks Sectoriels
                         </div>
-                        <table style="width: 100%; border-collapse: collapse; font-size: 9.5px; text-align: left;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 9px; text-align: left;">
                             <thead>
                                 <tr style="background: #f1f5f9; color: #0f172a; border-bottom: 1px solid #cbd5e1;">
                                     <th style="padding: 5px;">Ratio</th>
@@ -3286,64 +3297,67 @@ ${targetSchema}`;
                         </table>
                     </div>
 
-                    <div style="border: 1px dashed #0284c7; border-radius: 8px; padding: 12px; background: #f0f9ff; margin-bottom: 14px; page-break-inside: avoid; break-inside: avoid;">
+                    <!-- Plan de Trading -->
+                    <div style="border: 1px dashed #0284c7; border-radius: 8px; padding: 12px; background: #f0f9ff; margin-bottom: 12px; page-break-inside: avoid; break-inside: avoid;">
                         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #bae6fd; padding-bottom: 6px; margin-bottom: 8px;">
                             <span style="font-weight: 800; font-size: 11px; text-transform: uppercase; color: #0369a1;">4. Cadre d'Exécution & Plan de Trading Moyen Terme</span>
-                            <span style="font-size: 9.5px; font-weight: 700; color: #0284c7;">Probabilité: ${trading.winProbability || '--%'} | Ratio R/R: ${trading.riskRewardRatio || '1:--'}</span>
+                            <span style="font-size: 9px; font-weight: 700; color: #0284c7;">Probabilité: ${trading.winProbability || '--%'} | Ratio R/R: ${trading.riskRewardRatio || '1:--'}</span>
                         </div>
-                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; text-align: center; margin-bottom: 8px; font-size: 10px;">
-                            <div style="background: #ffffff; border: 1px solid #cbd5e1; padding: 5px; border-radius: 4px;">
-                                <div style="font-size: 8.5px; color: #64748b;">ENTRÉE CIBLÉE</div>
+                        <div style="display: flex; gap: 8px; text-align: center; margin-bottom: 8px; font-size: 9.5px;">
+                            <div style="flex: 1; background: #ffffff; border: 1px solid #cbd5e1; padding: 5px; border-radius: 4px;">
+                                <div style="font-size: 8px; color: #64748b;">ENTRÉE CIBLÉE</div>
                                 <div style="font-weight: 800; color: #0369a1;">${trading.entryZone || 'N/A'}</div>
                             </div>
-                            <div style="background: #ffffff; border: 1px solid #fca5a5; padding: 5px; border-radius: 4px;">
-                                <div style="font-size: 8.5px; color: #991b1b;">STOP LOSS</div>
+                            <div style="flex: 1; background: #ffffff; border: 1px solid #fca5a5; padding: 5px; border-radius: 4px;">
+                                <div style="font-size: 8px; color: #991b1b;">STOP LOSS</div>
                                 <div style="font-weight: 800; color: #b91c1c;">${trading.stopLoss || 'N/A'}</div>
                             </div>
-                            <div style="background: #ffffff; border: 1px solid #a7f3d0; padding: 5px; border-radius: 4px;">
-                                <div style="font-size: 8.5px; color: #065f46;">OBJECTIF 1 (TP1)</div>
+                            <div style="flex: 1; background: #ffffff; border: 1px solid #a7f3d0; padding: 5px; border-radius: 4px;">
+                                <div style="font-size: 8px; color: #065f46;">OBJECTIF 1 (TP1)</div>
                                 <div style="font-weight: 800; color: #047857;">${trading.tp1 || 'N/A'}</div>
                             </div>
-                            <div style="background: #ffffff; border: 1px solid #99f6e4; padding: 5px; border-radius: 4px;">
-                                <div style="font-size: 8.5px; color: #115e59;">OBJECTIF 2 (TP2)</div>
+                            <div style="flex: 1; background: #ffffff; border: 1px solid #99f6e4; padding: 5px; border-radius: 4px;">
+                                <div style="font-size: 8px; color: #115e59;">OBJECTIF 2 (TP2)</div>
                                 <div style="font-weight: 800; color: #0f766e;">${trading.tp2 || 'N/A'}</div>
                             </div>
                         </div>
-                        <div style="font-size: 9.5px; color: #1e293b; space-y: 2px;">
+                        <div style="font-size: 9px; color: #1e293b;">
                             <div><strong>Thèse :</strong> ${trading.thesis || 'N/A'}</div>
                             <div><strong>Invalidation :</strong> ${trading.invalidation || 'N/A'}</div>
                             <div><strong>Sentiment Marché :</strong> ${trading.marketSentiment || 'N/A'}</div>
                         </div>
                     </div>
 
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; page-break-inside: avoid; break-inside: avoid;">
-                        <div style="border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; background: #ffffff;">
-                            <div style="font-weight: 800; font-size: 10px; uppercase; color: #0f172a; margin-bottom: 4px;">Guidance & Strategic Pillars</div>
-                            <div style="font-size: 9.5px; color: #334155; margin-bottom: 4px;">${pers.guidanceSummary || 'Aucune guidance.'}</div>
+                    <!-- Guidance & Risques -->
+                    <div style="display: flex; gap: 10px; margin-bottom: 12px; page-break-inside: avoid; break-inside: avoid;">
+                        <div style="flex: 1; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; background: #ffffff;">
+                            <div style="font-weight: 800; font-size: 10px; text-transform: uppercase; color: #0f172a; margin-bottom: 4px;">Guidance & Piliers Stratégiques</div>
+                            <div style="font-size: 9px; color: #334155; margin-bottom: 4px;">${pers.guidanceSummary || 'Aucune guidance.'}</div>
                             ${pers.strategicPillars && pers.strategicPillars.length > 0 ? `
-                                <ul style="margin: 0; padding-left: 12px; font-size: 9px; color: #475569;">
+                                <ul style="margin: 0; padding-left: 12px; font-size: 8.5px; color: #475569;">
                                     ${pers.strategicPillars.map(p => `<li>${p}</li>`).join('')}
                                 </ul>
                             ` : ''}
                         </div>
 
-                        <div style="border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; background: #ffffff;">
-                            <div style="font-weight: 800; font-size: 10px; uppercase; color: #991b1b; margin-bottom: 4px;">Facteurs de Risques Principal</div>
+                        <div style="flex: 1; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; background: #ffffff;">
+                            <div style="font-weight: 800; font-size: 10px; text-transform: uppercase; color: #991b1b; margin-bottom: 4px;">Facteurs de Risques Principaux</div>
                             ${risks.length > 0 ? `
-                                <ul style="margin: 0; padding-left: 12px; font-size: 9px; color: #334155;">
+                                <ul style="margin: 0; padding-left: 12px; font-size: 8.5px; color: #334155;">
                                     ${risks.slice(0, 3).map(r => `<li><strong>${r.category}:</strong> ${r.description}</li>`).join('')}
                                 </ul>
-                            ` : '<div style="font-size: 9px; color: #64748b;">Aucun risque majeur répertorié.</div>'}
+                            ` : '<div style="font-size: 8.5px; color: #64748b;">Aucun risque majeur répertorié.</div>'}
                         </div>
                     </div>
 
-                    <div style="border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; background: #f8fafc; font-size: 9px; color: #475569; page-break-inside: avoid; break-inside: avoid;">
+                    <!-- VAD & Footer -->
+                    <div style="border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; background: #f8fafc; font-size: 8.5px; color: #475569; page-break-inside: avoid; break-inside: avoid;">
                         <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
                             <span><strong>Capital Vendu à Découvert (Short Interest):</strong> ${shortInfo.shortCapitalPct || '--- %'}</span>
                             <span><strong>Tendance VAD:</strong> ${shortInfo.shortTrend || 'Neutre'}</span>
                             <span><strong>Risque Short Squeeze:</strong> ${shortInfo.shortSqueezePotential || 'Faible'}</span>
                         </div>
-                        <div style="font-style: italic; font-size: 8.5px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 4px; margin-top: 4px;">
+                        <div style="font-style: italic; font-size: 8px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 4px; margin-top: 4px;">
                             Document édité via Euronext FactCheck AI par Leonce IA. Analyse algorithmique basée sur des sources publiques vérifiées en temps réel via Google Search Grounding (${sources.length} sources). Ne constitue pas un conseil en investissement réglementé.
                         </div>
                     </div>
@@ -3354,10 +3368,17 @@ ${targetSchema}`;
             document.body.appendChild(pdfWrapper);
 
             const opt = {
-                margin:       [0.3, 0.3, 0.3, 0.3],
+                margin:       [0.25, 0.25, 0.25, 0.25],
                 filename:     `Euronext_Factsheet_${companyName.replace(/\s+/g, '_')}.pdf`,
                 image:        { type: 'jpeg', quality: 0.98 },
-                html2canvas:  { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+                html2canvas:  { 
+                    scale: 2, 
+                    useCORS: true, 
+                    backgroundColor: '#ffffff',
+                    scrollX: 0,
+                    scrollY: 0,
+                    windowWidth: 800
+                },
                 jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' },
                 pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
             };
