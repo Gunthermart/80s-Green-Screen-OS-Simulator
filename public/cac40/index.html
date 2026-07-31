@@ -115,6 +115,7 @@
             font-family: 'Inter', sans-serif !important;
             padding: 24px !important;
             width: 780px !important;
+            box-sizing: border-box !important;
         }
         .pdf-export-mode .pdf-section {
             background: #ffffff !important;
@@ -142,19 +143,28 @@
             justify-content: space-between !important;
         }
         .pdf-export-mode .pdf-grid-2 {
-            display: grid !important;
-            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            display: flex !important;
             gap: 12px !important;
+        }
+        .pdf-export-mode .pdf-grid-2 > div {
+            flex: 1 !important;
         }
         .pdf-export-mode .pdf-grid-3 {
-            display: grid !important;
-            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+            display: flex !important;
             gap: 12px !important;
         }
+        .pdf-export-mode .pdf-grid-3 > div {
+            flex: 1 !important;
+        }
         .pdf-export-mode .pdf-grid-4 {
-            display: grid !important;
-            grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+            display: flex !important;
             gap: 8px !important;
+        }
+        .pdf-export-mode .pdf-grid-4 > div {
+            flex: 1 !important;
+            padding: 6px !important;
+            border: 1px solid #e2e8f0 !important;
+            border-radius: 6px !important;
         }
         .pdf-export-mode table {
             width: 100% !important;
@@ -1589,9 +1599,31 @@ Réponds obligatoirement en JSON.`;
         function cleanAndParseJSON(rawText) {
             if (!rawText) throw new Error("Texte IA vide.");
             let cleaned = rawText.trim();
-            if (cleaned.startsWith('```')) {
-                cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+            
+            // Remove markdown code fences if present
+            cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+
+            // Find outermost '{' ... '}' or '[' ... ']'
+            const firstObj = cleaned.indexOf('{');
+            const firstArr = cleaned.indexOf('[');
+            let start = -1;
+            if (firstObj !== -1 && firstArr !== -1) {
+                start = Math.min(firstObj, firstArr);
+            } else if (firstObj !== -1) {
+                start = firstObj;
+            } else if (firstArr !== -1) {
+                start = firstArr;
             }
+
+            if (start !== -1) {
+                const lastObj = cleaned.lastIndexOf('}');
+                const lastArr = cleaned.lastIndexOf(']');
+                const end = Math.max(lastObj, lastArr);
+                if (end > start) {
+                    cleaned = cleaned.substring(start, end + 1);
+                }
+            }
+
             return JSON.parse(cleaned);
         }
 
@@ -1842,23 +1874,25 @@ Réponds obligatoirement en JSON.`;
             buttonEl.disabled = true;
             buttonEl.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> <span>Approfondissement...</span>`;
 
+            const companyName = currentReportData.companyInfo?.name || "l'entreprise";
+
             const sectionPrompts = {
-                companyInfo: `Fournis une analyse approfondie et détaillée de la fiche d'identité et de l'avantage concurrentiel (Moat) de ${currentReportData.companyInfo.name}.`,
-                financialKPIs: `Approfondis l'analyse des indicateurs financiers et des faits marquants de ${currentReportData.companyInfo.name}.`,
-                financialRatios: `Analyse en profondeur les ratios financiers et la santé financière (Piotroski/Altman) de ${currentReportData.companyInfo.name}.`,
-                growthAnalysis: `Détaille les moteurs de croissance et les relais futurs de ${currentReportData.companyInfo.name}.`,
-                governanceAndCapital: `Fournis des précisions sur la structure du capital et la gouvernance de ${currentReportData.companyInfo.name}.`,
-                perspectives: `Détaille la guidance officielle et la stratégie de long terme de ${currentReportData.companyInfo.name}.`,
-                analystConsensusAndNews: `Fournis les derniers avis d'analystes et l'actualité récente de ${currentReportData.companyInfo.name}.`,
-                documentedRisks: `Détaille les risques majeurs et menaces pesant sur ${currentReportData.companyInfo.name}.`,
-                recentAnnouncements: `Résume les derniers communiqués de presse de ${currentReportData.companyInfo.name}.`,
-                overallDiagnostic: `Afine le diagnostic global et la note synthétique /100 pour ${currentReportData.companyInfo.name}.`,
-                tradingPlan: `Raffine le plan de trading et le cadrage technique Ichimoku Kinko Hyo pour ${currentReportData.companyInfo.name}.`,
-                shortInterest: `Analyse la pression vendeuse et les positions de vente à découvert sur ${currentReportData.companyInfo.name}.`
+                companyInfo: `Fournis une analyse approfondie et détaillée de la fiche d'identité et de l'avantage concurrentiel (Moat) de ${companyName}.`,
+                financialKPIs: `Approfondis l'analyse des indicateurs financiers et des faits marquants de ${companyName}.`,
+                financialRatios: `Analyse en profondeur les ratios financiers et la santé financière (Piotroski/Altman) de ${companyName}.`,
+                growthAnalysis: `Détaille les moteurs de croissance et les relais futurs de ${companyName}.`,
+                governanceAndCapital: `Fournis des précisions sur la structure du capital et la gouvernance de ${companyName}.`,
+                perspectives: `Détaille la guidance officielle et la stratégie de long terme de ${companyName}.`,
+                analystConsensusAndNews: `Fournis les derniers avis d'analystes et l'actualité récente de ${companyName}.`,
+                documentedRisks: `Détaille les risques majeurs et menaces pesant sur ${companyName}.`,
+                recentAnnouncements: `Résume les derniers communiqués de presse de ${companyName}.`,
+                overallDiagnostic: `Affinie le diagnostic global et la note synthétique /100 pour ${companyName}.`,
+                tradingPlan: `Raffine le plan de trading et le cadrage technique Ichimoku Kinko Hyo pour ${companyName}.`,
+                shortInterest: `Analyse la pression vendeuse et les positions de vente à découvert sur ${companyName}.`
             };
 
             const sectionSchemas = {
-                companyInfo: `{ "summary": "...", "headquarters": "...", "index": "..." }`,
+                companyInfo: `{ "summary": "...", "headquarters": "...", "index": "...", "market": "..." }`,
                 financialKPIs: `{ "revenue": "...", "netIncome": "...", "operatingMargin": "...", "netDebt": "...", "financialHighlights": ["..."] }`,
                 financialRatios: `[{ "ratioName": "...", "value": "...", "benchmark": "...", "status": "positive", "analysis": "..." }]`,
                 growthAnalysis: `{ "revenueGrowthRate": "...", "earningsGrowthRate": "...", "historicalGrowthSummary": "...", "growthDrivers": ["..."], "growthOutlook": "..." }`,
@@ -1873,12 +1907,15 @@ Réponds obligatoirement en JSON.`;
             };
 
             const promptText = `${sectionPrompts[sectionKey] || 'Approfondis cette section.'} 
-Réponds UNIQUEMENT avec un objet JSON structuré respectant exactement ce schéma :
+Réponds UNIQUEMENT au format JSON valide respectant exactement ce modèle :
 ${sectionSchemas[sectionKey] || '{}'}`;
 
             const payload = {
                 contents: [{ parts: [{ text: promptText }] }],
                 tools: [{ "google_search": {} }],
+                systemInstruction: {
+                    parts: [{ text: "Tu es un analyste financier spécialisé Euronext. Tu dois approfondir la section demandée et répondre STRICTEMENT au format JSON." }]
+                },
                 generationConfig: { responseMimeType: "application/json" }
             };
 
@@ -1900,16 +1937,27 @@ ${sectionSchemas[sectionKey] || '{}'}`;
                 
                 const candidate = result.candidates?.[0];
                 if (!candidate || !candidate.content?.parts) {
-                    throw new Error("Réponse IA vide ou inattendue.");
+                    throw new Error("Réponse IA vide de Gemini.");
                 }
 
-                const textPart = candidate.content.parts.find(p => p.text);
-                if (!textPart || !textPart.text) {
-                    throw new Error("Aucun texte valide trouvé dans la réponse IA.");
+                // Concatenate text parts across all parts
+                const textParts = candidate.content.parts.map(p => p.text || '').filter(Boolean).join('\n').trim();
+                if (!textParts) {
+                    throw new Error("Aucun texte valide dans la réponse Gemini.");
                 }
 
-                const updatedData = cleanAndParseJSON(textPart.text);
-                currentReportData[sectionKey] = updatedData;
+                const updatedData = cleanAndParseJSON(textParts);
+
+                // Update section data cleanly
+                if (Array.isArray(updatedData)) {
+                    currentReportData[sectionKey] = updatedData;
+                } else if (typeof updatedData === 'object' && updatedData !== null) {
+                    currentReportData[sectionKey] = {
+                        ...(currentReportData[sectionKey] || {}),
+                        ...updatedData
+                    };
+                }
+
                 renderReport(currentReportData);
 
             } catch (err) {
