@@ -1,0 +1,1709 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>BALL X PIT - Roguelite Ultimate Edition</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap');
+
+        body {
+            font-family: 'Rajdhani', sans-serif;
+            background-color: #0b0f19;
+            color: #f3f4f6;
+            touch-action: manipulation;
+            user-select: none;
+            overflow: hidden;
+        }
+
+        .font-orbitron {
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        .glass-panel {
+            background: rgba(17, 24, 39, 0.85);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .glow-title {
+            text-shadow: 0 0 12px rgba(59, 130, 246, 0.8), 0 0 24px rgba(147, 51, 234, 0.6);
+        }
+
+        .glow-btn {
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
+            transition: all 0.2s ease;
+        }
+
+        .glow-btn:hover {
+            box-shadow: 0 0 25px rgba(59, 130, 246, 0.8);
+            transform: translateY(-2px);
+        }
+
+        .ult-glow {
+            animation: pulse-ult 1.2s infinite alternate ease-in-out;
+            box-shadow: 0 0 20px rgba(168, 85, 247, 0.8);
+        }
+
+        @keyframes pulse-ult {
+            0% { transform: scale(1); box-shadow: 0 0 15px rgba(168, 85, 247, 0.6); }
+            100% { transform: scale(1.05); box-shadow: 0 0 30px rgba(217, 70, 239, 1); }
+        }
+
+        canvas {
+            background: radial-gradient(circle at center, #111827 0%, #070a12 100%);
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.8), inset 0 0 15px rgba(59, 130, 246, 0.1);
+            border: 2px solid rgba(59, 130, 246, 0.3);
+            border-radius: 1rem;
+            cursor: crosshair;
+        }
+
+        .upgrade-card {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .upgrade-card:not(:disabled):hover {
+            border-color: #3b82f6;
+            background: rgba(30, 58, 138, 0.3);
+        }
+
+        .upgrade-card:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            filter: grayscale(0.8);
+        }
+
+        .relic-card {
+            transition: all 0.25s ease;
+        }
+
+        .relic-card:hover {
+            transform: translateY(-4px) scale(1.02);
+            border-color: #a855f7;
+            box-shadow: 0 0 20px rgba(168, 85, 247, 0.4);
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col items-center justify-between p-2 md:p-3 select-none">
+
+    <!-- Header UI Bar -->
+    <header class="w-full max-w-lg glass-panel rounded-xl p-2.5 flex justify-between items-center shadow-lg border border-slate-800 z-10 gap-1">
+        <div class="flex items-center space-x-1.5">
+            <div class="w-7 h-7 rounded-lg bg-indigo-600/30 border border-indigo-400 flex items-center justify-center text-indigo-400 font-bold text-xs">
+                <i class="fa-solid fa-layer-group"></i>
+            </div>
+            <div>
+                <div class="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Vague</div>
+                <div id="ui-wave" class="text-base font-orbitron font-bold text-white">1</div>
+            </div>
+        </div>
+
+        <div class="flex items-center space-x-1.5">
+            <div class="w-7 h-7 rounded-lg bg-amber-600/30 border border-amber-400 flex items-center justify-center text-amber-400 font-bold text-xs">
+                <i class="fa-solid fa-coins"></i>
+            </div>
+            <div>
+                <div class="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Pièces</div>
+                <div id="ui-gold" class="text-base font-orbitron font-bold text-amber-400">0</div>
+            </div>
+        </div>
+
+        <div class="flex items-center space-x-1.5">
+            <div class="w-7 h-7 rounded-lg bg-cyan-600/30 border border-cyan-400 flex items-center justify-center text-cyan-400 font-bold text-xs">
+                <i class="fa-solid fa-bowling-ball"></i>
+            </div>
+            <div>
+                <div class="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Billes</div>
+                <div id="ui-balls" class="text-base font-orbitron font-bold text-cyan-400">10</div>
+            </div>
+        </div>
+
+        <!-- Combo Tracker -->
+        <div class="flex items-center space-x-1 bg-purple-900/40 border border-purple-500/40 px-2 py-1 rounded-lg">
+            <i class="fa-solid fa-bolt text-purple-400 text-xs"></i>
+            <span id="ui-combo" class="font-orbitron font-bold text-xs text-purple-300">x0</span>
+        </div>
+
+        <!-- Speed control button -->
+        <button id="btn-speed" class="px-2 py-1 rounded-lg bg-slate-800 border border-slate-700 hover:border-cyan-500 font-orbitron font-bold text-xs text-cyan-400 transition flex items-center space-x-1">
+            <i class="fa-solid fa-forward text-[10px]"></i>
+            <span id="speed-label">x1</span>
+        </button>
+    </header>
+
+    <!-- Main Game Canvas Container -->
+    <main class="relative flex-1 w-full max-w-lg my-1.5 flex items-center justify-center overflow-hidden">
+        <canvas id="gameCanvas" class="w-full h-full object-contain"></canvas>
+
+        <!-- Powerup Legend Banner -->
+        <div class="absolute top-2 left-2 right-2 flex justify-center space-x-2 bg-slate-950/70 border border-slate-800 backdrop-blur-md py-1 px-2 rounded-lg text-[9px] text-slate-300 pointer-events-none flex-wrap gap-y-1">
+            <span class="flex items-center space-x-1"><i class="fa-solid fa-bomb text-red-500"></i><span>Bombe</span></span>
+            <span class="flex items-center space-x-1"><i class="fa-solid fa-bolt text-yellow-400"></i><span>Laser</span></span>
+            <span class="flex items-center space-x-1"><i class="fa-solid fa-cloud-bolt text-cyan-400"></i><span>Éclair</span></span>
+            <span class="flex items-center space-x-1"><i class="fa-solid fa-clone text-emerald-400"></i><span>Split</span></span>
+            <span class="flex items-center space-x-1"><i class="fa-solid fa-snowflake text-blue-400"></i><span>Gel</span></span>
+            <span class="flex items-center space-x-1"><i class="fa-solid fa-magnet text-purple-400"></i><span>Aimant</span></span>
+            <span class="flex items-center space-x-1"><i class="fa-solid fa-shield-halved text-green-400"></i><span>Bouclier</span></span>
+            <span class="flex items-center space-x-1"><i class="fa-solid fa-flask text-lime-400"></i><span>Acide</span></span>
+            <span class="flex items-center space-x-1"><i class="fa-solid fa-sun text-orange-400"></i><span>Nova</span></span>
+            <span class="flex items-center space-x-1"><i class="fa-solid fa-arrow-up text-pink-400"></i><span>Repousse</span></span>
+        </div>
+
+        <!-- Ultimate Skill Activation Button (Option 2) -->
+        <div class="absolute bottom-4 left-4 z-20 flex flex-col items-center">
+            <button id="btn-ultimate" disabled class="w-12 h-12 rounded-full bg-slate-800 border-2 border-slate-600 text-slate-500 font-bold flex items-center justify-center transition shadow-lg relative overflow-hidden group">
+                <i class="fa-solid fa-tornado text-lg"></i>
+                <div id="ult-progress-fill" class="absolute bottom-0 left-0 right-0 bg-purple-600/40 w-full transition-all duration-200 pointer-events-none" style="height: 0%"></div>
+            </button>
+            <span class="text-[9px] font-orbitron uppercase text-purple-300 font-bold mt-1">Trou Noir</span>
+        </div>
+
+        <!-- Fast Return Floating Button -->
+        <button id="btn-recall" class="hidden absolute bottom-4 right-4 bg-indigo-600/90 hover:bg-indigo-500 border border-indigo-300 text-white font-bold py-2 px-4 rounded-full shadow-lg transition backdrop-blur-md flex items-center space-x-2 text-sm z-20">
+            <i class="fa-solid fa-angles-down"></i>
+            <span>Rappeler</span>
+        </button>
+
+        <!-- Relic Choice Modal (Option 3 - Roguelite Card Picker) -->
+        <div id="relic-modal" class="hidden absolute inset-0 bg-slate-950/95 backdrop-blur-md flex flex-col items-center justify-center p-4 z-40 rounded-xl">
+            <div class="text-amber-400 text-[10px] font-orbitron uppercase tracking-widest mb-1"><i class="fa-solid fa-crown mr-1"></i> Récompense de Vague</div>
+            <h2 class="text-2xl font-orbitron font-black text-white mb-4 tracking-wider glow-title text-center">CHOISISSEZ UNE RELIQUE</h2>
+            
+            <div id="relic-container" class="w-full max-w-sm flex flex-col space-y-3 mb-4">
+                <!-- Relic cards populated dynamically via JS -->
+            </div>
+        </div>
+
+        <!-- Game Over Modal -->
+        <div id="game-over-modal" class="hidden absolute inset-0 bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center z-50 rounded-xl">
+            <div class="w-16 h-16 rounded-full bg-red-500/20 border-2 border-red-500 flex items-center justify-center text-red-500 text-3xl mb-4 animate-bounce">
+                <i class="fa-solid fa-skull"></i>
+            </div>
+            <h2 class="text-3xl font-orbitron font-black text-red-500 mb-1 tracking-wider glow-title">GAME OVER</h2>
+            <p class="text-slate-400 text-sm mb-6">Les blocs ont atteint le bas du terrain !</p>
+
+            <div class="w-full max-w-xs glass-panel p-4 rounded-xl mb-6 space-y-3 border border-slate-700">
+                <div class="flex justify-between items-center text-slate-300">
+                    <span>Vagues Suréveillées :</span>
+                    <span id="go-wave" class="font-orbitron font-bold text-white text-lg">0</span>
+                </div>
+                <div class="flex justify-between items-center text-slate-300">
+                    <span>Score Total :</span>
+                    <span id="go-score" class="font-orbitron font-bold text-amber-400 text-lg">0</span>
+                </div>
+            </div>
+
+            <button id="btn-restart" class="w-full max-w-xs py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 font-orbitron font-bold rounded-xl text-white shadow-lg glow-btn tracking-wider uppercase">
+                Rejouer <i class="fa-solid fa-rotate-right ml-2"></i>
+            </button>
+        </div>
+    </main>
+
+    <!-- Upgrades / Roguelike Shop Footer -->
+    <footer class="w-full max-w-lg glass-panel rounded-xl p-2 shadow-lg border border-slate-800 z-10 flex flex-col space-y-1.5">
+        <!-- Active Relics Indicator Bar -->
+        <div class="flex items-center justify-between px-1 border-b border-slate-800 pb-1">
+            <span class="text-[9px] uppercase font-bold text-purple-400 tracking-wider flex items-center space-x-1">
+                <i class="fa-solid fa-gem text-xs"></i>
+                <span>Reliques actives :</span>
+            </span>
+            <div id="active-relics-list" class="flex space-x-1 overflow-x-auto text-[10px]">
+                <span class="text-slate-500 italic text-[9px]">Aucune relique</span>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-2">
+            <button id="upg-balls" class="upgrade-card p-1.5 rounded-lg border border-slate-700/60 bg-slate-900/60 flex flex-col items-center text-center">
+                <div class="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Billes +5</div>
+                <div class="flex items-center space-x-1 my-0.5">
+                    <i class="fa-solid fa-bowling-ball text-cyan-400 text-xs"></i>
+                    <span id="lvl-balls" class="font-orbitron text-xs text-white">Niv.1</span>
+                </div>
+                <div class="w-full py-0.5 bg-amber-500/10 border border-amber-500/30 rounded text-amber-400 font-orbitron text-xs font-bold flex items-center justify-center space-x-1">
+                    <i class="fa-solid fa-coins text-[9px]"></i>
+                    <span id="cost-balls">20</span>
+                </div>
+            </button>
+
+            <button id="upg-damage" class="upgrade-card p-1.5 rounded-lg border border-slate-700/60 bg-slate-900/60 flex flex-col items-center text-center">
+                <div class="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Dégâts +1</div>
+                <div class="flex items-center space-x-1 my-0.5">
+                    <i class="fa-solid fa-bolt text-red-400 text-xs"></i>
+                    <span id="lvl-damage" class="font-orbitron text-xs text-white">Niv.1</span>
+                </div>
+                <div class="w-full py-0.5 bg-amber-500/10 border border-amber-500/30 rounded text-amber-400 font-orbitron text-xs font-bold flex items-center justify-center space-x-1">
+                    <i class="fa-solid fa-coins text-[9px]"></i>
+                    <span id="cost-damage">35</span>
+                </div>
+            </button>
+
+            <button id="upg-speed" class="upgrade-card p-1.5 rounded-lg border border-slate-700/60 bg-slate-900/60 flex flex-col items-center text-center">
+                <div class="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Cadence +</div>
+                <div class="flex items-center space-x-1 my-0.5">
+                    <i class="fa-solid fa-gauge-high text-emerald-400 text-xs"></i>
+                    <span id="lvl-speed" class="font-orbitron text-xs text-white">Niv.1</span>
+                </div>
+                <div class="w-full py-0.5 bg-amber-500/10 border border-amber-500/30 rounded text-amber-400 font-orbitron text-xs font-bold flex items-center justify-center space-x-1">
+                    <i class="fa-solid fa-coins text-[9px]"></i>
+                    <span id="cost-speed">50</span>
+                </div>
+            </button>
+        </div>
+    </footer>
+
+    <script>
+        window.addEventListener('load', () => {
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+
+            const GAME_WIDTH = 480;
+            const GAME_HEIGHT = 680;
+            canvas.width = GAME_WIDTH;
+            canvas.height = GAME_HEIGHT;
+
+            // DOM UI Elements
+            const uiWave = document.getElementById('ui-wave');
+            const uiGold = document.getElementById('ui-gold');
+            const uiBalls = document.getElementById('ui-balls');
+            const uiCombo = document.getElementById('ui-combo');
+            const btnSpeed = document.getElementById('btn-speed');
+            const speedLabel = document.getElementById('speed-label');
+            const btnRecall = document.getElementById('btn-recall');
+            const btnUltimate = document.getElementById('btn-ultimate');
+            const ultProgressFill = document.getElementById('ult-progress-fill');
+            const relicModal = document.getElementById('relic-modal');
+            const relicContainer = document.getElementById('relic-container');
+            const activeRelicsList = document.getElementById('active-relics-list');
+            const gameOverModal = document.getElementById('game-over-modal');
+            const goWave = document.getElementById('go-wave');
+            const goScore = document.getElementById('go-score');
+            const btnRestart = document.getElementById('btn-restart');
+
+            const upgBallsBtn = document.getElementById('upg-balls');
+            const lvlBallsEl = document.getElementById('lvl-balls');
+            const costBallsEl = document.getElementById('cost-balls');
+
+            const upgDamageBtn = document.getElementById('upg-damage');
+            const lvlDamageEl = document.getElementById('lvl-damage');
+            const costDamageEl = document.getElementById('cost-damage');
+
+            const upgSpeedBtn = document.getElementById('upg-speed');
+            const lvlSpeedEl = document.getElementById('lvl-speed');
+            const costSpeedEl = document.getElementById('cost-speed');
+
+            const COLS = 7;
+            const ROWS = 9;
+            const PADDING = 6;
+            const GRID_TOP = 80;
+            const GRID_BOTTOM = GAME_HEIGHT - 90;
+            const BLOCK_SIZE = (GAME_WIDTH - (PADDING * (COLS + 1))) / COLS;
+            const LAUNCHER_Y = GAME_HEIGHT - 45;
+
+            // Game State Variables
+            let wave = 1;
+            let gold = 0;
+            let totalScore = 0;
+            let currentCombo = 0;
+            let gameState = 'AIMING'; // 'AIMING', 'SHOOTING', 'WAVE_END', 'RELIC_CHOICE', 'GAMEOVER'
+            let gameSpeedMultiplier = 1;
+            let freezeWavesLeft = 0;
+            let screenShake = 0;
+            let ultEnergy = 0; // 0 to 100
+
+            let launcherX = GAME_WIDTH / 2;
+            let nextLauncherX = GAME_WIDTH / 2;
+            let aimAngle = -Math.PI / 2;
+            let isDragging = false;
+
+            // Active Roguelite Relics (Option 3)
+            const activeRelics = new Set();
+            const RELIC_POOL = [
+                { id: 'pierce', name: 'Billes Perforantes', icon: 'fa-wand-magic-sparkles', desc: 'Le 1er impact perfore la cible sans rebondir immédiatement.', color: '#ec4899' },
+                { id: 'wallShock', name: 'Onde Murale', icon: 'fa-shield-halved', desc: 'Chaque rebond contre un mur libère une onde de choc explosive.', color: '#ef4444' },
+                { id: 'critHit', name: 'Tir Critique', icon: 'fa-crosshair', desc: '15% de chance de causer x3 dégâts à chaque frappe.', color: '#f59e0b' },
+                { id: 'goldMagnet', name: 'Aimant d\'Or', icon: 'fa-coins', desc: 'Doubles les pièces d\'or gagnées lors des destructions.', color: '#eab308' },
+                { id: 'explBounce', name: 'Rebond Explosif', icon: 'fa-burst', desc: '10% de chance qu\'un impact déclenche une micro-explosion.', color: '#f97316' },
+                { id: 'chronoSpark', name: 'Gel Prolongé', icon: 'fa-snowflake', desc: 'Les effets de Gel (Chrono) durent +1 vague supplémentaire.', color: '#38bdf8' },
+                { id: 'meteorImpact', name: 'Impact Météore', icon: 'fa-meteor', desc: '12% de chance d\'invoquer une pluie de feu sur 3 blocs au hasard.', color: '#dc2626' },
+                { id: 'overcharge', name: 'Surcharge Ultime', icon: 'fa-atom', desc: 'Recharge la jauge de Trou Noir 25% plus vite.', color: '#a855f7' }
+            ];
+
+            const upgrades = {
+                balls: { level: 1, count: 10, cost: 20 },
+                damage: { level: 1, val: 1, cost: 35 },
+                speed: { level: 1, interval: 8, cost: 50 }
+            };
+
+            let balls = [];
+            let blocks = [];
+            let bonusItems = [];
+            let particles = [];
+            let floatingTexts = [];
+            let shockwaves = [];
+            let laserBeams = [];
+            let lightningArcs = [];
+            let activeBlackHole = null; // Option 2 Ultimate Skill Effect
+            let floorShieldHits = 0; // Shield floor bounces left
+            let activeAcidClouds = []; // Acid Cloud damage-over-time areas
+
+            // Audio Synthesizer
+            const AudioFX = {
+                ctx: null,
+                init() {
+                    if (!this.ctx) {
+                        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                        if (AudioCtx) this.ctx = new AudioCtx();
+                    }
+                    if (this.ctx && this.ctx.state === 'suspended') {
+                        this.ctx.resume();
+                    }
+                },
+                hit() {
+                    if (!this.ctx) return;
+                    try {
+                        const osc = this.ctx.createOscillator();
+                        const gain = this.ctx.createGain();
+                        osc.type = 'triangle';
+                        osc.frequency.setValueAtTime(300 + Math.random() * 150, this.ctx.currentTime);
+                        osc.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 0.04);
+                        gain.gain.setValueAtTime(0.06, this.ctx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.04);
+                        osc.connect(gain);
+                        gain.connect(this.ctx.destination);
+                        osc.start();
+                        osc.stop(this.ctx.currentTime + 0.04);
+                    } catch(e) {}
+                },
+                crit() {
+                    if (!this.ctx) return;
+                    try {
+                        const osc = this.ctx.createOscillator();
+                        const gain = this.ctx.createGain();
+                        osc.type = 'sawtooth';
+                        osc.frequency.setValueAtTime(600, this.ctx.currentTime);
+                        osc.frequency.linearRampToValueAtTime(1200, this.ctx.currentTime + 0.08);
+                        gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.08);
+                        osc.connect(gain);
+                        gain.connect(this.ctx.destination);
+                        osc.start();
+                        osc.stop(this.ctx.currentTime + 0.08);
+                    } catch(e) {}
+                },
+                bomb() {
+                    if (!this.ctx) return;
+                    try {
+                        const osc = this.ctx.createOscillator();
+                        const gain = this.ctx.createGain();
+                        osc.type = 'sawtooth';
+                        osc.frequency.setValueAtTime(120, this.ctx.currentTime);
+                        osc.frequency.exponentialRampToValueAtTime(30, this.ctx.currentTime + 0.3);
+                        gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.3);
+                        osc.connect(gain);
+                        gain.connect(this.ctx.destination);
+                        osc.start();
+                        osc.stop(this.ctx.currentTime + 0.3);
+                    } catch(e) {}
+                },
+                laser() {
+                    if (!this.ctx) return;
+                    try {
+                        const osc = this.ctx.createOscillator();
+                        const gain = this.ctx.createGain();
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(800, this.ctx.currentTime);
+                        osc.frequency.exponentialRampToValueAtTime(200, this.ctx.currentTime + 0.15);
+                        gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.15);
+                        osc.connect(gain);
+                        gain.connect(this.ctx.destination);
+                        osc.start();
+                        osc.stop(this.ctx.currentTime + 0.15);
+                    } catch(e) {}
+                },
+                freeze() {
+                    if (!this.ctx) return;
+                    try {
+                        const osc = this.ctx.createOscillator();
+                        const gain = this.ctx.createGain();
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(400, this.ctx.currentTime);
+                        osc.frequency.linearRampToValueAtTime(900, this.ctx.currentTime + 0.25);
+                        gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.25);
+                        osc.connect(gain);
+                        gain.connect(this.ctx.destination);
+                        osc.start();
+                        osc.stop(this.ctx.currentTime + 0.25);
+                    } catch(e) {}
+                }
+            };
+
+            let ballsToSpawn = 0;
+            let spawnTimer = 0;
+            let bonusBallsCollectedThisRound = 0;
+
+            class Particle {
+                constructor(x, y, color, size = 3) {
+                    this.x = x;
+                    this.y = y;
+                    this.vx = (Math.random() - 0.5) * 8;
+                    this.vy = (Math.random() - 0.5) * 8;
+                    this.radius = Math.random() * size + 1;
+                    this.color = color;
+                    this.alpha = 1;
+                    this.decay = Math.random() * 0.03 + 0.02;
+                }
+
+                update() {
+                    this.x += this.vx;
+                    this.y += this.vy;
+                    this.alpha -= this.decay;
+                }
+
+                draw(ctx) {
+                    ctx.save();
+                    ctx.globalAlpha = Math.max(0, this.alpha);
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = this.color;
+                    ctx.shadowColor = this.color;
+                    ctx.shadowBlur = 8;
+                    ctx.fill();
+                    ctx.restore();
+                }
+            }
+
+            class Shockwave {
+                constructor(x, y, maxRadius, color) {
+                    this.x = x;
+                    this.y = y;
+                    this.radius = 5;
+                    this.maxRadius = maxRadius;
+                    this.color = color;
+                    this.alpha = 1;
+                }
+
+                update() {
+                    this.radius += (this.maxRadius - this.radius) * 0.25;
+                    this.alpha -= 0.05;
+                }
+
+                draw(ctx) {
+                    if (this.alpha <= 0) return;
+                    ctx.save();
+                    ctx.globalAlpha = Math.max(0, this.alpha);
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                    ctx.strokeStyle = this.color;
+                    ctx.lineWidth = 4;
+                    ctx.shadowColor = this.color;
+                    ctx.shadowBlur = 12;
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            }
+
+            class FloatingText {
+                constructor(x, y, text, color, scale = 1) {
+                    this.x = x;
+                    this.y = y;
+                    this.text = text;
+                    this.color = color;
+                    this.scale = scale;
+                    this.alpha = 1;
+                    this.vy = -1.8;
+                }
+
+                update() {
+                    this.y += this.vy;
+                    this.alpha -= 0.02;
+                }
+
+                draw(ctx) {
+                    ctx.save();
+                    ctx.globalAlpha = Math.max(0, this.alpha);
+                    ctx.font = `bold ${Math.floor(14 * this.scale)}px Orbitron`;
+                    ctx.fillStyle = this.color;
+                    ctx.shadowColor = this.color;
+                    ctx.shadowBlur = 8;
+                    ctx.textAlign = 'center';
+                    ctx.fillText(this.text, this.x, this.y);
+                    ctx.restore();
+                }
+            }
+
+            class Ball {
+                constructor(x, y, angle, speed, damage) {
+                    this.x = x;
+                    this.y = y;
+                    this.radius = 6;
+                    this.speed = speed;
+                    this.vx = Math.cos(angle) * speed;
+                    this.vy = Math.sin(angle) * speed;
+                    this.damage = damage;
+                    this.active = true;
+                    this.returning = false;
+                    this.trailTimer = 0;
+                    this.pierceLeft = activeRelics.has('pierce') ? 1 : 0; // Relic Pierce
+                }
+
+                update() {
+                    if (!this.active) return;
+
+                    // Neon Particle Trail Effect
+                    this.trailTimer++;
+                    if (this.trailTimer % 2 === 0) {
+                        particles.push(new Particle(this.x, this.y, '#38bdf8', 2));
+                    }
+
+                    // Gravitational Pull towards Ultimate Black Hole (Option 2)
+                    if (activeBlackHole) {
+                        const dx = activeBlackHole.x - this.x;
+                        const dy = activeBlackHole.y - this.y;
+                        const dist = Math.hypot(dx, dy);
+                        if (dist > 10 && dist < 220) {
+                            this.vx += (dx / dist) * 0.45;
+                            this.vy += (dy / dist) * 0.45;
+                        }
+                    }
+
+                    if (this.returning) {
+                        const dx = nextLauncherX - this.x;
+                        const dy = LAUNCHER_Y - this.y;
+                        const dist = Math.hypot(dx, dy);
+                        if (dist < 15) {
+                            this.active = false;
+                            this.x = nextLauncherX;
+                            this.y = LAUNCHER_Y;
+                        } else {
+                            this.x += (dx / dist) * 20;
+                            this.y += (dy / dist) * 20;
+                        }
+                        return;
+                    }
+
+                    const steps = 3;
+                    const subVx = this.vx / steps;
+                    const subVy = this.vy / steps;
+
+                    for (let s = 0; s < steps; s++) {
+                        this.x += subVx;
+                        this.y += subVy;
+
+                        // Wall Collisions
+                        if (this.x - this.radius <= PADDING) {
+                            this.x = PADDING + this.radius;
+                            this.vx = Math.abs(this.vx);
+                            this.triggerWallRelic();
+                        } else if (this.x + this.radius >= GAME_WIDTH - PADDING) {
+                            this.x = GAME_WIDTH - PADDING - this.radius;
+                            this.vx = -Math.abs(this.vx);
+                            this.triggerWallRelic();
+                        }
+
+                        if (this.y - this.radius <= GRID_TOP) {
+                            this.y = GRID_TOP + this.radius;
+                            this.vy = Math.abs(this.vy);
+                            this.triggerWallRelic();
+                        }
+
+                        // Floor Collision
+                        if (this.vy > 0 && this.y + this.radius >= LAUNCHER_Y) {
+                            if (floorShieldHits > 0) {
+                                this.y = LAUNCHER_Y - this.radius;
+                                this.vy = -Math.abs(this.vy);
+                                floorShieldHits--;
+                                shockwaves.push(new Shockwave(this.x, LAUNCHER_Y, 30, '#22c55e'));
+                                AudioFX.crit();
+                            } else {
+                                this.y = LAUNCHER_Y;
+                                this.active = false;
+                                if (balls.filter(b => b.returning || !b.active).length === 1) {
+                                    nextLauncherX = Math.max(PADDING + 20, Math.min(GAME_WIDTH - PADDING - 20, this.x));
+                                }
+                                break;
+                            }
+                        }
+
+                        this.checkBlockCollisions();
+                        this.checkBonusCollisions();
+                    }
+                }
+
+                triggerWallRelic() {
+                    // Relic: Wall Shockwave (Option 3)
+                    if (activeRelics.has('wallShock')) {
+                        shockwaves.push(new Shockwave(this.x, this.y, 45, '#ef4444'));
+                        for (let b of blocks) {
+                            if (Math.hypot(b.x + b.w/2 - this.x, b.y + b.h/2 - this.y) < 60) {
+                                b.hit(Math.ceil(this.damage * 0.5));
+                            }
+                        }
+                    }
+                }
+
+                checkBlockCollisions() {
+                    for (let block of blocks) {
+                        if (block.hp <= 0) continue;
+
+                        const closestX = Math.max(block.x, Math.min(this.x, block.x + block.w));
+                        const closestY = Math.max(block.y, Math.min(this.y, block.y + block.h));
+
+                        const distX = this.x - closestX;
+                        const distY = this.y - closestY;
+                        const distanceSq = (distX * distX) + (distY * distY);
+
+                        if (distanceSq <= (this.radius * this.radius)) {
+                            let dmg = this.damage;
+
+                            // Relic: Critical Hit (Option 3)
+                            if (activeRelics.has('critHit') && Math.random() < 0.15) {
+                                dmg *= 3;
+                                AudioFX.crit();
+                                floatingTexts.push(new FloatingText(closestX, closestY, 'CRIT!', '#f59e0b', 1.4));
+                            } else {
+                                AudioFX.hit();
+                            }
+
+                            // Relic: Explosive Bounce (Option 3)
+                            if (activeRelics.has('explBounce') && Math.random() < 0.10) {
+                                shockwaves.push(new Shockwave(closestX, closestY, 35, '#f97316'));
+                                for (let ob of blocks) {
+                                    if (Math.hypot(ob.x + ob.w/2 - closestX, ob.y + ob.h/2 - closestY) < 50) {
+                                        ob.hit(dmg);
+                                    }
+                                }
+                            }
+
+                            block.hit(dmg);
+                            createImpactSparks(closestX, closestY, block.color);
+
+                            // Handle Pierce Relic
+                            if (this.pierceLeft > 0) {
+                                this.pierceLeft--;
+                                floatingTexts.push(new FloatingText(this.x, this.y, 'PERCÉ!', '#ec4899', 1.1));
+                            } else {
+                                if (Math.abs(distX) > Math.abs(distY)) {
+                                    this.vx = distX > 0 ? Math.abs(this.vx) : -Math.abs(this.vx);
+                                } else {
+                                    this.vy = distY > 0 ? Math.abs(this.vy) : -Math.abs(this.vy);
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                checkBonusCollisions() {
+                    for (let item of bonusItems) {
+                        if (item.collected) continue;
+                        const dist = Math.hypot(this.x - item.x, this.y - item.y);
+                        if (dist < this.radius + item.radius) {
+                            item.collect(this);
+                        }
+                    }
+                }
+
+                draw(ctx) {
+                    if (!this.active && !this.returning) return;
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = this.pierceLeft > 0 ? '#ec4899' : '#38bdf8';
+                    ctx.shadowColor = this.pierceLeft > 0 ? '#ec4899' : '#0284c7';
+                    ctx.shadowBlur = 10;
+                    ctx.fill();
+                    ctx.restore();
+                }
+            }
+
+            class Block {
+                constructor(col, row, hp, type = 'rect', isBoss = false) {
+                    this.col = col;
+                    this.row = row;
+                    this.isBoss = isBoss;
+                    this.w = isBoss ? BLOCK_SIZE * 2 + PADDING : BLOCK_SIZE;
+                    this.h = isBoss ? (BLOCK_SIZE * 0.75) * 2 + PADDING : BLOCK_SIZE * 0.75;
+                    this.x = PADDING + col * (BLOCK_SIZE + PADDING);
+                    this.y = GRID_TOP + row * (BLOCK_SIZE * 0.75 + PADDING);
+                    this.targetY = this.y;
+                    this.maxHp = hp;
+                    this.hp = hp;
+                    this.type = type;
+                    this.color = this.getColorForHp(hp);
+                }
+
+                getColorForHp(hp) {
+                    if (this.isBoss) return '#dc2626';
+                    const hue = Math.max(0, 240 - Math.min(hp * 4, 240)); 
+                    return `hsl(${hue}, 85%, 55%)`;
+                }
+
+                hit(damage) {
+                    this.hp -= damage;
+                    totalScore += damage * 10;
+                    currentCombo++;
+
+                    // Ultimate Energy Charge (Option 2 & Relic Overcharge)
+                    if (ultEnergy < 100) {
+                        const chargeAmount = activeRelics.has('overcharge') ? 1.0 : 0.8;
+                        ultEnergy = Math.min(100, ultEnergy + chargeAmount);
+                        updateUltUI();
+                    }
+
+                    // Relic: Meteor Impact (Option 3)
+                    if (activeRelics.has('meteorImpact') && Math.random() < 0.12) {
+                        let targets = blocks.filter(b => b.hp > 0 && b !== this).slice(0, 3);
+                        for (let t of targets) {
+                            shockwaves.push(new Shockwave(t.x + t.w/2, t.y + t.h/2, 30, '#dc2626'));
+                            t.hit(Math.ceil(damage * 0.8));
+                        }
+                        floatingTexts.push(new FloatingText(this.x + this.w/2, this.y, 'MÉTÉORE!', '#dc2626', 1.2));
+                    }
+
+                    if (currentCombo % 10 === 0) {
+                        floatingTexts.push(new FloatingText(this.x + this.w / 2, this.y, `COMBO x${currentCombo}!`, '#a855f7', 1.3));
+                    }
+
+                    if (this.hp <= 0) {
+                        this.hp = 0;
+                        let earned = Math.floor(Math.random() * 3) + (this.isBoss ? 25 : 2);
+                        // Relic: Gold Magnet (Option 3)
+                        if (activeRelics.has('goldMagnet')) earned *= 2;
+
+                        gold += earned;
+                        floatingTexts.push(new FloatingText(this.x + this.w / 2, this.y + this.h / 2, `+${earned} $`, '#f59e0b', this.isBoss ? 1.5 : 1));
+                        createExplosion(this.x + this.w / 2, this.y + this.h / 2, this.color);
+                    }
+                    this.color = this.getColorForHp(this.hp);
+                }
+
+                shiftDown() {
+                    this.row += 1;
+                    const blockH = BLOCK_SIZE * 0.75;
+                    this.targetY = GRID_TOP + this.row * (blockH + PADDING);
+                }
+
+                update() {
+                    if (this.y < this.targetY) {
+                        this.y += Math.min(4, this.targetY - this.y);
+                    }
+                }
+
+                draw(ctx) {
+                    if (this.hp <= 0) return;
+
+                    ctx.save();
+                    ctx.fillStyle = this.color;
+                    ctx.shadowColor = this.color;
+                    ctx.shadowBlur = freezeWavesLeft > 0 ? 15 : 8;
+
+                    if (freezeWavesLeft > 0) {
+                        ctx.strokeStyle = '#38bdf8';
+                        ctx.lineWidth = 2;
+                    }
+
+                    if (this.isBoss) { // Boss rendering (Option 1)
+                        ctx.strokeStyle = '#f87171';
+                        ctx.lineWidth = 3;
+                        ctx.beginPath();
+                        ctx.roundRect(this.x, this.y, this.w, this.h, 12);
+                        ctx.fill();
+                        ctx.stroke();
+
+                        // Boss Inner Core
+                        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+                        ctx.beginPath();
+                        ctx.roundRect(this.x + 6, this.y + 6, this.w - 12, this.h - 12, 8);
+                        ctx.fill();
+
+                        ctx.fillStyle = '#ffffff';
+                        ctx.font = 'bold 12px Orbitron';
+                        ctx.textAlign = 'center';
+                        ctx.fillText('BOSS [ALPHA]', this.x + this.w / 2, this.y + 20);
+
+                    } else if (this.type === 'circle') {
+                        const radius = this.w / 2;
+                        ctx.beginPath();
+                        ctx.arc(this.x + radius, this.y + this.h / 2, radius, 0, Math.PI * 2);
+                        ctx.fill();
+                        if (freezeWavesLeft > 0) ctx.stroke();
+                    } else {
+                        ctx.beginPath();
+                        ctx.roundRect(this.x, this.y, this.w, this.h, 6);
+                        ctx.fill();
+                        if (freezeWavesLeft > 0) ctx.stroke();
+
+                        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                        ctx.beginPath();
+                        ctx.roundRect(this.x + 3, this.y + 3, this.w - 6, this.h - 6, 4);
+                        ctx.fill();
+                    }
+
+                    ctx.shadowBlur = 0;
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = 'bold 15px Orbitron';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(this.hp, this.x + this.w / 2, this.y + (this.isBoss ? this.h / 2 + 8 : this.h / 2));
+
+                    ctx.restore();
+                }
+            }
+
+            class BonusItem {
+                constructor(col, row, type) {
+                    this.col = col;
+                    this.row = row;
+                    this.type = type; // 'ball', 'coin', 'bomb', 'laser', 'lightning', 'split', 'freeze', 'magnet', 'shield', 'poison', 'radial', 'pushback'
+                    const blockH = BLOCK_SIZE * 0.75;
+                    this.x = PADDING + col * (BLOCK_SIZE + PADDING) + BLOCK_SIZE / 2;
+                    this.y = GRID_TOP + row * (blockH + PADDING) + blockH / 2;
+                    this.targetY = this.y;
+                    this.radius = 13;
+                    this.collected = false;
+                    this.pulse = 0;
+                }
+
+                shiftDown() {
+                    this.row += 1;
+                    const blockH = BLOCK_SIZE * 0.75;
+                    this.targetY = GRID_TOP + this.row * (blockH + PADDING) + blockH / 2;
+                }
+
+                update() {
+                    if (this.y < this.targetY) {
+                        this.y += Math.min(4, this.targetY - this.y);
+                    }
+                    this.pulse += 0.06;
+                }
+
+                collect(triggerBall) {
+                    if (this.collected) return;
+                    this.collected = true;
+
+                    switch(this.type) {
+                        case 'ball':
+                            bonusBallsCollectedThisRound += 1;
+                            floatingTexts.push(new FloatingText(this.x, this.y, '+1 Bille', '#34d399'));
+                            createImpactSparks(this.x, this.y, '#34d399');
+                            break;
+
+                        case 'coin':
+                            let gained = 5;
+                            if (activeRelics.has('goldMagnet')) gained *= 2;
+                            gold += gained;
+                            floatingTexts.push(new FloatingText(this.x, this.y, `+${gained} $`, '#f59e0b'));
+                            createImpactSparks(this.x, this.y, '#fbbf24');
+                            break;
+
+                        case 'bomb':
+                            AudioFX.bomb();
+                            screenShake = 12;
+                            shockwaves.push(new Shockwave(this.x, this.y, 100, '#ef4444'));
+                            floatingTexts.push(new FloatingText(this.x, this.y, 'BOOM!', '#ef4444', 1.4));
+                            for (let b of blocks) {
+                                if (Math.hypot(b.x + b.w/2 - this.x, b.y + b.h/2 - this.y) < 110) {
+                                    b.hit(upgrades.damage.val * 5);
+                                }
+                            }
+                            createExplosion(this.x, this.y, '#ef4444');
+                            break;
+
+                        case 'laser':
+                            AudioFX.laser();
+                            screenShake = 8;
+                            laserBeams.push({ x: this.x, y: this.y, alpha: 1 });
+                            floatingTexts.push(new FloatingText(this.x, this.y, 'SUPER LASER!', '#facc15', 1.3));
+                            for (let b of blocks) {
+                                if (Math.abs(b.x + b.w/2 - this.x) < BLOCK_SIZE || Math.abs(b.y + b.h/2 - this.y) < BLOCK_SIZE) {
+                                    b.hit(upgrades.damage.val * 3);
+                                }
+                            }
+                            break;
+
+                        case 'lightning':
+                            AudioFX.laser();
+                            floatingTexts.push(new FloatingText(this.x, this.y, 'ÉCLAIR!', '#38bdf8', 1.3));
+                            let targets = blocks.filter(b => b.hp > 0).slice(0, 6);
+                            for (let t of targets) {
+                                lightningArcs.push({ x1: this.x, y1: this.y, x2: t.x + t.w/2, y2: t.y + t.h/2, alpha: 1 });
+                                t.hit(upgrades.damage.val * 2);
+                            }
+                            break;
+
+                        case 'split':
+                            if (triggerBall) {
+                                floatingTexts.push(new FloatingText(this.x, this.y, 'SPLIT x3!', '#10b981', 1.2));
+                                const baseAngle = Math.atan2(triggerBall.vy, triggerBall.vx);
+                                balls.push(new Ball(triggerBall.x, triggerBall.y, baseAngle + 0.3, 11, triggerBall.damage));
+                                balls.push(new Ball(triggerBall.x, triggerBall.y, baseAngle - 0.3, 11, triggerBall.damage));
+                                shockwaves.push(new Shockwave(this.x, this.y, 40, '#10b981'));
+                            }
+                            break;
+
+                        case 'freeze':
+                            AudioFX.freeze();
+                            let freezeAdd = 1 + (activeRelics.has('chronoSpark') ? 1 : 0);
+                            freezeWavesLeft += freezeAdd;
+                            floatingTexts.push(new FloatingText(this.x, this.y, `GEL +${freezeAdd}!`, '#38bdf8', 1.4));
+                            shockwaves.push(new Shockwave(this.x, this.y, 120, '#38bdf8'));
+                            break;
+
+                        // NEW GOODIE 1: AIMANT GRAVITATIONNEL
+                        case 'magnet':
+                            AudioFX.freeze();
+                            screenShake = 6;
+                            shockwaves.push(new Shockwave(this.x, this.y, 140, '#c084fc'));
+                            floatingTexts.push(new FloatingText(this.x, this.y, 'AIMANT!', '#c084fc', 1.4));
+                            for (let ball of balls) {
+                                if (ball.active && !ball.returning) {
+                                    const dx = this.x - ball.x;
+                                    const dy = this.y - ball.y;
+                                    const angle = Math.atan2(dy, dx);
+                                    ball.vx = Math.cos(angle) * 13;
+                                    ball.vy = Math.sin(angle) * 13;
+                                }
+                            }
+                            break;
+
+                        // NEW GOODIE 2: BOUCLIER DE SÉCURITÉ
+                        case 'shield':
+                            AudioFX.crit();
+                            floorShieldHits += 15;
+                            floatingTexts.push(new FloatingText(this.x, this.y, 'BOUCLIER BAS!', '#22c55e', 1.4));
+                            shockwaves.push(new Shockwave(GAME_WIDTH / 2, LAUNCHER_Y, 200, '#22c55e'));
+                            break;
+
+                        // NEW GOODIE 3: NUAGE D'ACIDE
+                        case 'poison':
+                            AudioFX.bomb();
+                            activeAcidClouds.push({ x: this.x, y: this.y, radius: 75, duration: 180, timer: 0 });
+                            floatingTexts.push(new FloatingText(this.x, this.y, 'ACIDE CORROSIF!', '#84cc16', 1.4));
+                            shockwaves.push(new Shockwave(this.x, this.y, 80, '#84cc16'));
+                            break;
+
+                        // NEW GOODIE 4: NOVA RADIALE
+                        case 'radial':
+                            AudioFX.laser();
+                            screenShake = 10;
+                            floatingTexts.push(new FloatingText(this.x, this.y, 'NOVA RADIALE!', '#f97316', 1.5));
+                            for (let i = 0; i < 8; i++) {
+                                const angle = (i * Math.PI) / 4;
+                                const endX = this.x + Math.cos(angle) * 600;
+                                const endY = this.y + Math.sin(angle) * 600;
+                                lightningArcs.push({ x1: this.x, y1: this.y, x2: endX, y2: endY, alpha: 1 });
+                            }
+                            for (let b of blocks) {
+                                if (Math.hypot(b.x + b.w/2 - this.x, b.y + b.h/2 - this.y) < 160) {
+                                    b.hit(upgrades.damage.val * 4);
+                                }
+                            }
+                            break;
+
+                        // NEW GOODIE 5: ONDE REPOUSSE
+                        case 'pushback':
+                            AudioFX.crit();
+                            screenShake = 10;
+                            floatingTexts.push(new FloatingText(GAME_WIDTH / 2, GRID_TOP + 100, 'REPOUSSE VAGUE!', '#ec4899', 1.6));
+                            shockwaves.push(new Shockwave(GAME_WIDTH / 2, GAME_HEIGHT / 2, 250, '#ec4899'));
+                            for (let b of blocks) {
+                                if (b.row > 0) {
+                                    b.row -= 1;
+                                    const blockH = BLOCK_SIZE * 0.75;
+                                    b.targetY = GRID_TOP + b.row * (blockH + PADDING);
+                                }
+                            }
+                            break;
+                    }
+                }
+
+                draw(ctx) {
+                    if (this.collected) return;
+
+                    ctx.save();
+                    const scaleRadius = this.radius + Math.sin(this.pulse) * 2;
+                    
+                    let bg = '#10b981';
+                    let icon = '+';
+
+                    switch(this.type) {
+                        case 'ball': bg = '#10b981'; icon = '+'; break;
+                        case 'coin': bg = '#f59e0b'; icon = '$'; break;
+                        case 'bomb': bg = '#ef4444'; icon = '💣'; break;
+                        case 'laser': bg = '#facc15'; icon = '⚡'; break;
+                        case 'lightning': bg = '#06b6d4'; icon = '🌩️'; break;
+                        case 'split': bg = '#34d399'; icon = '🔮'; break;
+                        case 'freeze': bg = '#38bdf8'; icon = '❄️'; break;
+                        case 'magnet': bg = '#c084fc'; icon = '🧲'; break;
+                        case 'shield': bg = '#22c55e'; icon = '🛡️'; break;
+                        case 'poison': bg = '#84cc16'; icon = '🧪'; break;
+                        case 'radial': bg = '#f97316'; icon = '🎆'; break;
+                        case 'pushback': bg = '#ec4899'; icon = '⬆️'; break;
+                    }
+
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, scaleRadius + 3, 0, Math.PI * 2);
+                    ctx.strokeStyle = bg;
+                    ctx.lineWidth = 1.5;
+                    ctx.stroke();
+
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, scaleRadius, 0, Math.PI * 2);
+                    ctx.fillStyle = bg;
+                    ctx.shadowColor = bg;
+                    ctx.shadowBlur = 10;
+                    ctx.fill();
+
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = 'bold 11px Orbitron';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(icon, this.x, this.y);
+                    ctx.restore();
+                }
+            }
+
+            function triggerUltimate() { // Option 2: Black Hole Ultimate Skill
+                if (ultEnergy < 100) return;
+                ultEnergy = 0;
+                updateUltUI();
+
+                AudioFX.bomb();
+                screenShake = 15;
+                const centerX = GAME_WIDTH / 2;
+                const centerY = GRID_TOP + (ROWS * (BLOCK_SIZE * 0.75 + PADDING)) / 2;
+
+                activeBlackHole = { x: centerX, y: centerY, radius: 20, maxRadius: 160, duration: 180, timer: 0 };
+                floatingTexts.push(new FloatingText(centerX, centerY - 40, 'TROU NOIR ACTIVÉ !', '#c084fc', 1.6));
+            }
+
+            function updateUltUI() {
+                ultProgressFill.style.height = `${ultEnergy}%`;
+                if (ultEnergy >= 100) {
+                    btnUltimate.disabled = false;
+                    btnUltimate.classList.add('ult-glow', 'border-purple-400', 'text-purple-300', 'hover:scale-110');
+                    btnUltimate.classList.remove('text-slate-500', 'border-slate-600');
+                } else {
+                    btnUltimate.disabled = true;
+                    btnUltimate.classList.remove('ult-glow', 'border-purple-400', 'text-purple-300', 'hover:scale-110');
+                    btnUltimate.classList.add('text-slate-500', 'border-slate-600');
+                }
+            }
+
+            function openRelicModal() { // Option 3: Roguelite Card Picker UI
+                gameState = 'RELIC_CHOICE';
+                relicContainer.innerHTML = '';
+
+                // Pick 3 random available relics
+                const available = RELIC_POOL.filter(r => !activeRelics.has(r.id));
+                const choices = available.sort(() => Math.random() - 0.5).slice(0, 3);
+
+                if (choices.length === 0) {
+                    gameState = 'AIMING';
+                    return;
+                }
+
+                choices.forEach(relic => {
+                    const card = document.createElement('div');
+                    card.className = 'relic-card glass-panel p-3 rounded-xl border border-slate-700 cursor-pointer flex items-center space-x-3 bg-slate-900/80';
+                    card.innerHTML = `
+                        <div class="w-10 h-10 rounded-lg flex items-center justify-center text-xl shrink-0 border" style="background: ${relic.color}20; border-color: ${relic.color}; color: ${relic.color}">
+                            <i class="fa-solid ${relic.icon}"></i>
+                        </div>
+                        <div class="flex-1">
+                            <h4 class="font-orbitron font-bold text-sm text-white">${relic.name}</h4>
+                            <p class="text-xs text-slate-400 leading-tight">${relic.desc}</p>
+                        </div>
+                    `;
+                    card.addEventListener('click', () => {
+                        activeRelics.add(relic.id);
+                        AudioFX.freeze();
+                        for (let i = 0; i < 20; i++) {
+                            particles.push(new Particle(GAME_WIDTH / 2, GRID_TOP + 150, relic.color, 4));
+                        }
+                        relicModal.classList.add('hidden');
+                        renderActiveRelicsUI();
+                        gameState = 'AIMING';
+                    });
+                    relicContainer.appendChild(card);
+                });
+
+                relicModal.classList.remove('hidden');
+            }
+
+            function renderActiveRelicsUI() {
+                activeRelicsList.innerHTML = '';
+                if (activeRelics.size === 0) {
+                    activeRelicsList.innerHTML = '<span class="text-slate-500 italic text-[9px]">Aucune relique</span>';
+                    return;
+                }
+                activeRelics.forEach(id => {
+                    const relic = RELIC_POOL.find(r => r.id === id);
+                    if (relic) {
+                        const tag = document.createElement('span');
+                        tag.className = 'px-1.5 py-0.5 rounded border text-[9px] font-bold flex items-center space-x-1';
+                        tag.style.borderColor = `${relic.color}60`;
+                        tag.style.background = `${relic.color}20`;
+                        tag.style.color = relic.color;
+                        tag.innerHTML = `<i class="fa-solid ${relic.icon}"></i> <span>${relic.name}</span>`;
+                        activeRelicsList.appendChild(tag);
+                    }
+                });
+            }
+
+            function createExplosion(x, y, color) {
+                for (let i = 0; i < 18; i++) {
+                    particles.push(new Particle(x, y, color, 4));
+                }
+            }
+
+            function createImpactSparks(x, y, color) {
+                for (let i = 0; i < 5; i++) {
+                    particles.push(new Particle(x, y, color, 2));
+                }
+            }
+
+            function spawnNewWaveRow() {
+                if (freezeWavesLeft > 0) {
+                    freezeWavesLeft--;
+                    floatingTexts.push(new FloatingText(GAME_WIDTH / 2, GRID_TOP + 40, 'VAGUE GELÉE !', '#38bdf8', 1.5));
+                } else {
+                    for (let b of blocks) b.shiftDown();
+                    for (let item of bonusItems) item.shiftDown();
+                }
+
+                const reachedBottom = blocks.some(b => b.hp > 0 && b.row >= ROWS - 1);
+                if (reachedBottom) {
+                    triggerGameOver();
+                    return;
+                }
+
+                // Check for Boss Wave (Every 10 waves - Option 1)
+                if (wave % 10 === 0) {
+                    const bossHp = Math.floor(wave * 25 + Math.pow(wave, 1.4));
+                    blocks.push(new Block(2, 0, bossHp, 'rect', true));
+                    floatingTexts.push(new FloatingText(GAME_WIDTH / 2, GRID_TOP + 60, 'VAGUE DE BOSS !', '#ef4444', 1.8));
+                } else {
+                    const numBlocks = Math.floor(Math.random() * 4) + 2;
+                    const colIndices = [0, 1, 2, 3, 4, 5, 6].sort(() => Math.random() - 0.5);
+                    const baseHp = Math.floor(wave * 2.2 + Math.pow(wave, 1.1));
+
+                    for (let i = 0; i < numBlocks; i++) {
+                        const col = colIndices[i];
+                        const hp = Math.max(1, baseHp + Math.floor(Math.random() * wave));
+                        const isCircle = Math.random() < 0.2;
+                        blocks.push(new Block(col, 0, hp, isCircle ? 'circle' : 'rect'));
+                    }
+
+                    // Spawn 1 to 2 Goodies in remaining empty slots
+                    const goodieTypes = ['ball', 'coin', 'bomb', 'laser', 'lightning', 'split', 'freeze', 'magnet', 'shield', 'poison', 'radial', 'pushback'];
+                    if (colIndices.length > numBlocks) {
+                        const bonusCol = colIndices[numBlocks];
+                        const randomGoodie = goodieTypes[Math.floor(Math.random() * goodieTypes.length)];
+                        bonusItems.push(new BonusItem(bonusCol, 0, randomGoodie));
+                    }
+                }
+
+                wave++;
+                updateUI();
+
+                // Trigger Roguelite Relic Selection (Option 3 - Every 5 waves)
+                if ((wave - 1) % 5 === 0 && wave > 1) {
+                    setTimeout(() => openRelicModal(), 400);
+                }
+            }
+
+            function startShootingSequence() {
+                if (gameState !== 'AIMING') return;
+
+                gameState = 'SHOOTING';
+                currentCombo = 0;
+                btnRecall.classList.remove('hidden');
+                balls = [];
+                ballsToSpawn = upgrades.balls.count;
+                spawnTimer = 0;
+                bonusBallsCollectedThisRound = 0;
+            }
+
+            function finishRound() {
+                gameState = 'WAVE_END';
+                btnRecall.classList.add('hidden');
+                launcherX = nextLauncherX;
+
+                if (bonusBallsCollectedThisRound > 0) {
+                    upgrades.balls.count += bonusBallsCollectedThisRound;
+                }
+
+                blocks = blocks.filter(b => b.hp > 0);
+                bonusItems = bonusItems.filter(i => !i.collected);
+
+                setTimeout(() => {
+                    spawnNewWaveRow();
+                    if (gameState !== 'GAMEOVER' && gameState !== 'RELIC_CHOICE') {
+                        gameState = 'AIMING';
+                    }
+                }, 300);
+            }
+
+            function triggerGameOver() {
+                gameState = 'GAMEOVER';
+                btnRecall.classList.add('hidden');
+                goWave.textContent = wave - 1;
+                goScore.textContent = totalScore;
+                gameOverModal.classList.remove('hidden');
+            }
+
+            function resetGame() {
+                wave = 1;
+                gold = 0;
+                totalScore = 0;
+                currentCombo = 0;
+                ultEnergy = 0;
+                gameState = 'AIMING';
+                launcherX = GAME_WIDTH / 2;
+                nextLauncherX = GAME_WIDTH / 2;
+                freezeWavesLeft = 0;
+                activeRelics.clear();
+                floorShieldHits = 0;
+                activeAcidClouds = [];
+                
+                upgrades.balls.count = 10;
+                upgrades.balls.level = 1;
+                upgrades.balls.cost = 20;
+
+                upgrades.damage.val = 1;
+                upgrades.damage.level = 1;
+                upgrades.damage.cost = 35;
+
+                upgrades.speed.interval = 8;
+                upgrades.speed.level = 1;
+                upgrades.speed.cost = 50;
+
+                blocks = [];
+                bonusItems = [];
+                balls = [];
+                particles = [];
+                floatingTexts = [];
+                shockwaves = [];
+                laserBeams = [];
+                lightningArcs = [];
+                activeBlackHole = null;
+
+                gameOverModal.classList.add('hidden');
+                relicModal.classList.add('hidden');
+                renderActiveRelicsUI();
+                updateUltUI();
+                spawnNewWaveRow();
+                updateUI();
+            }
+
+            function drawAimTrajectory(ctx) {
+                if (gameState !== 'AIMING' || !isDragging) return;
+
+                let currX = launcherX;
+                let currY = LAUNCHER_Y;
+                let dirX = Math.cos(aimAngle);
+                let dirY = Math.sin(aimAngle);
+
+                ctx.save();
+                ctx.strokeStyle = '#38bdf8';
+                ctx.lineWidth = 2.5;
+                ctx.setLineDash([6, 6]);
+                ctx.beginPath();
+                ctx.moveTo(currX, currY);
+
+                let maxBounces = 2;
+                let step = 4;
+
+                for (let b = 0; b <= maxBounces; b++) {
+                    let hit = false;
+
+                    for (let dist = 0; dist < 600; dist += step) {
+                        currX += dirX * step;
+                        currY += dirY * step;
+
+                        if (currX <= PADDING || currX >= GAME_WIDTH - PADDING) {
+                            currX = Math.max(PADDING, Math.min(GAME_WIDTH - PADDING, currX));
+                            dirX = -dirX;
+                            hit = true;
+                        }
+
+                        if (currY <= GRID_TOP) {
+                            currY = GRID_TOP;
+                            dirY = -dirY;
+                            hit = true;
+                        }
+
+                        for (let block of blocks) {
+                            if (block.hp <= 0) continue;
+                            if (currX >= block.x && currX <= block.x + block.w &&
+                                currY >= block.y && currY <= block.y + block.h) {
+                                hit = true;
+                                break;
+                            }
+                        }
+
+                        if (hit) {
+                            ctx.lineTo(currX, currY);
+                            break;
+                        }
+                    }
+
+                    if (!hit) {
+                        ctx.lineTo(currX, currY);
+                        break;
+                    }
+                }
+
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            function getCanvasCoordinates(e) {
+                const rect = canvas.getBoundingClientRect();
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                return {
+                    x: (clientX - rect.left) * (GAME_WIDTH / rect.width),
+                    y: (clientY - rect.top) * (GAME_HEIGHT / rect.height)
+                };
+            }
+
+            function handlePointerDown(e) {
+                if (gameState !== 'AIMING') return;
+                AudioFX.init();
+                isDragging = true;
+                updateAimAngle(getCanvasCoordinates(e));
+            }
+
+            function handlePointerMove(e) {
+                if (!isDragging || gameState !== 'AIMING') return;
+                updateAimAngle(getCanvasCoordinates(e));
+            }
+
+            function handlePointerUp() {
+                if (!isDragging || gameState !== 'AIMING') return;
+                isDragging = false;
+                startShootingSequence();
+            }
+
+            function updateAimAngle(pos) {
+                let dx = pos.x - launcherX;
+                let dy = pos.y - LAUNCHER_Y;
+                let calculatedAngle = Math.atan2(dy, dx);
+                
+                if (calculatedAngle > 0) {
+                    calculatedAngle = dx >= 0 ? -Math.PI * 0.05 : -Math.PI * 0.95;
+                } else {
+                    if (calculatedAngle > -Math.PI * 0.05) calculatedAngle = -Math.PI * 0.05;
+                    if (calculatedAngle < -Math.PI * 0.95) calculatedAngle = -Math.PI * 0.95;
+                }
+                aimAngle = calculatedAngle;
+            }
+
+            canvas.addEventListener('mousedown', handlePointerDown);
+            window.addEventListener('mousemove', handlePointerMove);
+            window.addEventListener('mouseup', handlePointerUp);
+
+            canvas.addEventListener('touchstart', (e) => { handlePointerDown(e); e.preventDefault(); }, { passive: false });
+            window.addEventListener('touchmove', (e) => { handlePointerMove(e); }, { passive: false });
+            window.addEventListener('touchend', handlePointerUp);
+
+            btnSpeed.addEventListener('click', () => {
+                if (gameSpeedMultiplier === 1) gameSpeedMultiplier = 2;
+                else if (gameSpeedMultiplier === 2) gameSpeedMultiplier = 4;
+                else gameSpeedMultiplier = 1;
+                speedLabel.textContent = `x${gameSpeedMultiplier}`;
+            });
+
+            btnRecall.addEventListener('click', () => {
+                if (gameState !== 'SHOOTING') return;
+                ballsToSpawn = 0;
+                balls.forEach(b => b.returning = true);
+            });
+
+            btnUltimate.addEventListener('click', triggerUltimate);
+            btnRestart.addEventListener('click', resetGame);
+
+            function updateUI() {
+                uiWave.textContent = wave;
+                uiGold.textContent = gold;
+                uiBalls.textContent = upgrades.balls.count;
+                uiCombo.textContent = `x${currentCombo}`;
+
+                lvlBallsEl.textContent = `Niv.${upgrades.balls.level}`;
+                costBallsEl.textContent = upgrades.balls.cost;
+                upgBallsBtn.disabled = gold < upgrades.balls.cost || gameState !== 'AIMING';
+
+                lvlDamageEl.textContent = `Niv.${upgrades.damage.level}`;
+                costDamageEl.textContent = upgrades.damage.cost;
+                upgDamageBtn.disabled = gold < upgrades.damage.cost || gameState !== 'AIMING';
+
+                lvlSpeedEl.textContent = `Niv.${upgrades.speed.level}`;
+                costSpeedEl.textContent = upgrades.speed.cost;
+                upgSpeedBtn.disabled = gold < upgrades.speed.cost || gameState !== 'AIMING';
+            }
+
+            upgBallsBtn.addEventListener('click', () => {
+                if (gold >= upgrades.balls.cost && gameState === 'AIMING') {
+                    gold -= upgrades.balls.cost;
+                    upgrades.balls.count += 5;
+                    upgrades.balls.level += 1;
+                    upgrades.balls.cost = Math.floor(upgrades.balls.cost * 1.6);
+                    updateUI();
+                }
+            });
+
+            upgDamageBtn.addEventListener('click', () => {
+                if (gold >= upgrades.damage.cost && gameState === 'AIMING') {
+                    gold -= upgrades.damage.cost;
+                    upgrades.damage.val += 1;
+                    upgrades.damage.level += 1;
+                    upgrades.damage.cost = Math.floor(upgrades.damage.cost * 1.8);
+                    updateUI();
+                }
+            });
+
+            upgSpeedBtn.addEventListener('click', () => {
+                if (gold >= upgrades.speed.cost && gameState === 'AIMING') {
+                    gold -= upgrades.speed.cost;
+                    upgrades.speed.interval = Math.max(2, upgrades.speed.interval - 1);
+                    upgrades.speed.level += 1;
+                    upgrades.speed.cost = Math.floor(upgrades.speed.cost * 1.7);
+                    updateUI();
+                }
+            });
+
+            function update() {
+                for (let ticks = 0; ticks < gameSpeedMultiplier; ticks++) {
+                    if (gameState === 'SHOOTING' && ballsToSpawn > 0) {
+                        spawnTimer++;
+                        if (spawnTimer >= upgrades.speed.interval) {
+                            spawnTimer = 0;
+                            balls.push(new Ball(launcherX, LAUNCHER_Y, aimAngle, 11, upgrades.damage.val));
+                            ballsToSpawn--;
+                        }
+                    }
+
+                    for (let ball of balls) ball.update();
+
+                    if (gameState === 'SHOOTING' && ballsToSpawn === 0 && balls.every(b => !b.active)) {
+                        finishRound();
+                    }
+
+                    // Update Ultimate Black Hole (Option 2)
+                    if (activeBlackHole) {
+                        activeBlackHole.timer++;
+                        activeBlackHole.radius += (activeBlackHole.maxRadius - activeBlackHole.radius) * 0.05;
+                        
+                        // Damage surrounding blocks inside Black Hole
+                        for (let b of blocks) {
+                            if (Math.hypot(b.x + b.w/2 - activeBlackHole.x, b.y + b.h/2 - activeBlackHole.y) < activeBlackHole.radius) {
+                                b.hit(upgrades.damage.val * 0.5);
+                            }
+                        }
+
+                        if (activeBlackHole.timer >= activeBlackHole.duration) {
+                            activeBlackHole = null;
+                        }
+                    }
+
+                    // Update Acid Clouds
+                    for (let cloud of activeAcidClouds) {
+                        cloud.timer++;
+                        for (let b of blocks) {
+                            if (Math.hypot(b.x + b.w/2 - cloud.x, b.y + b.h/2 - cloud.y) < cloud.radius) {
+                                b.hit(Math.max(1, Math.ceil(upgrades.damage.val * 0.2)));
+                            }
+                        }
+                    }
+                    activeAcidClouds = activeAcidClouds.filter(c => c.timer < c.duration);
+
+                    for (let block of blocks) block.update();
+                    for (let item of bonusItems) item.update();
+                    for (let p of particles) p.update();
+                    particles = particles.filter(p => p.alpha > 0);
+                    for (let ft of floatingTexts) ft.update();
+                    floatingTexts = floatingTexts.filter(ft => ft.alpha > 0);
+                    for (let sw of shockwaves) sw.update();
+                    shockwaves = shockwaves.filter(sw => sw.alpha > 0);
+
+                    for (let l of laserBeams) l.alpha -= 0.05;
+                    laserBeams = laserBeams.filter(l => l.alpha > 0);
+                    for (let la of lightningArcs) la.alpha -= 0.08;
+                    lightningArcs = lightningArcs.filter(la => la.alpha > 0);
+                }
+
+                if (screenShake > 0) screenShake *= 0.85;
+
+                updateUI();
+            }
+
+            function draw() {
+                ctx.save();
+
+                if (screenShake > 0.5) {
+                    const shakeX = (Math.random() - 0.5) * screenShake;
+                    const shakeY = (Math.random() - 0.5) * screenShake;
+                    ctx.translate(shakeX, shakeY);
+                }
+
+                ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+                // Top boundary bar
+                ctx.fillStyle = 'rgba(30, 41, 59, 0.8)';
+                ctx.fillRect(0, 0, GAME_WIDTH, GRID_TOP - 2);
+                ctx.fillStyle = '#3b82f6';
+                ctx.fillRect(0, GRID_TOP - 2, GAME_WIDTH, 2);
+
+                // Danger Limit Line
+                ctx.strokeStyle = 'rgba(239, 68, 68, 0.3)';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([8, 4]);
+                ctx.beginPath();
+                ctx.moveTo(0, GRID_BOTTOM);
+                ctx.lineTo(GAME_WIDTH, GRID_BOTTOM);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                drawAimTrajectory(ctx);
+
+                // Draw Floor Shield if active
+                if (floorShieldHits > 0) {
+                    ctx.save();
+                    ctx.strokeStyle = '#22c55e';
+                    ctx.lineWidth = 4;
+                    ctx.shadowColor = '#22c55e';
+                    ctx.shadowBlur = 15;
+                    ctx.beginPath();
+                    ctx.moveTo(0, LAUNCHER_Y);
+                    ctx.lineTo(GAME_WIDTH, LAUNCHER_Y);
+                    ctx.stroke();
+
+                    ctx.fillStyle = '#22c55e';
+                    ctx.font = 'bold 10px Orbitron';
+                    ctx.textAlign = 'right';
+                    ctx.fillText(`BOUCLIER BAS (${floorShieldHits})`, GAME_WIDTH - 10, LAUNCHER_Y - 6);
+                    ctx.restore();
+                }
+
+                // Draw Acid Clouds
+                for (let cloud of activeAcidClouds) {
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.arc(cloud.x, cloud.y, cloud.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = 'rgba(132, 204, 22, 0.18)';
+                    ctx.strokeStyle = '#84cc16';
+                    ctx.lineWidth = 2;
+                    ctx.shadowColor = '#84cc16';
+                    ctx.shadowBlur = 12;
+                    ctx.fill();
+                    ctx.stroke();
+                    ctx.restore();
+                }
+
+                // Draw Ultimate Black Hole Visual (Option 2)
+                if (activeBlackHole) {
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.arc(activeBlackHole.x, activeBlackHole.y, activeBlackHole.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = 'rgba(147, 51, 234, 0.25)';
+                    ctx.strokeStyle = '#c084fc';
+                    ctx.lineWidth = 4;
+                    ctx.shadowColor = '#a855f7';
+                    ctx.shadowBlur = 25;
+                    ctx.fill();
+                    ctx.stroke();
+
+                    // Inner vortex core
+                    ctx.beginPath();
+                    ctx.arc(activeBlackHole.x, activeBlackHole.y, activeBlackHole.radius * 0.4, 0, Math.PI * 2);
+                    ctx.fillStyle = '#1e1b4b';
+                    ctx.fill();
+                    ctx.restore();
+                }
+
+                // Draw Blocks and Items
+                for (let block of blocks) block.draw(ctx);
+                for (let item of bonusItems) item.draw(ctx);
+
+                // Draw Laser Beams
+                for (let lb of laserBeams) {
+                    ctx.save();
+                    ctx.globalAlpha = Math.max(0, lb.alpha);
+                    ctx.strokeStyle = '#facc15';
+                    ctx.lineWidth = 14;
+                    ctx.shadowColor = '#facc15';
+                    ctx.shadowBlur = 20;
+
+                    ctx.beginPath();
+                    ctx.moveTo(lb.x, 0); ctx.lineTo(lb.x, GAME_HEIGHT);
+                    ctx.moveTo(0, lb.y); ctx.lineTo(GAME_WIDTH, lb.y);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+
+                // Draw Lightning Arcs
+                for (let la of lightningArcs) {
+                    ctx.save();
+                    ctx.globalAlpha = Math.max(0, la.alpha);
+                    ctx.strokeStyle = '#06b6d4';
+                    ctx.lineWidth = 3;
+                    ctx.shadowColor = '#06b6d4';
+                    ctx.shadowBlur = 10;
+
+                    ctx.beginPath();
+                    ctx.moveTo(la.x1, la.y1);
+                    const midX = (la.x1 + la.x2) / 2 + (Math.random() - 0.5) * 20;
+                    const midY = (la.y1 + la.y2) / 2 + (Math.random() - 0.5) * 20;
+                    ctx.lineTo(midX, midY);
+                    ctx.lineTo(la.x2, la.y2);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+
+                // Draw Shockwaves & Balls
+                for (let sw of shockwaves) sw.draw(ctx);
+                for (let ball of balls) ball.draw(ctx);
+
+                // Draw Launcher Pad
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(launcherX, LAUNCHER_Y, 14, 0, Math.PI * 2);
+                ctx.fillStyle = '#0284c7';
+                ctx.shadowColor = '#38bdf8';
+                ctx.shadowBlur = 12;
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.arc(launcherX, LAUNCHER_Y, 7, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffffff';
+                ctx.fill();
+                ctx.restore();
+
+                // Draw Visual FX Particles & Floating Texts
+                for (let p of particles) p.draw(ctx);
+                for (let ft of floatingTexts) ft.draw(ctx);
+
+                ctx.restore();
+            }
+
+            function gameLoop() {
+                update();
+                draw();
+                requestAnimationFrame(gameLoop);
+            }
+
+            resetGame();
+            requestAnimationFrame(gameLoop);
+        });
+    </script>
+</body>
+</html>
