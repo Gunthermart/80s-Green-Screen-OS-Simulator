@@ -1092,26 +1092,31 @@
                         <div class="flex items-center justify-between border-b border-slate-800/80 pb-3">
                             <div class="flex items-center space-x-2 text-xs font-mono uppercase text-sky-400 font-semibold">
                                 <i class="fa-solid fa-calculator"></i>
-                                <span>Calculateur de Dimensionnement de Position</span>
+                                <span>Calculateur de Dimensionnement de Position & Liquidité</span>
                             </div>
-                            <span id="mmWarningBadge" class="hidden text-xs font-mono px-2 py-0.5 rounded font-bold neon-red-badge">
-                                ⚠️ Sur-exposition (&gt; 5%)
-                            </span>
+                            <div class="flex items-center space-x-2">
+                                <span id="mmLiquidityBadge" class="text-xs font-mono px-2 py-0.5 rounded font-bold bg-slate-800 text-slate-300">
+                                    Liquidité : ---
+                                </span>
+                                <span id="mmWarningBadge" class="hidden text-xs font-mono px-2 py-0.5 rounded font-bold neon-red-badge">
+                                    ⚠️ Sur-exposition (> 8%)
+                                </span>
+                            </div>
                         </div>
 
                         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                             <div>
                                 <label class="text-xs text-slate-400 block mb-1 font-medium">Capital Portefeuille (€)</label>
                                 <input type="number" id="mmCapitalInput" value="0" min="0" step="500" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm font-mono text-white focus:outline-none focus:border-sky-500" placeholder="0" />
-                                <span class="text-[10px] text-slate-500">Si &gt; 0 = Actif, Sinon = Inactif</span>
+                                <span class="text-[10px] text-slate-500">Si > 0 = Actif, Sinon = Inactif</span>
                             </div>
                             <div>
                                 <div class="flex items-center justify-between mb-1">
                                     <label class="text-xs text-slate-400 font-medium">Risque Max / Trade (%)</label>
                                     <div class="flex items-center space-x-1">
                                         <select id="mmMethodSelect" class="bg-slate-900 border border-slate-700 rounded text-[10px] font-mono text-slate-300 px-1.5 py-0.5 focus:outline-none focus:border-sky-500 cursor-pointer">
-                                            <option value="auto">IA Auto (Kelly + Santé)</option>
-                                            <option value="fixed">Fixed (3% Alloc)</option>
+                                            <option value="auto">IA Auto (Kelly + Liquidité)</option>
+                                            <option value="fixed">Fixed (5% Alloc)</option>
                                             <option value="health">Santé Bilan</option>
                                             <option value="kelly">Kelly Modéré</option>
                                             <option value="volatility">Volatilité Relative</option>
@@ -1122,8 +1127,8 @@
                                         </button>
                                     </div>
                                 </div>
-                                <input type="number" id="mmRiskPercentInput" value="0.15" min="0.01" max="10" step="0.01" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm font-mono text-white focus:outline-none focus:border-sky-500" />
-                                <span id="mmSmartRiskExplanation" class="text-[10px] text-sky-400/90 block mt-1 font-mono">Modèle 1% à 5% Allocation</span>
+                                <input type="number" id="mmRiskPercentInput" value="0.25" min="0.01" max="10" step="0.01" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm font-mono text-white focus:outline-none focus:border-sky-500" />
+                                <span id="mmSmartRiskExplanation" class="text-[10px] text-sky-400/90 block mt-1 font-mono">Modèle 2% à 8% Allocation (Ajusté Liquidité)</span>
                             </div>
                             <div>
                                 <label class="text-xs text-slate-400 block mb-1 font-medium">Montant à Risquer (€)</label>
@@ -1137,7 +1142,7 @@
                             </div>
                         </div>
 
-                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 border-t border-slate-800/60 text-xs font-mono">
+                        <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 pt-2 border-t border-slate-800/60 text-xs font-mono">
                             <div class="bg-slate-900/80 p-3 rounded-lg border border-slate-800/80">
                                 <div class="text-slate-500">Taille de Position Total</div>
                                 <div id="mmPositionSizeVal" class="text-sm font-bold text-sky-300 mt-0.5">--- €</div>
@@ -1145,6 +1150,10 @@
                             <div class="bg-slate-900/80 p-3 rounded-lg border border-slate-800/80">
                                 <div class="text-slate-500">Exposition / Portefeuille</div>
                                 <div id="mmAllocationVal" class="text-sm font-bold text-emerald-400 mt-0.5">-- %</div>
+                            </div>
+                            <div class="bg-slate-900/80 p-3 rounded-lg border border-slate-800/80">
+                                <div class="text-slate-500">Volume Quotidien & Impact</div>
+                                <div id="mmSlippageVal" class="text-sm font-bold text-purple-300 mt-0.5">--- € (Impact: --%)</div>
                             </div>
                             <div class="bg-slate-900/80 p-3 rounded-lg border border-slate-800/80">
                                 <div class="text-slate-500">Gains Potentiels (TP1 / TP2)</div>
@@ -1497,13 +1506,38 @@
             const sharesEl = document.getElementById('mmSharesVal');
             const posSizeEl = document.getElementById('mmPositionSizeVal');
             const allocEl = document.getElementById('mmAllocationVal');
+            const slippageEl = document.getElementById('mmSlippageVal');
             const gainEl = document.getElementById('mmPotentialGainVal');
             const warningBadge = document.getElementById('mmWarningBadge');
+            const liqBadge = document.getElementById('mmLiquidityBadge');
+
+            const liqInfo = (currentReportData.tradingPlan && currentReportData.tradingPlan.liquidity) ? currentReportData.tradingPlan.liquidity : {};
+            const avgVolStr = liqInfo.avgDailyVolumeEur || '---';
+            const liqGradeStr = liqInfo.liquidityGrade || 'Inconnu';
+
+            if (liqBadge) {
+                const gradeLower = liqGradeStr.toLowerCase();
+                if (gradeLower.includes('élevée') || gradeLower.includes('forte')) {
+                    liqBadge.className = 'text-xs font-mono px-2 py-0.5 rounded font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+                    liqBadge.innerText = `Liquidité : Élevée 💧 (${avgVolStr})`;
+                } else if (gradeLower.includes('faible') || gradeLower.includes('illiquide')) {
+                    liqBadge.className = 'text-xs font-mono px-2 py-0.5 rounded font-bold neon-red-badge';
+                    liqBadge.innerText = `Liquidité : Faible ⚠️ (${avgVolStr})`;
+                } else {
+                    liqBadge.className = 'text-xs font-mono px-2 py-0.5 rounded font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20';
+                    liqBadge.innerText = `Liquidité : Moyenne 🟡 (${avgVolStr})`;
+                }
+            }
+
+            let avgVolNum = parsePriceValue(avgVolStr);
+            if (avgVolStr.toLowerCase().includes('m')) avgVolNum *= 1000000;
+            if (avgVolStr.toLowerCase().includes('k')) avgVolNum *= 1000;
 
             if (entryVal <= 0 || stopLossVal <= 0 || entryVal <= stopLossVal || capital <= 0) {
                 if (sharesEl) sharesEl.innerText = "--- actions";
                 if (posSizeEl) posSizeEl.innerText = "--- €";
                 if (allocEl) allocEl.innerText = "-- %";
+                if (slippageEl) slippageEl.innerText = `${avgVolStr} (Impact: --%)`;
                 if (gainEl) gainEl.innerText = "--- € / --- €";
                 if (warningBadge) warningBadge.classList.add('hidden');
                 return { riskEuro, sharesCount: 0, positionSize: 0, allocationPct: 0, gainTp1: 0, gainTp2: 0, capital, riskPct };
@@ -1514,18 +1548,31 @@
             const positionSize = sharesCount * entryVal;
             const allocationPct = (positionSize / capital) * 100;
 
+            let volumeImpactPct = 0;
+            if (avgVolNum > 0) {
+                volumeImpactPct = (positionSize / avgVolNum) * 100;
+            }
+
             const gainTp1 = sharesCount * (tp1Val - entryVal);
             const gainTp2 = sharesCount * (tp2Val - entryVal);
 
             if (sharesEl) sharesEl.innerText = `${sharesCount.toLocaleString('fr-FR')} actions`;
             if (posSizeEl) posSizeEl.innerText = `${positionSize.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} €`;
             if (allocEl) allocEl.innerText = `${allocationPct.toFixed(1)} % du portefeuille`;
+            if (slippageEl) {
+                const impactStr = volumeImpactPct > 0 ? `${volumeImpactPct.toFixed(2)}% du vol. j.` : 'Inconnu';
+                slippageEl.innerText = `${avgVolStr} (${impactStr})`;
+                slippageEl.className = volumeImpactPct > 1.5 ? 'text-sm font-bold text-rose-400 mt-0.5' : 'text-sm font-bold text-purple-300 mt-0.5';
+            }
             if (gainEl) gainEl.innerText = `TP1: +${gainTp1 > 0 ? gainTp1.toFixed(0) : '-'} € | TP2: +${gainTp2 > 0 ? gainTp2.toFixed(0) : '-'} €`;
 
             if (warningBadge) {
-                if (allocationPct > 5) {
+                if (allocationPct > 8) {
                     warningBadge.classList.remove('hidden');
-                    warningBadge.innerText = `⚠️ Sur-exposition (${allocationPct.toFixed(1)}% > 5%)`;
+                    warningBadge.innerText = `⚠️ Sur-exposition (${allocationPct.toFixed(1)}% > 8%)`;
+                } else if (volumeImpactPct > 1.5) {
+                    warningBadge.classList.remove('hidden');
+                    warningBadge.innerText = `⚠️ Impact Vol. Quotidien Élevé (${volumeImpactPct.toFixed(1)}% du vol.)`;
                 } else {
                     warningBadge.classList.add('hidden');
                 }
@@ -1535,10 +1582,11 @@
         }
 
         function calculateSmartRiskPercent(method = 'auto') {
-            if (!currentReportData || !currentReportData.tradingPlan) return 0.15;
+            if (!currentReportData || !currentReportData.tradingPlan) return 0.25;
 
             const t = currentReportData.tradingPlan;
             const health = currentReportData.healthScores || {};
+            const liq = t.liquidity || {};
 
             const entryVal = parsePriceValue(t.entryZone);
             const stopLossVal = parsePriceValue(t.stopLoss);
@@ -1547,19 +1595,19 @@
                 slPct = ((entryVal - stopLossVal) / entryVal) * 100;
             }
 
-            let targetAllocationPct = 3.0;
+            let targetAllocationPct = 5.0;
 
             if (method === 'fixed') {
-                targetAllocationPct = 3.0;
+                targetAllocationPct = 5.0;
             } else if (method === 'health') {
                 let piotroskiNum = 5;
                 if (health.piotroskiScore) {
                     const pMatch = health.piotroskiScore.match(/\d+/);
                     if (pMatch) piotroskiNum = parseInt(pMatch[0], 10);
                 }
-                if (piotroskiNum >= 7) targetAllocationPct = 4.5;
-                else if (piotroskiNum >= 4) targetAllocationPct = 3.0;
-                else targetAllocationPct = 1.5;
+                if (piotroskiNum >= 7) targetAllocationPct = 7.5;
+                else if (piotroskiNum >= 4) targetAllocationPct = 5.0;
+                else targetAllocationPct = 2.5;
             } else if (method === 'kelly') {
                 let winProb = 0.50;
                 if (t.winProbability) {
@@ -1576,9 +1624,9 @@
                 }
                 let kelly = winProb - ((1 - winProb) / rrRatio);
                 if (kelly <= 0) kelly = 0.1;
-                targetAllocationPct = 1.0 + (kelly * 4.0);
+                targetAllocationPct = 2.0 + (kelly * 6.0);
             } else if (method === 'volatility') {
-                targetAllocationPct = Math.min(5.0, Math.max(1.0, 25.0 / slPct));
+                targetAllocationPct = Math.min(8.0, Math.max(2.0, 40.0 / slPct));
             } else {
                 let winProb = 0.50;
                 if (t.winProbability) {
@@ -1595,22 +1643,30 @@
                 }
                 let kelly = winProb - ((1 - winProb) / rrRatio);
                 if (kelly <= 0) kelly = 0.1;
-                targetAllocationPct = 1.0 + (kelly * 4.0);
+                targetAllocationPct = 2.0 + (kelly * 6.0);
 
                 let piotroskiNum = 5;
                 if (health.piotroskiScore) {
                     const pMatch = health.piotroskiScore.match(/\d+/);
                     if (pMatch) piotroskiNum = parseInt(pMatch[0], 10);
                 }
-                if (piotroskiNum >= 7) targetAllocationPct += 0.5;
-                else if (piotroskiNum <= 3) targetAllocationPct -= 0.5;
+                if (piotroskiNum >= 7) targetAllocationPct += 0.8;
+                else if (piotroskiNum <= 3) targetAllocationPct -= 0.8;
 
                 if (health.altmanStatus && (health.altmanStatus.toLowerCase().includes('détresse') || health.altmanStatus.toLowerCase().includes('risque'))) {
-                    targetAllocationPct -= 0.5;
+                    targetAllocationPct -= 1.0;
                 }
             }
 
-            targetAllocationPct = Math.max(1.0, Math.min(5.0, targetAllocationPct));
+            // Plafonnement par la Liquidité du Marché (Slippage Control)
+            const grade = (liq.liquidityGrade || '').toLowerCase();
+            if (grade.includes('faible') || grade.includes('faiblesse') || grade.includes('illiquide')) {
+                targetAllocationPct = Math.min(targetAllocationPct, 2.5);
+            } else if (grade.includes('moyenne') || grade.includes('modérée')) {
+                targetAllocationPct = Math.min(targetAllocationPct, 5.0);
+            }
+
+            targetAllocationPct = Math.max(2.0, Math.min(8.0, targetAllocationPct));
             let recommendedRisk = (targetAllocationPct * slPct) / 100;
             recommendedRisk = Math.max(0.01, parseFloat(recommendedRisk.toFixed(2)));
             return recommendedRisk;
@@ -2871,8 +2927,19 @@ Sois concis et rapide. Fournis l'ensemble des 13 sections au format JSON structu
                                             mtfTrendSummary: { type: "STRING" }
                                         },
                                         required: ["kumoStatus", "tkCrossStatus", "chikouSpanStatus", "kijunSsbAnchor", "mtfTrendSummary"]
+                                    },
+                                    liquidity: {
+                                        type: "OBJECT",
+                                        properties: {
+                                            avgDailyVolumeEur: { type: "STRING" },
+                                            liquidityGrade: { type: "STRING" },
+                                            slippageWarning: { type: "STRING" }
+                                        },
+                                        required: ["avgDailyVolumeEur", "liquidityGrade", "slippageWarning"]
                                     }
                                 },
+                                required: ["entryZone", "stopLoss", "tp1", "tp2", "riskRewardRatio", "winProbability", "marketSentiment", "thesis", "invalidation", "ichimoku", "liquidity"]
+                            },
                                 required: ["entryZone", "stopLoss", "tp1", "tp2", "riskRewardRatio", "winProbability", "marketSentiment", "thesis", "invalidation", "ichimoku"]
                             },
                             shortInterest: {
@@ -3555,7 +3622,7 @@ ${targetSchema}`;
 
             const smartRiskExp = document.getElementById('mmSmartRiskExplanation');
             if (smartRiskExp) {
-                smartRiskExp.innerText = `⚡ IA Suggéré: ${smartRiskVal}% (Taille position 1%-5% max)`;
+                smartRiskExp.innerText = `⚡ IA Suggéré: ${smartRiskVal}% (Taille position 2%-8% max)`;
             }
 
             calculateMoneyManagement();
