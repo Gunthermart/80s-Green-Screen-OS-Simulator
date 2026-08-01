@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Autopsie et Grand Livre</title>
+    
+    <!-- External Dependencies -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
@@ -12,12 +14,14 @@
     
     <style>
         body { background-color: #0f172a; color: #e2e8f0; font-family: 'Inter', sans-serif; }
-        html { scroll-behavior: smooth; }
+        html { scroll-behavior: smooth; scroll-padding-top: 20px; }
         .card { background-color: #1e293b; border: 1px solid #334155; border-radius: 0.5rem; padding: 1.5rem; }
         .drop-zone { border: 2px dashed #475569; transition: all 0.3s; position: relative; }
         .drop-zone.dragover { border-color: #38bdf8; background-color: #1e293b; }
         .drop-zone.loaded { border-color: #22c55e; border-style: solid; }
         select { background-color: #334155; color: white; border: 1px solid #475569; padding: 0.5rem; border-radius: 0.25rem; width: 100%; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
 <body class="p-4 md:p-8">
@@ -30,7 +34,11 @@
                 <p class="text-slate-400 text-sm mt-1">Analyse factuelle des exécutions passées et du risque latent.</p>
             </div>
             <div class="flex items-center gap-4 flex-wrap">
-                <button onclick="generatePDFReport()" id="pdf-btn" class="hidden bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white px-4 py-2 rounded text-xs font-bold uppercase tracking-wider transition-colors">
+                <span id="sync-status" class="text-xs font-bold text-slate-500 uppercase tracking-wider">Hors Ligne</span>
+                <button onclick="window.clearData()" id="clear-btn" class="hidden text-xs text-slate-500 hover:text-red-500 transition-colors uppercase tracking-wider font-bold">
+                    Purger Base
+                </button>
+                <button onclick="window.generatePDFReport()" id="pdf-btn" class="hidden bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white px-4 py-2 rounded text-xs font-bold uppercase tracking-wider transition-colors">
                     Extraire Rapport PDF
                 </button>
             </div>
@@ -111,11 +119,40 @@
 
         <!-- GRAND LIVRE COMPTABLE -->
         <div id="ledger-section" style="display:none;" class="space-y-6 mt-8 pt-8 border-t border-slate-700">
-            <h2 class="text-2xl font-bold text-white">Grand Livre Comptable (Données Brutes)</h2>
-            <p class="text-slate-400 text-sm mb-4">L'exhaustivité des transactions croisée avec les positions ouvertes. Bilan mathématique, sans biais.</p>
-            
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                    <h2 class="text-2xl font-bold text-white">Grand Livre Comptable</h2>
+                    <p class="text-slate-400 text-sm mt-1">L'exhaustivité des transactions croisée avec les positions ouvertes. Bilan mathématique, sans biais.</p>
+                </div>
+            </div>
+
+            <!-- Totaux Globaux (Positions Actives vs Positions Clôturées) -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="card border-blue-900/50 bg-slate-800/80">
+                    <div class="text-slate-400 text-xs uppercase font-bold tracking-wider">Positions Actives - Valeur</div>
+                    <div class="text-2xl font-bold mt-1 text-blue-400" id="ledger-active-val">--</div>
+                    <div class="text-xs text-slate-400 mt-1" id="ledger-active-count">0 position(s) ouverte(s)</div>
+                </div>
+                <div class="card border-blue-900/50 bg-slate-800/80">
+                    <div class="text-slate-400 text-xs uppercase font-bold tracking-wider">Positions Actives - PnL Latent</div>
+                    <div class="text-2xl font-bold mt-1" id="ledger-active-pnl">--</div>
+                    <div class="text-xs text-slate-400 mt-1">Gain/Perte non réalisé</div>
+                </div>
+                <div class="card border-purple-900/50 bg-slate-800/80">
+                    <div class="text-slate-400 text-xs uppercase font-bold tracking-wider">Positions Clôturées - PnL Réalisé</div>
+                    <div class="text-2xl font-bold mt-1" id="ledger-closed-pnl">--</div>
+                    <div class="text-xs text-slate-400 mt-1" id="ledger-closed-count">0 trade(s) clôturé(s)</div>
+                </div>
+                <div class="card border-emerald-900/50 bg-slate-800/80">
+                    <div class="text-slate-400 text-xs uppercase font-bold tracking-wider">Bilan Net Global Réalisé</div>
+                    <div class="text-2xl font-bold mt-1" id="ledger-net-global">--</div>
+                    <div class="text-xs text-slate-400 mt-1" id="ledger-net-subtext">Dividendes + PnL - Frais</div>
+                </div>
+            </div>
+
+            <!-- Table Active Positions -->
             <div id="ledger-portfolio-section" style="display:none;" class="mb-6">
-                <h3 class="text-lg font-semibold text-slate-300 mb-2">Positions Actives</h3>
+                <h3 class="text-lg font-semibold text-slate-300 mb-2">Positions Actives (Portefeuille)</h3>
                 <div class="card bg-slate-800/50 overflow-x-auto p-0 border-slate-700">
                     <table class="w-full text-left border-collapse text-xs">
                         <thead class="bg-slate-900 shadow">
@@ -129,11 +166,45 @@
                             </tr>
                         </thead>
                         <tbody id="ledger-portfolio-tbody" class="text-slate-300"></tbody>
+                        <tfoot class="bg-slate-900/90 font-bold border-t border-slate-600 text-slate-200">
+                            <tr id="ledger-portfolio-tfoot"></tr>
+                        </tfoot>
                     </table>
                 </div>
             </div>
 
-            <h3 class="text-lg font-semibold text-slate-300 mb-2 mt-6">Historique des Transactions</h3>
+            <!-- Synthèse Temporelle (Solde par Mois et par Année) -->
+            <div class="mt-8 space-y-4">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
+                    <div>
+                        <h3 class="text-lg font-semibold text-slate-300">Synthèse des Soldes Temporels</h3>
+                        <p class="text-slate-400 text-xs">Cliquez sur un mois ou une année pour afficher le graphique d'analyse de la période.</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="window.toggleSummaryView('monthly')" id="btn-sum-monthly" class="px-3 py-1 bg-slate-700 text-white rounded text-xs font-bold uppercase tracking-wider hover:bg-slate-600 transition-colors">Vue Mensuelle</button>
+                        <button onclick="window.toggleSummaryView('yearly')" id="btn-sum-yearly" class="px-3 py-1 bg-slate-800 text-slate-400 rounded text-xs font-bold uppercase tracking-wider hover:bg-slate-700 transition-colors">Vue Annuelle</button>
+                    </div>
+                </div>
+
+                <div class="card bg-slate-800/50 overflow-x-auto p-0 border-slate-700 max-h-[400px] overflow-y-auto">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead class="sticky top-0 bg-slate-900 shadow">
+                            <tr class="border-b border-slate-600 text-slate-400 uppercase tracking-wider">
+                                <th class="p-3 font-bold" id="summary-period-col">Période (Mois)</th>
+                                <th class="p-3 font-bold text-right">Volume Acheté</th>
+                                <th class="p-3 font-bold text-right">Volume Vendu</th>
+                                <th class="p-3 font-bold text-right">Dividendes</th>
+                                <th class="p-3 font-bold text-right">Frais</th>
+                                <th class="p-3 font-bold text-right">PnL Ventes</th>
+                                <th class="p-3 font-bold text-right">Solde Net Période</th>
+                            </tr>
+                        </thead>
+                        <tbody id="summary-balances-tbody" class="text-slate-300"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <h3 class="text-lg font-semibold text-slate-300 mb-2 mt-8">Historique Détaillé des Transactions</h3>
             <div class="card bg-slate-800/50 overflow-x-auto p-0 border-slate-700 max-h-[600px] overflow-y-auto">
                 <table class="w-full text-left border-collapse text-xs">
                     <thead class="sticky top-0 bg-slate-900 shadow">
@@ -154,7 +225,76 @@
         </div>
 
         <div id="empty-state" class="text-center py-10 text-slate-500">
-            <p id="empty-state-text">Charge les fichiers CSV pour générer l'analyse combinée. Attente synchronisation cloud...</p>
+            <p id="empty-state-text">Charge les fichiers CSV pour générer l'analyse combinée. En attente de données...</p>
+        </div>
+    </div>
+
+    <!-- PERIOD ANALYSIS MODAL -->
+    <div id="period-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4 md:p-6">
+        <div class="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-5xl p-6 space-y-6 shadow-2xl my-auto max-h-[90vh] overflow-y-auto no-scrollbar">
+            <div class="flex justify-between items-start border-b border-slate-800 pb-4">
+                <div>
+                    <span class="text-xs uppercase font-bold text-sky-400 tracking-wider">Analyse Temporelle</span>
+                    <h3 id="period-modal-title" class="text-2xl font-bold text-white mt-1">Détail de la Période</h3>
+                </div>
+                <button onclick="window.closePeriodModal()" class="text-slate-400 hover:text-white p-2 rounded-lg hover:bg-slate-800 transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+
+            <!-- Summary KPI Grid for Period -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                <div class="bg-slate-800/80 p-3 rounded-lg border border-slate-700/60">
+                    <div class="text-slate-400 uppercase font-semibold">Volume Acheté</div>
+                    <div id="pm-buy-vol" class="text-base font-bold text-slate-200 mt-1">0 €</div>
+                </div>
+                <div class="bg-slate-800/80 p-3 rounded-lg border border-slate-700/60">
+                    <div class="text-slate-400 uppercase font-semibold">Volume Vendu</div>
+                    <div id="pm-sell-vol" class="text-base font-bold text-slate-200 mt-1">0 €</div>
+                </div>
+                <div class="bg-slate-800/80 p-3 rounded-lg border border-slate-700/60">
+                    <div class="text-slate-400 uppercase font-semibold">Dividendes</div>
+                    <div id="pm-divs" class="text-base font-bold text-emerald-400 mt-1">0 €</div>
+                </div>
+                <div class="bg-slate-800/80 p-3 rounded-lg border border-slate-700/60">
+                    <div class="text-slate-400 uppercase font-semibold">Solde Net Période</div>
+                    <div id="pm-net" class="text-base font-bold mt-1">0 €</div>
+                </div>
+            </div>
+
+            <!-- Plotly Charts for Period -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div class="bg-slate-800/50 p-4 rounded-lg border border-slate-700/60 flex flex-col min-h-[320px]">
+                    <h4 class="text-sm font-semibold text-slate-300 mb-2">Chronologie des Opérations</h4>
+                    <div id="period-timeline-chart" class="flex-grow w-full h-[260px]"></div>
+                </div>
+                <div class="bg-slate-800/50 p-4 rounded-lg border border-slate-700/60 flex flex-col min-h-[320px]">
+                    <h4 class="text-sm font-semibold text-slate-300 mb-2">PnL & Dividendes par Titre sur la Période</h4>
+                    <div id="period-stock-chart" class="flex-grow w-full h-[260px]"></div>
+                </div>
+            </div>
+
+            <!-- Period Transactions Table -->
+            <div class="space-y-2">
+                <h4 class="text-sm font-semibold text-slate-300">Transactions de la Période (<span id="pm-tx-count">0</span>)</h4>
+                <div class="bg-slate-800/50 rounded-lg border border-slate-700/60 overflow-x-auto max-h-[220px] overflow-y-auto">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead class="sticky top-0 bg-slate-900 shadow">
+                            <tr class="border-b border-slate-700 text-slate-400 uppercase tracking-wider">
+                                <th class="p-2.5 font-bold">Date</th>
+                                <th class="p-2.5 font-bold">Type</th>
+                                <th class="p-2.5 font-bold">Titre</th>
+                                <th class="p-2.5 font-bold text-right">Qté</th>
+                                <th class="p-2.5 font-bold text-right">Prix</th>
+                                <th class="p-2.5 font-bold text-right">Frais</th>
+                                <th class="p-2.5 font-bold text-right">Montant</th>
+                                <th class="p-2.5 font-bold text-right">PnL</th>
+                            </tr>
+                        </thead>
+                        <tbody id="period-modal-tbody" class="text-slate-300"></tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -169,17 +309,35 @@
         let db = null;
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
+        window.currentSummaryView = 'monthly';
+        window.monthlyBalances = [];
+        window.yearlyBalances = [];
+
+        function updateSyncStatus(msg, state = 'neutral') {
+            const el = document.getElementById('sync-status');
+            if (!el) return;
+            el.textContent = msg;
+            if (state === 'success') el.className = 'text-xs font-bold uppercase tracking-wider text-emerald-500';
+            else if (state === 'error') el.className = 'text-xs font-bold uppercase tracking-wider text-red-500';
+            else el.className = 'text-xs font-bold uppercase tracking-wider text-slate-400';
+        }
+
         if (typeof __firebase_config !== 'undefined') {
+            updateSyncStatus('Connexion DB...', 'neutral');
             const firebaseConfig = JSON.parse(__firebase_config);
             const app = initializeApp(firebaseConfig);
             const auth = getAuth(app);
             db = getFirestore(app);
 
             const initAuth = async () => {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
+                try {
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                } catch (e) {
+                    updateSyncStatus('Erreur Auth', 'error');
                 }
             };
             
@@ -187,11 +345,15 @@
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         currentUser = user;
-                        document.getElementById('empty-state-text').textContent = "Authentification cloud établie. Chargement des données...";
+                        updateSyncStatus('Lecture Cloud...', 'neutral');
                         await loadDataFromCloud();
+                    } else {
+                        updateSyncStatus('Non Authentifié', 'error');
                     }
                 });
             });
+        } else {
+            updateSyncStatus('Mode Local (Sans Persistance)', 'error');
         }
 
         async function loadDataFromCloud() {
@@ -203,12 +365,17 @@
                     const data = docSnap.data();
                     if (data.history) globalHistory = JSON.parse(data.history);
                     if (data.portfolio) globalPortfolio = JSON.parse(data.portfolio);
-                    updateDashboard();
+                    
+                    if (globalHistory.length > 0 || globalPortfolio.length > 0) {
+                        updateDashboard();
+                    }
+                    updateSyncStatus('Synchronisé', 'success');
                 } else {
-                    document.getElementById('empty-state-text').textContent = "Aucune donnée cloud trouvée. Charge tes CSV pour initialiser la base.";
+                    updateSyncStatus('Base Vierge', 'neutral');
                 }
             } catch (e) {
                 console.error("Erreur de chargement Firebase:", e);
+                updateSyncStatus('Erreur Lecture', 'error');
             }
         }
 
@@ -216,23 +383,116 @@
             if (!currentUser || !db) return;
             const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'financial_data', 'state');
             try {
+                updateSyncStatus('Sauvegarde...', 'neutral');
                 await setDoc(docRef, {
                     history: JSON.stringify(globalHistory),
                     portfolio: JSON.stringify(globalPortfolio)
                 });
+                updateSyncStatus('Synchronisé', 'success');
             } catch (e) {
                 console.error("Erreur de sauvegarde Firebase:", e);
+                updateSyncStatus('Erreur Sauvegarde', 'error');
             }
         }
+
+        window.clearData = async function() {
+            globalHistory = [];
+            globalPortfolio = [];
+            await saveDataToCloud();
+            location.reload();
+        };
 
         const parseFrenchNumber = (str) => { if (!str) return 0; let num = parseFloat(str.toString().replace(/\s/g, '').replace('€', '').replace(',', '.')); return isNaN(num) ? 0 : num; };
         const parseFrenchDate = (str) => { if (!str) return null; const parts = str.split('/'); return parts.length === 3 ? new Date(`${parts[2]}-${parts[1]}-${parts[0]}`) : null; };
         const formatCurrency = (num) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(num).replace(/[\u202f\u00a0]/g, ' ');
 
+        /**
+         * Robust PRU & P&L Calculation Engine
+         * Handles incomplete CSV histories, partial sales, and floating point zeroing.
+         */
+        function getPortfolioPruMap(portfolioData) {
+            const map = {};
+            if (portfolioData && Array.isArray(portfolioData)) {
+                portfolioData.forEach(r => {
+                    const stock = r['Titre'] || r['Valeur'];
+                    const pru = parseFrenchNumber(r['prix de revient']);
+                    if (stock && pru > 0) {
+                        map[stock] = pru;
+                    }
+                });
+            }
+            return map;
+        }
+
+        function processTransactions(txs, portfolioPruMap = {}) {
+            // Sort ascending by date for chronological processing
+            const sorted = [...txs].sort((a, b) => a.date - b.date);
+            const stockState = {};
+
+            return sorted.map(t => {
+                const s = t.stock;
+                if (!stockState[s]) {
+                    stockState[s] = { qty: 0, cost: 0, pmp: 0 };
+                }
+                const state = stockState[s];
+                let tradePnl = null;
+
+                if (t.type === 'Achat') {
+                    const buyCost = (t.price * t.qty) + t.fees;
+                    state.cost += buyCost;
+                    state.qty += t.qty;
+                    state.pmp = state.qty > 0 ? state.cost / state.qty : 0;
+                } else if (t.type === 'Vente') {
+                    const sellQty = t.qty;
+                    const sellAmount = t.price * sellQty;
+                    const fees = t.fees || 0;
+
+                    const coveredQty = Math.min(Math.max(0, state.qty), sellQty);
+                    const uncoveredQty = sellQty - coveredQty;
+
+                    let costBasis = 0;
+
+                    if (coveredQty > 0 && state.qty > 0) {
+                        const costOfCovered = (state.cost / state.qty) * coveredQty;
+                        costBasis += costOfCovered;
+                        state.qty -= coveredQty;
+                        state.cost -= costOfCovered;
+                    }
+
+                    if (uncoveredQty > 0) {
+                        // Use known portfolio PRU or fall back to sell price (0 profit on uncovered)
+                        const fallbackPru = portfolioPruMap[s] || t.price;
+                        costBasis += fallbackPru * uncoveredQty;
+                    }
+
+                    // Zero out floating point noise
+                    if (state.qty <= 1e-6) {
+                        state.qty = 0;
+                        state.cost = 0;
+                        state.pmp = 0;
+                    } else {
+                        state.pmp = state.cost / state.qty;
+                    }
+
+                    tradePnl = (sellAmount - fees) - costBasis;
+                } else if (t.type === 'Dividende') {
+                    tradePnl = t.amount;
+                }
+
+                return {
+                    ...t,
+                    tradePnl,
+                    currentQty: state.qty,
+                    currentPmp: state.pmp
+                };
+            });
+        }
+
         function updateDashboard() {
             if (globalHistory.length > 0 || globalPortfolio.length > 0) {
                 document.getElementById('empty-state').style.display = 'none';
                 document.getElementById('pdf-btn').style.display = 'block';
+                document.getElementById('clear-btn').style.display = 'block';
                 populateStockSelector();
                 document.getElementById('detail-section').style.display = 'block';
                 renderLedger(globalHistory, globalPortfolio);
@@ -248,7 +508,7 @@
                 qty: parseFrenchNumber(row['Quantité']), 
                 fees: parseFrenchNumber(row['Frais']), 
                 amount: parseFrenchNumber(row['Prix']) * parseFrenchNumber(row['Quantité']) 
-            })).filter(d => d.date !== null).sort((a, b) => a.date - b.date); 
+            })).filter(d => d.date !== null); 
         }
 
         function populateStockSelector() {
@@ -265,7 +525,6 @@
         function analyzeStock(stock) {
             if (!stock) return;
             
-            // Intégration des données du portefeuille courant
             const portRow = globalPortfolio.find(r => r['Titre'] === stock);
             const portContainer = document.getElementById('detail-portfolio-data');
             
@@ -284,10 +543,12 @@
                 portContainer.style.display = 'none';
             }
 
-            // Calcul sur l'historique
-            const txs = parseHistory(globalHistory).filter(t => t.stock === stock);
+            const portfolioPruMap = getPortfolioPruMap(globalPortfolio);
+            const allTxs = parseHistory(globalHistory);
+            const processedAll = processTransactions(allTxs, portfolioPruMap);
+            const txs = processedAll.filter(t => t.stock === stock);
+
             let realizedPnl = 0, totalDivs = 0, totalFees = 0;
-            let qty = 0, cost = 0, pmp = 0;
 
             let execDates = [], execPrices = [], execTexts = [], execColors = [], execSymbols = [];
             let pnlDates = [], cumPnl = [], currentCumPnl = 0;
@@ -303,23 +564,12 @@
                     execColors.push('#3b82f6'); execSymbols.push('circle');
                     execTexts.push(`Div: +${formatCurrency(t.amount)}`);
                 } else if (t.type === 'Achat') {
-                    cost += (t.price * t.qty);
-                    qty += t.qty;
                     currentCumPnl -= t.fees;
                     execColors.push('#22c55e'); execSymbols.push('triangle-up');
                     execTexts.push(`Achat: ${t.qty} @ ${formatCurrency(t.price)}`);
                 } else if (t.type === 'Vente') {
-                    let tradePnl = 0;
-                    if (qty > 0) {
-                        pmp = cost / qty;
-                        tradePnl = ((t.price * t.qty) - t.fees) - (pmp * t.qty);
-                        realizedPnl += tradePnl;
-                        qty -= t.qty;
-                        cost -= (pmp * t.qty);
-                        if (qty <= 0) cost = 0;
-                    } else {
-                        tradePnl = -t.fees;
-                    }
+                    const tradePnl = t.tradePnl || 0;
+                    realizedPnl += tradePnl;
                     currentCumPnl += tradePnl;
                     execColors.push('#ef4444'); execSymbols.push('triangle-down');
                     execTexts.push(`Vente: ${t.qty} @ ${formatCurrency(t.price)} (PnL: ${formatCurrency(tradePnl)})`);
@@ -357,10 +607,195 @@
             }, { displayModeBar: false });
         }
 
+        window.toggleSummaryView = function(view) {
+            window.currentSummaryView = view;
+            const btnM = document.getElementById('btn-sum-monthly');
+            const btnY = document.getElementById('btn-sum-yearly');
+            const colHeader = document.getElementById('summary-period-col');
+
+            if (view === 'monthly') {
+                btnM.className = "px-3 py-1 bg-slate-700 text-white rounded text-xs font-bold uppercase tracking-wider hover:bg-slate-600 transition-colors";
+                btnY.className = "px-3 py-1 bg-slate-800 text-slate-400 rounded text-xs font-bold uppercase tracking-wider hover:bg-slate-700 transition-colors";
+                if(colHeader) colHeader.textContent = "Période (Mois)";
+                renderSummaryTable(window.monthlyBalances);
+            } else {
+                btnY.className = "px-3 py-1 bg-slate-700 text-white rounded text-xs font-bold uppercase tracking-wider hover:bg-slate-600 transition-colors";
+                btnM.className = "px-3 py-1 bg-slate-800 text-slate-400 rounded text-xs font-bold uppercase tracking-wider hover:bg-slate-700 transition-colors";
+                if(colHeader) colHeader.textContent = "Période (Année)";
+                renderSummaryTable(window.yearlyBalances);
+            }
+        };
+
+        function renderSummaryTable(balancesList) {
+            const tbody = document.getElementById('summary-balances-tbody');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+
+            if (!balancesList || balancesList.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-slate-500">Aucune donnée disponible pour cette synthèse.</td></tr>`;
+                return;
+            }
+
+            balancesList.forEach(b => {
+                const tr = document.createElement('tr');
+                tr.className = "border-b border-slate-700/50 hover:bg-slate-700/60 cursor-pointer transition-colors";
+                tr.title = "Cliquer pour voir les graphiques de la période";
+                tr.onclick = () => window.showPeriodAnalysis(b.periodKey, b.periodLabel, b);
+
+                const netClass = b.netSolde >= 0 ? "text-emerald-400 font-bold" : "text-red-500 font-bold";
+                const pnlClass = b.realizedPnl >= 0 ? "text-emerald-400" : "text-red-400";
+
+                tr.innerHTML = `
+                    <td class="p-3 font-semibold text-sky-400 hover:underline flex items-center gap-1">
+                        ${b.periodLabel}
+                        <svg class="w-3.5 h-3.5 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                    </td>
+                    <td class="p-3 text-right text-slate-300">${formatCurrency(b.buyVolume)}</td>
+                    <td class="p-3 text-right text-slate-300">${formatCurrency(b.sellVolume)}</td>
+                    <td class="p-3 text-right text-emerald-400">${formatCurrency(b.dividends)}</td>
+                    <td class="p-3 text-right text-red-400">${formatCurrency(b.fees)}</td>
+                    <td class="p-3 text-right ${pnlClass}">${formatCurrency(b.realizedPnl)}</td>
+                    <td class="p-3 text-right ${netClass}">${formatCurrency(b.netSolde)}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        window.showPeriodAnalysis = function(periodKey, periodLabel, summaryData) {
+            const modal = document.getElementById('period-modal');
+            const titleEl = document.getElementById('period-modal-title');
+            if (!modal || !titleEl) return;
+
+            titleEl.textContent = `Détail : ${periodLabel}`;
+            
+            document.getElementById('pm-buy-vol').textContent = formatCurrency(summaryData.buyVolume);
+            document.getElementById('pm-sell-vol').textContent = formatCurrency(summaryData.sellVolume);
+            document.getElementById('pm-divs').textContent = formatCurrency(summaryData.dividends);
+            
+            const netEl = document.getElementById('pm-net');
+            netEl.textContent = formatCurrency(summaryData.netSolde);
+            netEl.className = `text-base font-bold mt-1 ${summaryData.netSolde >= 0 ? 'text-emerald-400' : 'text-red-500'}`;
+
+            const portfolioPruMap = getPortfolioPruMap(globalPortfolio);
+            const allTxs = processTransactions(parseHistory(globalHistory), portfolioPruMap);
+            
+            const periodTxs = allTxs.filter(t => {
+                const dateObj = t.date;
+                if (!dateObj) return false;
+                const mKey = dateObj.getFullYear() + '-' + String(dateObj.getMonth() + 1).padStart(2, '0');
+                const yKey = String(dateObj.getFullYear());
+                return window.currentSummaryView === 'monthly' ? mKey === periodKey : yKey === periodKey;
+            });
+
+            document.getElementById('pm-tx-count').textContent = periodTxs.length;
+
+            const pBody = document.getElementById('period-modal-tbody');
+            pBody.innerHTML = '';
+            periodTxs.slice().reverse().forEach(t => {
+                const tr = document.createElement('tr');
+                tr.className = "border-b border-slate-700/50 hover:bg-slate-800 cursor-pointer transition-colors";
+                tr.onclick = () => {
+                    window.closePeriodModal();
+                    window.selectAndAnalyzeStock(t.stock);
+                };
+
+                let typeClass = "text-slate-300";
+                if (t.type === 'Achat') typeClass = "text-blue-400";
+                if (t.type === 'Vente') typeClass = "text-purple-400";
+                if (t.type === 'Dividende') typeClass = "text-emerald-400";
+
+                let pnlDisplay = "-";
+                let pnlClass = "";
+                if (t.tradePnl !== null && t.tradePnl !== undefined) {
+                    pnlDisplay = formatCurrency(t.tradePnl);
+                    pnlClass = t.tradePnl >= 0 ? "text-emerald-400 font-bold" : "text-red-500 font-bold";
+                }
+
+                tr.innerHTML = `
+                    <td class="p-2.5">${t.date.toLocaleDateString('fr-FR')}</td>
+                    <td class="p-2.5 ${typeClass}">${t.type}</td>
+                    <td class="p-2.5 font-semibold text-white">${t.stock}</td>
+                    <td class="p-2.5 text-right">${t.qty || '-'}</td>
+                    <td class="p-2.5 text-right">${t.price ? formatCurrency(t.price) : '-'}</td>
+                    <td class="p-2.5 text-right text-red-400">${t.fees ? formatCurrency(t.fees) : '-'}</td>
+                    <td class="p-2.5 text-right">${formatCurrency(t.amount)}</td>
+                    <td class="p-2.5 text-right ${pnlClass}">${pnlDisplay}</td>
+                `;
+                pBody.appendChild(tr);
+            });
+
+            const dates = [], amounts = [], texts = [], colors = [], symbols = [];
+            periodTxs.forEach(t => {
+                dates.push(t.date);
+                if (t.type === 'Achat') {
+                    amounts.push(t.amount);
+                    colors.push('#22c55e');
+                    symbols.push('triangle-up');
+                    texts.push(`Achat ${t.stock}: ${t.qty} @ ${formatCurrency(t.price)}`);
+                } else if (t.type === 'Vente') {
+                    amounts.push(t.amount);
+                    colors.push('#ef4444');
+                    symbols.push('triangle-down');
+                    texts.push(`Vente ${t.stock}: ${t.qty} @ ${formatCurrency(t.price)} (PnL: ${formatCurrency(t.tradePnl || 0)})`);
+                } else if (t.type === 'Dividende') {
+                    amounts.push(t.amount);
+                    colors.push('#3b82f6');
+                    symbols.push('circle');
+                    texts.push(`Dividende ${t.stock}: +${formatCurrency(t.amount)}`);
+                }
+            });
+
+            const timelineTrace = {
+                x: dates, y: amounts, text: texts, hoverinfo: 'text',
+                mode: 'markers', type: 'scatter', name: 'Opérations',
+                marker: { color: colors, symbol: symbols, size: 12 }
+            };
+
+            Plotly.newPlot('period-timeline-chart', [timelineTrace], {
+                paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+                font: { color: '#94a3b8', size: 10 }, margin: { t: 10, l: 40, r: 20, b: 30 },
+                xaxis: { gridcolor: '#334155' }, yaxis: { gridcolor: '#334155', title: 'Montant (€)' }
+            }, { displayModeBar: false });
+
+            const stockMap = {};
+            periodTxs.forEach(t => {
+                if (!stockMap[t.stock]) stockMap[t.stock] = { stock: t.stock, pnl: 0, divs: 0, fees: 0 };
+                if (t.type === 'Vente') stockMap[t.stock].pnl += (t.tradePnl || 0);
+                if (t.type === 'Dividende') stockMap[t.stock].divs += t.amount;
+                stockMap[t.stock].fees += t.fees;
+            });
+
+            const stocks = Object.keys(stockMap);
+            const netPerStock = stocks.map(s => stockMap[s].pnl + stockMap[s].divs - stockMap[s].fees);
+            const barColors = netPerStock.map(val => val >= 0 ? '#22c55e' : '#ef4444');
+
+            const stockTrace = {
+                x: stocks, y: netPerStock,
+                type: 'bar',
+                marker: { color: barColors }
+            };
+
+            Plotly.newPlot('period-stock-chart', [stockTrace], {
+                paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+                font: { color: '#94a3b8', size: 10 }, margin: { t: 10, l: 40, r: 20, b: 30 },
+                xaxis: { gridcolor: '#334155' }, yaxis: { gridcolor: '#334155', title: 'Solde Net (€)' }
+            }, { displayModeBar: false });
+
+            modal.classList.remove('hidden');
+        };
+
+        window.closePeriodModal = function() {
+            const modal = document.getElementById('period-modal');
+            if (modal) modal.classList.add('hidden');
+        };
+
         function renderLedger(historyData, portfolioData) {
             document.getElementById('ledger-section').style.display = 'block';
 
-            // Rendu des positions ouvertes (Portefeuille)
+            let totalActiveVal = 0;
+            let totalActivePnl = 0;
+            let activeCount = 0;
+
             if (portfolioData && portfolioData.length > 0) {
                 document.getElementById('ledger-portfolio-section').style.display = 'block';
                 const pBody = document.getElementById('ledger-portfolio-tbody');
@@ -371,6 +806,10 @@
                     if (val <= 0) return;
                     
                     const pnl = parseFrenchNumber(r['gain ou perte en euros']);
+                    totalActiveVal += val;
+                    totalActivePnl += pnl;
+                    activeCount++;
+
                     const pnlClass = pnl >= 0 ? 'text-emerald-400 font-bold' : 'text-red-500 font-bold';
                     const price = parseFrenchNumber(r['cours actuel']);
                     const pru = parseFrenchNumber(r['prix de revient']);
@@ -389,46 +828,106 @@
                     `;
                     pBody.appendChild(tr);
                 });
+
+                const tfoot = document.getElementById('ledger-portfolio-tfoot');
+                if (tfoot) {
+                    const pnlFootClass = totalActivePnl >= 0 ? 'text-emerald-400 font-bold' : 'text-red-500 font-bold';
+                    tfoot.innerHTML = `
+                        <td class="p-3 uppercase">Total Actif (${activeCount})</td>
+                        <td class="p-3 text-right">-</td>
+                        <td class="p-3 text-right">-</td>
+                        <td class="p-3 text-right">-</td>
+                        <td class="p-3 text-right text-blue-400">${formatCurrency(totalActiveVal)}</td>
+                        <td class="p-3 text-right ${pnlFootClass}">${formatCurrency(totalActivePnl)}</td>
+                    `;
+                }
             }
 
-            // Rendu de l'historique brut
-            const txs = parseHistory(historyData);
+            document.getElementById('ledger-active-val').textContent = formatCurrency(totalActiveVal);
+            document.getElementById('ledger-active-count').textContent = `${activeCount} position(s) ouverte(s)`;
+            const activePnlEl = document.getElementById('ledger-active-pnl');
+            activePnlEl.textContent = formatCurrency(totalActivePnl);
+            activePnlEl.className = `text-2xl font-bold mt-1 ${totalActivePnl >= 0 ? 'text-emerald-400' : 'text-red-500'}`;
+
+            const portfolioPruMap = getPortfolioPruMap(portfolioData);
+            const rawTxs = parseHistory(historyData);
+            const txs = processTransactions(rawTxs, portfolioPruMap);
+
             const tbody = document.getElementById('ledger-tbody');
             tbody.innerHTML = '';
             
-            let fwdInventory = {};
+            let totalClosedPnl = 0;
+            let totalDividends = 0;
+            let totalFees = 0;
+            let closedTradesCount = 0;
+
+            const monthlyMap = {};
+            const yearlyMap = {};
+
             txs.forEach(t => {
-                const s = t.stock;
-                if (!fwdInventory[s]) fwdInventory[s] = { qty: 0, cost: 0 };
-                t.tradePnl = null;
+                const dateObj = t.date;
+                const mKey = dateObj.getFullYear() + '-' + String(dateObj.getMonth() + 1).padStart(2, '0');
+                const yKey = String(dateObj.getFullYear());
+
+                const initPeriod = (map, key, label) => {
+                    if (!map[key]) map[key] = { periodKey: key, periodLabel: label, buyVolume: 0, sellVolume: 0, dividends: 0, fees: 0, realizedPnl: 0, netSolde: 0 };
+                };
                 
+                const monthLabel = dateObj.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+                initPeriod(monthlyMap, mKey, monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1));
+                initPeriod(yearlyMap, yKey, yKey);
+
+                totalFees += t.fees;
+                monthlyMap[mKey].fees += t.fees;
+                yearlyMap[yKey].fees += t.fees;
+
                 if (t.type === 'Achat') {
-                    fwdInventory[s].cost += (t.price * t.qty) + t.fees;
-                    fwdInventory[s].qty += t.qty;
+                    monthlyMap[mKey].buyVolume += (t.price * t.qty);
+                    yearlyMap[yKey].buyVolume += (t.price * t.qty);
                 } else if (t.type === 'Vente') {
-                    if (fwdInventory[s].qty > 0) {
-                        const pmp = fwdInventory[s].cost / fwdInventory[s].qty;
-                        t.tradePnl = ((t.price * t.qty) - t.fees) - (pmp * t.qty);
-                        fwdInventory[s].qty -= t.qty;
-                        fwdInventory[s].cost -= (pmp * t.qty);
-                        if (fwdInventory[s].qty <= 0) fwdInventory[s].cost = 0;
-                    } else {
-                        t.tradePnl = -t.fees;
-                    }
+                    monthlyMap[mKey].sellVolume += (t.price * t.qty);
+                    yearlyMap[yKey].sellVolume += (t.price * t.qty);
+                    closedTradesCount++;
+
+                    const tradePnl = t.tradePnl || 0;
+                    totalClosedPnl += tradePnl;
+                    monthlyMap[mKey].realizedPnl += tradePnl;
+                    yearlyMap[yKey].realizedPnl += tradePnl;
                 } else if (t.type === 'Dividende') {
-                    t.tradePnl = t.amount;
+                    totalDividends += t.amount;
+                    monthlyMap[mKey].dividends += t.amount;
+                    yearlyMap[yKey].dividends += t.amount;
                 }
+
+                monthlyMap[mKey].netSolde = monthlyMap[mKey].dividends + monthlyMap[mKey].realizedPnl - monthlyMap[mKey].fees;
+                yearlyMap[yKey].netSolde = yearlyMap[yKey].dividends + yearlyMap[yKey].realizedPnl - yearlyMap[yKey].fees;
             });
+
+            const closedPnlEl = document.getElementById('ledger-closed-pnl');
+            closedPnlEl.textContent = formatCurrency(totalClosedPnl);
+            closedPnlEl.className = `text-2xl font-bold mt-1 ${totalClosedPnl >= 0 ? 'text-emerald-400' : 'text-red-500'}`;
+            document.getElementById('ledger-closed-count').textContent = `${closedTradesCount} transaction(s) de vente`;
+
+            const netGlobal = totalClosedPnl + totalDividends - totalFees;
+            const netGlobalEl = document.getElementById('ledger-net-global');
+            netGlobalEl.textContent = formatCurrency(netGlobal);
+            netGlobalEl.className = `text-2xl font-bold mt-1 ${netGlobal >= 0 ? 'text-emerald-400' : 'text-red-500'}`;
+
+            window.monthlyBalances = Object.values(monthlyMap).sort((a,b) => b.periodKey.localeCompare(a.periodKey));
+            window.yearlyBalances = Object.values(yearlyMap).sort((a,b) => b.periodKey.localeCompare(a.periodKey));
+            
+            window.toggleSummaryView(window.currentSummaryView || 'monthly');
 
             const reversedTxs = [...txs].reverse();
             
             reversedTxs.forEach(t => {
                 const tr = document.createElement('tr');
-                tr.className = "border-b border-slate-700/50 hover:bg-slate-800/50";
+                tr.className = "border-b border-slate-700/50 hover:bg-slate-600 cursor-pointer transition-colors";
+                tr.onclick = () => window.selectAndAnalyzeStock(t.stock);
                 
                 let pnlDisplay = "-";
                 let pnlClass = "";
-                if (t.tradePnl !== null) {
+                if (t.tradePnl !== null && t.tradePnl !== undefined) {
                     pnlDisplay = formatCurrency(t.tradePnl);
                     pnlClass = t.tradePnl >= 0 ? "text-emerald-400 font-bold" : "text-red-500 font-bold";
                 }
@@ -452,39 +951,27 @@
             });
         }
 
-        // --- Fonctions d'analyse pour le PDF ---
-        function getPnLMatrix(historyData) {
-            const txs = parseHistory(historyData);
+        function getPnLMatrix(historyData, portfolioData) {
+            const portfolioPruMap = getPortfolioPruMap(portfolioData);
+            const rawTxs = parseHistory(historyData);
+            const processedTxs = processTransactions(rawTxs, portfolioPruMap);
+
             const matrix = {};
             const years = new Set();
-            const state = {};
 
-            txs.forEach(t => {
+            processedTxs.forEach(t => {
                 const s = t.stock;
                 const y = t.date.getFullYear().toString();
                 years.add(y);
 
-                if (!state[s]) state[s] = { qty: 0, cost: 0 };
                 if (!matrix[s]) matrix[s] = { total: 0 };
                 if (!matrix[s][y]) matrix[s][y] = 0;
 
                 if (t.type === 'Dividende') {
                     matrix[s][y] += t.amount;
                     matrix[s].total += t.amount;
-                } else if (t.type === 'Achat') {
-                    state[s].cost += (t.price * t.qty) + t.fees;
-                    state[s].qty += t.qty;
                 } else if (t.type === 'Vente') {
-                    let tradePnl = 0;
-                    if (state[s].qty > 0) {
-                        const pmp = state[s].cost / state[s].qty;
-                        tradePnl = ((t.price * t.qty) - t.fees) - (pmp * t.qty);
-                        state[s].qty -= t.qty;
-                        state[s].cost -= (pmp * t.qty);
-                        if (state[s].qty <= 0) state[s].cost = 0;
-                    } else {
-                        tradePnl = -t.fees;
-                    }
+                    const tradePnl = t.tradePnl || 0;
                     matrix[s][y] += tradePnl;
                     matrix[s].total += tradePnl;
                 }
@@ -493,155 +980,437 @@
             return { matrix, sortedYears: Array.from(years).sort() };
         }
 
-        function extractCyclesFromHistory(historyData) {
-            const txs = parseHistory(historyData); 
-            const cycles = [], active = {};
-            txs.forEach(t => {
-                const s = t.stock; 
-                if (!active[s]) active[s] = { qty: 0, cost: 0, pnl: 0, first: t.date, downs: 0, pmp: 0, fees: 0, capital: 0 }; 
-                let c = active[s];
-                if (t.type === 'Achat') { 
-                    if (c.qty > 0 && t.price < c.pmp) c.downs++; 
-                    c.qty += t.qty; 
-                    c.cost += (t.price * t.qty) + t.fees; 
-                    c.capital += (t.price * t.qty);
+        function extractCyclesFromHistory(historyData, portfolioData) {
+            const portfolioPruMap = getPortfolioPruMap(portfolioData);
+            const rawTxs = parseHistory(historyData);
+            const processedTxs = processTransactions(rawTxs, portfolioPruMap);
+
+            const stockCycles = {};
+            const cycles = [];
+
+            processedTxs.forEach(t => {
+                const s = t.stock;
+                if (!stockCycles[s]) {
+                    stockCycles[s] = { firstDate: t.date, capital: 0, fees: 0, pnl: 0, hasActivePosition: false };
+                }
+                const c = stockCycles[s];
+
+                if (t.type === 'Achat') {
+                    if (!c.hasActivePosition) {
+                        c.firstDate = t.date;
+                        c.capital = 0;
+                        c.fees = 0;
+                        c.pnl = 0;
+                        c.hasActivePosition = true;
+                    }
+                    c.capital += t.price * t.qty;
                     c.fees += t.fees;
-                    c.pmp = c.cost / c.qty; 
-                } 
-                else if (t.type === 'Vente') { 
-                    if (c.qty > 0) { 
-                        c.fees += t.fees;
-                        c.pnl += ((t.price * t.qty) - t.fees) - (c.pmp * t.qty); 
-                        c.qty -= t.qty; 
-                        if (c.qty <= 0) { 
-                            cycles.push({ stock: s, pnl: c.pnl, days: (t.date - c.first)/86400000, avgDowns: c.downs, fees: c.fees, capital: c.capital }); 
-                            delete active[s]; 
-                        } 
-                    } 
+                } else if (t.type === 'Vente') {
+                    c.fees += t.fees;
+                    c.pnl += (t.tradePnl || 0);
+                    
+                    if (t.currentQty === 0) {
+                        const days = Math.max(1, Math.round((t.date - c.firstDate) / 86400000));
+                        cycles.push({
+                            stock: s,
+                            pnl: c.pnl,
+                            days: days,
+                            capital: c.capital || (t.price * t.qty),
+                            fees: c.fees
+                        });
+                        c.hasActivePosition = false;
+                    }
                 }
             });
+
+            // Include realized P&L from ongoing positions
+            Object.keys(stockCycles).forEach(s => {
+                const c = stockCycles[s];
+                if (c.hasActivePosition && c.pnl !== 0) {
+                    cycles.push({
+                        stock: s,
+                        pnl: c.pnl,
+                        days: Math.max(1, Math.round((new Date() - c.firstDate) / 86400000)),
+                        capital: c.capital,
+                        fees: c.fees
+                    });
+                }
+            });
+
             return cycles;
         }
 
-        // --- Generateur de PDF ---
         function generatePDFReport() {
             if (globalHistory.length === 0 && globalPortfolio.length === 0) return;
             const { jsPDF } = window.jspdf; 
             const doc = new jsPDF(); 
-            let yPos = 20;
+            let yPos = 18;
 
-            doc.setFontSize(22); doc.setTextColor(30, 41, 59); 
-            doc.text("BILAN FACTUEL D'EXECUTION", 14, yPos); yPos += 10;
-            doc.setFontSize(10); doc.setTextColor(100, 100, 100); 
-            doc.text(`Edite le : ${new Date().toLocaleString('fr-FR')}`, 14, yPos); yPos += 15;
+            // Header Banner
+            doc.setFillColor(15, 23, 42);
+            doc.rect(0, 0, 210, 32, 'F');
 
-            // 1. Portefeuille (Positions Actuelles)
-            if (globalPortfolio.length > 0) {
-                doc.setFontSize(14); doc.setTextColor(0, 0, 0); 
-                doc.text("1. EXPOSITION ACTUELLE (RISQUE LATENT)", 14, yPos); yPos += 5;
-                
-                let totalVal = 0, totalPnl = 0;
-                const portData = globalPortfolio.filter(r => parseFrenchNumber(r['valeur actuelle']) > 0).map(r => {
-                    const val = parseFrenchNumber(r['valeur actuelle']);
-                    const pnl = parseFrenchNumber(r['gain ou perte en euros']);
-                    totalVal += val; totalPnl += pnl;
-                    return [r['Titre'], formatCurrency(val), formatCurrency(parseFrenchNumber(r['prix de revient'])), formatCurrency(pnl)];
+            doc.setFontSize(18);
+            doc.setTextColor(255, 255, 255);
+            doc.setFont("helvetica", "bold");
+            doc.text("RAPPORT D'AUTOPSIE & BILAN FINANCIER", 14, 16);
+
+            doc.setFontSize(9);
+            doc.setFont("helvetica", "normal");
+            doc.setTextColor(148, 163, 184);
+            doc.text(`Généré le ${new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })} | Grand Livre & Portefeuille`, 14, 24);
+
+            yPos = 40;
+
+            const portfolioPruMap = getPortfolioPruMap(globalPortfolio);
+            const rawTxs = parseHistory(globalHistory);
+            const txs = processTransactions(rawTxs, portfolioPruMap);
+
+            let totalActiveVal = 0;
+            let totalActivePnl = 0;
+            let activeCount = 0;
+            
+            const activePositions = globalPortfolio.filter(r => parseFrenchNumber(r['valeur actuelle']) > 0).map(r => {
+                const val = parseFrenchNumber(r['valeur actuelle']);
+                const pnl = parseFrenchNumber(r['gain ou perte en euros']);
+                const price = parseFrenchNumber(r['cours actuel']);
+                const pru = parseFrenchNumber(r['prix de revient']);
+                const qty = price > 0 ? (val / price) : 0;
+                totalActiveVal += val;
+                totalActivePnl += pnl;
+                activeCount++;
+                return {
+                    stock: r['Titre'],
+                    qty: qty.toFixed(2),
+                    pru: pru,
+                    price: price,
+                    val: val,
+                    pnl: pnl,
+                    pnlPct: pru > 0 ? ((price - pru) / pru) * 100 : 0
+                };
+            });
+
+            let totalClosedPnl = 0;
+            let totalDividends = 0;
+            let totalFees = 0;
+            let winningTrades = 0;
+            let losingTrades = 0;
+            let totalTradesCount = 0;
+
+            const yearlyMap = {};
+
+            txs.forEach(t => {
+                const dateObj = t.date;
+                const yKey = String(dateObj.getFullYear());
+
+                if (!yearlyMap[yKey]) {
+                    yearlyMap[yKey] = { year: yKey, buyVol: 0, sellVol: 0, divs: 0, fees: 0, pnl: 0, net: 0 };
+                }
+
+                totalFees += t.fees;
+                yearlyMap[yKey].fees += t.fees;
+
+                if (t.type === 'Achat') {
+                    yearlyMap[yKey].buyVol += (t.price * t.qty);
+                } else if (t.type === 'Vente') {
+                    yearlyMap[yKey].sellVol += (t.price * t.qty);
+                    totalTradesCount++;
+                    const tradePnl = t.tradePnl || 0;
+
+                    if (tradePnl >= 0) winningTrades++;
+                    else losingTrades++;
+
+                    totalClosedPnl += tradePnl;
+                    yearlyMap[yKey].pnl += tradePnl;
+                } else if (t.type === 'Dividende') {
+                    totalDividends += t.amount;
+                    yearlyMap[yKey].divs += t.amount;
+                }
+
+                yearlyMap[yKey].net = yearlyMap[yKey].divs + yearlyMap[yKey].pnl - yearlyMap[yKey].fees;
+            });
+
+            const winRate = totalTradesCount > 0 ? ((winningTrades / totalTradesCount) * 100).toFixed(1) : 0;
+            const netGlobal = totalClosedPnl + totalDividends - totalFees;
+
+            // SECTION 1: SYNTHÈSE EXÉCUTIVE
+            doc.setFontSize(11);
+            doc.setTextColor(30, 41, 59);
+            doc.setFont("helvetica", "bold");
+            doc.text("1. SYNTHÈSE EXÉCUTIVE ET BILAN GLOBAL", 14, yPos);
+            yPos += 4;
+
+            const kpiData = [
+                ['Portefeuille Actif (Valeur)', formatCurrency(totalActiveVal), 'Positions Actives', `${activeCount} ligne(s)`],
+                ['PnL Latent (Non Réalisé)', formatCurrency(totalActivePnl), 'Taux de Réussite Ventes', `${winRate}% (${winningTrades}/${totalTradesCount})`],
+                ['PnL Ventes Réalisé', formatCurrency(totalClosedPnl), 'Dividendes Cumulés', formatCurrency(totalDividends)],
+                ['Frais de Courtage Totaux', formatCurrency(totalFees), 'Bilan Net Global Réalisé', formatCurrency(netGlobal)]
+            ];
+
+            doc.autoTable({
+                startY: yPos,
+                head: [['Indicateur Clef', 'Valeur', 'Indicateur Clef', 'Valeur']],
+                body: kpiData,
+                theme: 'grid',
+                headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5 },
+                styles: { fontSize: 8, cellPadding: 2.5 },
+                columnStyles: {
+                    0: { fontStyle: 'bold', textColor: [71, 85, 105] },
+                    1: { fontStyle: 'bold' },
+                    2: { fontStyle: 'bold', textColor: [71, 85, 105] },
+                    3: { fontStyle: 'bold' }
+                },
+                didParseCell: function(data) {
+                    if (data.section === 'body') {
+                        if (data.column.index === 1) {
+                            if (data.row.index === 1) data.cell.styles.textColor = totalActivePnl >= 0 ? [34, 197, 94] : [239, 68, 68];
+                            if (data.row.index === 2) data.cell.styles.textColor = totalClosedPnl >= 0 ? [34, 197, 94] : [239, 68, 68];
+                            if (data.row.index === 3) data.cell.styles.textColor = [239, 68, 68];
+                        }
+                        if (data.column.index === 3) {
+                            if (data.row.index === 1) data.cell.styles.textColor = [59, 130, 246];
+                            if (data.row.index === 2) data.cell.styles.textColor = [34, 197, 94];
+                            if (data.row.index === 3) data.cell.styles.textColor = netGlobal >= 0 ? [34, 197, 94] : [239, 68, 68];
+                        }
+                    }
+                }
+            });
+
+            yPos = doc.lastAutoTable.finalY + 10;
+
+            // SECTION 2: POSITIONS ACTIVES
+            if (activePositions.length > 0) {
+                doc.setFontSize(11);
+                doc.setTextColor(30, 41, 59);
+                doc.setFont("helvetica", "bold");
+                doc.text("2. DÉTAIL DES POSITIONS ACTIVES (EXPOSITION & RISQUE LATENT)", 14, yPos);
+                yPos += 4;
+
+                const activeTableBody = activePositions.map(p => {
+                    const weight = totalActiveVal > 0 ? ((p.val / totalActiveVal) * 100).toFixed(1) + ' %' : '0 %';
+                    return [
+                        p.stock,
+                        p.qty,
+                        formatCurrency(p.pru),
+                        formatCurrency(p.price),
+                        formatCurrency(p.val),
+                        weight,
+                        `${p.pnlPct >= 0 ? '+' : ''}${p.pnlPct.toFixed(2)} %`,
+                        formatCurrency(p.pnl)
+                    ];
                 });
-                
+
                 doc.autoTable({
                     startY: yPos,
-                    head: [['Titre', 'Valeur Actuelle', 'PRU', 'PnL Latent']],
-                    body: portData,
-                    foot: [['TOTAL', formatCurrency(totalVal), '-', formatCurrency(totalPnl)]],
-                    theme: 'grid', headStyles: { fillColor: [30, 41, 59] }, footStyles: { fillColor: [241, 245, 249], textColor: [0,0,0], fontStyle: 'bold' }
+                    head: [['Titre', 'Qté', 'PRU', 'Cours', 'Valeur Act.', 'Poids', 'PnL Lat. %', 'PnL Lat. (€)']],
+                    body: activeTableBody,
+                    foot: [['TOTAL', `${activeCount} lignes`, '-', '-', formatCurrency(totalActiveVal), '100 %', '-', formatCurrency(totalActivePnl)]],
+                    theme: 'striped',
+                    headStyles: { fillColor: [30, 41, 59], fontSize: 8 },
+                    footStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold', fontSize: 8 },
+                    styles: { fontSize: 7.5, cellPadding: 2 },
+                    columnStyles: {
+                        1: { halign: 'right' },
+                        2: { halign: 'right' },
+                        3: { halign: 'right' },
+                        4: { halign: 'right', fontStyle: 'bold' },
+                        5: { halign: 'right' },
+                        6: { halign: 'right', fontStyle: 'bold' },
+                        7: { halign: 'right', fontStyle: 'bold' }
+                    },
+                    didParseCell: function(data) {
+                        if (data.section === 'body') {
+                            const pnlVal = activePositions[data.row.index]?.pnl || 0;
+                            if (data.column.index === 6 || data.column.index === 7) {
+                                data.cell.styles.textColor = pnlVal >= 0 ? [34, 197, 94] : [239, 68, 68];
+                            }
+                        }
+                    }
                 });
-                yPos = doc.lastAutoTable.finalY + 15;
+
+                yPos = doc.lastAutoTable.finalY + 10;
             }
 
-            if (globalHistory.length > 0) {
-                // 2. Pires Opérations Clôturées
-                if(yPos > 250) { doc.addPage(); yPos = 20; }
-                doc.setFontSize(14); doc.setTextColor(0, 0, 0); 
-                doc.text("2. DESTRUCTION DE CAPITAL (PIRES OPERATIONS CLOTUREES)", 14, yPos); yPos += 5;
-                
-                const cycles = extractCyclesFromHistory(globalHistory).filter(c => c.pnl < 0).sort((a,b) => a.pnl - b.pnl).slice(0, 10);
-                const tableData = cycles.map(c => [
-                    c.stock, formatCurrency(c.pnl), Math.round(c.days) + ' jours', formatCurrency(c.fees)
+            // SECTION 3: TOP CRÉATION ET DESTRUCTION DE VALEUR
+            const cycles = extractCyclesFromHistory(globalHistory, globalPortfolio);
+            if (cycles.length > 0) {
+                if (yPos > 210) { doc.addPage(); yPos = 20; }
+
+                doc.setFontSize(11);
+                doc.setTextColor(30, 41, 59);
+                doc.setFont("helvetica", "bold");
+                doc.text("3. TRADES CLOS : CRÉATION ET DESTRUCTION DE VALEUR", 14, yPos);
+                yPos += 4;
+
+                const bestCycles = [...cycles].filter(c => c.pnl > 0).sort((a,b) => b.pnl - a.pnl).slice(0, 5);
+                const worstCycles = [...cycles].filter(c => c.pnl < 0).sort((a,b) => a.pnl - b.pnl).slice(0, 5);
+
+                const topGainsBody = bestCycles.map(c => [
+                    c.stock,
+                    formatCurrency(c.pnl),
+                    `${Math.round(c.days)} jours`,
+                    formatCurrency(c.capital),
+                    formatCurrency(c.fees)
                 ]);
 
-                if(tableData.length > 0) {
-                    doc.autoTable({
-                        startY: yPos,
-                        head: [['Titre', 'PnL Net Realise', 'Duree Detention', 'Frais Payes']],
-                        body: tableData,
-                        theme: 'striped',
-                        headStyles: { fillColor: [220, 38, 38] },
-                        didParseCell: function (data) {
-                            if (data.section === 'body' && data.column.index === 1) {
-                                data.cell.styles.textColor = [220, 38, 38];
-                            }
+                const topLossesBody = worstCycles.map(c => [
+                    c.stock,
+                    formatCurrency(c.pnl),
+                    `${Math.round(c.days)} jours`,
+                    formatCurrency(c.capital),
+                    formatCurrency(c.fees)
+                ]);
+
+                doc.setFontSize(9);
+                doc.setTextColor(34, 197, 94);
+                doc.text("Top 5 Gagnants (Plus forts PnL Réalisés)", 14, yPos + 3);
+                yPos += 5;
+
+                doc.autoTable({
+                    startY: yPos,
+                    head: [['Titre', 'PnL Net Réalisé', 'Détention', 'Capital Investi', 'Frais Payés']],
+                    body: topGainsBody.length > 0 ? topGainsBody : [['Aucun trade gagnant', '-', '-', '-', '-']],
+                    theme: 'plain',
+                    headStyles: { fillColor: [240, 253, 244], textColor: [22, 101, 52], fontStyle: 'bold', fontSize: 7.5 },
+                    styles: { fontSize: 7.5, cellPadding: 2 },
+                    columnStyles: {
+                        1: { halign: 'right', fontStyle: 'bold', textColor: [34, 197, 94] },
+                        2: { halign: 'right' },
+                        3: { halign: 'right' },
+                        4: { halign: 'right', textColor: [239, 68, 68] }
+                    }
+                });
+
+                yPos = doc.lastAutoTable.finalY + 6;
+
+                doc.setFontSize(9);
+                doc.setTextColor(239, 68, 68);
+                doc.text("Top 5 Pertes (Pires Destructions de Capital)", 14, yPos + 3);
+                yPos += 5;
+
+                doc.autoTable({
+                    startY: yPos,
+                    head: [['Titre', 'PnL Net Réalisé', 'Détention', 'Capital Investi', 'Frais Payés']],
+                    body: topLossesBody.length > 0 ? topLossesBody : [['Aucune perte enregistrée', '-', '-', '-', '-']],
+                    theme: 'plain',
+                    headStyles: { fillColor: [254, 242, 242], textColor: [153, 27, 27], fontStyle: 'bold', fontSize: 7.5 },
+                    styles: { fontSize: 7.5, cellPadding: 2 },
+                    columnStyles: {
+                        1: { halign: 'right', fontStyle: 'bold', textColor: [239, 68, 68] },
+                        2: { halign: 'right' },
+                        3: { halign: 'right' },
+                        4: { halign: 'right', textColor: [239, 68, 68] }
+                    }
+                });
+
+                yPos = doc.lastAutoTable.finalY + 10;
+            }
+
+            // SECTION 4: HISTORIQUE ANNUEL
+            const yearlyList = Object.values(yearlyMap).sort((a,b) => b.year.localeCompare(a.year));
+            if (yearlyList.length > 0) {
+                if (yPos > 210) { doc.addPage(); yPos = 20; }
+
+                doc.setFontSize(11);
+                doc.setTextColor(30, 41, 59);
+                doc.setFont("helvetica", "bold");
+                doc.text("4. SYNTHÈSE DES SOLDES TEMPORELS ANNUELS", 14, yPos);
+                yPos += 4;
+
+                const yearlyTableBody = yearlyList.map(y => [
+                    y.year,
+                    formatCurrency(y.buyVol),
+                    formatCurrency(y.sellVol),
+                    formatCurrency(y.divs),
+                    formatCurrency(y.fees),
+                    formatCurrency(y.pnl),
+                    formatCurrency(y.net)
+                ]);
+
+                doc.autoTable({
+                    startY: yPos,
+                    head: [['Année', 'Vol. Acheté', 'Vol. Vendu', 'Dividendes', 'Frais', 'PnL Ventes', 'Solde Net']],
+                    body: yearlyTableBody,
+                    theme: 'grid',
+                    headStyles: { fillColor: [30, 41, 59], fontSize: 8 },
+                    styles: { fontSize: 7.5, cellPadding: 2 },
+                    columnStyles: {
+                        1: { halign: 'right' },
+                        2: { halign: 'right' },
+                        3: { halign: 'right', textColor: [34, 197, 94] },
+                        4: { halign: 'right', textColor: [239, 68, 68] },
+                        5: { halign: 'right', fontStyle: 'bold' },
+                        6: { halign: 'right', fontStyle: 'bold' }
+                    },
+                    didParseCell: function(data) {
+                        if (data.section === 'body') {
+                            const pnlVal = yearlyList[data.row.index]?.pnl || 0;
+                            const netVal = yearlyList[data.row.index]?.net || 0;
+                            if (data.column.index === 5) data.cell.styles.textColor = pnlVal >= 0 ? [34, 197, 94] : [239, 68, 68];
+                            if (data.column.index === 6) data.cell.styles.textColor = netVal >= 0 ? [34, 197, 94] : [239, 68, 68];
                         }
-                    });
-                    yPos = doc.lastAutoTable.finalY + 15;
-                } else {
-                    doc.setFontSize(10); doc.setTextColor(50, 50, 50);
-                    doc.text("Aucune perte cloturee enregistree.", 14, yPos);
-                    yPos += 10;
-                }
+                    }
+                });
 
-                // 3. Matrice de Performance
-                if(yPos > 230) { doc.addPage(); yPos = 20; }
-                doc.setFontSize(14); doc.setTextColor(0, 0, 0); 
-                doc.text("3. MATRICE DE RENTABILITE REALISEE PAR AN", 14, yPos); yPos += 5;
+                yPos = doc.lastAutoTable.finalY + 10;
+            }
 
-                const pnlData = getPnLMatrix(globalHistory);
-                const headRow = ['Titre', ...pnlData.sortedYears, 'Total Net'];
+            // SECTION 5: DIAGNOSTIC ET POINTS D'ATTENTION
+            if (yPos > 220) { doc.addPage(); yPos = 20; }
+            doc.setFontSize(11);
+            doc.setTextColor(30, 41, 59);
+            doc.setFont("helvetica", "bold");
+            doc.text("5. DIAGNOSTIC ET POINTS D'ATTENTION", 14, yPos);
+            yPos += 7;
 
-                const matrixRows = Object.keys(pnlData.matrix).map(stock => {
-                    const rowData = pnlData.matrix[stock];
-                    const row = [stock];
-                    pnlData.sortedYears.forEach(y => {
-                        row.push(rowData[y] ? formatCurrency(rowData[y]) : "-");
-                    });
-                    row.push(formatCurrency(rowData.total));
-                    return { raw: row, totalVal: rowData.total, rawData: rowData };
-                }).sort((a, b) => b.totalVal - a.totalVal);
+            doc.setFontSize(8);
+            doc.setFont("helvetica", "normal");
+            doc.setTextColor(51, 65, 85);
 
-                if(matrixRows.length > 0) {
-                    doc.autoTable({
-                        startY: yPos,
-                        head: [headRow],
-                        body: matrixRows.map(r => r.raw),
-                        theme: 'grid',
-                        headStyles: { fillColor: [30, 41, 59] },
-                        styles: { fontSize: 8 },
-                        didParseCell: function (data) {
-                            if (data.section === 'body' && data.column.index > 0) {
-                                const cellData = matrixRows[data.row.index];
-                                let numVal = 0;
-                                if (data.column.index === headRow.length - 1) {
-                                    numVal = cellData.totalVal;
-                                } else {
-                                    const year = pnlData.sortedYears[data.column.index - 1];
-                                    numVal = cellData.rawData[year] || 0;
-                                }
+            const diagPoints = [];
+            
+            if (totalFees > 0) {
+                diagPoints.push(`Friction des Frais : Les frais cumulés s'élèvent à ${formatCurrency(totalFees)}. Surveillez la fréquence de vos ordres pour préserver la rentabilité nette.`);
+            }
 
-                                if (numVal < 0) data.cell.styles.textColor = [220, 38, 38];
-                                else if (numVal > 0) data.cell.styles.textColor = [34, 197, 94];
-                            }
-                        }
-                    });
+            if (activePositions.length > 0 && totalActiveVal > 0) {
+                const maxPos = [...activePositions].sort((a,b) => b.val - a.val)[0];
+                const maxPct = ((maxPos.val / totalActiveVal) * 100).toFixed(1);
+                if (parseFloat(maxPct) > 25) {
+                    diagPoints.push(`Risque de Concentration : La ligne principale (${maxPos.stock}) représente ${maxPct}% de la valeur totale du portefeuille actif.`);
                 }
             }
 
-            doc.save("autopsie_portefeuille.pdf");
+            if (totalActivePnl < 0 && totalClosedPnl > 0) {
+                diagPoints.push(`Aversion à la Perte : Vos ventes fermées sont positives (${formatCurrency(totalClosedPnl)}), mais vos positions ouvertes accumulent un PnL latent négatif (${formatCurrency(totalActivePnl)}). Attention au stockage des pertes latentes.`);
+            }
+
+            if (diagPoints.length === 0) {
+                diagPoints.push("Gestion équilibrée. Aucun dépassement majeur n'a été identifié sur la concentration ou les frais de transaction.");
+            }
+
+            diagPoints.forEach(point => {
+                doc.text(`• ${point}`, 14, yPos, { maxWidth: 182 });
+                yPos += 7;
+            });
+
+            // Page Numbering
+            const pageCount = doc.internal.getNumberOfPages();
+            for (let i = 1; i <= pageCount; i++) {
+                doc.setPage(i);
+                doc.setFontSize(8);
+                doc.setTextColor(148, 163, 184);
+                doc.text(`Page ${i} sur ${pageCount} — Autopsie & Grand Livre Comptable`, 14, doc.internal.pageSize.height - 8);
+            }
+
+            doc.save("rapport_autopsie_bilan.pdf");
         }
 
         window.generatePDFReport = generatePDFReport;
 
         window.selectAndAnalyzeStock = function(stock) {
             const selector = document.getElementById('stock-selector');
-            selector.value = stock;
+            if (selector) selector.value = stock;
             analyzeStock(stock);
             document.getElementById('detail-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
         };
