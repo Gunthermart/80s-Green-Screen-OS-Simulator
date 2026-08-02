@@ -2549,35 +2549,38 @@
                 });
                 clearTimeout(timeoutId);
 
-                const rawText = await response.text();
-                let resData;
-                try {
-                    resData = JSON.parse(rawText);
-                } catch (e) {
-                    console.error("Réponse du serveur non-JSON:", rawText);
-                    throw new Error("Réponse serveur invalide ou HTML au lieu de JSON.");
-                }
-
-                if (!response.ok) {
-                    if (response.status === 429) {
-                        throw new Error("Quota de requêtes atteint (429). Veuillez patienter une minute avant de relancer l'analyse.");
+                if (response.ok) {
+                    const rawText = await response.text();
+                    try {
+                        const resData = JSON.parse(rawText);
+                        if (resData && !resData.error) {
+                            return resData;
+                        }
+                    } catch (e) {
+                        console.warn("Réponse Netlify non-JSON, passage au fallback direct Gemini.");
                     }
-                    const errMsg = resData?.error?.message || resData?.error || `Erreur serveur (${response.status})`;
-                    throw new Error(errMsg);
                 }
-
-                if (resData && resData.error) {
-                    throw new Error(typeof resData.error === 'string' ? resData.error : JSON.stringify(resData.error));
-                }
-
-                return resData;
             } catch (err) {
                 clearTimeout(timeoutId);
-                if (err.name === 'AbortError') {
-                    throw new Error("La requête a expiré (délai d'attente dépassé). L'IA est trop sollicitée, réessayez.");
-                }
-                throw err;
+                console.warn("Fonction Netlify indisponible ou en erreur, basculement vers l'API Gemini directe.", err);
             }
+
+            // Fallback direct sur l'API Gemini (pour l'environnement de prévisualisation)
+            const apiKey = "";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+            const geminiResponse = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!geminiResponse.ok) {
+                const errData = await geminiResponse.json().catch(() => ({}));
+                throw new Error(errData?.error?.message || `Erreur lors de l'analyse (${geminiResponse.status})`);
+            }
+
+            return await geminiResponse.json();
         }
 
         async function executeVSAnalysis(stock1Query, stock2Query) {
@@ -3171,25 +3174,6 @@ Sois concis et rapide. Fournis l'ensemble des 13 sections au format JSON structu
                 'tradingPlan': `{ "entryZone": "...", "stopLoss": "...", "tp1": "...", "tp2": "...", "riskRewardRatio": "...", "winProbability": "...", "marketSentiment": "...", "thesis": "...", "invalidation": "...", "ichimoku": { "kumoStatus": "...", "tkCrossStatus": "...", "chikouSpanStatus": "...", "kijunSsbAnchor": "...", "mtfTrendSummary": "..." } }`,
                 'shortInterest': `{ "shortCapitalPct": "...", "shortTrend": "...", "shortSqueezePotential": "...", "shortFundsList": [ { "fundName": "...", "percentage": "..." } ], "shortAnalysis": "..." }`,
                 'qvmIndicator': `{ "overallScore": 82, "signal": "BUY", "qualityScore": 85, "qualityAnalysis": "...", "valuationScore": 75, "valuationAnalysis": "...", "momentumScore": 85, "momentumAnalysis": "...", "decisionSummary": "..." }`
-            };
-
-            const targetSectionId = sectionMapToId[sectionKey] || 'section-1';
-            const targetSectionEl = document.getElementById(targetSectionId);
-            const currentScrollOffset = targetSectionEl ? targetSectionEl.getBoundingClientRect().top + window.pageYOffset - 130 : window.pageYOffset;
-
-            const schemaMap = {
-                'companyInfo': `{ "name": "...", "ticker": "...", "isin": "...", "market": "...", "index": "...", "icbSector": "...", "headquarters": "...", "summary": "...", "competitivePositioning": "..." }`,
-                'financialKPIs': `{ "currency": "EUR", "period": "...", "revenue": "...", "netIncome": "...", "operatingMargin": "...", "netDebt": "...", "keyMetricsTable": [ { "label": "...", "value": "...", "trend": "..." } ], "financialHighlights": [ "..." ] }`,
-                'financialRatios': `[ { "ratioName": "...", "value": "...", "benchmark": "...", "status": "positive", "analysis": "..." } ]`,
-                'growthAnalysis': `{ "revenueGrowthRate": "...", "earningsGrowthRate": "...", "historicalGrowthSummary": "...", "growthDrivers": [ "..." ], "growthOutlook": "..." }`,
-                'governanceAndCapital': `{ "majorShareholders": [ { "name": "...", "percentage": "..." } ], "executives": [ { "title": "...", "name": "..." } ], "governanceNotes": "..." }`,
-                'perspectives': `{ "guidanceSummary": "...", "strategicPillars": [ "..." ] }`,
-                'analystConsensusAndNews': `{ "consensusRecommendation": "...", "targetPriceAvg": "...", "consensusSummary": "...", "recentNews": [ { "date": "...", "title": "...", "summary": "...", "source": "..." } ] }`,
-                'documentedRisks': `[ { "category": "...", "description": "..." } ]`,
-                'recentAnnouncements': `[ { "date": "...", "title": "...", "details": "..." } ]`,
-                'leonceDiagnostic': `{ "overallScore": 80, "shortTermSignal": "...", "shortTermAnalysis": "...", "mediumTermSignal": "...", "mediumTermAnalysis": "..." }`,
-                'tradingPlan': `{ "entryZone": "...", "stopLoss": "...", "tp1": "...", "tp2": "...", "riskRewardRatio": "...", "winProbability": "...", "marketSentiment": "...", "thesis": "...", "invalidation": "...", "ichimoku": { "kumoStatus": "...", "tkCrossStatus": "...", "chikouSpanStatus": "...", "kijunSsbAnchor": "...", "mtfTrendSummary": "..." } }`,
-                'shortInterest': `{ "shortCapitalPct": "...", "shortTrend": "...", "shortSqueezePotential": "...", "shortFundsList": [ { "fundName": "...", "percentage": "..." } ], "shortAnalysis": "..." }`
             };
 
             const targetSchema = schemaMap[sectionKey] || '{}';
