@@ -1,0 +1,1295 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mahjong Titan Solitaire</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Noto+Serif+JP:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg-gradient: radial-gradient(circle, #1e4d2b 0%, #0d2814 100%);
+            --board-border: #0a1f10;
+            --tile-bg: linear-gradient(145deg, #fffef9, #ede6d3);
+            --tile-side: #c2b280;
+            --tile-bottom: #8b7d52;
+            --tile-text: #1a1a1a;
+            --tile-border: #d4c59a;
+            --tile-shadow: rgba(0, 0, 0, 0.45);
+            --tile-hover: #fff8dc;
+            --tile-selected: #ffe680;
+            --tile-hint: #a8efff;
+            --accent-color: #e6b800;
+            --ui-bg: rgba(13, 40, 20, 0.85);
+            --ui-text: #f3f4f6;
+            --ui-border: rgba(230, 184, 0, 0.3);
+        }
+
+        body.theme-dark {
+            --bg-gradient: radial-gradient(circle, #121826 0%, #050811 100%);
+            --board-border: #00f2fe;
+            --tile-bg: linear-gradient(145deg, #1e293b, #0f172a);
+            --tile-side: #0284c7;
+            --tile-bottom: #0369a1;
+            --tile-text: #38bdf8;
+            --tile-border: #38bdf8;
+            --tile-shadow: rgba(0, 242, 254, 0.25);
+            --tile-hover: #1e3a8a;
+            --tile-selected: #0284c7;
+            --tile-hint: #f43f5e;
+            --accent-color: #38bdf8;
+            --ui-bg: rgba(15, 23, 42, 0.9);
+            --ui-text: #f1f5f9;
+            --ui-border: rgba(56, 189, 248, 0.4);
+        }
+
+        body.theme-minimal {
+            --bg-gradient: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+            --board-border: #cbd5e1;
+            --tile-bg: #ffffff;
+            --tile-side: #cbd5e1;
+            --tile-bottom: #94a3b8;
+            --tile-text: #334155;
+            --tile-border: #e2e8f0;
+            --tile-shadow: rgba(148, 163, 184, 0.3);
+            --tile-hover: #f8fafc;
+            --tile-selected: #e0e7ff;
+            --tile-hint: #fef08a;
+            --accent-color: #6366f1;
+            --ui-bg: rgba(255, 255, 255, 0.9);
+            --ui-text: #1e293b;
+            --ui-border: rgba(99, 102, 241, 0.2);
+        }
+
+        body {
+            background: var(--bg-gradient);
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            color: var(--ui-text);
+            min-height: 100vh;
+            overflow-x: hidden;
+            user-select: none;
+            transition: background 0.4s ease;
+        }
+
+        .title-font {
+            font-family: 'Cinzel', serif;
+        }
+
+        .kanji-font {
+            font-family: 'Noto Serif JP', serif;
+        }
+
+        .board-container {
+            perspective: 1000px;
+            position: relative;
+            margin: 0 auto;
+        }
+
+        .board-viewport {
+            position: relative;
+            transform-style: preserve-3d;
+            margin: 0 auto;
+            transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+
+        .tile {
+            position: absolute;
+            width: 48px;
+            height: 64px;
+            border-radius: 6px;
+            background: var(--tile-bg);
+            border: 1px solid var(--tile-border);
+            box-shadow: 
+                -2px 2px 0px var(--tile-side),
+                -4px 4px 0px var(--tile-bottom),
+                -6px 6px 10px var(--tile-shadow);
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+            transform-origin: center center;
+            z-index: 1;
+        }
+
+        @media (min-width: 768px) {
+            .tile {
+                width: 56px;
+                height: 74px;
+                border-radius: 8px;
+            }
+        }
+
+        @media (min-width: 1280px) {
+            .tile {
+                width: 64px;
+                height: 84px;
+                border-radius: 9px;
+            }
+        }
+
+        .tile:hover:not(.blocked) {
+            transform: translateY(-4px) translateZ(10px) scale(1.04);
+            background: var(--tile-hover);
+            z-index: 999 !important;
+        }
+
+        .tile.selected {
+            background: var(--tile-selected) !important;
+            border-color: var(--accent-color);
+            transform: translateY(-6px) translateZ(15px) scale(1.06);
+            box-shadow: 0 0 15px var(--accent-color), -4px 4px 0px var(--tile-side), -6px 6px 12px var(--tile-shadow);
+            z-index: 1000 !important;
+        }
+
+        .tile.hinted {
+            animation: pulse-hint 1.2s infinite ease-in-out;
+            border-color: #00f2fe;
+            z-index: 998 !important;
+        }
+
+        @keyframes pulse-hint {
+            0%, 100% { box-shadow: 0 0 5px var(--tile-hint), -3px 3px 0px var(--tile-side); }
+            50% { box-shadow: 0 0 20px var(--tile-hint), 0 0 30px var(--tile-hint), -3px 3px 0px var(--tile-side); }
+        }
+
+        .tile.blocked {
+            cursor: not-allowed;
+            opacity: 0.92;
+        }
+
+        .tile.blocked::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.12);
+            border-radius: inherit;
+            pointer-events: none;
+        }
+
+        @keyframes remove-tile {
+            0% { transform: scale(1) translateZ(20px); opacity: 1; }
+            50% { transform: scale(1.2) rotate(8deg) translateZ(40px); opacity: 0.8; }
+            100% { transform: scale(0) rotate(-15deg) translateZ(0); opacity: 0; }
+        }
+
+        .glass-panel {
+            background: var(--ui-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--ui-border);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .btn-action {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid var(--ui-border);
+        }
+
+        .btn-action:hover:not(:disabled) {
+            transform: translateY(-2px);
+            background: rgba(255, 255, 255, 0.18);
+            border-color: var(--accent-color);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        .btn-action:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        .btn-action:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.1);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--ui-border);
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="theme-classic flex flex-col min-h-screen">
+
+    <header class="w-full p-3 md:p-4 glass-panel sticky top-0 z-50 transition-colors duration-300">
+        <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+            
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-amber-400 font-bold text-xl shadow-inner">
+                    🀄
+                </div>
+                <div>
+                    <h1 class="title-font text-lg md:text-2xl font-extrabold tracking-wider text-amber-400 leading-tight">MAHJONG TITAN</h1>
+                    <p class="text-xs opacity-75 hidden sm:block">Solitaire Classique Éternel</p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2 sm:gap-4 text-xs sm:text-sm font-semibold">
+                <div class="flex flex-col items-center px-3 py-1.5 rounded-lg bg-black/20 border border-white/10">
+                    <span class="text-[10px] uppercase tracking-wider opacity-60">Tuiles</span>
+                    <span id="tiles-count" class="text-amber-400 font-mono text-base md:text-lg">144</span>
+                </div>
+                <div class="flex flex-col items-center px-3 py-1.5 rounded-lg bg-black/20 border border-white/10">
+                    <span class="text-[10px] uppercase tracking-wider opacity-60">Coups</span>
+                    <span id="moves-count" class="text-emerald-400 font-mono text-base md:text-lg">0</span>
+                </div>
+                <div class="flex flex-col items-center px-3 py-1.5 rounded-lg bg-black/20 border border-white/10">
+                    <span class="text-[10px] uppercase tracking-wider opacity-60">Temps</span>
+                    <span id="timer-display" class="font-mono text-base md:text-lg">00:00</span>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2 flex-wrap">
+                <select id="layout-select" class="btn-action text-xs md:text-sm px-2.5 py-1.5 rounded-lg font-medium outline-none cursor-pointer">
+                    <option value="turtle" class="bg-slate-900 text-white">🐢 Disposition: Tortue</option>
+                    <option value="pyramid" class="bg-slate-900 text-white">🔺 Disposition: Pyramide</option>
+                    <option value="arena" class="bg-slate-900 text-white">🏛️ Disposition: Arène</option>
+                    <option value="skull" class="bg-slate-900 text-white">💀 Disposition: Tête de Mort</option>
+                    <option value="butterfly" class="bg-slate-900 text-white">🦋 Disposition: Papillon</option>
+                    <option value="fortress" class="bg-slate-900 text-white">🏰 Disposition: Forteresse</option>
+                </select>
+
+                <select id="theme-select" class="btn-action text-xs md:text-sm px-2.5 py-1.5 rounded-lg font-medium outline-none cursor-pointer">
+                    <option value="classic" class="bg-slate-900 text-white">🎨 Thème: Classique</option>
+                    <option value="dark" class="bg-slate-900 text-white">🌙 Thème: Néon Sombre</option>
+                    <option value="minimal" class="bg-slate-900 text-white">✨ Thème: Minimaliste</option>
+                </select>
+
+                <button id="btn-sound" class="btn-action p-2 rounded-lg text-lg" title="Activer / Muet">
+                    🔊
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 flex flex-col items-center justify-center p-2 sm:p-6 relative overflow-hidden">
+        <div class="mb-4 flex items-center justify-center gap-2 sm:gap-3 flex-wrap z-10">
+            <button id="btn-undo" class="btn-action px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 text-amber-300">
+                <span>↩️</span> Annuler
+            </button>
+            <button id="btn-hint" class="btn-action px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 text-cyan-300">
+                <span>💡</span> Indice
+            </button>
+            <button id="btn-shuffle" class="btn-action px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 text-purple-300">
+                <span>🔀</span> Mélanger
+            </button>
+            <button id="btn-restart" class="btn-action px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 text-rose-300">
+                <span>🔄</span> Nouvelle Partie
+            </button>
+        </div>
+
+        <div class="board-container w-full max-w-6xl flex justify-center items-center py-4 overflow-auto">
+            <div id="board-viewport" class="board-viewport">
+                <!-- Tiles injected dynamically by JS -->
+            </div>
+        </div>
+    </main>
+
+    <footer class="w-full p-2 text-center text-xs opacity-60">
+        Mahjong Titan Solitaire &bull; Tous les plateaux sont garantis résolubles
+    </footer>
+
+    <div id="modal-overlay" class="fixed inset-0 bg-black/70 backdrop-blur-md hidden flex items-center justify-center z-50 p-4 transition-opacity duration-300">
+        <div class="glass-panel p-6 sm:p-8 rounded-2xl max-w-md w-full text-center shadow-2xl border border-amber-500/30 transform scale-95 transition-transform duration-300">
+            <div id="modal-icon" class="text-6xl mb-3">🏆</div>
+            <h2 id="modal-title" class="title-font text-2xl sm:text-3xl font-extrabold text-amber-400 mb-2">Victoire Absolue !</h2>
+            <p id="modal-message" class="text-sm opacity-90 mb-6">Vous avez nettoyé le plateau avec succès !</p>
+            
+            <div id="modal-stats" class="grid grid-cols-2 gap-3 mb-6 bg-black/30 p-3 rounded-xl border border-white/10 text-xs sm:text-sm">
+                <div>
+                    <span class="block opacity-60">Temps écoulé</span>
+                    <span id="stat-time" class="font-mono text-amber-300 text-base font-bold">00:00</span>
+                </div>
+                <div>
+                    <span class="block opacity-60">Coups joués</span>
+                    <span id="stat-moves" class="font-mono text-emerald-300 text-base font-bold">0</span>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-center gap-3">
+                <button id="modal-btn-primary" class="btn-action bg-amber-500/30 hover:bg-amber-500/50 text-amber-200 border-amber-400/50 px-5 py-2.5 rounded-xl font-bold text-sm">
+                    Rejouer Une Partie
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class SoundEngine {
+            constructor() {
+                this.ctx = null;
+                this.muted = false;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    if (AudioContext) {
+                        this.ctx = new AudioContext();
+                    }
+                }
+            }
+
+            playClick() {
+                if (this.muted) return;
+                this.init();
+                if (!this.ctx) return;
+
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(400, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(120, this.ctx.currentTime + 0.05);
+
+                gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.05);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.05);
+            }
+
+            playMatch() {
+                if (this.muted) return;
+                this.init();
+                if (!this.ctx) return;
+
+                const now = this.ctx.currentTime;
+                const osc1 = this.ctx.createOscillator();
+                const osc2 = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc1.type = 'triangle';
+                osc2.type = 'sine';
+
+                osc1.frequency.setValueAtTime(523.25, now); // C5
+                osc1.frequency.exponentialRampToValueAtTime(659.25, now + 0.1); // E5
+
+                osc2.frequency.setValueAtTime(659.25, now + 0.08);
+                osc2.frequency.exponentialRampToValueAtTime(783.99, now + 0.2); // G5
+
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+
+                osc1.connect(gain);
+                osc2.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc1.start(now);
+                osc2.start(now + 0.08);
+                osc1.stop(now + 0.15);
+                osc2.stop(now + 0.25);
+            }
+
+            playError() {
+                if (this.muted) return;
+                this.init();
+                if (!this.ctx) return;
+
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.linearRampToValueAtTime(100, now + 0.15);
+
+                gain.gain.setValueAtTime(0.15, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(now + 0.15);
+            }
+
+            playWin() {
+                if (this.muted) return;
+                this.init();
+                if (!this.ctx) return;
+
+                const now = this.ctx.currentTime;
+                const notes = [523.25, 659.25, 783.99, 1046.50];
+                notes.forEach((freq, i) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, now + i * 0.12);
+
+                    gain.gain.setValueAtTime(0.25, now + i * 0.12);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.12 + 0.3);
+
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now + i * 0.12);
+                    osc.stop(now + i * 0.12 + 0.3);
+                });
+            }
+        }
+
+        const soundEngine = new SoundEngine();
+
+        const TILE_TYPES = {
+            BAMBOO: 'bamboo',
+            CIRCLES: 'circles',
+            CHARACTERS: 'characters',
+            WINDS: 'winds',
+            DRAGONS: 'dragons',
+            SEASONS: 'seasons',
+            FLOWERS: 'flowers'
+        };
+
+        function generateTileCatalog() {
+            const catalog = [];
+
+            for (let i = 1; i <= 9; i++) {
+                for (let c = 0; c < 4; c++) {
+                    catalog.push({
+                        type: TILE_TYPES.BAMBOO,
+                        value: i,
+                        key: `bamboo-${i}`,
+                        label: `${i} Bambou`,
+                        icon: getBambooIcon(i),
+                        color: '#15803d'
+                    });
+                }
+            }
+
+            for (let i = 1; i <= 9; i++) {
+                for (let c = 0; c < 4; c++) {
+                    catalog.push({
+                        type: TILE_TYPES.CIRCLES,
+                        value: i,
+                        key: `circle-${i}`,
+                        label: `${i} Cercle`,
+                        icon: getCircleIcon(i),
+                        color: '#b91c1c'
+                    });
+                }
+            }
+
+            const kanjiNumbers = ['一', '二', '三', '四', '五', '六', '七', '八', '九'];
+            for (let i = 1; i <= 9; i++) {
+                for (let c = 0; c < 4; c++) {
+                    catalog.push({
+                        type: TILE_TYPES.CHARACTERS,
+                        value: i,
+                        key: `char-${i}`,
+                        label: `${i} Caractère`,
+                        kanji: kanjiNumbers[i - 1],
+                        subKanji: '萬',
+                        color: '#c2410c'
+                    });
+                }
+            }
+
+            const winds = [
+                { val: 1, name: 'Est', kanji: '東' },
+                { val: 2, name: 'Sud', kanji: '南' },
+                { val: 3, name: 'Ouest', kanji: '西' },
+                { val: 4, name: 'Nord', kanji: '北' }
+            ];
+            winds.forEach(w => {
+                for (let c = 0; c < 4; c++) {
+                    catalog.push({
+                        type: TILE_TYPES.WINDS,
+                        value: w.val,
+                        key: `wind-${w.val}`,
+                        label: `Vent ${w.name}`,
+                        kanji: w.kanji,
+                        color: '#0284c7'
+                    });
+                }
+            });
+
+            const dragons = [
+                { val: 1, name: 'Rouge', kanji: '中', color: '#dc2626' },
+                { val: 2, name: 'Vert', kanji: '發', color: '#16a34a' },
+                { val: 3, name: 'Blanc', kanji: '白', color: '#2563eb' }
+            ];
+            dragons.forEach(d => {
+                for (let c = 0; c < 4; c++) {
+                    catalog.push({
+                        type: TILE_TYPES.DRAGONS,
+                        value: d.val,
+                        key: `dragon-${d.val}`,
+                        label: `Dragon ${d.name}`,
+                        kanji: d.kanji,
+                        color: d.color
+                    });
+                }
+            });
+
+            const seasons = [
+                { val: 1, name: 'Printemps', kanji: '春', emoji: '🌸' },
+                { val: 2, name: 'Été', kanji: '夏', emoji: '☀️' },
+                { val: 3, name: 'Automne', kanji: '秋', emoji: '🍁' },
+                { val: 4, name: 'Hiver', kanji: '冬', emoji: '❄️' }
+            ];
+            seasons.forEach(s => {
+                catalog.push({
+                    type: TILE_TYPES.SEASONS,
+                    value: s.val,
+                    key: `season-any`,
+                    label: `Saison: ${s.name}`,
+                    kanji: s.kanji,
+                    emoji: s.emoji,
+                    color: '#d97706'
+                });
+            });
+
+            const flowers = [
+                { val: 1, name: 'Prunier', kanji: '梅', emoji: '🌺' },
+                { val: 2, name: 'Orchidée', kanji: '蘭', emoji: '🌿' },
+                { val: 3, name: 'Bambou', kanji: '竹', emoji: '🎋' },
+                { val: 4, name: 'Chrysanthème', kanji: '菊', emoji: '🌻' }
+            ];
+            flowers.forEach(f => {
+                catalog.push({
+                    type: TILE_TYPES.FLOWERS,
+                    value: f.val,
+                    key: `flower-any`,
+                    label: `Fleur: ${f.name}`,
+                    kanji: f.kanji,
+                    emoji: f.emoji,
+                    color: '#0d9488'
+                });
+            });
+
+            return catalog;
+        }
+
+        function getBambooIcon(num) {
+            if (num === 1) {
+                return `<svg viewBox="0 0 32 32" class="w-8 h-8"><circle cx="16" cy="16" r="12" fill="#15803d" opacity="0.2"/><path d="M16 6 C12 12 10 18 16 26 C22 18 20 12 16 6 Z" fill="#15803d"/><circle cx="16" cy="14" r="3" fill="#dc2626"/></svg>`;
+            }
+            let sticks = '';
+            const count = num;
+            const colors = count % 2 === 0 ? ['#15803d', '#15803d'] : ['#15803d', '#dc2626', '#15803d'];
+            for(let i=0; i<Math.min(count, 4); i++) {
+                sticks += `<rect x="${6 + i*7}" y="6" width="3.5" height="20" rx="1.5" fill="${colors[i % colors.length]}"/>`;
+            }
+            return `<svg viewBox="0 0 32 32" class="w-7 h-7">${sticks}</svg>`;
+        }
+
+        function getCircleIcon(num) {
+            let circles = '';
+            const count = Math.min(num, 9);
+            for(let i=0; i<count; i++) {
+                const cx = 8 + (i % 3) * 8;
+                const cy = 8 + Math.floor(i / 3) * 8;
+                const col = (i % 2 === 0) ? '#dc2626' : '#2563eb';
+                circles += `<circle cx="${cx}" cy="${cy}" r="3" fill="${col}"/>`;
+            }
+            return `<svg viewBox="0 0 32 32" class="w-7 h-7">${circles}</svg>`;
+        }
+
+        function getTurtleLayout() {
+            const pos = [];
+            const l0Rows = [
+                { y: 0, x: [4,6,8,10,12,14,16,18,20,22] },
+                { y: 2, x: [6,8,10,12,14,16,18,20] },
+                { y: 4, x: [4,6,8,10,12,14,16,18,20,22] },
+                { y: 6, x: [2,4,6,8,10,12,14,16,18,20,22,24] },
+                { y: 8, x: [0,2,4,6,8,10,12,14,16,18,20,22,24,26] },
+                { y: 10, x: [2,4,6,8,10,12,14,16,18,20,22,24] },
+                { y: 12, x: [4,6,8,10,12,14,16,18,20,22] },
+                { y: 14, x: [6,8,10,12,14,16,18,20] },
+                { y: 16, x: [8,10,12,14] }
+            ];
+            l0Rows.forEach(r => r.x.forEach(x => pos.push({ x, y: r.y, z: 0 })));
+
+            for (let y = 4; y <= 14; y += 2) {
+                for (let x = 8; x <= 18; x += 2) {
+                    pos.push({ x, y, z: 1 });
+                }
+            }
+
+            for (let y = 6; y <= 12; y += 2) {
+                for (let x = 10; x <= 16; x += 2) {
+                    pos.push({ x, y, z: 2 });
+                }
+            }
+
+            pos.push({ x: 12, y: 8, z: 3 });
+            pos.push({ x: 14, y: 8, z: 3 });
+            pos.push({ x: 13, y: 10, z: 3 });
+            pos.push({ x: 13, y: 8, z: 4 });
+
+            return pos;
+        }
+
+        function getPyramidLayout() {
+            const pos = [];
+
+            for (let y = 2; y <= 16; y += 2) {
+                for (let x = 4; x <= 18; x += 2) {
+                    pos.push({ x, y, z: 0 });
+                }
+            }
+            [6, 8, 10, 12, 14].forEach(y => {
+                pos.push({ x: 2, y, z: 0 });
+                pos.push({ x: 20, y, z: 0 });
+            });
+
+            for (let y = 4; y <= 14; y += 2) {
+                for (let x = 6; x <= 16; x += 2) {
+                    pos.push({ x, y, z: 1 });
+                }
+            }
+            pos.push({ x: 11, y: 2, z: 1 }, { x: 13, y: 2, z: 1 }, { x: 11, y: 16, z: 1 }, { x: 13, y: 16, z: 1 });
+
+            for (let y = 6; y <= 12; y += 2) {
+                for (let x = 8; x <= 14; x += 2) {
+                    pos.push({ x, y, z: 2 });
+                }
+            }
+            pos.push({ x: 6, y: 9, z: 2 }, { x: 16, y: 9, z: 2 }, { x: 11, y: 4, z: 2 }, { x: 11, y: 14, z: 2 });
+
+            for (let y = 8; y <= 10; y += 2) {
+                for (let x = 10; x <= 12; x += 2) {
+                    pos.push({ x, y, z: 3 });
+                }
+            }
+            pos.push({ x: 8, y: 9, z: 3 }, { x: 14, y: 9, z: 3 }, { x: 11, y: 6, z: 3 }, { x: 11, y: 12, z: 3 });
+
+            pos.push({ x: 11, y: 8, z: 4 });
+            pos.push({ x: 11, y: 10, z: 4 });
+
+            return pos;
+        }
+
+        function getArenaLayout() {
+            const pos = [];
+
+            for (let x = 2; x <= 24; x += 2) {
+                pos.push({ x, y: 0, z: 0 });
+                pos.push({ x, y: 16, z: 0 });
+            }
+            for (let y = 2; y <= 14; y += 2) {
+                pos.push({ x: 2, y, z: 0 });
+                pos.push({ x: 24, y, z: 0 });
+            }
+
+            for (let x = 4; x <= 22; x += 2) {
+                pos.push({ x, y: 2, z: 0 });
+                pos.push({ x, y: 14, z: 0 });
+            }
+            for (let y = 4; y <= 12; y += 2) {
+                pos.push({ x: 4, y, z: 0 });
+                pos.push({ x: 22, y, z: 0 });
+            }
+
+            for (let y = 6; y <= 10; y += 2) {
+                for (let x = 6; x <= 20; x += 2) {
+                    if (x <= 8 || x >= 18 || y === 8) {
+                        pos.push({ x, y, z: 0 });
+                    }
+                }
+            }
+
+            for (let x = 4; x <= 22; x += 2) {
+                pos.push({ x, y: 4, z: 1 });
+                pos.push({ x, y: 12, z: 1 });
+            }
+            for (let y = 6; y <= 10; y += 2) {
+                pos.push({ x: 6, y, z: 1 });
+                pos.push({ x: 20, y, z: 1 });
+            }
+            for (let x = 8; x <= 18; x += 2) {
+                pos.push({ x, y: 6, z: 1 });
+                pos.push({ x, y: 10, z: 1 });
+            }
+
+            const corners = [
+                { x: 6, y: 4 }, { x: 20, y: 4 },
+                { x: 6, y: 12 }, { x: 20, y: 12 }
+            ];
+            corners.forEach(c => {
+                pos.push({ x: c.x, y: c.y, z: 2 });
+                pos.push({ x: c.x + 1, y: c.y, z: 2 });
+                pos.push({ x: c.x, y: c.y, z: 3 });
+                pos.push({ x: c.x + 1, y: c.y, z: 3 });
+            });
+
+            return pos;
+        }
+
+        function getSkullLayout() {
+            const pos = [];
+
+            [8,10,12,14,16,18].forEach(x => pos.push({ x, y: 0, z: 0 }));
+            [6,8,10,12,14,16,18,20].forEach(x => pos.push({ x, y: 2, z: 0 }));
+            [4,6,8,10,12,14,16,18,20,22].forEach(x => pos.push({ x, y: 4, z: 0 }));
+            [4,6, 12,14, 20,22].forEach(x => pos.push({ x, y: 6, z: 0 }));
+            [4,6, 12,14, 20,22].forEach(x => pos.push({ x, y: 8, z: 0 }));
+            [4,6,8,10, 16,18,20,22].forEach(x => pos.push({ x, y: 10, z: 0 }));
+            [6,8,10,12,14,16,18,20].forEach(x => pos.push({ x, y: 12, z: 0 }));
+            [8,10,12,14,16,18].forEach(x => pos.push({ x, y: 14, z: 0 }));
+            [8,10,12,14,16,18].forEach(x => pos.push({ x, y: 16, z: 0 }));
+            [2, 24].forEach(x => pos.push({ x, y: 2, z: 0 }));
+            [0,2, 24,26].forEach(x => pos.push({ x, y: 4, z: 0 }));
+            [0,2, 24,26].forEach(x => pos.push({ x, y: 8, z: 0 }));
+            [2, 24].forEach(x => pos.push({ x, y: 10, z: 0 }));
+            [4,6, 20,22].forEach(x => pos.push({ x, y: 14, z: 0 }));
+            [4,6, 20,22].forEach(x => pos.push({ x, y: 16, z: 0 }));
+            [6,8,10,12,14,16,18,20].forEach(x => pos.push({ x, y: 18, z: 0 }));
+
+            [8,10,12,14,16,18].forEach(x => pos.push({ x, y: 2, z: 1 }));
+            [6,8,10,12,14,16,18,20].forEach(x => pos.push({ x, y: 4, z: 1 }));
+            [6,8,10,12,14,16,18,20].forEach(x => pos.push({ x, y: 6, z: 1 }));
+            [6,8, 16,18].forEach(x => pos.push({ x, y: 10, z: 1 }));
+            [8,10,12,14,16,18].forEach(x => pos.push({ x, y: 12, z: 1 }));
+            [10,12,14,16].forEach(x => pos.push({ x, y: 14, z: 1 }));
+
+            [10,12,14,16].forEach(x => pos.push({ x, y: 2, z: 2 }));
+            [10,12,14,16].forEach(x => pos.push({ x, y: 4, z: 2 }));
+            [10,12,14,16].forEach(x => pos.push({ x, y: 14, z: 2 }));
+
+            pos.push({ x: 11, y: 3, z: 3 }, { x: 13, y: 3, z: 3 });
+            pos.push({ x: 11, y: 1, z: 3 }, { x: 13, y: 1, z: 3 });
+
+            return pos;
+        }
+
+        function getButterflyLayout() {
+            const pos = [];
+
+            [0, 2, 4, 6, 8, 10, 12, 14, 16].forEach(y => pos.push({ x: 13, y, z: 0 }));
+            pos.push({ x: 9, y: 0, z: 0 }, { x: 17, y: 0, z: 0 });
+            [3,5,7,9,11].forEach(x => pos.push({ x, y: 2, z: 0 }));
+            [1,3,5,7,9,11].forEach(x => pos.push({ x, y: 4, z: 0 }));
+            [1,3,5,7,9,11].forEach(x => pos.push({ x, y: 6, z: 0 }));
+            [3,5,7,9,11].forEach(x => pos.push({ x, y: 8, z: 0 }));
+            [15,17,19,21,23].forEach(x => pos.push({ x, y: 2, z: 0 }));
+            [15,17,19,21,23,25].forEach(x => pos.push({ x, y: 4, z: 0 }));
+            [15,17,19,21,23,25].forEach(x => pos.push({ x, y: 6, z: 0 }));
+            [15,17,19,21,23].forEach(x => pos.push({ x, y: 8, z: 0 }));
+            [5,7,9,11].forEach(x => pos.push({ x, y: 10, z: 0 }));
+            [3,5,7,9,11].forEach(x => pos.push({ x, y: 12, z: 0 }));
+            [5,7,9,11].forEach(x => pos.push({ x, y: 14, z: 0 }));
+            [7,9].forEach(x => pos.push({ x, y: 16, z: 0 }));
+            [15,17,19,21].forEach(x => pos.push({ x, y: 10, z: 0 }));
+            [15,17,19,21,23].forEach(x => pos.push({ x, y: 12, z: 0 }));
+            [15,17,19,21].forEach(x => pos.push({ x, y: 14, z: 0 }));
+            [17,19].forEach(x => pos.push({ x, y: 16, z: 0 }));
+            pos.push({ x: 0, y: 4, z: 0 }, { x: 26, y: 4, z: 0 });
+            pos.push({ x: 0, y: 6, z: 0 }, { x: 26, y: 6, z: 0 }, { x: 1, y: 12, z: 0 });
+
+            [2, 4, 6, 8, 10, 12, 14, 16].forEach(y => pos.push({ x: 13, y, z: 1 }));
+            [3,5,7,9].forEach(x => { pos.push({ x, y: 4, z: 1 }); pos.push({ x, y: 6, z: 1 }); });
+            [17,19,21,23].forEach(x => { pos.push({ x, y: 4, z: 1 }); pos.push({ x, y: 6, z: 1 }); });
+            [5,7,9].forEach(x => pos.push({ x, y: 12, z: 1 }));
+            [17,19,21].forEach(x => pos.push({ x, y: 12, z: 1 }));
+            [7,19].forEach(x => {
+                pos.push({ x, y: 2, z: 1 }, { x, y: 8, z: 1 }, { x, y: 10, z: 1 }, { x, y: 14, z: 1 });
+            });
+
+            [2, 4, 6, 8, 10, 12].forEach(y => pos.push({ x: 13, y, z: 2 }));
+            pos.push({ x: 5, y: 4, z: 2 }, { x: 5, y: 6, z: 2 }, { x: 21, y: 4, z: 2 }, { x: 21, y: 6, z: 2 });
+            pos.push({ x: 7, y: 12, z: 2 }, { x: 19, y: 12, z: 2 });
+
+            pos.push({ x: 13, y: 6, z: 3 }, { x: 13, y: 8, z: 3 }, { x: 13, y: 10, z: 3 });
+            pos.push({ x: 5, y: 5, z: 3 });
+
+            return pos;
+        }
+
+        function getFortressLayout() {
+            const pos = [];
+
+            [2,4,6,8,10,12,14,16,18,20,22].forEach(x => {
+                pos.push({ x, y: 0, z: 0 });
+                pos.push({ x, y: 16, z: 0 });
+            });
+            [2,4,6,8,10,12,14].forEach(y => {
+                pos.push({ x: 2, y, z: 0 });
+                pos.push({ x: 22, y, z: 0 });
+            });
+            pos.push({ x: 0, y: 0, z: 0 }, { x: 0, y: 2, z: 0 });
+            pos.push({ x: 24, y: 0, z: 0 }, { x: 24, y: 2, z: 0 });
+            pos.push({ x: 0, y: 14, z: 0 }, { x: 0, y: 16, z: 0 });
+            pos.push({ x: 24, y: 14, z: 0 }, { x: 24, y: 16, z: 0 });
+            for (let y = 4; y <= 12; y += 2) {
+                for (let x = 6; x <= 18; x += 2) {
+                    pos.push({ x, y, z: 0 });
+                }
+            }
+            pos.push({ x: 4, y: 8, z: 0 }, { x: 20, y: 8, z: 0 }, { x: 12, y: 2, z: 0 }, { x: 12, y: 14, z: 0 }, { x: 0, y: 8, z: 0 });
+
+            pos.push({ x: 2, y: 0, z: 1 }, { x: 22, y: 0, z: 1 }, { x: 2, y: 16, z: 1 }, { x: 22, y: 16, z: 1 });
+            for (let y = 6; y <= 10; y += 2) {
+                for (let x = 8; x <= 16; x += 2) {
+                    pos.push({ x, y, z: 1 });
+                }
+            }
+            [8,10,12,14,16].forEach(x => { pos.push({ x, y: 4, z: 1 }); pos.push({ x, y: 12, z: 1 }); });
+            [6, 18].forEach(x => { pos.push({ x, y: 8, z: 1 }); pos.push({ x, y: 6, z: 1 }); pos.push({ x, y: 10, z: 1 }); });
+            pos.push({ x: 10, y: 2, z: 1 }, { x: 14, y: 2, z: 1 }, { x: 10, y: 14, z: 1 }, { x: 14, y: 14, z: 1 });
+            pos.push({ x: 12, y: 0, z: 1 });
+
+            for (let y = 6; y <= 10; y += 2) {
+                for (let x = 10; x <= 14; x += 2) {
+                    pos.push({ x, y, z: 2 });
+                }
+            }
+            pos.push({ x: 8, y: 6, z: 2 }, { x: 16, y: 6, z: 2 }, { x: 8, y: 10, z: 2 }, { x: 16, y: 10, z: 2 }, { x: 12, y: 4, z: 2 });
+
+            pos.push({ x: 10, y: 8, z: 3 }, { x: 12, y: 8, z: 3 }, { x: 14, y: 8, z: 3 });
+            pos.push({ x: 12, y: 6, z: 3 }, { x: 12, y: 10, z: 3 });
+            pos.push({ x: 12, y: 8, z: 4 });
+
+            return pos;
+        }
+
+        function generateSolvableBoard(positions) {
+            const numTiles = positions.length;
+            const tileCatalog = generateTileCatalog();
+            
+            const tilePairs = [];
+            for (let i = 0; i < tileCatalog.length; i += 2) {
+                tilePairs.push([tileCatalog[i], tileCatalog[i + 1]]);
+            }
+
+            for (let i = tilePairs.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [tilePairs[i], tilePairs[j]] = [tilePairs[j], tilePairs[i]];
+            }
+
+            const grid = positions.map((p, idx) => ({
+                id: idx,
+                x: p.x,
+                y: p.y,
+                z: p.z,
+                tile: null
+            }));
+
+            let remainingGrid = [...grid];
+            const assignedTiles = new Array(numTiles);
+            let pairIndex = 0;
+
+            while (remainingGrid.length > 0) {
+                const freePositions = remainingGrid.filter(pos => isPositionFreeInGrid(pos, remainingGrid));
+
+                if (freePositions.length < 2) {
+                    if (remainingGrid.length >= 2) {
+                        const p1 = remainingGrid.pop();
+                        const p2 = remainingGrid.pop();
+                        const pair = tilePairs[pairIndex++] || tilePairs[0];
+                        assignedTiles[p1.id] = { ...p1, ...pair[0] };
+                        assignedTiles[p2.id] = { ...p2, ...pair[1] };
+                    } else break;
+                } else {
+                    const idx1 = Math.floor(Math.random() * freePositions.length);
+                    let idx2 = Math.floor(Math.random() * freePositions.length);
+                    while (idx1 === idx2 && freePositions.length > 1) {
+                        idx2 = Math.floor(Math.random() * freePositions.length);
+                    }
+
+                    const pos1 = freePositions[idx1];
+                    const pos2 = freePositions[idx2];
+                    const pair = tilePairs[pairIndex++] || tilePairs[0];
+
+                    assignedTiles[pos1.id] = { ...pos1, ...pair[0] };
+                    assignedTiles[pos2.id] = { ...pos2, ...pair[1] };
+
+                    remainingGrid = remainingGrid.filter(p => p.id !== pos1.id && p.id !== pos2.id);
+                }
+            }
+
+            return assignedTiles;
+        }
+
+        function isPositionFreeInGrid(target, allTiles) {
+            const blockedAbove = allTiles.some(other => 
+                other.z === target.z + 1 &&
+                Math.abs(other.x - target.x) < 2 &&
+                Math.abs(other.y - target.y) < 2
+            );
+
+            if (blockedAbove) return false;
+
+            const blockedLeft = allTiles.some(other =>
+                other.z === target.z &&
+                other.x === target.x - 2 &&
+                Math.abs(other.y - target.y) < 2
+            );
+
+            const blockedRight = allTiles.some(other =>
+                other.z === target.z &&
+                other.x === target.x + 2 &&
+                Math.abs(other.y - target.y) < 2
+            );
+
+            return !(blockedLeft && blockedRight);
+        }
+
+        function isTileFree(tile, activeTiles) {
+            return isPositionFreeInGrid(tile, activeTiles);
+        }
+
+        function doTilesMatch(tileA, tileB) {
+            if (!tileA || !tileB || tileA.id === tileB.id) return false;
+
+            if (tileA.key === tileB.key) return true;
+            if (tileA.type === TILE_TYPES.SEASONS && tileB.type === TILE_TYPES.SEASONS) return true;
+            if (tileA.type === TILE_TYPES.FLOWERS && tileB.type === TILE_TYPES.FLOWERS) return true;
+
+            return false;
+        }
+
+        class MahjongGame {
+            constructor() {
+                this.activeTiles = [];
+                this.selectedTile = null;
+                this.historyStack = [];
+                this.timerSeconds = 0;
+                this.timerInterval = null;
+                this.movesCount = 0;
+                this.currentLayout = 'turtle';
+                this.currentTheme = 'classic';
+
+                this.domViewport = document.getElementById('board-viewport');
+                this.domTilesCount = document.getElementById('tiles-count');
+                this.domMovesCount = document.getElementById('moves-count');
+                this.domTimer = document.getElementById('timer-display');
+
+                this.initEvents();
+            }
+
+            initEvents() {
+                document.getElementById('layout-select').addEventListener('change', (e) => {
+                    this.currentLayout = e.target.value;
+                    this.startNewGame();
+                });
+
+                document.getElementById('theme-select').addEventListener('change', (e) => {
+                    this.setTheme(e.target.value);
+                });
+
+                document.getElementById('btn-sound').addEventListener('click', () => {
+                    soundEngine.muted = !soundEngine.muted;
+                    document.getElementById('btn-sound').innerText = soundEngine.muted ? '🔇' : '🔊';
+                });
+
+                document.getElementById('btn-undo').addEventListener('click', () => this.undoMove());
+                document.getElementById('btn-hint').addEventListener('click', () => this.showHint());
+                document.getElementById('btn-shuffle').addEventListener('click', () => this.shuffleRemaining());
+                document.getElementById('btn-restart').addEventListener('click', () => this.startNewGame());
+
+                document.getElementById('modal-btn-primary').addEventListener('click', () => {
+                    this.hideModal();
+                    this.startNewGame();
+                });
+            }
+
+            setTheme(theme) {
+                this.currentTheme = theme;
+                document.body.className = `theme-${theme} flex flex-col min-h-screen`;
+            }
+
+            startNewGame() {
+                this.stopTimer();
+                this.timerSeconds = 0;
+                this.movesCount = 0;
+                this.historyStack = [];
+                this.selectedTile = null;
+
+                let positions = [];
+                if (this.currentLayout === 'turtle') positions = getTurtleLayout();
+                else if (this.currentLayout === 'pyramid') positions = getPyramidLayout();
+                else if (this.currentLayout === 'arena') positions = getArenaLayout();
+                else if (this.currentLayout === 'skull') positions = getSkullLayout();
+                else if (this.currentLayout === 'butterfly') positions = getButterflyLayout();
+                else if (this.currentLayout === 'fortress') positions = getFortressLayout();
+
+                this.activeTiles = generateSolvableBoard(positions);
+
+                this.renderBoard();
+                this.updateStats();
+                this.startTimer();
+            }
+
+            startTimer() {
+                this.stopTimer();
+                this.timerInterval = setInterval(() => {
+                    this.timerSeconds++;
+                    const m = String(Math.floor(this.timerSeconds / 60)).padStart(2, '0');
+                    const s = String(this.timerSeconds % 60).padStart(2, '0');
+                    this.domTimer.innerText = `${m}:${s}`;
+                }, 1000);
+            }
+
+            stopTimer() {
+                if (this.timerInterval) clearInterval(this.timerInterval);
+            }
+
+            renderBoard() {
+                this.domViewport.innerHTML = '';
+
+                let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+                this.activeTiles.forEach(t => {
+                    if (t.x < minX) minX = t.x;
+                    if (t.x > maxX) maxX = t.x;
+                    if (t.y < minY) minY = t.y;
+                    if (t.y > maxY) maxY = t.y;
+                });
+
+                const isMobile = window.innerWidth < 768;
+                const isLarge = window.innerWidth >= 1280;
+                const unitSize = isLarge ? 28 : (isMobile ? 20 : 24);
+
+                const boardWidth = (maxX - minX + 4) * unitSize;
+                const boardHeight = (maxY - minY + 4) * unitSize;
+
+                this.domViewport.style.width = `${boardWidth}px`;
+                this.domViewport.style.height = `${boardHeight}px`;
+
+                this.activeTiles.forEach(tile => {
+                    const isFree = isTileFree(tile, this.activeTiles);
+                    const el = document.createElement('div');
+                    el.className = `tile ${isFree ? '' : 'blocked'}`;
+                    el.id = `tile-${tile.id}`;
+
+                    const leftPos = (tile.x - minX) * unitSize;
+                    const topPos = (tile.y - minY) * unitSize;
+                    const zIndex = tile.z * 10 + tile.y;
+
+                    el.style.left = `${leftPos}px`;
+                    el.style.top = `${topPos}px`;
+                    el.style.zIndex = zIndex;
+                    
+                    const offsetDepth = tile.z * 4;
+                    el.style.transform = `translate(${-offsetDepth}px, ${-offsetDepth}px)`;
+
+                    el.innerHTML = this.getTileInnerHTML(tile);
+                    el.addEventListener('click', () => this.handleTileClick(tile));
+
+                    this.domViewport.appendChild(el);
+                });
+            }
+
+            getTileInnerHTML(tile) {
+                if (tile.kanji) {
+                    return `
+                        <div class="kanji-font font-bold text-xl md:text-2xl leading-none" style="color: ${tile.color};">
+                            ${tile.kanji}
+                        </div>
+                        ${tile.subKanji ? `<div class="kanji-font text-xs text-red-600 mt-1 font-bold">${tile.subKanji}</div>` : ''}
+                    `;
+                }
+                if (tile.emoji) {
+                    return `
+                        <div class="text-xl md:text-2xl mb-1">${tile.emoji}</div>
+                        <div class="kanji-font text-[10px] md:text-xs font-bold" style="color: ${tile.color}">${tile.kanji}</div>
+                    `;
+                }
+                if (tile.icon) {
+                    return tile.icon;
+                }
+                return `<div class="font-bold text-sm" style="color:${tile.color}">${tile.label}</div>`;
+            }
+
+            handleTileClick(tile) {
+                if (!isTileFree(tile, this.activeTiles)) {
+                    soundEngine.playError();
+                    return;
+                }
+
+                soundEngine.playClick();
+
+                if (!this.selectedTile) {
+                    this.selectedTile = tile;
+                    this.highlightTile(tile.id, true);
+                    return;
+                }
+
+                if (this.selectedTile.id === tile.id) {
+                    this.highlightTile(tile.id, false);
+                    this.selectedTile = null;
+                    return;
+                }
+
+                if (doTilesMatch(this.selectedTile, tile)) {
+                    this.removePair(this.selectedTile, tile);
+                    this.selectedTile = null;
+                } else {
+                    soundEngine.playError();
+                    this.highlightTile(this.selectedTile.id, false);
+                    this.selectedTile = tile;
+                    this.highlightTile(tile.id, true);
+                }
+            }
+
+            highlightTile(id, isSelected) {
+                const el = document.getElementById(`tile-${id}`);
+                if (el) {
+                    if (isSelected) el.classList.add('selected');
+                    else el.classList.remove('selected');
+                }
+            }
+
+            removePair(tileA, tileB) {
+                soundEngine.playMatch();
+
+                this.historyStack.push([tileA, tileB]);
+                this.movesCount++;
+
+                const elA = document.getElementById(`tile-${tileA.id}`);
+                const elB = document.getElementById(`tile-${tileB.id}`);
+
+                if (elA) elA.classList.add('removing');
+                if (elB) elB.classList.add('removing');
+
+                setTimeout(() => {
+                    this.activeTiles = this.activeTiles.filter(t => t.id !== tileA.id && t.id !== tileB.id);
+                    this.renderBoard();
+                    this.updateStats();
+                    this.checkGameState();
+                }, 300);
+            }
+
+            undoMove() {
+                if (this.historyStack.length === 0) return;
+                soundEngine.playClick();
+
+                const [tileA, tileB] = this.historyStack.pop();
+                this.activeTiles.push(tileA, tileB);
+                this.movesCount++;
+
+                if (this.selectedTile) {
+                    this.highlightTile(this.selectedTile.id, false);
+                    this.selectedTile = null;
+                }
+
+                this.renderBoard();
+                this.updateStats();
+            }
+
+            getAvailableMoves() {
+                const freeTiles = this.activeTiles.filter(t => isTileFree(t, this.activeTiles));
+                const pairs = [];
+
+                for (let i = 0; i < freeTiles.length; i++) {
+                    for (let j = i + 1; j < freeTiles.length; j++) {
+                        if (doTilesMatch(freeTiles[i], freeTiles[j])) {
+                            pairs.push([freeTiles[i], freeTiles[j]]);
+                        }
+                    }
+                }
+                return pairs;
+            }
+
+            showHint() {
+                soundEngine.playClick();
+                const moves = this.getAvailableMoves();
+
+                document.querySelectorAll('.tile.hinted').forEach(el => el.classList.remove('hinted'));
+
+                if (moves.length === 0) {
+                    this.showModal("Aucun Coup Possible", "Plus aucun coup libre n'est disponible. Essayez de mélanger les tuiles restantes !", "🔀", "Mélanger les Tuiles", () => {
+                        this.hideModal();
+                        this.shuffleRemaining();
+                    });
+                    return;
+                }
+
+                const [tileA, tileB] = moves[0];
+                const elA = document.getElementById(`tile-${tileA.id}`);
+                const elB = document.getElementById(`tile-${tileB.id}`);
+
+                if (elA) elA.classList.add('hinted');
+                if (elB) elB.classList.add('hinted');
+
+                setTimeout(() => {
+                    if (elA) elA.classList.remove('hinted');
+                    if (elB) elB.classList.remove('hinted');
+                }, 3000);
+            }
+
+            shuffleRemaining() {
+                soundEngine.playClick();
+                if (this.activeTiles.length === 0) return;
+
+                const currentPositions = this.activeTiles.map(t => ({ id: t.id, x: t.x, y: t.y, z: t.z }));
+                const shuffledBoard = generateSolvableBoard(currentPositions);
+
+                this.activeTiles = shuffledBoard;
+                this.selectedTile = null;
+
+                this.renderBoard();
+                this.updateStats();
+            }
+
+            updateStats() {
+                this.domTilesCount.innerText = this.activeTiles.length;
+                this.domMovesCount.innerText = this.movesCount;
+                document.getElementById('btn-undo').disabled = this.historyStack.length === 0;
+            }
+
+            checkGameState() {
+                if (this.activeTiles.length === 0) {
+                    this.stopTimer();
+                    soundEngine.playWin();
+                    this.showModal("Victoire Absolue !", "Félicitations, vous avez entièrement nettoyé le plateau !", "🏆", "Nouvelle Partie", () => {
+                        this.hideModal();
+                        this.startNewGame();
+                    });
+                    return;
+                }
+
+                const moves = this.getAvailableMoves();
+                if (moves.length === 0) {
+                    soundEngine.playError();
+                    this.showModal("Partie Bloquée", "Aucun coup n'est disponible avec les tuiles libres actuelles.", "⚠️", "Mélanger les Tuiles", () => {
+                        this.hideModal();
+                        this.shuffleRemaining();
+                    });
+                }
+            }
+
+            showModal(title, msg, icon, btnText, callback) {
+                const modal = document.getElementById('modal-overlay');
+                document.getElementById('modal-title').innerText = title;
+                document.getElementById('modal-message').innerText = msg;
+                document.getElementById('modal-icon').innerText = icon;
+
+                const primaryBtn = document.getElementById('modal-btn-primary');
+                primaryBtn.innerText = btnText;
+
+                document.getElementById('stat-time').innerText = this.domTimer.innerText;
+                document.getElementById('stat-moves').innerText = this.movesCount;
+
+                const newBtn = primaryBtn.cloneNode(true);
+                primaryBtn.parentNode.replaceChild(newBtn, primaryBtn);
+                newBtn.addEventListener('click', callback);
+
+                modal.classList.remove('hidden');
+            }
+
+            hideModal() {
+                document.getElementById('modal-overlay').classList.add('hidden');
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const game = new MahjongGame();
+            game.startNewGame();
+
+            window.addEventListener('resize', () => {
+                game.renderBoard();
+            });
+        });
+    </script>
+</body>
+</html>
