@@ -1099,9 +1099,9 @@
                                 <i class="fa-solid fa-code text-xs"></i>
                                 <span>PineScript v5</span>
                             </button>
-                            <button onclick="copyTweetToClipboard()" title="Générer un Tweet (max 270 caractères) et le copier" class="px-3 py-1.5 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 text-xs font-semibold border border-sky-500/40 transition flex items-center space-x-1.5 cursor-pointer">
-                                <i class="fa-brands fa-x-twitter text-xs"></i>
-                                <span>Tweet (270c)</span>
+                            <button onclick="copyPPToClipboard()" title="Copier la fiche synthétique au format PP" class="px-3 py-1.5 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 text-xs font-semibold border border-sky-500/40 transition flex items-center space-x-1.5 cursor-pointer">
+                                <i class="fa-solid fa-paste text-xs"></i>
+                                <span>PP</span>
                             </button>
                             <button id="btnSaveTrade" onclick="saveCurrentTrade()" class="px-3 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold shadow border border-sky-400/30 transition flex items-center space-x-1.5 cursor-pointer">
                                 <i class="fa-solid fa-bookmark"></i>
@@ -1808,42 +1808,42 @@ RÉPONDS EXCLUSIVEMENT PAR UN OBJET JSON VALIDE STRICTEMENT RESPECTANT LA STRUCT
                 <i class="fa-solid fa-spinner animate-spin text-amber-400 text-xl"></i>
                 <p class="text-xs text-amber-300 font-bold">Analyse approfondie sur "${topic}" en cours pour ${companyName}...
             </div>`;
-
-            const promptText = `Fournis une analyse financière extrêmement détaillée et chiffrée sur le thème "${topic}" pour l'entreprise ${companyName}. Donne 3 à 5 points clés avec des explications claires et directes.`;
-
-            const payload = {
-                contents: [{ parts: [{ text: promptText }] }],
-                tools: [{ "google_search": {} }]
-            };
-
-            try {
-                const apiRes = await fetchGeminiWithRetry(payload, 30000);
-                const candidate = apiRes?.candidates?.[0];
-                if (candidate && candidate.content?.parts?.[0]?.text) {
-                    output.innerHTML = `<div class="space-y-2">
-                        <div class="text-xs font-bold text-amber-400 uppercase font-mono mb-2">Thème : ${topic}</div>
-                        <div class="text-slate-200 leading-relaxed whitespace-pre-line text-xs">${candidate.content.parts[0].text}</div>
-                    </div>`;
-                } else {
-                    output.innerText = "Analyse non disponible.";
-                }
-            } catch (err) {
-                output.innerText = "Erreur lors de l'analyse approfondie.";
+        function copyPPToClipboard() {
+            if (!currentReportData) {
+                showToast("Veuillez d'abord réaliser l'analyse d'un titre.", "amber");
+                return;
             }
-        }
+            const info = currentReportData.companyInfo || {};
+            const plan = currentReportData.tradingPlan || {};
+            const diag = currentReportData.leonceDiagnostic || {};
 
-        function selectPreset(name) {
-            const searchInput = document.getElementById('searchInput');
-            if (searchInput) searchInput.value = name;
-            executeAnalysis(name, 'ALL');
-        }
+            const companyHashtag = '#' + (info.name || 'Societe').replace(/[^a-zA-Z0-9]/g, '');
+            const tickerTag = info.ticker ? `$${info.ticker}` : '';
+            const entry = plan.entryZone || 'N/A';
+            const sl = plan.stopLoss || 'N/A';
+            const tp1 = plan.tp1 || 'N/A';
+            const tp2 = plan.tp2 || 'N/A';
 
-        function selectVSPreset(s1, s2) {
-            const input1 = document.getElementById('searchInputVS1');
-            const input2 = document.getElementById('searchInputVS2');
-            if (input1) input1.value = s1;
-            if (input2) input2.value = s2;
-            executeVSAnalysis(s1, s2);
+            const entryNum = parsePriceValue(entry);
+            const slNum = parsePriceValue(sl);
+            const tp1Num = parsePriceValue(tp1);
+            let rrStr = '2,50';
+            if (entryNum && slNum && tp1Num && (entryNum - slNum) > 0) {
+                rrStr = ((tp1Num - entryNum) / (entryNum - slNum)).toFixed(2).replace('.', ',');
+            }
+
+            const thesis = diag.mediumTermAnalysis || diag.shortTermAnalysis || info.summary || 'Excellente dynamique opérationnelle et perspectives fondamentales solides.';
+
+            const formattedMessage = `${companyHashtag} ${tickerTag}|In:${entry}|SL:${sl}|TP1:${tp1}|TP2:${tp2}| R/R: ${rrStr}\nThèse: ${thesis}`;
+
+            const tempTextArea = document.createElement('textarea');
+            tempTextArea.value = formattedMessage;
+            document.body.appendChild(tempTextArea);
+            tempTextArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempTextArea);
+
+            showToast('Format PP copié dans le presse-papier !', 'success');
         }
 
         function copyPineScript() {
