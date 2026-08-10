@@ -1822,6 +1822,415 @@ plot(targetPrice, "TP1", color=color.green, linewidth=2)
             showToast('Données JSON copiées dans le presse-papier !', 'success');
         }
 
+        function getCategoryScore(cat) {
+            if (!cat.subIndicators || cat.subIndicators.length === 0) return 50;
+            const totalSubVal = cat.subIndicators.reduce((sum, s) => sum + (s.val * (s.weight || 1)), 0);
+            const totalWeight = cat.subIndicators.reduce((sum, s) => sum + (s.weight || 1), 0);
+            return Math.round(totalSubVal / totalWeight);
+        }
+
+        function calculateOverallRiskScore() {
+            let weightedSum = 0;
+            let totalWeight = 0;
+            categories.forEach(cat => {
+                const catScore = getCategoryScore(cat);
+                const w = cat.weight || 20;
+                weightedSum += catScore * w;
+                totalWeight += w;
+            });
+            return totalWeight > 0 ? Math.round(weightedSum / totalWeight) : 50;
+        }
+
+        function drawGauge(score) {
+            const canvas = document.getElementById('gaugeCanvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            const centerX = width / 2;
+            const centerY = height - 20;
+            const radius = Math.min(width, height) - 40;
+
+            ctx.clearRect(0, 0, width, height);
+
+            const gradient = ctx.createLinearGradient(centerX - radius, centerY, centerX + radius, centerY);
+            gradient.addColorStop(0, '#10b981');
+            gradient.addColorStop(0.25, '#22c55e');
+            gradient.addColorStop(0.5, '#f59e0b');
+            gradient.addColorStop(0.75, '#f97316');
+            gradient.addColorStop(1, '#f43f5e');
+
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, Math.PI, 0, false);
+            ctx.lineWidth = 20;
+            ctx.strokeStyle = gradient;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+
+            const angle = Math.PI + (score / 100) * Math.PI;
+
+            ctx.save();
+            ctx.translate(centerX, centerY);
+            ctx.rotate(angle);
+
+            ctx.beginPath();
+            ctx.moveTo(0, -4);
+            ctx.lineTo(radius - 12, 0);
+            ctx.lineTo(0, 4);
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(0, 0, 7, 0, Math.PI * 2);
+            ctx.fillStyle = '#0f172a';
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 3;
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        function renderRadarChart() {
+            const canvas = document.getElementById('radarChart');
+            if (!canvas || typeof Chart === 'undefined') return;
+
+            const labels = categories.map(c => c.name);
+            const dataValues = categories.map(c => getCategoryScore(c));
+
+            if (radarChartInstance) {
+                radarChartInstance.data.labels = labels;
+                radarChartInstance.data.datasets[0].data = dataValues;
+                radarChartInstance.update();
+                return;
+            }
+
+            const ctx = canvas.getContext('2d');
+            radarChartInstance = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Risque par Pilier',
+                        data: dataValues,
+                        backgroundColor: 'rgba(56, 189, 248, 0.2)',
+                        borderColor: '#38bdf8',
+                        borderWidth: 2,
+                        pointBackgroundColor: '#38bdf8'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        r: {
+                            angleLines: { color: 'rgba(255, 255, 255, 0.1)' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                            pointLabels: { color: '#94a3b8', font: { size: 10 } },
+                            ticks: { display: false },
+                            min: 0,
+                            max: 100
+                        }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        function updateBarometerUI() {
+            const overallScore = calculateOverallRiskScore();
+            
+            const scoreText = document.getElementById('overallScoreText');
+            if (scoreText) scoreText.innerText = overallScore;
+
+            const riskBadge = document.getElementById('riskBadge');
+            if (riskBadge) {
+                if (overallScore < 30) {
+                    riskBadge.innerText = 'Faible';
+                    riskBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+                } else if (overallScore < 50) {
+                    riskBadge.innerText = 'Modéré-';
+                    riskBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-green-500/20 text-green-400 border border-green-500/30';
+                } else if (overallScore < 65) {
+                    riskBadge.innerText = 'Modéré+';
+                    riskBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30';
+                } else if (overallScore < 80) {
+                    riskBadge.innerText = 'Élevé';
+                    riskBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-orange-500/20 text-orange-400 border border-orange-500/30';
+                } else {
+                    riskBadge.innerText = 'Extrême';
+                    riskBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30';
+                }
+            }
+
+            let pctActions = Math.max(10, Math.min(80, 100 - overallScore));
+            let pctOblig = Math.round((100 - pctActions) * 0.6);
+            let pctCash = 100 - pctActions - pctOblig;
+
+            if (document.getElementById('barActions')) document.getElementById('barActions').style.width = pctActions + '%';
+            if (document.getElementById('barOblig')) document.getElementById('barOblig').style.width = pctOblig + '%';
+            if (document.getElementById('barCash')) document.getElementById('barCash').style.width = pctCash + '%';
+
+            if (document.getElementById('pctActions')) document.getElementById('pctActions').innerText = pctActions + '%';
+            if (document.getElementById('pctOblig')) document.getElementById('pctOblig').innerText = pctOblig + '%';
+            if (document.getElementById('pctCash')) document.getElementById('pctCash').innerText = pctCash + '%';
+
+            if (document.getElementById('allocTag')) {
+                if (overallScore < 40) document.getElementById('allocTag').innerText = 'Offensive (Actions)';
+                else if (overallScore < 65) document.getElementById('allocTag').innerText = 'Équilibrée (50/50)';
+                else document.getElementById('allocTag').innerText = 'Prudente (Cash/Gold)';
+            }
+
+            drawGauge(overallScore);
+            renderRadarChart();
+        }
+
+        function renderCategories() {
+            const container = document.getElementById('categoriesContainer');
+            if (!container) return;
+
+            container.innerHTML = categories.map(cat => {
+                const catScore = getCategoryScore(cat);
+                return `
+                    <div class="p-5 rounded-2xl glass-card space-y-4 border border-slate-800">
+                        <div class="flex items-center justify-between border-b border-slate-800/80 pb-3">
+                            <div class="flex items-center space-x-2.5">
+                                <div class="w-8 h-8 rounded-lg bg-${cat.color}-500/10 text-${cat.color}-400 flex items-center justify-center">
+                                    <i class="fa-solid ${cat.icon} text-sm"></i>
+                                </div>
+                                <span class="font-bold text-sm text-white">${cat.name}</span>
+                            </div>
+                            <span id="score-cat-${cat.id}" class="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-sky-400">
+                                ${catScore} / 100
+                            </span>
+                        </div>
+
+                        <div class="space-y-3">
+                            ${cat.subIndicators.map(sub => `
+                                <div class="space-y-1.5 text-xs">
+                                    <div class="flex items-center justify-between text-slate-300">
+                                        <span>${sub.name}</span>
+                                        <span id="val-${cat.id}-${sub.id}" class="font-mono font-bold text-slate-100">${sub.val}</span>
+                                    </div>
+                                    <div class="flex items-center space-x-2">
+                                        <button type="button" onclick="adjustSubVal('${cat.id}', '${sub.id}', -5)" class="w-6 h-6 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center font-bold transition cursor-pointer">-</button>
+                                        <input type="range" min="0" max="100" value="${sub.val}" oninput="setSubVal('${cat.id}', '${sub.id}', this.value)" class="flex-1 cursor-pointer">
+                                        <button type="button" onclick="adjustSubVal('${cat.id}', '${sub.id}', 5)" class="w-6 h-6 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center font-bold transition cursor-pointer">+</button>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function setSubVal(catId, subId, value) {
+            const numVal = Math.max(0, Math.min(100, parseInt(value, 10) || 0));
+            const cat = categories.find(c => c.id === catId);
+            if (cat) {
+                const sub = cat.subIndicators.find(s => s.id === subId);
+                if (sub) {
+                    sub.val = numVal;
+                    const valDisplay = document.getElementById(`val-${catId}-${subId}`);
+                    if (valDisplay) valDisplay.innerText = numVal;
+                    const catScoreDisplay = document.getElementById(`score-cat-${catId}`);
+                    if (catScoreDisplay) catScoreDisplay.innerText = `${getCategoryScore(cat)} / 100`;
+                    updateBarometerUI();
+                }
+            }
+        }
+
+        function adjustSubVal(catId, subId, delta) {
+            const cat = categories.find(c => c.id === catId);
+            if (cat) {
+                const sub = cat.subIndicators.find(s => s.id === subId);
+                if (sub) {
+                    setSubVal(catId, subId, sub.val + delta);
+                    renderCategories();
+                }
+            }
+        }
+
+        async function runLiveMarketAnalysis() {
+            showToast("Analyse du marché en direct via Leonce IA...", "info");
+            const btn = document.getElementById('btnLiveSearch');
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> <span>Analyse en cours...</span>`;
+            }
+
+            const promptText = `Act en tant qu'expert en risque macroéconomique et de marché financier global (CAC 40, Euronext, S&P 500, VIX, taux BCE/FED).
+Effectue un diagnostic récent du marché et attribue une note de risque globale de 0 (Très favorable/Serein) à 100 (Risque extrême/Panic) pour les 5 piliers suivants :
+1. macro (Macroéconomie : croissance, inflation, géopolitique)
+2. rates_liquidity (Taux et liquidité : banques centrales, spreads de crédit)
+3. earnings (Bénéfices des entreprises : révisions EPS, marges, valorisation)
+4. market_structure (Structure interne : VIX, dispersion, largeur du marché)
+5. sentiment (Sentiment : Fear & Greed, options, risques systémiques)
+
+Réponds EXCLUSIVEMENT sous forme d'objet JSON respectant strictement cette structure :
+{
+  "macro": 55,
+  "rates_liquidity": 50,
+  "earnings": 45,
+  "market_structure": 40,
+  "sentiment": 52,
+  "summary": "Court résumé du climat de marché..."
+}`;
+
+            const payload = {
+                contents: [{ parts: [{ text: promptText }] }],
+                tools: [{ "google_search": {} }]
+            };
+
+            try {
+                const res = await fetchGeminiWithRetry(payload, 30000);
+                const text = res?.candidates?.[0]?.content?.parts?.[0]?.text;
+                const parsed = cleanAndParseJSON(text);
+
+                if (parsed) {
+                    categories.forEach(cat => {
+                        if (parsed[cat.id] !== undefined) {
+                            const val = Math.max(0, Math.min(100, parseInt(parsed[cat.id], 10)));
+                            cat.subIndicators.forEach(sub => { sub.val = val; });
+                        }
+                    });
+                    renderCategories();
+                    updateBarometerUI();
+                    showToast("Analyse de marché mise à jour en direct !", "success");
+                } else {
+                    showToast("Réponse incomplète. Valeurs par défaut conservées.", "amber");
+                }
+            } catch (e) {
+                showToast("Erreur lors de l'analyse du marché en direct.", "amber");
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> <span>Analyser Marché Direct</span>`;
+                }
+            }
+        }
+
+        function resetToDefaults() {
+            categories.forEach(cat => {
+                cat.subIndicators.forEach(sub => { sub.val = 50; });
+            });
+            const scenarioSel = document.getElementById('scenarioSelect');
+            if (scenarioSel) scenarioSel.value = 'custom';
+            renderCategories();
+            updateBarometerUI();
+            showToast("Indicateurs réinitialisés aux valeurs neutres (50/100).", "info");
+        }
+
+        function exportReport() {
+            window.print();
+        }
+
+        function applyScenario(scenarioKey) {
+            const presets = {
+                goldilocks: { macro: 25, rates_liquidity: 30, earnings: 25, market_structure: 30, sentiment: 30 },
+                liquidity_squeeze: { macro: 55, rates_liquidity: 80, earnings: 60, market_structure: 65, sentiment: 70 },
+                earnings_recession: { macro: 65, rates_liquidity: 50, earnings: 85, market_structure: 60, sentiment: 65 },
+                systemic_crisis: { macro: 85, rates_liquidity: 90, earnings: 80, market_structure: 90, sentiment: 95 }
+            };
+
+            const sel = presets[scenarioKey];
+            if (sel) {
+                categories.forEach(cat => {
+                    if (sel[cat.id] !== undefined) {
+                        cat.subIndicators.forEach(sub => { sub.val = sel[cat.id]; });
+                    }
+                });
+                renderCategories();
+                updateBarometerUI();
+                showToast(`Scénario appliqué : ${scenarioKey}`, "info");
+            }
+        }
+
+        async function executeVSAnalysis(s1, s2) {
+            const loadingContainer = document.getElementById('loadingContainer');
+            const vsResultsContainer = document.getElementById('vsResultsContainer');
+            const welcomeContainer = document.getElementById('welcomeContainer');
+            const errorContainer = document.getElementById('errorContainer');
+
+            if (welcomeContainer) welcomeContainer.classList.add('hidden');
+            if (errorContainer) errorContainer.classList.add('hidden');
+            if (loadingContainer) loadingContainer.classList.remove('hidden');
+
+            const promptText = `Effectue une comparaison financière et boursière côte-à-côte entre la société "${s1}" et la société "${s2}" sur Euronext.
+
+Réponds EXCLUSIVEMENT par un objet JSON valide strictement respectant cette structure (sans texte en dehors) :
+{
+  "stock1": { "name": "${s1}", "ticker": "S1" },
+  "stock2": { "name": "${s2}", "ticker": "S2" },
+  "valuationAnalysis": "Comparaison des valorisations...",
+  "riskRewardAnalysis": "Comparaison du profil risque/rendement...",
+  "keyTakeaway": "Conclusion et recommandation stratégique...",
+  "winner": "${s1}",
+  "comparisonTable": [
+    { "metric": "Valorisation (PER)", "val1": "22x", "val2": "18x", "winner": "S2" },
+    { "metric": "Marge Opérationnelle", "val1": "25%", "val2": "12%", "winner": "S1" },
+    { "metric": "Piotroski F-Score", "val1": "8/9", "val2": "6/9", "winner": "S1" },
+    { "metric": "Rendement Dividende", "val1": "2.1%", "val2": "4.5%", "winner": "S2" },
+    { "metric": "Bilan & Endettement", "val1": "Très Solide", "val2": "Modéré", "winner": "S1" }
+  ]
+}`;
+
+            const payload = {
+                contents: [{ parts: [{ text: promptText }] }],
+                tools: [{ "google_search": {} }]
+            };
+
+            try {
+                const res = await fetchGeminiWithRetry(payload, 35000);
+                const text = res?.candidates?.[0]?.content?.parts?.[0]?.text;
+                const parsed = cleanAndParseJSON(text);
+
+                if (loadingContainer) loadingContainer.classList.add('hidden');
+
+                if (parsed) {
+                    if (vsResultsContainer) vsResultsContainer.classList.remove('hidden');
+
+                    const st1Name = parsed.stock1?.name || s1;
+                    const st2Name = parsed.stock2?.name || s2;
+
+                    if (document.getElementById('vsTitleStock1')) document.getElementById('vsTitleStock1').innerText = st1Name;
+                    if (document.getElementById('vsTitleStock2')) document.getElementById('vsTitleStock2').innerText = st2Name;
+                    if (document.getElementById('thVSStock1')) document.getElementById('thVSStock1').innerText = st1Name;
+                    if (document.getElementById('thVSStock2')) document.getElementById('thVSStock2').innerText = st2Name;
+
+                    if (document.getElementById('vsValuationAnalysis')) document.getElementById('vsValuationAnalysis').innerText = parsed.valuationAnalysis || '---';
+                    if (document.getElementById('vsRiskRewardAnalysis')) document.getElementById('vsRiskRewardAnalysis').innerText = parsed.riskRewardAnalysis || '---';
+                    if (document.getElementById('vsKeyTakeaway')) document.getElementById('vsKeyTakeaway').innerText = parsed.keyTakeaway || '---';
+
+                    if (document.getElementById('vsWinnerBadgeContainer')) {
+                        document.getElementById('vsWinnerBadgeContainer').innerHTML = `
+                            <div class="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-emerald-500 text-slate-950 font-black text-xs uppercase shadow-lg flex items-center space-x-2">
+                                <i class="fa-solid fa-trophy"></i>
+                                <span>Vainqueur IA : ${parsed.winner || st1Name}</span>
+                            </div>
+                        `;
+                    }
+
+                    if (document.getElementById('vsComparisonTableBody')) {
+                        const rows = parsed.comparisonTable || [];
+                        document.getElementById('vsComparisonTableBody').innerHTML = rows.map(r => `
+                            <tr>
+                                <td class="p-4 font-semibold text-slate-200">${r.metric}</td>
+                                <td class="p-4 text-center font-bold text-sky-400">${r.val1}</td>
+                                <td class="p-4 text-center font-bold text-amber-400">${r.val2}</td>
+                            </tr>
+                        `).join('');
+                    }
+                } else {
+                    showToast("Erreur lors de la génération du duel VS.", "amber");
+                }
+            } catch (e) {
+                if (loadingContainer) loadingContainer.classList.add('hidden');
+                showToast("Erreur lors du comparateur VS.", "amber");
+            }
+        }
+
         // Attach listeners on load
         window.addEventListener('DOMContentLoaded', () => {
             const searchForm = document.getElementById('searchForm');
@@ -1832,6 +2241,19 @@ plot(targetPrice, "TP1", color=color.green, linewidth=2)
                     if (query) executeAnalysis(query, document.getElementById('marketSelect')?.value || 'ALL');
                 });
             }
+
+            const searchVSForm = document.getElementById('searchVSForm');
+            if (searchVSForm) {
+                searchVSForm.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    const s1 = document.getElementById('searchInputVS1')?.value.trim();
+                    const s2 = document.getElementById('searchInputVS2')?.value.trim();
+                    if (s1 && s2) executeVSAnalysis(s1, s2);
+                });
+            }
+
+            renderCategories();
+            updateBarometerUI();
         });
 
         // Global functions exposition
@@ -1848,6 +2270,13 @@ plot(targetPrice, "TP1", color=color.green, linewidth=2)
         window.closeHistoryModal = closeHistoryModal;
         window.copyJSONToClipboard = copyJSONToClipboard;
         window.calculateMoneyManagement = calculateMoneyManagement;
+        window.runLiveMarketAnalysis = runLiveMarketAnalysis;
+        window.resetToDefaults = resetToDefaults;
+        window.exportReport = exportReport;
+        window.applyScenario = applyScenario;
+        window.setSubVal = setSubVal;
+        window.adjustSubVal = adjustSubVal;
+        window.executeVSAnalysis = executeVSAnalysis;
     </script>
 </body>
 </html>
