@@ -1099,6 +1099,10 @@
                                 <i class="fa-solid fa-code text-xs"></i>
                                 <span>PineScript v5</span>
                             </button>
+                            <button onclick="copyTweetToClipboard()" title="Générer un Tweet (max 270 caractères) et le copier" class="px-3 py-1.5 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 text-xs font-semibold border border-sky-500/40 transition flex items-center space-x-1.5 cursor-pointer">
+                                <i class="fa-brands fa-x-twitter text-xs"></i>
+                                <span>Tweet (270c)</span>
+                            </button>
                             <button id="btnSaveTrade" onclick="saveCurrentTrade()" class="px-3 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold shadow border border-sky-400/30 transition flex items-center space-x-1.5 cursor-pointer">
                                 <i class="fa-solid fa-bookmark"></i>
                                 <span>Enregistrer</span>
@@ -1873,8 +1877,53 @@ plot(targetPrice, "TP1", color=color.green, linewidth=2)
             showToast('Code PineScript v5 copié dans le presse-papier !', 'success');
         }
 
+        function copyTweetToClipboard() {
+            if (!currentReportData) {
+                showToast("Veuillez d'abord réaliser l'analyse d'un titre.", "amber");
+                return;
+            }
+
+            const info = currentReportData.companyInfo || {};
+            const plan = currentReportData.tradingPlan || {};
+            const diag = currentReportData.leonceDiagnostic || {};
+
+            const name = info.name || 'Société';
+            const ticker = info.ticker ? `$${info.ticker}` : '';
+            const score = diag.overallScore ? `${diag.overallScore}/100` : '--/100';
+            const entry = plan.entryZone || 'N/A';
+            const sl = plan.stopLoss || 'N/A';
+            const tp1 = plan.tp1 || 'N/A';
+
+            let tweetText = `📊 Plan MT #Euronext: ${name} ${ticker}
+🎯 Entrée: ${entry}
+🛡️ Stop Loss: ${sl}
+🚀 TP1: ${tp1}
+📈 Score Leonce IA: ${score}
+
+#Bourse #Trading #CAC40`;
+
+            if (tweetText.length > 270) {
+                tweetText = `📊 Plan MT ${ticker || name}
+🎯 Entrée: ${entry} | 🛡️ SL: ${sl} | 🚀 TP1: ${tp1}
+📈 Score IA: ${score}
+#Euronext #Bourse`;
+            }
+
+            const tempTextArea = document.createElement('textarea');
+            tempTextArea.value = tweetText;
+            document.body.appendChild(tempTextArea);
+            tempTextArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempTextArea);
+
+            showToast(`Tweet (${tweetText.length} car.) copié dans le presse-papier !`, 'success');
+        }
+
         async function saveCurrentTrade() {
-            if (!currentReportData) return;
+            if (!currentReportData) {
+                showToast("Aucune donnée de titre chargée à enregistrer.", "amber");
+                return;
+            }
             const companyName = currentReportData.companyInfo?.name || 'Inconnu';
             const ticker = currentReportData.companyInfo?.ticker || 'INC';
             const plan = currentReportData.tradingPlan || {};
@@ -1889,15 +1938,65 @@ plot(targetPrice, "TP1", color=color.green, linewidth=2)
                     tp1: plan.tp1 || 'N/A',
                     timestamp: new Date().toISOString()
                 });
-                showToast(`Trade pour ${companyName} enregistré dans le Journal !`, 'success');
+                showToast(`Trade pour ${companyName} (${ticker}) enregistré dans le Journal !`, 'success');
+                renderTradesList();
             } catch (e) {
+                console.error("Erreur enregistrement trade:", e);
                 showToast("Erreur lors de l'enregistrement du trade.", "amber");
+            }
+        }
+
+        async function renderTradesList() {
+            const tradesList = document.getElementById('tradesList');
+            if (!tradesList) return;
+            try {
+                const trades = await db.trades.orderBy('id').reverse().toArray();
+                if (!trades || trades.length === 0) {
+                    tradesList.innerHTML = `<div class="text-center py-8 text-xs text-slate-500">Aucun trade enregistré dans le journal.</div>`;
+                    return;
+                }
+                tradesList.innerHTML = trades.map(t => `
+                    <div class="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 flex items-center justify-between gap-3 font-mono text-xs">
+                        <div class="space-y-1">
+                            <div class="flex items-center space-x-2">
+                                <span class="font-bold text-white text-sm">${t.companyName || t.ticker}</span>
+                                <span class="px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 text-[10px] border border-sky-500/20">${t.ticker}</span>
+                                <span class="px-2 py-0.5 rounded ${t.status === 'Clôturé' ? 'bg-slate-800 text-slate-400' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'} text-[10px]">${t.status || 'Actif'}</span>
+                            </div>
+                            <div class="text-[11px] text-slate-400 flex flex-wrap gap-x-3 gap-y-0.5">
+                                <span>Entrée: <strong class="text-sky-300">${t.entryZone || 'N/A'}</strong></span>
+                                <span>SL: <strong class="text-rose-400">${t.stopLoss || 'N/A'}</strong></span>
+                                <span>TP1: <strong class="text-emerald-400">${t.tp1 || 'N/A'}</strong></span>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-1 shrink-0">
+                            <button onclick="deleteTrade(${t.id})" class="p-2 text-slate-500 hover:text-rose-400 transition cursor-pointer" title="Supprimer">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (e) {
+                tradesList.innerHTML = `<div class="text-center py-4 text-xs text-rose-400">Erreur lors de la lecture des trades.</div>`;
+            }
+        }
+
+        async function deleteTrade(id) {
+            try {
+                await db.trades.delete(id);
+                renderTradesList();
+                showToast("Trade supprimé du journal.", "info");
+            } catch (e) {
+                showToast("Erreur lors de la suppression.", "amber");
             }
         }
 
         function openHistoryModal() {
             const historyModal = document.getElementById('historyModal');
-            if (historyModal) historyModal.classList.remove('hidden');
+            if (historyModal) {
+                historyModal.classList.remove('hidden');
+                renderTradesList();
+            }
         }
 
         function closeHistoryModal() {
@@ -2442,7 +2541,10 @@ Réponds EXCLUSIVEMENT par un objet JSON valide strictement respectant cette str
         window.selectPreset = selectPreset;
         window.selectVSPreset = selectVSPreset;
         window.copyPineScript = copyPineScript;
+        window.copyTweetToClipboard = copyTweetToClipboard;
         window.saveCurrentTrade = saveCurrentTrade;
+        window.deleteTrade = deleteTrade;
+        window.renderTradesList = renderTradesList;
         window.openHistoryModal = openHistoryModal;
         window.closeHistoryModal = closeHistoryModal;
         window.copyJSONToClipboard = copyJSONToClipboard;
