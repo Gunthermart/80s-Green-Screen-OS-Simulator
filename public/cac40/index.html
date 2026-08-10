@@ -1806,8 +1806,47 @@ RÉPONDS EXCLUSIVEMENT PAR UN OBJET JSON VALIDE STRICTEMENT RESPECTANT LA STRUCT
 
             output.innerHTML = `<div class="text-center py-8 space-y-2">
                 <i class="fa-solid fa-spinner animate-spin text-amber-400 text-xl"></i>
-                <p class="text-xs text-amber-300 font-bold">Analyse approfondie sur "${topic}" en cours pour ${companyName}...
+                <p class="text-xs text-amber-300 font-bold">Analyse approfondie sur "${topic}" en cours pour ${companyName}...</p>
             </div>`;
+
+            const promptText = `Fournis une analyse approfondie et détaillée sur le sujet "${topic}" pour la société "${companyName}" sur Euronext.
+Inclut des métriques clés, l'évaluation des risques et les perspectives futures. Réponds directement en texte clair ou HTML simple lisible.`;
+
+            const payload = {
+                contents: [{ parts: [{ text: promptText }] }],
+                tools: [{ "google_search": {} }]
+            };
+
+            try {
+                const res = await fetchGeminiWithRetry(payload, 30000);
+                const text = res?.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (text) {
+                    output.innerHTML = `<div class="prose prose-invert max-w-none text-xs space-y-3">${text}</div>`;
+                } else {
+                    output.innerHTML = `<p class="text-rose-400">Impossible d'obtenir le détail approfondi pour le moment.</p>`;
+                }
+            } catch (err) {
+                output.innerHTML = `<p class="text-rose-400">Erreur lors de la génération de l'analyse approfondie.</p>`;
+            }
+        }
+
+        function selectPreset(value) {
+            const input = document.getElementById('searchInput');
+            if (input) {
+                input.value = value;
+                const market = document.getElementById('marketSelect')?.value || 'ALL';
+                executeAnalysis(value, market);
+            }
+        }
+
+        function selectVSPreset(v1, v2) {
+            const input1 = document.getElementById('searchInputVS1');
+            const input2 = document.getElementById('searchInputVS2');
+            if (input1) input1.value = v1;
+            if (input2) input2.value = v2;
+            executeVSAnalysis(v1, v2);
+        }
+
         function copyPPToClipboard() {
             if (!currentReportData) {
                 showToast("Veuillez d'abord réaliser l'analyse d'un titre.", "amber");
