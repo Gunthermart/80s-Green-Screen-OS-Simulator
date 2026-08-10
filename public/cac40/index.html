@@ -1744,12 +1744,15 @@ RÉPONDS EN JSON STRUCTURÉ :
             
             if (startIndex !== -1 && endIndex !== -1 && endIndex >= startIndex) {
                 clean = clean.substring(startIndex, endIndex + 1);
+            } else {
+                console.warn("Aucun bloc JSON valide trouvé dans la réponse :", rawText);
+                return null;
             }
             
             try {
                 return JSON.parse(clean);
             } catch (e) {
-                console.error("Erreur de décodage JSON:", e);
+                console.error("Erreur de décodage JSON:", e, "\nTexte à décoder :", clean);
                 return null;
             }
         }
@@ -1948,10 +1951,22 @@ RÉPONDS EN JSON STRUCTURÉ :
         async function executeVSAnalysis(s1, s2) {
             const loadingContainer = document.getElementById('loadingContainer');
             const vsResultsContainer = document.getElementById('vsResultsContainer');
+            const errorContainer = document.getElementById('errorContainer');
+            const errorMessage = document.getElementById('errorMessage');
+
+            if (errorContainer) errorContainer.classList.add('hidden');
             if (loadingContainer) loadingContainer.classList.remove('hidden');
 
+            const promptText = `Compare les deux sociétés Euronext "${s1}" et "${s2}".
+RÉPONDS EXCLUSIVEMENT PAR UN OBJET JSON VALIDE STRICTEMENT RESPECTANT LE FORMAT SUIVANT (SANS AUCUN TEXTE NI EXPLICATION EN DEHORS DU JSON) :
+{
+  "stock1": { "name": "${s1}", "ticker": "MC", "isin": "FR0000121014", "market": "Euronext Paris", "peRatio": "22.4x", "evEbitda": "12.1x", "operatingMargin": "25.2%", "piotroskiScore": "7/9", "altmanZScore": "4.15", "fcfYield": "4.8%", "dividendYield": "2.1%", "revenueGrowth": "+8.5%", "shortInterestPct": "0.2%", "overallScore": 84 },
+  "stock2": { "name": "${s2}", "ticker": "KER", "isin": "FR0000121485", "market": "Euronext Paris", "peRatio": "15.8x", "evEbitda": "8.4x", "operatingMargin": "18.5%", "piotroskiScore": "5/9", "altmanZScore": "2.85", "fcfYield": "6.2%", "dividendYield": "3.8%", "revenueGrowth": "-3.1%", "shortInterestPct": "1.4%", "overallScore": 68 },
+  "arbitrage": { "winnerChoice": "stock1", "winnerName": "${s1}", "verdictTitle": "Avantage net", "valuationAnalysis": "Analyse de valorisation...", "riskRewardAnalysis": "Analyse du risque...", "keyTakeaway": "Conclusion..." }
+}`;
+
             const payload = {
-                contents: [{ parts: [{ text: `Compare les deux sociétés Euronext "${s1}" et "${s2}".` }] }],
+                contents: [{ parts: [{ text: promptText }] }],
                 tools: [{ "google_search": {} }]
             };
 
@@ -1961,36 +1976,90 @@ RÉPONDS EN JSON STRUCTURÉ :
                 const parsed = cleanAndParseJSON(text);
 
                 if (loadingContainer) loadingContainer.classList.add('hidden');
-                if (vsResultsContainer) vsResultsContainer.classList.remove('hidden');
 
-                if (parsed) renderVSReport(parsed);
+                if (parsed) {
+                    if (vsResultsContainer) vsResultsContainer.classList.remove('hidden');
+                    renderVSReport(parsed);
+                } else {
+                    if (errorContainer) {
+                        errorContainer.classList.remove('hidden');
+                        if (errorMessage) errorMessage.innerText = "La réponse générée n'a pas pu être convertie en format JSON. Veuillez relancer la comparaison.";
+                    }
+                }
             } catch (err) {
                 if (loadingContainer) loadingContainer.classList.add('hidden');
+                if (errorContainer) {
+                    errorContainer.classList.remove('hidden');
+                    if (errorMessage) errorMessage.innerText = "Erreur lors de l'exécution du comparateur VS.";
+                }
             }
-        }
-
-        function renderVSReport(vsData) {
-            const s1 = vsData.stock1 || {};
-            const s2 = vsData.stock2 || {};
-            const arb = vsData.arbitrage || {};
-
-            document.getElementById('vsTitleStock1').innerText = `${s1.name} (${s1.ticker})`;
-            document.getElementById('vsTitleStock2').innerText = `${s2.name} (${s2.ticker})`;
-            document.getElementById('vsValuationAnalysis').innerText = arb.valuationAnalysis || '---';
-            document.getElementById('vsRiskRewardAnalysis').innerText = arb.riskRewardAnalysis || '---';
-            document.getElementById('vsKeyTakeaway').innerText = arb.keyTakeaway || '---';
         }
 
         async function executeAnalysis(query, marketFilter) {
             const loadingContainer = document.getElementById('loadingContainer');
             const resultsContainer = document.getElementById('resultsContainer');
             const welcomeContainer = document.getElementById('welcomeContainer');
+            const errorContainer = document.getElementById('errorContainer');
+            const errorMessage = document.getElementById('errorMessage');
 
             if (welcomeContainer) welcomeContainer.classList.add('hidden');
+            if (errorContainer) errorContainer.classList.add('hidden');
             if (loadingContainer) loadingContainer.classList.remove('hidden');
 
+            const promptText = `Effectue une analyse factuelle récente et vérifiée pour la société cotée Euronext "${query}".
+${marketFilter !== 'ALL' ? 'Marché privilégié : ' + marketFilter : ''}
+
+RÉPONDS EXCLUSIVEMENT PAR UN OBJET JSON VALIDE (SANS TEXTE, COMMENTAIRE OU EXPLICATION EN DEHORS DU JSON).
+Structure JSON à respecter impérativement :
+{
+  "companyInfo": {
+    "name": "Nom complet de la société",
+    "ticker": "Ticker",
+    "isin": "Code ISIN",
+    "market": "Euronext Paris / Amsterdam / etc.",
+    "index": "CAC 40 / AEX / etc.",
+    "icbSector": "Secteur d'activité",
+    "headquarters": "Siège social",
+    "summary": "Résumé du modèle économique...",
+    "competitivePositioning": "Avantage concurrentiel (Moat)..."
+  },
+  "financialKPIs": {
+    "currency": "M€",
+    "period": "Derniers résultats",
+    "revenue": "Chiffre d'affaires avec unité",
+    "netIncome": "Résultat net avec unité",
+    "operatingMargin": "Marge opérationnelle en %",
+    "netDebt": "Dette nette avec unité"
+  },
+  "healthScores": {
+    "piotroskiScore": "7/9",
+    "piotroskiAnalysis": "Explication...",
+    "altmanZScore": "4.2",
+    "altmanStatus": "Zone Sûre 🟢"
+  },
+  "leonceDiagnostic": {
+    "overallScore": 84,
+    "shortTermSignal": "Favorable 🟢",
+    "shortTermAnalysis": "Analyse CT...",
+    "mediumTermSignal": "Solide 🟢",
+    "mediumTermAnalysis": "Analyse MT..."
+  },
+  "tradingPlan": {
+    "entryZone": "680 - 700 €",
+    "stopLoss": "640 €",
+    "tp1": "780 €",
+    "tp2": "850 €"
+  },
+  "qvmIndicator": {
+    "overallScore": 82,
+    "qualityAnalysis": "Analyse qualité...",
+    "valuationAnalysis": "Analyse valorisation...",
+    "momentumAnalysis": "Analyse momentum..."
+  }
+}`;
+
             const payload = {
-                contents: [{ parts: [{ text: `Analyse factuelle récente pour la société Euronext "${query}".` }] }],
+                contents: [{ parts: [{ text: promptText }] }],
                 tools: [{ "google_search": {} }]
             };
 
@@ -2004,9 +2073,18 @@ RÉPONDS EN JSON STRUCTURÉ :
                 if (parsed) {
                     currentReportData = parsed;
                     renderReport(parsed);
+                } else {
+                    if (errorContainer) {
+                        errorContainer.classList.remove('hidden');
+                        if (errorMessage) errorMessage.innerText = "La réponse reçue est sous forme de texte brut et n'a pas pu être convertie en JSON. Veuillez relancer l'analyse.";
+                    }
                 }
             } catch (err) {
                 if (loadingContainer) loadingContainer.classList.add('hidden');
+                if (errorContainer) {
+                    errorContainer.classList.remove('hidden');
+                    if (errorMessage) errorMessage.innerText = "Une erreur est survenue lors de l'analyse.";
+                }
             }
         }
 
