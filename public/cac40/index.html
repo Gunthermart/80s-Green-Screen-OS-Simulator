@@ -1552,7 +1552,7 @@
             const mockSingle = {
                 companyInfo: { name: "LVMH Moët Hennessy", ticker: "MC", isin: "FR0000121014", market: "Euronext Paris", index: "CAC 40", icbSector: "Luxe", headquarters: "Paris, France", summary: "Leader mondial des produits de luxe.", competitivePositioning: "Avantage concurrentiel (Moat) étendu." },
                 financialKPIs: { currency: "M€", period: "Récente", revenue: "86 153 M€", netIncome: "15 174 M€", operatingMargin: "25.6%", netDebt: "10 742 M€" },
-                healthScores: { piotroskiScore: "7/9", piotroskiAnalysis: "Bilan très solide.", altmanZScore: "4.25", altmanStatus: "Zone Sûre 🟢" },
+                healthScores: { piotroskiScore: "7/9", piotroskiAnalysis: "Bilan très solide et rentabilité élevée.", altmanZScore: "4.25", altmanStatus: "Zone Sûre 🟢", altmanAnalysis: "Risque de défaillance quasi nul à 2 ans.", dividendYield: "2.8%", dividendSafety: "Sécurisé 🟢", dividendAnalysis: "Dividende très bien couvert par les flux de trésorerie libres (FCF)." },
                 growthAnalysis: { growthSummary: "Solide dynamique tirée par la division Mode & Maroquinerie.", growthDrivers: ["Asie", "Pricing Power"], growthOutlook: "Perspectives favorables." },
                 governanceAndCapital: { shareholders: ["Famille Arnault (48%)", "Flottant (52%)"], governanceNotes: "Conseil d'administration indépendant et stable." },
                 perspectivesAndGuidance: { guidanceSummary: "Objectif de croissance organique supérieure au marché en 2026-2027.", strategicPillars: ["Efficacité sélective", "Investissement dans la désirabilité"] },
@@ -1591,7 +1591,7 @@ RÉPONDS EXCLUSIVEMENT PAR UN OBJET JSON VALIDE STRICTEMENT RESPECTANT LA STRUCT
     "name": "Nom de la société", "ticker": "MC", "isin": "FR0000121014", "market": "Euronext Paris", "index": "CAC 40", "icbSector": "Secteur", "headquarters": "Siège", "summary": "Résumé...", "competitivePositioning": "Moat..."
   },
   "financialKPIs": { "currency": "M€", "period": "Derniers résultats", "revenue": "86 153 M€", "netIncome": "15 174 M€", "operatingMargin": "25.6%", "netDebt": "10 742 M€" },
-  "healthScores": { "piotroskiScore": "7/9", "piotroskiAnalysis": "Explication...", "altmanZScore": "4.2", "altmanStatus": "Zone Sûre 🟢" },
+  "healthScores": { "piotroskiScore": "7/9", "piotroskiAnalysis": "Explication solidité...", "altmanZScore": "4.2", "altmanStatus": "Zone Sûre 🟢", "altmanAnalysis": "Analyse solvabilité...", "dividendYield": "2.8%", "dividendSafety": "Sûr 🟢", "dividendAnalysis": "Soutenabilité du dividende via FCF..." },
   "growthAnalysis": { "growthSummary": "Tendance...", "growthDrivers": ["Moteur 1", "Moteur 2"], "growthOutlook": "Perspectives..." },
   "governanceAndCapital": { "shareholders": ["Actionnaire 1 (50%)"], "governanceNotes": "Note gouvernance..." },
   "perspectivesAndGuidance": { "guidanceSummary": "Guidance officielle...", "strategicPillars": ["Pilier 1", "Pilier 2"] },
@@ -1673,8 +1673,36 @@ RÉPONDS EXCLUSIVEMENT PAR UN OBJET JSON VALIDE STRICTEMENT RESPECTANT LA STRUCT
             document.getElementById('kpiMargin').innerText = kpi.operatingMargin || '---';
             document.getElementById('kpiDebt').innerText = kpi.netDebt || '---';
 
-            document.getElementById('piotroskiValue').innerText = health.piotroskiScore || '--/9';
+            document.getElementById('piotroskiValue').innerText = health.piotroskiScore || '-- / 9';
+            if (document.getElementById('piotroskiAnalysis')) {
+                document.getElementById('piotroskiAnalysis').innerText = health.piotroskiAnalysis || 'Évaluation de la solidité bilancielle.';
+            }
+
             document.getElementById('altmanValue').innerText = health.altmanZScore || '--';
+            if (document.getElementById('altmanAnalysis')) {
+                document.getElementById('altmanAnalysis').innerText = health.altmanAnalysis || health.altmanStatus || 'Risque théorique de défaillance à 2 ans.';
+            }
+
+            // Fallback pour rechercher le rendement/dividende dans les ratios financiers si non présent dans healthScores
+            let divYieldText = health.dividendYield || health.dividendSafety;
+            let divAnalysisText = health.dividendAnalysis;
+
+            if (!divYieldText && data.financialRatios && Array.isArray(data.financialRatios)) {
+                const divRatio = data.financialRatios.find(r => 
+                    r.ratioName && (r.ratioName.toLowerCase().includes('dividende') || r.ratioName.toLowerCase().includes('yield') || r.ratioName.toLowerCase().includes('rendement'))
+                );
+                if (divRatio) {
+                    divYieldText = divRatio.value;
+                    if (!divAnalysisText) divAnalysisText = divRatio.analysis;
+                }
+            }
+
+            if (document.getElementById('dividendYieldValue')) {
+                document.getElementById('dividendYieldValue').innerText = divYieldText || 'N/A';
+            }
+            if (document.getElementById('dividendAnalysis')) {
+                document.getElementById('dividendAnalysis').innerText = divAnalysisText || 'Soutenabilité basée sur les FCF.';
+            }
 
             if (document.getElementById('growthSummaryText')) document.getElementById('growthSummaryText').innerText = growth.growthSummary || 'Données de croissance disponibles.';
             if (document.getElementById('growthOutlookText')) document.getElementById('growthOutlookText').innerText = growth.growthOutlook || 'Perspectives de croissance solides.';
