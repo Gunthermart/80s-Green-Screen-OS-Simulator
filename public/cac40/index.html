@@ -1493,8 +1493,17 @@
             try {
                 return JSON.parse(clean);
             } catch (e) {
-                console.error("Erreur de décodage JSON:", e);
-                return null;
+                try {
+                    // Repair common JSON syntax glitches from AI generations
+                    let repaired = clean
+                        .replace(/,\s*([}\]])/g, '$1') // Trailing commas
+                        .replace(/:\s*\.\s*/g, ': "" ') // Broken syntax like ":."
+                        .replace(/[\r\n]+/g, " "); // Unescaped linebreaks
+                    return JSON.parse(repaired);
+                } catch (err) {
+                    console.error("Erreur de décodage JSON après réparation:", e);
+                    return null;
+                }
             }
         }
 
@@ -1848,14 +1857,15 @@ RÉPONDS EXCLUSIVEMENT PAR UN OBJET JSON VALIDE STRICTEMENT RESPECTANT LA STRUCT
             const promptText = `Fournis une analyse financière et stratégique approfondie et hautement pertinente sur le thème "${topic}" pour la société "${companyName}" ${ticker} cotée sur Euronext.
 Secteur: ${companyInfo.icbSector || 'Non spécifié'}.
 
-Tu dois répondre SOIT sous la forme d'un objet JSON strictement formaté, SOIT en HTML enrichi avec classes Tailwind.
-Si tu choisis le JSON, respecte impérativement cette structure :
+RÉPONDS EXCLUSIVEMENT PAR UN OBJET JSON STRICTEMENT VALIDE ET BIEN FORMATÉ (SANS AUCUN TEXTE EN DEHORS DU JSON).
+
+Structure JSON obligatoire :
 {
   "summary": "Synthèse exécutive claire et directe (2-3 phrases).",
   "verdict": "Conclusion / Signal (ex: Intérêt Acheteur Fort, Marge de Sécurité 15%, Risque Modéré)",
-  "verdictColor": "emerald" (ou "sky", "amber", "rose"),
+  "verdictColor": "emerald",
   "metrics": [
-    { "label": "Métrique / Assumption", "value": "Valeur", "note": "Explication courte", "color": "emerald" }
+    { "label": "Chiffre d'Affaires 2025", "value": "90,5 M€", "note": "Forte progression", "color": "emerald" }
   ],
   "sections": [
     {
@@ -1863,15 +1873,9 @@ Si tu choisis le JSON, respecte impérativement cette structure :
       "icon": "fa-chart-pie",
       "content": "Explication détaillée, chiffrée et factuelle...",
       "bullets": ["Point clé 1", "Point clé 2"]
-    },
-    {
-      "title": "Titre du Pilier 2",
-      "icon": "fa-shield-halved",
-      "content": "Analyse complémentaire...",
-      "bullets": ["Point à surveiller"]
     }
   ],
-  "takeaway": "Recommandation / Conclusion stratégique pour un investisseur moyen terme."
+  "takeaway": "Recommandation ou conclusion stratégique à moyen terme."
 }`;
 
             const payload = {
@@ -1892,6 +1896,9 @@ Si tu choisis le JSON, respecte impérativement cette structure :
 
                 if (parsedJson && (parsedJson.summary || parsedJson.sections)) {
                     output.innerHTML = renderDeepDiveJSON(parsedJson, topic, companyName);
+                } else if (text.trim().startsWith('{') || text.includes('"summary"')) {
+                    // Fallback JSON extractor in case JSON syntax is corrupted by AI
+                    output.innerHTML = repairAndRenderBrokenJSON(text, topic);
                 } else {
                     output.innerHTML = formatDeepDiveMarkdown(text, topic);
                 }
@@ -1968,6 +1975,70 @@ Si tu choisis le JSON, respecte impérativement cette structure :
                                 <span>Conclusion Stratégique</span>
                             </div>
                             <p class="text-xs leading-relaxed text-slate-200">${data.takeaway}</p>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+
+        // Emergency parser if AI outputs corrupted JSON containing text fragments
+        function repairAndRenderBrokenJSON(rawText, topic) {
+            const extractString = (key) => {
+                const reg = new RegExp(`"${key}"\\s*:\\s*"([^"]+)"`, 'i');
+                const m = rawText.match(reg);
+                return m ? m[1] : null;
+            };
+
+            const summary = extractString('summary') || 'Synthèse d\'analyse générée par Leonce IA.';
+            const verdict = extractString('verdict') || 'Analyse Complétée';
+            const takeaway = extractString('takeaway');
+
+            // Extract bullet points from stringified text
+            const bulletMatches = rawText.match(/"bullets"\s*:\s*\[([\s\S]*?)\]/i);
+            let bullets = [];
+            if (bulletMatches && bulletMatches[1]) {
+                bullets = Array.from(bulletMatches[1].matchAll(/"([^"]+)"/g)).map(m => m[1]);
+            }
+
+            // Extract text blocks
+            let cleanContent = rawText
+                .replace(/\{|\}|\[|\]|"/g, ' ')
+                .replace(/summary|verdict|metrics|sections|bullets|takeaway/g, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+
+            return `
+                <div class="space-y-4 text-xs">
+                    <div class="p-4 rounded-xl bg-slate-900 border border-amber-500/30 space-y-2">
+                        <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+                            <span class="font-mono text-[11px] text-amber-400 uppercase font-bold">Analyse : ${topic}</span>
+                            <span class="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold text-[10px] border border-emerald-500/30">${verdict}</span>
+                        </div>
+                        <p class="text-xs text-slate-200 leading-relaxed">${summary}</p>
+                    </div>
+
+                    ${bullets.length > 0 ? `
+                        <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2">
+                            <div class="font-bold text-sky-400 font-mono text-[11px] uppercase">Points Clés Identifiés :</div>
+                            <ul class="space-y-1.5">
+                                ${bullets.map(b => `
+                                    <li class="flex items-start space-x-2 text-slate-300">
+                                        <i class="fa-solid fa-check text-emerald-400 text-[10px] mt-1 shrink-0"></i>
+                                        <span>${b}</span>
+                                    </li>
+                                `).join('')}
+                            </ul>
+                        </div>
+                    ` : ''}
+
+                    <div class="p-4 rounded-xl bg-slate-900/60 border border-slate-800/80 text-slate-300 leading-relaxed text-xs">
+                        ${cleanContent.slice(0, 800)}...
+                    </div>
+
+                    ${takeaway ? `
+                        <div class="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-slate-200 text-xs">
+                            <strong class="text-amber-400 block mb-1">Takeaway :</strong>
+                            ${takeaway}
                         </div>
                     ` : ''}
                 </div>
