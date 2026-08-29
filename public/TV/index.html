@@ -8,6 +8,9 @@
   <!-- Hls.js CDN pour la lecture des flux vidéo et radio HLS (.m3u8) -->
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.8/dist/hls.min.js"></script>
 
+  <!-- Three.js CDN pour les animations 3D WebGL haute performance -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
   <style>
     :root {
       --bg-base: #07080c;
@@ -348,7 +351,8 @@
     }
 
     /* Canvas d'Animation Générative et Audio-Réactive */
-    canvas#visualizer-canvas {
+    canvas#visualizer-canvas,
+    canvas#visualizer-canvas-3d {
       position: absolute;
       inset: 0;
       width: 100%;
@@ -357,108 +361,18 @@
       pointer-events: none;
     }
 
-    .audio-visualizer-overlay {
-      position: absolute;
-      inset: 0;
-      background: radial-gradient(circle at center, rgba(17, 20, 32, 0.4), rgba(7, 8, 12, 0.95));
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 18px;
-      z-index: 5;
-      padding: 20px;
-    }
-
-    .audio-cover {
-      width: 140px;
-      height: 140px;
-      border-radius: var(--radius-lg);
-      background: var(--bg-surface-elevated);
-      border: 2px solid var(--border-glass);
-      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6);
-      object-fit: cover;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-      z-index: 6;
-      transition: transform 0.3s ease;
-    }
-
-    #theater-stage:fullscreen .audio-cover,
-    #theater-stage:-webkit-full-screen .audio-cover {
-      width: 180px;
-      height: 180px;
-    }
-
-    .audio-cover img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-
-    .audio-info-stage {
-      text-align: center;
-      max-width: 80%;
-      z-index: 6;
-    }
-
-    .audio-stage-title {
-      font-size: 1.4rem;
-      font-weight: 700;
-      color: var(--text-primary);
-      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
-    }
-
-    .audio-stage-meta {
-      font-size: 0.95rem;
-      color: var(--text-secondary);
-      margin-top: 4px;
-      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
-    }
-
-    /* Bouton d'action haut droite sur le lecteur */
-    .stage-top-bar {
-      position: absolute;
-      top: 14px;
-      right: 14px;
-      z-index: 25;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .stage-action-btn {
-      background: rgba(15, 18, 29, 0.7);
-      backdrop-filter: blur(10px);
-      border: 1px solid var(--border-glass);
-      color: var(--text-primary);
-      width: 40px;
-      height: 40px;
-      border-radius: var(--radius-full);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      transition: var(--transition-smooth);
-    }
-
-    .stage-action-btn:hover {
-      background: rgba(99, 102, 241, 0.85);
-      transform: scale(1.08);
-      border-color: rgba(255, 255, 255, 0.4);
-    }
-
     /* Selector de mode graphique */
     .visualizer-preset-selector {
       display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
       gap: 6px;
-      background: rgba(15, 18, 29, 0.6);
+      max-width: 90%;
+      background: rgba(15, 18, 29, 0.75);
       backdrop-filter: blur(12px);
       border: 1px solid var(--border-glass);
-      border-radius: var(--radius-full);
-      padding: 3px;
+      border-radius: var(--radius-md);
+      padding: 6px;
       z-index: 6;
       margin-top: 8px;
     }
@@ -1043,8 +957,9 @@
           <div class="video-viewport" id="video-viewport">
             <video id="unified-media" playsinline></video>
 
-            <!-- Canvas d'animation graphique accéléré GPU -->
+            <!-- Canvas 2D & Canvas 3D WebGL (Three.js) -->
             <canvas id="visualizer-canvas"></canvas>
+            <canvas id="visualizer-canvas-3d"></canvas>
             
             <div id="audio-overlay" class="audio-visualizer-overlay">
               <div class="audio-cover">
@@ -1060,11 +975,16 @@
                 <p id="stage-meta" class="audio-stage-meta">Sélectionnez un flux pour débuter la diffusion</p>
               </div>
 
-              <!-- Selector de style visuel -->
+              <!-- Selector de style visuel (2D + 3D Three.js) -->
               <div class="visualizer-preset-selector" id="visualizer-preset-selector">
                 <button class="preset-btn active" data-preset="spectrum">Spectre Cyber</button>
                 <button class="preset-btn" data-preset="particles">Particules Pulse</button>
                 <button class="preset-btn" data-preset="aurora">Aurore Floue</button>
+                <button class="preset-btn" data-preset="tunnel">🚀 Hyperdrive 3D</button>
+                <button class="preset-btn" data-preset="cybersphere">🌐 Sphère 3D</button>
+                <button class="preset-btn" data-preset="synthwave">🌅 Synthwave 3D</button>
+                <button class="preset-btn" data-preset="vortex">🌀 Vortex 3D</button>
+                <button class="preset-btn" data-preset="matrixCubes">🧊 Cubes 3D</button>
               </div>
             </div>
           </div>
@@ -1405,40 +1325,241 @@
     }
 
     /**
-     * Engine d'animation graphique réactif au son / génératif fluide
-     * Optimisé avec accélération matérielle 2D (requestAnimationFrame) pour éviter l'utilisation excessive de CPU
+     * Engine d'animation graphique réactif au son & 3D WebGL (Three.js)
      */
     class ReactiveVisualizerEngine {
-      constructor(canvasElement, mediaElement) {
-        this.canvas = canvasElement;
-        this.ctx = canvasElement.getContext('2d', { alpha: true });
+      constructor(canvas2DElement, canvas3DElement, mediaElement) {
+        this.canvas2D = canvas2DElement;
+        this.ctx2D = canvas2DElement.getContext('2d', { alpha: true });
+        this.canvas3D = canvas3DElement;
         this.mediaEl = mediaElement;
-        this.preset = 'spectrum'; // 'spectrum' | 'particles' | 'aurora'
+        
+        this.preset = 'spectrum'; // 2D: 'spectrum','particles','aurora' | 3D: 'tunnel','cybersphere','synthwave','vortex','matrixCubes'
         this.particles = [];
         this.isLoopRunning = false;
-        
+
+        this.initThreeJS();
         this.resize();
         window.addEventListener('resize', () => this.resize());
         this.initParticles();
       }
 
+      initThreeJS() {
+        if (typeof THREE === 'undefined') return;
+
+        // Scène & Rendu WebGL
+        this.scene = new THREE.Scene();
+        this.camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
+        this.camera.position.z = 15;
+
+        this.renderer = new THREE.WebGLRenderer({
+          canvas: this.canvas3D,
+          alpha: true,
+          antialias: true
+        });
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+
+        // Groupes 3D pour chaque preset
+        this.threeGroups = {
+          tunnel: new THREE.Group(),
+          cybersphere: new THREE.Group(),
+          synthwave: new THREE.Group(),
+          vortex: new THREE.Group(),
+          matrixCubes: new THREE.Group()
+        };
+
+        Object.values(this.threeGroups).forEach(g => this.scene.add(g));
+
+        this.setup3DTunnel();
+        this.setup3DCybersphere();
+        this.setup3DSynthwave();
+        this.setup3DVortex();
+        this.setup3DMatrixCubes();
+      }
+
+      /* --- 1. TUNNEL HYPERDRIVE 3D --- */
+      setup3DTunnel() {
+        const group = this.threeGroups.tunnel;
+        const count = 600;
+        const geometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(count * 3);
+        const colors = new Float32Array(count * 3);
+
+        const color1 = new THREE.Color('#6366f1');
+        const color2 = new THREE.Color('#06b6d4');
+
+        for (let i = 0; i < count; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const radius = 3 + Math.random() * 5;
+          positions[i * 3] = Math.cos(angle) * radius;
+          positions[i * 3 + 1] = Math.sin(angle) * radius;
+          positions[i * 3 + 2] = (Math.random() - 0.5) * 60;
+
+          const mixColor = Math.random() > 0.5 ? color1 : color2;
+          colors[i * 3] = mixColor.r;
+          colors[i * 3 + 1] = mixColor.g;
+          colors[i * 3 + 2] = mixColor.b;
+        }
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+        const material = new THREE.PointsMaterial({
+          size: 0.25,
+          vertexColors: true,
+          transparent: true,
+          opacity: 0.95
+        });
+
+        this.tunnelPoints = new THREE.Points(geometry, material);
+        group.add(this.tunnelPoints);
+      }
+
+      /* --- 2. SPHERE CYBER 3D --- */
+      setup3DCybersphere() {
+        const group = this.threeGroups.cybersphere;
+        
+        // Icosaèdre central fil de fer
+        const geo = new THREE.IcosahedronGeometry(4, 2);
+        const mat = new THREE.MeshBasicMaterial({
+          color: 0x06b6d4,
+          wireframe: true,
+          transparent: true,
+          opacity: 0.6
+        });
+        this.cyberSphereMesh = new THREE.Mesh(geo, mat);
+        group.add(this.cyberSphereMesh);
+
+        // Halo de particules orbitales
+        const pGeo = new THREE.BufferGeometry();
+        const pCount = 300;
+        const pPos = new Float32Array(pCount * 3);
+
+        for (let i = 0; i < pCount; i++) {
+          const u = Math.random();
+          const v = Math.random();
+          const theta = u * 2.0 * Math.PI;
+          const phi = Math.acos(2.0 * v - 1.0);
+          const r = 5.2 + Math.random() * 1.5;
+
+          pPos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+          pPos[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+          pPos[i * 3 + 2] = r * Math.cos(phi);
+        }
+
+        pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+        const pMat = new THREE.PointsMaterial({ color: 0xec4899, size: 0.15, transparent: true, opacity: 0.8 });
+        this.cyberSphereParticles = new THREE.Points(pGeo, pMat);
+        group.add(this.cyberSphereParticles);
+      }
+
+      /* --- 3. GRILLE SYNTHWAVE 3D --- */
+      setup3DSynthwave() {
+        const group = this.threeGroups.synthwave;
+
+        // Grille fil de fer au sol
+        const grid = new THREE.GridHelper(60, 40, 0xec4899, 0x6366f1);
+        grid.position.y = -4;
+        this.synthwaveGrid = grid;
+        group.add(grid);
+
+        // Soleil néon en arrière-plan
+        const sunGeo = new THREE.CircleGeometry(4, 32);
+        const sunMat = new THREE.MeshBasicMaterial({ color: 0xff007f, transparent: true, opacity: 0.85 });
+        const sun = new THREE.Mesh(sunGeo, sunMat);
+        sun.position.set(0, 2, -25);
+        group.add(sun);
+      }
+
+      /* --- 4. VORTEX QUANTIQUE 3D --- */
+      setup3DVortex() {
+        const group = this.threeGroups.vortex;
+        const count = 800;
+        const geo = new THREE.BufferGeometry();
+        const pos = new Float32Array(count * 3);
+        const colors = new Float32Array(count * 3);
+
+        for (let i = 0; i < count; i++) {
+          const radius = Math.random() * 9;
+          const spin = radius * 1.5;
+          const angle = Math.random() * Math.PI * 2 + spin;
+
+          pos[i * 3] = Math.cos(angle) * radius;
+          pos[i * 3 + 1] = (Math.random() - 0.5) * 3;
+          pos[i * 3 + 2] = Math.sin(angle) * radius;
+
+          const c = new THREE.Color().setHSL(0.5 + radius * 0.04, 0.9, 0.6);
+          colors[i * 3] = c.r;
+          colors[i * 3 + 1] = c.g;
+          colors[i * 3 + 2] = c.b;
+        }
+
+        geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+        geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        const mat = new THREE.PointsMaterial({ size: 0.18, vertexColors: true, transparent: true, opacity: 0.9 });
+        this.vortexParticles = new THREE.Points(geo, mat);
+        group.add(this.vortexParticles);
+      }
+
+      /* --- 5. CUBES MATRICE 3D --- */
+      setup3DMatrixCubes() {
+        const group = this.threeGroups.matrixCubes;
+        this.matrixCubesList = [];
+
+        const cubeGeo = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+
+        for (let x = -2; x <= 2; x++) {
+          for (let z = -2; z <= 2; z++) {
+            const mat = new THREE.MeshBasicMaterial({
+              color: (x + z) % 2 === 0 ? 0x6366f1 : 0x06b6d4,
+              wireframe: true,
+              transparent: true,
+              opacity: 0.75
+            });
+            const mesh = new THREE.Mesh(cubeGeo, mat);
+            mesh.position.set(x * 1.8, 0, z * 1.8);
+            group.add(mesh);
+            this.matrixCubesList.push({ mesh, baseZ: z * 1.8, baseX: x * 1.8 });
+          }
+        }
+      }
+
       setPreset(newPreset) {
         this.preset = newPreset;
+        const is3DPreset = ['tunnel', 'cybersphere', 'synthwave', 'vortex', 'matrixCubes'].includes(newPreset);
+
+        // Basculer l'affichage des canvas 2D et 3D
+        this.canvas2D.style.display = is3DPreset ? 'none' : 'block';
+        this.canvas3D.style.display = is3DPreset ? 'block' : 'none';
+
+        if (is3DPreset && this.threeGroups) {
+          Object.keys(this.threeGroups).forEach(key => {
+            this.threeGroups[key].visible = (key === newPreset);
+          });
+        }
       }
 
       resize() {
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        this.width = this.canvas.offsetWidth || 600;
-        this.height = this.canvas.offsetHeight || 300;
-        this.canvas.width = this.width * dpr;
-        this.canvas.height = this.height * dpr;
-        this.ctx.scale(dpr, dpr);
+        this.width = this.canvas2D.offsetWidth || 600;
+        this.height = this.canvas2D.offsetHeight || 300;
+
+        // Resize Canvas 2D
+        this.canvas2D.width = this.width * dpr;
+        this.canvas2D.height = this.height * dpr;
+        this.ctx2D.scale(dpr, dpr);
+
+        // Resize Canvas 3D Three.js
+        if (this.renderer) {
+          this.renderer.setSize(this.width, this.height, false);
+          this.camera.aspect = this.width / this.height;
+          this.camera.updateProjectionMatrix();
+        }
       }
 
       initParticles() {
         this.particles = [];
-        const count = 45;
-        for (let i = 0; i < count; i++) {
+        for (let i = 0; i < 45; i++) {
           this.particles.push({
             x: Math.random() * (this.width || 600),
             y: Math.random() * (this.height || 300),
@@ -1461,23 +1582,71 @@
         if (!this.isLoopRunning) return;
         requestAnimationFrame(() => this.loop());
 
-        const w = this.width;
-        const h = this.height;
-        if (!w || !h) return;
-
-        this.ctx.clearRect(0, 0, w, h);
         const isPlaying = !this.mediaEl.paused;
         const time = Date.now() * 0.002;
 
-        if (this.preset === 'spectrum') {
-          this.renderCyberSpectrum(w, h, time, isPlaying);
-        } else if (this.preset === 'particles') {
-          this.renderParticleField(w, h, time, isPlaying);
-        } else if (this.preset === 'aurora') {
-          this.renderAuroraGlow(w, h, time, isPlaying);
+        const is3DPreset = ['tunnel', 'cybersphere', 'synthwave', 'vortex', 'matrixCubes'].includes(this.preset);
+
+        if (is3DPreset && this.renderer) {
+          this.renderThreeJS(time, isPlaying);
+        } else {
+          const w = this.width;
+          const h = this.height;
+          if (!w || !h) return;
+
+          this.ctx2D.clearRect(0, 0, w, h);
+          if (this.preset === 'spectrum') {
+            this.renderCyberSpectrum(w, h, time, isPlaying);
+          } else if (this.preset === 'particles') {
+            this.renderParticleField(w, h, time, isPlaying);
+          } else if (this.preset === 'aurora') {
+            this.renderAuroraGlow(w, h, time, isPlaying);
+          }
         }
       }
 
+      /* --- ANIMATION RENDU THREE.JS 3D --- */
+      renderThreeJS(time, isPlaying) {
+        const speed = isPlaying ? 1.5 : 0.4;
+
+        if (this.preset === 'tunnel') {
+          const pos = this.tunnelPoints.geometry.attributes.position.array;
+          for (let i = 0; i < pos.length / 3; i++) {
+            pos[i * 3 + 2] += 0.25 * speed;
+            if (pos[i * 3 + 2] > 10) pos[i * 3 + 2] = -50;
+          }
+          this.tunnelPoints.geometry.attributes.position.needsUpdate = true;
+          this.threeGroups.tunnel.rotation.z = time * 0.15 * speed;
+
+        } else if (this.preset === 'cybersphere') {
+          this.cyberSphereMesh.rotation.x = time * 0.3 * speed;
+          this.cyberSphereMesh.rotation.y = time * 0.5 * speed;
+          this.cyberSphereParticles.rotation.y = -time * 0.2 * speed;
+
+          const scale = isPlaying ? 1 + Math.sin(time * 3) * 0.12 : 1;
+          this.cyberSphereMesh.scale.set(scale, scale, scale);
+
+        } else if (this.preset === 'synthwave') {
+          this.synthwaveGrid.position.z = (time * 4 * speed) % 2;
+          this.threeGroups.synthwave.rotation.y = Math.sin(time * 0.5) * 0.05;
+
+        } else if (this.preset === 'vortex') {
+          this.vortexParticles.rotation.y = time * 0.4 * speed;
+          this.vortexParticles.rotation.z = Math.sin(time * 0.2) * 0.2;
+
+        } else if (this.preset === 'matrixCubes') {
+          this.threeGroups.matrixCubes.rotation.y = time * 0.25 * speed;
+          this.matrixCubesList.forEach((item, index) => {
+            const h = isPlaying ? Math.sin(time * 2.5 + index) * 2.5 : Math.sin(time * 0.8 + index) * 0.4;
+            item.mesh.position.y = h;
+            item.mesh.rotation.x = time + index;
+          });
+        }
+
+        this.renderer.render(this.scene, this.camera);
+      }
+
+      /* --- ANIMATIONS 2D CANVAS --- */
       renderCyberSpectrum(w, h, time, isPlaying) {
         const barCount = 42;
         const barGap = 4;
@@ -1491,19 +1660,19 @@
           const x = i * (barWidth + barGap);
           const y = h - amp;
 
-          const gradient = this.ctx.createLinearGradient(0, h, 0, y);
+          const gradient = this.ctx2D.createLinearGradient(0, h, 0, y);
           gradient.addColorStop(0, 'rgba(99, 102, 241, 0.75)');
           gradient.addColorStop(0.5, 'rgba(6, 182, 212, 0.85)');
           gradient.addColorStop(1, 'rgba(236, 72, 153, 0.95)');
 
-          this.ctx.fillStyle = gradient;
-          this.ctx.beginPath();
-          if (this.ctx.roundRect) {
-            this.ctx.roundRect(x, y, barWidth, amp, [4, 4, 0, 0]);
+          this.ctx2D.fillStyle = gradient;
+          this.ctx2D.beginPath();
+          if (this.ctx2D.roundRect) {
+            this.ctx2D.roundRect(x, y, barWidth, amp, [4, 4, 0, 0]);
           } else {
-            this.ctx.rect(x, y, barWidth, amp);
+            this.ctx2D.rect(x, y, barWidth, amp);
           }
-          this.ctx.fill();
+          this.ctx2D.fill();
         }
       }
 
@@ -1523,15 +1692,15 @@
             ? p.radius + Math.sin(time * 3 + p.x) * 2
             : p.radius;
 
-          this.ctx.save();
-          this.ctx.beginPath();
-          this.ctx.arc(p.x, p.y, Math.max(1, pulseRadius), 0, Math.PI * 2);
-          this.ctx.fillStyle = p.color;
-          this.ctx.globalAlpha = p.alpha;
-          this.ctx.shadowBlur = isPlaying ? 12 : 0;
-          this.ctx.shadowColor = p.color;
-          this.ctx.fill();
-          this.ctx.restore();
+          this.ctx2D.save();
+          this.ctx2D.beginPath();
+          this.ctx2D.arc(p.x, p.y, Math.max(1, pulseRadius), 0, Math.PI * 2);
+          this.ctx2D.fillStyle = p.color;
+          this.ctx2D.globalAlpha = p.alpha;
+          this.ctx2D.shadowBlur = isPlaying ? 12 : 0;
+          this.ctx2D.shadowColor = p.color;
+          this.ctx2D.fill();
+          this.ctx2D.restore();
         });
       }
 
@@ -1542,22 +1711,22 @@
         const pulse = isPlaying ? Math.sin(time * 2) * 18 : 0;
         const currentR = baseR + pulse;
 
-        const grad = this.ctx.createRadialGradient(cx, cy, currentR * 0.2, cx, cy, currentR * 1.5);
+        const grad = this.ctx2D.createRadialGradient(cx, cy, currentR * 0.2, cx, cy, currentR * 1.5);
         grad.addColorStop(0, 'rgba(99, 102, 241, 0.6)');
         grad.addColorStop(0.5, 'rgba(6, 182, 212, 0.35)');
         grad.addColorStop(1, 'rgba(7, 8, 12, 0)');
 
-        this.ctx.fillStyle = grad;
-        this.ctx.beginPath();
-        this.ctx.arc(cx, cy, currentR * 1.5, 0, Math.PI * 2);
-        this.ctx.fill();
+        this.ctx2D.fillStyle = grad;
+        this.ctx2D.beginPath();
+        this.ctx2D.arc(cx, cy, currentR * 1.5, 0, Math.PI * 2);
+        this.ctx2D.fill();
       }
     }
 
     class UnifiedPlayer {
-      constructor({ videoElement, canvasElement, onStateChange, onError }) {
+      constructor({ videoElement, canvas2DElement, canvas3DElement, onStateChange, onError }) {
         this.mediaEl = videoElement;
-        this.visualizer = new ReactiveVisualizerEngine(canvasElement, videoElement);
+        this.visualizer = new ReactiveVisualizerEngine(canvas2DElement, canvas3DElement, videoElement);
         this.onStateChange = onStateChange;
         this.onError = onError;
 
@@ -1705,7 +1874,7 @@
           videoViewport: document.getElementById('video-viewport'),
           unifiedMedia: document.getElementById('unified-media'),
           visualizerCanvas: document.getElementById('visualizer-canvas'),
-          audioOverlay: document.getElementById('audio-overlay'),
+          visualizerCanvas3D: document.getElementById('visualizer-canvas-3d'),
           stageTitle: document.getElementById('stage-title'),
           stageMeta: document.getElementById('stage-meta'),
           stageCoverImg: document.getElementById('stage-cover-img'),
@@ -1747,7 +1916,8 @@
       initPlayer() {
         this.player = new UnifiedPlayer({
           videoElement: this.dom.unifiedMedia,
-          canvasElement: this.dom.visualizerCanvas,
+          canvas2DElement: this.dom.visualizerCanvas,
+          canvas3DElement: this.dom.visualizerCanvas3D,
           onStateChange: (state) => this.handlePlayerState(state),
           onError: (msg) => this.showAlert(msg)
         });
