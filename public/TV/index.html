@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OmniStream — Live Radio & IPTV Player</title>
   
-  <!-- Hls.js pour la prise en charge des flux .m3u8 en direct -->
+  <!-- Hls.js pour le streaming vidéo / audio .m3u8 en direct -->
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.8/dist/hls.min.js"></script>
-  <!-- Three.js pour les animations 3D spectaculaires -->
+  <!-- Three.js pour les animations 3D WebGL -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
   <style>
@@ -63,6 +63,7 @@
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: var(--radius-full); }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.3); }
 
     #app-container {
       display: flex;
@@ -235,7 +236,6 @@
       border: none !important;
     }
 
-    /* HUD elements auto-hide on inactivity */
     .hud-element {
       transition: opacity 0.5s ease, transform 0.5s ease;
     }
@@ -280,6 +280,7 @@
       display: flex;
       align-items: center;
       gap: 6px;
+      outline: none;
     }
     .stage-btn:hover { background: rgba(99, 102, 241, 0.4); }
 
@@ -388,7 +389,7 @@
     .player-thumb { width: 52px; height: 52px; border-radius: var(--radius-sm); background: var(--bg-surface-elevated); overflow: hidden; display: flex; align-items: center; justify-content: center; }
     .player-thumb img { width: 100%; height: 100%; object-fit: contain; }
 
-    .ctrl-btn { background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 8px; border-radius: 50%; }
+    .ctrl-btn { background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 8px; border-radius: 50%; outline: none; }
     .ctrl-btn:hover { color: var(--text-primary); }
     .ctrl-btn.play-main { width: 48px; height: 48px; background: var(--text-primary); color: var(--bg-base); }
 
@@ -420,6 +421,9 @@
           <button class="chip" data-filter="GLOBAL">Monde</button>
           <button class="chip" data-filter="US">États-Unis</button>
           <button class="chip" data-filter="GB">Royaume-Uni</button>
+          <button class="chip" data-filter="CA">Canada</button>
+          <button class="chip" data-filter="BE">Belgique</button>
+          <button class="chip" data-filter="CH">Suisse</button>
         </div>
       </div>
     </aside>
@@ -450,7 +454,7 @@
               </select>
               <button class="stage-btn" id="btn-stage-fullscreen" title="Plein écran total">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
-                Plein Écran
+                Plein Écran [F]
               </button>
             </div>
           </div>
@@ -631,9 +635,6 @@
       }
     }
 
-    /**
-     * Moteur d'animation 2D et 3D Three.js pour la partie Radio
-     */
     class VisualizerEngine {
       constructor(canvasEl) {
         this.canvas = canvasEl;
@@ -762,7 +763,6 @@
         this.ctx.clearRect(0, 0, width, height);
         const time = Date.now() * 0.003;
 
-        // Rendu 3D Three.js pour les presets 3D
         if (['hyperdrive', 'sphere', 'synthwave', 'vortex', 'cubes'].includes(this.preset)) {
           if (this.threeRenderer && this.threeScene && this.threeCamera) {
             const delta = this.clock.getDelta();
@@ -878,10 +878,19 @@
           this.visualizer.setPreset(e.target.value);
         };
 
-        document.getElementById('btn-stage-fullscreen').onclick = () => {
+        const toggleFullscreen = () => {
           if (!document.fullscreenElement) this.theater.requestFullscreen();
           else document.exitFullscreen();
         };
+
+        document.getElementById('btn-stage-fullscreen').onclick = toggleFullscreen;
+
+        // Toggle Fullscreen with 'F' key
+        window.addEventListener('keydown', (e) => {
+          if ((e.key === 'f' || e.key === 'F') && document.activeElement.tagName !== 'INPUT') {
+            toggleFullscreen();
+          }
+        });
 
         // Gestion de l'inactivité souris (HUD auto-hide après 3s en plein écran / scène active)
         const resetIdle = () => {
@@ -934,7 +943,7 @@
 
       renderGrid() {
         this.grid.innerHTML = this.stations.map((s, i) => `
-          <div class="station-card" onclick="app.playStation(${i})">
+          <div class="station-card ${this.activeStationIndex === i ? 'is-playing' : ''}" onclick="app.playStation(${i})">
             <div class="card-thumb-wrapper">
               ${s.logo ? `<img src="${s.logo}" onerror="this.style.display='none'">` : `<span>${s.name.charAt(0)}</span>`}
             </div>
@@ -1005,6 +1014,7 @@
         };
 
         tryPlay(sources[0]);
+        this.renderGrid();
       }
     }
 
