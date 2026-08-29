@@ -1228,13 +1228,13 @@
         const targetUrl = `https://iptv-org.github.io/iptv/countries/${country.toLowerCase()}.m3u`;
         try {
           const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 3500);
+          const timer = setTimeout(() => controller.abort(), 8000);
           const res = await fetch(targetUrl, { signal: controller.signal });
           clearTimeout(timer);
 
           if (res.ok) {
             const text = await res.text();
-            const list = this.parseM3U(text, search, country);
+            const list = this.parseM3U(text, search, country, genre);
             if (list.length > 0) return list;
           }
         } catch (e) {}
@@ -1352,12 +1352,7 @@
               type: 'audio'
             });
           }
-        });
-
-        return episodes;
-      }
-
-      parseM3U(content, search = '', country = 'FR') {
+      parseM3U(content, search = '', country = 'FR', genre = 'all') {
         const lines = content.split('\n');
         const list = [];
         let item = null;
@@ -1366,14 +1361,19 @@
           if (line.startsWith('#EXTINF:')) {
             const name = (line.match(/,(.+)$/) || [])[1] || 'Chaîne TV';
             const logo = (line.match(/tvg-logo="([^"]*)"/) || [])[1] || '';
+            const group = (line.match(/group-title="([^"]*)"/) || [])[1] || 'Direct TV';
             const cleanId = `tv_${name.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
-            item = { id: cleanId, name, logo, country, tags: 'Direct TV', type: 'video' };
+            item = { id: cleanId, name, logo, country, tags: group, type: 'video' };
           } else if (line && !line.startsWith('#') && item) {
             item.url = line;
-            if (!search || item.name.toLowerCase().includes(search.toLowerCase())) list.push(item);
+            const matchesSearch = !search || item.name.toLowerCase().includes(search.toLowerCase()) || item.tags.toLowerCase().includes(search.toLowerCase());
+            const matchesGenre = genre === 'all' || item.tags.toLowerCase().includes(genre.toLowerCase()) || item.name.toLowerCase().includes(genre.toLowerCase());
+
+            if (matchesSearch && matchesGenre) {
+              list.push(item);
+            }
             item = null;
           }
-          if (list.length >= 80) break;
         }
         return list;
       }
