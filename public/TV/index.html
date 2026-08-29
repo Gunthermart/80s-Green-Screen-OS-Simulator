@@ -2386,6 +2386,8 @@
         this.media.muted = false;
         if (!this.media.volume || this.media.volume === 0) this.media.volume = 0.8;
 
+        this.isProxyRetried = false;
+
         // Détection élargie des flux HLS (pas seulement l'extension .m3u8)
         const isAudioFile = /\.(mp3|aac|ogg|wav|m4a)(\?.*)?$/i.test(cleanUrl);
         const isHlsUrl = cleanUrl.includes('.m3u8') || cleanUrl.includes('/hls/') || cleanUrl.includes('manifest') || cleanUrl.includes('playlist') || isVideo || !isAudioFile;
@@ -2412,13 +2414,21 @@
             this.media.play().catch(() => {});
           });
 
-          // Système d'auto-récupération en cas d'erreur réseau ou buffer (comme les lecteurs HLS professionnels)
+          // Système d'auto-récupération et contournement CORS intelligent (In-Browser HLS Player Engine)
           this.hlsPlayer.on(Hls.Events.ERROR, (event, data) => {
             if (data.fatal) {
               switch (data.type) {
                 case Hls.ErrorTypes.NETWORK_ERROR:
-                  console.warn('Problème réseau HLS, tentative de reconnexion...');
-                  this.hlsPlayer.startLoad();
+                  if (!this.isProxyRetried && !cleanUrl.includes('corsproxy.io')) {
+                    this.isProxyRetried = true;
+                    const proxiedUrl = `https://corsproxy.io/?${encodeURIComponent(cleanUrl)}`;
+                    console.warn('Contournement CORS via In-Browser Proxy HLS:', proxiedUrl);
+                    this.hlsPlayer.loadSource(proxiedUrl);
+                    this.hlsPlayer.startLoad();
+                  } else {
+                    console.warn('Tentative de relance HLS...');
+                    this.hlsPlayer.startLoad();
+                  }
                   break;
                 case Hls.ErrorTypes.MEDIA_ERROR:
                   console.warn('Erreur média HLS, tentative de récupération...');
