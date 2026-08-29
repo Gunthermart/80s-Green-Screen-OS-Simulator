@@ -962,6 +962,64 @@
   </div>
 
   <script>
+    // Chargeur HLS personnalisé avec résolution dynamique des chemins relatifs & proxy CORS
+    let activeStreamBaseDir = '';
+
+    class ProxyHlsLoader extends (typeof Hls !== 'undefined' ? Hls.DefaultConfig.loader : class {}) {
+      constructor(config) {
+        super(config);
+        const superLoad = this.load.bind(this);
+
+        this.load = function (context, config, callbacks) {
+          let rawUrl = context.url;
+
+          // Correction des requêtes relatives tronquées par la résolution proxy
+          if (rawUrl.startsWith('https://corsproxy.io/') && !rawUrl.includes('?')) {
+            const relativePath = rawUrl.replace('https://corsproxy.io/', '');
+            if (activeStreamBaseDir) {
+              try {
+                rawUrl = new URL(relativePath, activeStreamBaseDir).href;
+              } catch(e) {}
+            }
+          }
+
+          // Enregistrement du répertoire racine de la station active
+          if (!rawUrl.includes('corsproxy.io') && !rawUrl.includes('allorigins')) {
+            try {
+              activeStreamBaseDir = rawUrl.substring(0, rawUrl.lastIndexOf('/') + 1);
+            } catch(e) {}
+          }
+
+          // Routage transparent via le proxy CORS pour les flux HTTP/cross-origin
+          let fetchUrl = rawUrl;
+          const isHttp = rawUrl.startsWith('http://');
+          const isHttps = window.location.protocol === 'https:';
+
+          if ((isHttp && isHttps) || (!rawUrl.includes('corsproxy.io') && (context.type === 'manifest' || context.type === 'level' || isHttp))) {
+            fetchUrl = `https://corsproxy.io/?${encodeURIComponent(rawUrl)}`;
+          }
+
+          context.url = fetchUrl;
+
+          const customCallbacks = {
+            ...callbacks,
+            onError: (error, response, contextLoader) => {
+              // Bascule sur le proxy de secours si corsproxy rencontre une erreur
+              if (fetchUrl.includes('corsproxy.io') && !context.retriedAlt) {
+                context.retriedAlt = true;
+                context.url = `https://api.allorigins.win/raw?url=${encodeURIComponent(rawUrl)}`;
+                superLoad(context, config, callbacks);
+                return;
+              }
+              if (callbacks.onError) callbacks.onError(error, response, contextLoader);
+            }
+          };
+
+          superLoad(context, config, customCallbacks);
+        };
+      }
+    }
+
     class FavoritesStore {
       constructor(onChange) {
         this.onChange = onChange;
@@ -2379,31 +2437,30 @@
         }
 
         let cleanUrl = (url || '').trim();
-        if (window.location.protocol === 'https:' && cleanUrl.startsWith('http://')) {
-          cleanUrl = cleanUrl.replace('http://', 'https://');
-        }
 
         this.media.muted = false;
         if (!this.media.volume || this.media.volume === 0) this.media.volume = 0.8;
 
-        this.isProxyRetried = false;
-
-        // Détection élargie des flux HLS (pas seulement l'extension .m3u8)
         const isAudioFile = /\.(mp3|aac|ogg|wav|m4a)(\?.*)?$/i.test(cleanUrl);
         const isHlsUrl = cleanUrl.includes('.m3u8') || cleanUrl.includes('/hls/') || cleanUrl.includes('manifest') || cleanUrl.includes('playlist') || isVideo || !isAudioFile;
 
         if (isHlsUrl && typeof Hls !== 'undefined' && Hls.isSupported()) {
           const config = {
+            loader: ProxyHlsLoader,
             enableWorker: true,
-            lowLatencyMode: true,
+            lowLatencyMode: false,
             backBufferLength: 90,
             maxBufferLength: 30,
             maxMaxBufferLength: 600,
-            maxBufferHole: 0.5,
-            manifestLoadingTimeOut: 12000,
-            manifestLoadingMaxRetry: 4,
-            levelLoadingMaxRetry: 4,
-            fragLoadingMaxRetry: 6
+            maxBufferHole: 2.0,
+            highBufferWatchdogPeriod: 2,
+            nudgeMaxRetry: 10,
+            nudgeOffset: 0.2,
+            manifestLoadingTimeOut: 15000,
+            manifestLoadingMaxRetry: 6,
+            levelLoadingMaxRetry: 6,
+            fragLoadingMaxRetry: 10,
+            fragLoadingTimeOut: 20000
           };
 
           this.hlsPlayer = new Hls(config);
@@ -2411,7 +2468,10 @@
           this.hlsPlayer.attachMedia(this.media);
 
           this.hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
-            this.media.play().catch(() => {});
+            this.media.play().catch(() => {
+              this.media.muted = true;
+              this.media.play().catch(() => {});
+            });
           });
 
           // Système d'auto-récupération et contournement CORS intelligent (In-Browser HLS Player Engine)
@@ -2419,16 +2479,8 @@
             if (data.fatal) {
               switch (data.type) {
                 case Hls.ErrorTypes.NETWORK_ERROR:
-                  if (!this.isProxyRetried && !cleanUrl.includes('corsproxy.io')) {
-                    this.isProxyRetried = true;
-                    const proxiedUrl = `https://corsproxy.io/?${encodeURIComponent(cleanUrl)}`;
-                    console.warn('Contournement CORS via In-Browser Proxy HLS:', proxiedUrl);
-                    this.hlsPlayer.loadSource(proxiedUrl);
-                    this.hlsPlayer.startLoad();
-                  } else {
-                    console.warn('Tentative de relance HLS...');
-                    this.hlsPlayer.startLoad();
-                  }
+                  console.warn('Tentative de relance HLS...');
+                  this.hlsPlayer.startLoad();
                   break;
                 case Hls.ErrorTypes.MEDIA_ERROR:
                   console.warn('Erreur média HLS, tentative de récupération...');
@@ -2438,7 +2490,8 @@
                   console.error('Erreur HLS irrécupérable, bascule sur lecteur natif');
                   this.hlsPlayer.destroy();
                   this.hlsPlayer = null;
-                  this.media.src = cleanUrl;
+                  const proxiedUrl = `https://corsproxy.io/?${encodeURIComponent(cleanUrl)}`;
+                  this.media.src = proxiedUrl;
                   this.media.play().catch(() => {});
                   break;
               }
@@ -2449,7 +2502,7 @@
           this.media.src = cleanUrl;
           this.media.play().catch(() => {});
         } else {
-          // Fichiers audio directs (MP3/AAC/OGG)
+          // Fichiers audio/vidéo directs
           this.media.src = cleanUrl;
           this.media.play().catch(() => {});
         }
