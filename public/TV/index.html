@@ -542,12 +542,24 @@
       </div>
 
       <nav class="nav-tabs">
-        <div class="nav-item active" id="tab-radio"><span class="brand-title" style="font-size:0.95rem;">Radios du Monde</span></div>
-        <div class="nav-item" id="tab-tv"><span class="brand-title" style="font-size:0.95rem;">Télévision en Direct</span></div>
-        <div class="nav-item" id="tab-fav">
+        <div class="nav-item active" id="tab-radio">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="2"/><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9M19.1 4.9C23 8.8 23 15.1 19.1 19"/></svg>
+          <span style="font-size:0.9rem; font-weight:600;">Radios du Monde</span>
+        </div>
+        <div class="nav-item" id="tab-radio-fav">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l8.72-8.72 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-          <span class="brand-title" style="font-size:0.95rem;">Mes Favoris</span>
-          <span id="fav-badge-count" style="margin-left:auto; font-size:0.7rem; padding:2px 8px; background:rgba(239,68,68,0.2); color:#fca5a5; border-radius:10px; font-weight:700;">0</span>
+          <span style="font-size:0.9rem; font-weight:600;">Favoris Radios</span>
+          <span id="fav-radio-badge" style="margin-left:auto; font-size:0.7rem; padding:2px 8px; background:rgba(239,68,68,0.2); color:#fca5a5; border-radius:10px; font-weight:700;">0</span>
+        </div>
+
+        <div class="nav-item" id="tab-tv" style="margin-top:6px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"/><polyline points="17 2 12 7 7 2"/></svg>
+          <span style="font-size:0.9rem; font-weight:600;">Télévision en Direct</span>
+        </div>
+        <div class="nav-item" id="tab-tv-fav">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l8.72-8.72 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+          <span style="font-size:0.9rem; font-weight:600;">Favoris TV</span>
+          <span id="fav-tv-badge" style="margin-left:auto; font-size:0.7rem; padding:2px 8px; background:rgba(6,182,212,0.2); color:#67e8f9; border-radius:10px; font-weight:700;">0</span>
         </div>
       </nav>
 
@@ -683,7 +695,8 @@
   <script>
     class FavoritesStore {
       constructor(onUpdate) {
-        this.favoritesMap = new Map();
+        this.radioFavs = new Map();
+        this.tvFavs = new Map();
         this.onUpdate = onUpdate;
         this.db = null;
         this.auth = null;
@@ -713,16 +726,20 @@
           }
 
           const userId = this.auth.currentUser?.uid || 'anon_user';
-          this.userDocRef = doc(this.db, 'artifacts', appId, 'users', userId, 'favorites', 'my_favorites');
+          this.userDocRef = doc(this.db, 'artifacts', appId, 'users', userId, 'favorites', 'my_favorites_v2');
 
           onSnapshot(this.userDocRef, (docSnap) => {
             if (docSnap.exists()) {
               const data = docSnap.data();
-              if (Array.isArray(data.items)) {
-                this.favoritesMap.clear();
-                data.items.forEach(item => this.favoritesMap.set(item.id, item));
-                if (this.onUpdate) this.onUpdate(this.getAll());
+              if (Array.isArray(data.radioItems)) {
+                this.radioFavs.clear();
+                data.radioItems.forEach(item => this.radioFavs.set(item.id, item));
               }
+              if (Array.isArray(data.tvItems)) {
+                this.tvFavs.clear();
+                data.tvItems.forEach(item => this.tvFavs.set(item.id, item));
+              }
+              if (this.onUpdate) this.onUpdate();
             }
           }, (err) => {
             console.warn('Synchro cloud favoris indisponible:', err);
@@ -736,34 +753,53 @@
         if (!this.db || !this.userDocRef) return;
         try {
           const { setDoc } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
-          await setDoc(this.userDocRef, { items: this.getAll(), updatedAt: Date.now() }, { merge: true });
+          await setDoc(this.userDocRef, {
+            radioItems: this.getRadioFavs(),
+            tvItems: this.getTvFavs(),
+            updatedAt: Date.now()
+          }, { merge: true });
         } catch (e) {
           console.warn('Échec de la sauvegarde cloud des favoris:', e);
         }
       }
 
       toggle(station) {
-        const isFav = this.isFavorite(station.id);
+        if (!station || !station.id) return false;
+        const isTv = station.type === 'video';
+        const store = isTv ? this.tvFavs : this.radioFavs;
+
+        const isFav = store.has(station.id);
         if (isFav) {
-          this.favoritesMap.delete(station.id);
+          store.delete(station.id);
         } else {
-          this.favoritesMap.set(station.id, station);
+          store.set(station.id, station);
         }
+
         this.syncToCloud();
-        if (this.onUpdate) this.onUpdate(this.getAll());
+        if (this.onUpdate) this.onUpdate();
         return !isFav;
       }
 
-      isFavorite(id) {
-        return this.favoritesMap.has(id);
+      isFavorite(id, type = 'audio') {
+        if (!id) return false;
+        const store = (type === 'video' || type === 'tv') ? this.tvFavs : this.radioFavs;
+        return store.has(id);
       }
 
-      getAll() {
-        return Array.from(this.favoritesMap.values());
+      getRadioFavs() {
+        return Array.from(this.radioFavs.values());
       }
 
-      getCount() {
-        return this.favoritesMap.size;
+      getTvFavs() {
+        return Array.from(this.tvFavs.values());
+      }
+
+      getRadioCount() {
+        return this.radioFavs.size;
+      }
+
+      getTvCount() {
+        return this.tvFavs.size;
       }
     }
 
@@ -894,7 +930,10 @@
             const name = (line.match(/,(.+)$/) || [])[1] || 'Chaîne TV';
             const logo = (line.match(/tvg-logo="([^"]*)"/) || [])[1] || '';
             const group = (line.match(/group-title="([^"]*)"/) || [])[1] || 'Direct TV';
-            item = { name, logo, tags: group, type: 'video' };
+            
+            // Génération d'un ID unique stable pour chaque chaîne TV
+            const cleanId = 'tv_' + (name + logo).toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 40);
+            item = { id: cleanId, name, logo, tags: group, type: 'video' };
           } else if (line && !line.startsWith('#') && item) {
             item.url = line;
             if (!search || item.name.toLowerCase().includes(search.toLowerCase())) {
@@ -1093,7 +1132,7 @@
     class AppController {
       constructor() {
         this.fetcher = new MediaFetcher();
-        this.currentTab = 'radio';
+        this.currentTab = 'radio'; // 'radio' | 'radio-fav' | 'tv' | 'tv-fav'
         this.currentCountry = 'FR';
         this.currentGenre = 'all';
         this.stations = [];
@@ -1102,9 +1141,11 @@
         this.idleTimer = null;
 
         this.favStore = new FavoritesStore(() => {
-          this.updateFavBadge();
+          this.updateFavBadges();
           this.updateFavButtonsUI();
-          if (this.currentTab === 'fav') this.renderGrid();
+          if (this.currentTab === 'radio-fav' || this.currentTab === 'tv-fav') {
+            this.loadCatalog();
+          }
         });
 
         this.initDOM();
@@ -1127,14 +1168,16 @@
       bindEvents() {
         document.getElementById('mobile-toggle').onclick = () => this.sidebar.classList.toggle('open');
         document.getElementById('tab-radio').onclick = () => this.switchTab('radio');
+        document.getElementById('tab-radio-fav').onclick = () => this.switchTab('radio-fav');
         document.getElementById('tab-tv').onclick = () => this.switchTab('tv');
-        document.getElementById('tab-fav').onclick = () => this.switchTab('fav');
+        document.getElementById('tab-tv-fav').onclick = () => this.switchTab('tv-fav');
 
         const handleFavToggle = () => {
           if (this.activeStationIndex < 0 || !this.stations[this.activeStationIndex]) return;
           const station = this.stations[this.activeStationIndex];
           const added = this.favStore.toggle(station);
-          this.showToast(added ? `❤️ "${station.name}" ajouté aux favoris` : `Retiré des favoris`);
+          const typeLabel = station.type === 'video' ? 'Chaîne TV' : 'Radio';
+          this.showToast(added ? `❤️ ${typeLabel} "${station.name}" ajoutée aux favoris` : `Retirée des favoris`);
         };
 
         document.getElementById('btn-stage-fav').onclick = handleFavToggle;
@@ -1229,15 +1272,17 @@
       switchTab(tab) {
         this.currentTab = tab;
         document.getElementById('tab-radio').classList.toggle('active', tab === 'radio');
+        document.getElementById('tab-radio-fav').classList.toggle('active', tab === 'radio-fav');
         document.getElementById('tab-tv').classList.toggle('active', tab === 'tv');
-        document.getElementById('tab-fav').classList.toggle('active', tab === 'fav');
+        document.getElementById('tab-tv-fav').classList.toggle('active', tab === 'tv-fav');
 
         const heading = document.getElementById('catalog-heading');
         if (tab === 'radio') heading.textContent = 'Radios Populaires';
+        else if (tab === 'radio-fav') heading.textContent = 'Mes Radios Favorites';
         else if (tab === 'tv') heading.textContent = 'Télévision en Direct';
-        else heading.textContent = 'Mes Stations Favorites';
+        else if (tab === 'tv-fav') heading.textContent = 'Mes Chaînes TV Favorites';
 
-        if (tab === 'tv') {
+        if (tab === 'tv' || tab === 'tv-fav') {
           this.visualizer.stop();
           document.getElementById('stage-hud-top').style.display = 'none';
         } else {
@@ -1254,8 +1299,14 @@
           this.stations = await this.fetcher.getRadios(this.currentCountry, this.currentGenre, search);
         } else if (this.currentTab === 'tv') {
           this.stations = await this.fetcher.getTV(this.currentCountry, this.currentGenre, search);
-        } else if (this.currentTab === 'fav') {
-          let favs = this.favStore.getAll();
+        } else if (this.currentTab === 'radio-fav') {
+          let favs = this.favStore.getRadioFavs();
+          if (search) {
+            favs = favs.filter(s => s.name.toLowerCase().includes(search.toLowerCase()) || (s.tags && s.tags.toLowerCase().includes(search.toLowerCase())));
+          }
+          this.stations = favs;
+        } else if (this.currentTab === 'tv-fav') {
+          let favs = this.favStore.getTvFavs();
           if (search) {
             favs = favs.filter(s => s.name.toLowerCase().includes(search.toLowerCase()) || (s.tags && s.tags.toLowerCase().includes(search.toLowerCase())));
           }
@@ -1267,19 +1318,20 @@
       }
 
       renderGrid() {
-        if (this.currentTab === 'fav' && !this.stations.length) {
+        if ((this.currentTab === 'radio-fav' || this.currentTab === 'tv-fav') && !this.stations.length) {
+          const isTvFav = this.currentTab === 'tv-fav';
           this.grid.innerHTML = `
             <div class="loader-container" style="grid-column: 1 / -1; padding:40px 0;">
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l8.72-8.72 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-              <p style="font-weight:600; color:var(--text-primary); margin-top:8px;">Aucun favori enregistré</p>
-              <p style="font-size:0.85rem; color:var(--text-secondary);">Cliquez sur le cœur ❤️ d'une radio ou d'une chaîne TV pour l'ajouter à vos favoris.</p>
+              <p style="font-weight:600; color:var(--text-primary); margin-top:8px;">Aucun favori ${isTvFav ? 'TV' : 'Radio'} enregistré</p>
+              <p style="font-size:0.85rem; color:var(--text-secondary);">Cliquez sur le cœur ❤️ d'une ${isTvFav ? 'chaîne TV' : 'station de radio'} pour l'ajouter à vos favoris.</p>
             </div>
           `;
           return;
         }
 
         this.grid.innerHTML = this.stations.map((s, i) => {
-          const isFav = this.favStore.isFavorite(s.id);
+          const isFav = this.favStore.isFavorite(s.id, s.type);
           return `
             <div class="station-card ${this.activeStationIndex === i ? 'is-playing' : ''}" onclick="app.playStation(${i})">
               <div class="card-thumb-wrapper">
@@ -1301,30 +1353,27 @@
         }).join('');
       }
 
-      playStationInFullscreen(index) {
-        this.playStation(index);
-        if (!document.fullscreenElement && this.theater) {
-          this.theater.requestFullscreen().catch(() => {});
-        }
-      }
-
       toggleFavCard(index) {
         const s = this.stations[index];
         if (!s) return;
         const added = this.favStore.toggle(s);
-        this.showToast(added ? `❤️ "${s.name}" ajouté aux favoris` : `Retiré des favoris`);
+        const typeLabel = s.type === 'video' ? 'Chaîne TV' : 'Radio';
+        this.showToast(added ? `❤️ ${typeLabel} "${s.name}" ajoutée aux favoris` : `Retirée des favoris`);
       }
 
-      updateFavBadge() {
-        const count = this.favStore.getCount();
-        const badge = document.getElementById('fav-badge-count');
-        if (badge) badge.textContent = count;
+      updateFavBadges() {
+        const radioCount = this.favStore.getRadioCount();
+        const tvCount = this.favStore.getTvCount();
+        const badgeRadio = document.getElementById('fav-radio-badge');
+        const badgeTv = document.getElementById('fav-tv-badge');
+        if (badgeRadio) badgeRadio.textContent = radioCount;
+        if (badgeTv) badgeTv.textContent = tvCount;
       }
 
       updateFavButtonsUI() {
         if (this.activeStationIndex < 0 || !this.stations[this.activeStationIndex]) return;
         const s = this.stations[this.activeStationIndex];
-        const isFav = this.favStore.isFavorite(s.id);
+        const isFav = this.favStore.isFavorite(s.id, s.type);
 
         const btnStageIcon = document.getElementById('icon-stage-fav');
         const btnStageLabel = document.getElementById('label-stage-fav');
