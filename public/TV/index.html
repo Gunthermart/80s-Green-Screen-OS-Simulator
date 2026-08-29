@@ -10,33 +10,33 @@
   <!-- Three.js pour le rendu des animations 3D WebGL -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
-  <style>
-    :root {
-      --bg-base: #08090d;
-      --bg-surface: #10131e;
-      --bg-surface-elevated: #171b2b;
-      --bg-glass: rgba(16, 19, 30, 0.85);
-      --border-glass: rgba(255, 255, 255, 0.08);
-      --border-focus: rgba(99, 102, 241, 0.5);
+    .live-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      color: var(--accent-live);
+      text-transform: uppercase;
+    }
 
-      --text-primary: #f8fafc;
-      --text-secondary: #94a3b8;
-      --text-muted: #64748b;
+    .live-badge.is-active {
+      color: #10b981;
+    }
+    .live-badge.is-buffering {
+      color: #f59e0b;
+    }
+    .live-badge.is-dead {
+      color: #ef4444;
+    }
 
-      --accent-primary: #6366f1;
-      --accent-primary-hover: #4f46e5;
-      --accent-cyan: #06b6d4;
-      --accent-live: #ef4444;
-
-      --sidebar-width: 280px;
-      --player-height: 84px;
-      --radius-sm: 8px;
-      --radius-md: 12px;
-      --radius-lg: 18px;
-      --radius-full: 9999px;
-
-      --shadow-glow: 0 0 25px rgba(99, 102, 241, 0.25);
-      --transition-smooth: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    .live-dot {
+      width: 7px;
+      height: 7px;
+      background: currentColor;
+      border-radius: 50%;
+      animation: pulse 1.5s infinite;
     }
 
     * {
@@ -533,10 +533,10 @@
 <body>
 
   <div id="app-container">
-    <aside id="sidebar">
-      <div class="brand-section">
-        <div class="brand-icon">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2"><circle cx="12" cy="12" r="2"/><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9M19.1 4.9C23 8.8 23 15.1 19.1 19"/></svg>
+        <div class="live-badge" id="live-badge-container">
+          <span class="live-dot"></span>
+          <span id="player-status-badge">DIRECT STREAM</span>
+          <span id="player-fps-badge" style="font-size:0.65rem; opacity:0.8; margin-left:4px;"></span>
         </div>
         <span class="brand-title">OmniStream Live</span>
       </div>
@@ -693,498 +693,99 @@
   </div>
 
   <script>
-    class FavoritesStore {
-      constructor(onUpdate) {
-        this.radioFavs = new Map();
-        this.tvFavs = new Map();
-        this.onUpdate = onUpdate;
-        this.db = null;
-        this.auth = null;
-        this.userDocRef = null;
-        this.idb = null;
-        this.initCloud();
-        this.initIndexedDB();
+    /**
+     * Module : Surveillance dynamique et pertinente de l'activité du flux (Audio / Video / Frames)
+     */
+    class StreamActivityMonitor {
+      constructor(mediaElement, onStatusChange) {
+        this.media = mediaElement;
+        this.onStatusChange = onStatusChange;
+        this.interval = null;
+        this.lastTime = 0;
+        this.lastTotalFrames = 0;
+        this.stallCount = 0;
+        this.isActive = false;
       }
 
-      async initCloud() {
-        try {
-          const { initializeApp } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
-          const { getAuth, signInAnonymously, signInWithCustomToken } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js");
-          const { getFirestore, doc, onSnapshot } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
-
-          const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-          if (!firebaseConfig) return;
-
-          const appId = typeof __app_id !== 'undefined' ? __app_id : 'omnistream-app';
-          const app = initializeApp(firebaseConfig);
-          this.auth = getAuth(app);
-          this.db = getFirestore(app);
-
-          const token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-          if (token) {
-            await signInWithCustomToken(this.auth, token);
-          } else {
-            await signInAnonymously(this.auth);
-          }
-
-          const userId = this.auth.currentUser?.uid || 'anon_user';
-          this.userDocRef = doc(this.db, 'artifacts', appId, 'users', userId, 'favorites', 'my_favorites_v2');
-
-          onSnapshot(this.userDocRef, (docSnap) => {
-            if (docSnap.exists()) {
-              const data = docSnap.data();
-              if (Array.isArray(data.radioItems)) {
-                data.radioItems.forEach(item => {
-                  if (item && item.id) this.radioFavs.set(item.id, item);
-                });
-              }
-              if (Array.isArray(data.tvItems)) {
-                data.tvItems.forEach(item => {
-                  if (item && item.id) this.tvFavs.set(item.id, item);
-                });
-              }
-              if (this.onUpdate) this.onUpdate();
-            }
-          }, (err) => {
-            console.warn('Synchro cloud favoris indisponible:', err);
-          });
-        } catch (e) {
-          console.info('Mode stockage local actif pour les favoris');
-        }
+      start() {
+        this.stop();
+        this.lastTime = this.media.currentTime;
+        this.stallCount = 0;
+        // Analyse du flux chaque seconde
+        this.interval = setInterval(() => this.checkActivity(), 1000);
       }
 
-      initIndexedDB() {
-        try {
-          const request = indexedDB.open('OmniStreamDB', 1);
-          request.onupgradeneeded = (e) => {
-            const db = e.target.result;
-            if (!db.objectStoreNames.contains('favorites')) {
-              db.createObjectStore('favorites', { keyPath: 'id' });
-            }
-          };
-          request.onsuccess = (e) => {
-            this.idb = e.target.result;
-            this.loadFromIndexedDB();
-          };
-        } catch (err) {
-          console.warn('IndexedDB non disponible:', err);
-        }
-      }
-
-      loadFromIndexedDB() {
-        if (!this.idb) return;
-        try {
-          const tx = this.idb.transaction('favorites', 'readonly');
-          const store = tx.objectStore('favorites');
-          const req = store.getAll();
-          req.onsuccess = () => {
-            const items = req.result || [];
-            items.forEach(item => {
-              if (item && item.id) {
-                if (item.type === 'video') this.tvFavs.set(item.id, item);
-                else this.radioFavs.set(item.id, item);
-              }
-            });
-            if (this.onUpdate) this.onUpdate();
-          };
-        } catch (e) {
-          console.warn('Erreur chargement IndexedDB:', e);
-        }
-      }
-
-      saveToIndexedDB(station, isFav) {
-        if (!this.idb) return;
-        try {
-          const tx = this.idb.transaction('favorites', 'readwrite');
-          const store = tx.objectStore('favorites');
-          if (isFav) {
-            store.put(station);
-          } else {
-            store.delete(station.id);
-          }
-        } catch (e) {
-          console.warn('Erreur sauvegarde IndexedDB:', e);
-        }
-      }
-
-      async syncToCloud() {
-        if (!this.db || !this.userDocRef) return;
-        try {
-          const { setDoc } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
-          await setDoc(this.userDocRef, {
-            radioItems: this.getRadioFavs(),
-            tvItems: this.getTvFavs(),
-            updatedAt: Date.now()
-          }, { merge: true });
-        } catch (e) {
-          console.warn('Échec de la sauvegarde cloud des favoris:', e);
-        }
-      }
-
-      toggle(station) {
-        if (!station || !station.id) return false;
-        const isTv = station.type === 'video' || station.type === 'tv';
-        const store = isTv ? this.tvFavs : this.radioFavs;
-
-        const isFav = store.has(station.id);
-        if (isFav) {
-          store.delete(station.id);
-        } else {
-          store.set(station.id, station);
-        }
-
-        const newlyFav = !isFav;
-        this.saveToIndexedDB(station, newlyFav);
-        this.syncToCloud();
-        if (this.onUpdate) this.onUpdate();
-        return newlyFav;
-      }
-
-      isFavorite(id, type = 'audio') {
-        if (!id) return false;
-        const isTv = type === 'video' || type === 'tv';
-        const store = isTv ? this.tvFavs : this.radioFavs;
-        return store.has(id);
-      }
-
-      getRadioFavs() {
-        return Array.from(this.radioFavs.values());
-      }
-
-      getTvFavs() {
-        return Array.from(this.tvFavs.values());
-      }
-
-      getRadioCount() {
-        return this.radioFavs.size;
-      }
-
-      getTvCount() {
-        return this.tvFavs.size;
-      }
-    }
-
-    const BACKUP_DATA = {
-      FR: {
-        radios: [
-          { id: 'fip', name: 'FIP Radio', url: 'https://stream.radiofrance.fr/fip/fip.m3u8?id=radiofrance', logo: 'https://www.radiofrance.fr/assets/images/brands/fip.svg', tags: 'Jazz, Eclectique', type: 'audio' },
-          { id: 'franceinter', name: 'France Inter', url: 'https://stream.radiofrance.fr/franceinter/franceinter.m3u8?id=radiofrance', logo: 'https://www.radiofrance.fr/assets/images/brands/franceinter.svg', tags: 'Généraliste, News', type: 'audio' },
-          { id: 'franceinfo', name: 'France Info', url: 'https://stream.radiofrance.fr/franceinfo/franceinfo.m3u8?id=radiofrance', logo: 'https://www.radiofrance.fr/assets/images/brands/franceinfo.svg', tags: 'News, Info 24/7', type: 'audio' },
-          { id: 'rtl', name: 'RTL France', url: 'https://icecast.rtl.fr/rtl-1-44-128', logo: 'https://upload.wikimedia.org/wikipedia/commons/e/e1/RTL_logo.svg', tags: 'Généraliste, Talk', type: 'audio' },
-          { id: 'europe1', name: 'Europe 1', url: 'https://europe1.lmn.cloud/europe1.mp3', logo: 'https://upload.wikimedia.org/wikipedia/commons/b/b5/Europe_1_logo_2010.svg', tags: 'Information, Talk', type: 'audio' },
-          { id: 'skyrock', name: 'Skyrock', url: 'https://icecast.skyrock.net/s/natio_mp3_128k', logo: 'https://upload.wikimedia.org/wikipedia/commons/4/4c/Skyrock_logo.svg', tags: 'Rap, Urban', type: 'audio' }
-        ],
-        tv: [
-          { id: 'france24', name: 'France 24 Français', url: 'https://static.france24.com/live/F24_FR_LO_HLS/live_tv.m3u8', logo: 'https://upload.wikimedia.org/wikipedia/fr/4/4e/France_24_logo_2013.svg', tags: 'Information', type: 'video' },
-          { id: 'bfmtv', name: 'BFM TV Live', url: 'https://bfmtv.akamaized.net/hls/live/2032271/bfmtv/index.m3u8', logo: 'https://upload.wikimedia.org/wikipedia/commons/e/e6/BFMTV_2019.svg', tags: 'Actualités 24/7', type: 'video' },
-          { id: 'arte', name: 'ARTE Journal Live', url: 'https://artesimulcast.akamaized.net/hls/live/2031003/artelive_fr/index.m3u8', logo: 'https://upload.wikimedia.org/wikipedia/commons/0/07/Logo_Arte.svg', tags: 'Culture', type: 'video' },
-          { id: 'euronews', name: 'Euronews Français', url: 'https://euronews-euronews-french-1-eu.rakuten.wurl.tv/playlist.m3u8', logo: 'https://upload.wikimedia.org/wikipedia/commons/4/47/Euronews_2016_logo.svg', tags: 'Info International', type: 'video' }
-        ]
-      },
-      US: {
-        radios: [
-          { id: 'kexp', name: 'KEXP 90.3 FM Seattle', url: 'https://kexp-mp3-128.streamguys1.com/kexp128.mp3', logo: '', tags: 'Indie, Rock', type: 'audio' },
-          { id: 'wnyc', name: 'WNYC FM New York', url: 'https://fm939.wnyc.org/wnycfm-web', logo: '', tags: 'Talk, News', type: 'audio' },
-          { id: 'somafm', name: 'SomaFM Groove Salad', url: 'https://ice1.somafm.com/groovesalad-128-mp3', logo: '', tags: 'Ambient, Electro', type: 'audio' }
-        ],
-        tv: [
-          { id: 'nasa_tv', name: 'NASA TV Official', url: 'https://ntv1.akamaized.net/hls/live/2014075/NASA-NTV1-HLS/master.m3u8', logo: 'https://upload.wikimedia.org/wikipedia/commons/e/e5/NASA_logo.svg', tags: 'Science, Space', type: 'video' },
-          { id: 'abc_news', name: 'ABC News Live', url: 'https://content.uplynk.com/channel/3324f7367a8b43b487d295b123456789.m3u8', logo: '', tags: 'News', type: 'video' }
-        ]
-      },
-      GB: {
-        radios: [
-          { id: 'bbc1', name: 'BBC Radio 1', url: 'https://stream.live.vc.bbcmedia.co.uk/bbc_radio_one', logo: '', tags: 'Pop, Hits', type: 'audio' },
-          { id: 'capital', name: 'Capital FM London', url: 'https://icecast.capitalradio.com/CapitalMP3', logo: '', tags: 'Pop, Top40', type: 'audio' }
-        ],
-        tv: [
-          { id: 'sky_news', name: 'Sky News UK', url: 'https://skynews-live.skynews.com/hls/live/2002840/skynews/master.m3u8', logo: '', tags: 'News', type: 'video' }
-        ]
-      },
-      GLOBAL: {
-        radios: [
-          { id: 'fip', name: 'FIP Paris', url: 'https://stream.radiofrance.fr/fip/fip.m3u8?id=radiofrance', logo: 'https://www.radiofrance.fr/assets/images/brands/fip.svg', tags: 'Eclectic', type: 'audio' },
-          { id: 'kexp', name: 'KEXP Seattle', url: 'https://kexp-mp3-128.streamguys1.com/kexp128.mp3', logo: '', tags: 'Indie', type: 'audio' }
-        ],
-        tv: [
-          { id: 'france24_en', name: 'France 24 English', url: 'https://static.france24.com/live/F24_EN_LO_HLS/live_tv.m3u8', logo: '', tags: 'News', type: 'video' },
-          { id: 'nasa_tv', name: 'NASA TV Live', url: 'https://ntv1.akamaized.net/hls/live/2014075/NASA-NTV1-HLS/master.m3u8', logo: 'https://upload.wikimedia.org/wikipedia/commons/e/e5/NASA_logo.svg', tags: 'Science', type: 'video' }
-        ]
-      }
-    };
-
-    class MediaFetcher {
-      constructor() {
-        this.radioMirrors = [
-          'https://de1.api.radio-browser.info',
-          'https://nl1.api.radio-browser.info',
-          'https://at1.api.radio-browser.info'
-        ];
-        this.mirrorIndex = 0;
-      }
-
-      getMirror() { return this.radioMirrors[this.mirrorIndex]; }
-      rotateMirror() { this.mirrorIndex = (this.mirrorIndex + 1) % this.radioMirrors.length; }
-
-      async getRadios(country = 'FR', genre = 'all', search = '') {
-        const mirror = this.getMirror();
-        let url = `${mirror}/json/stations/bycountrycodeexact/${country.toLowerCase()}?limit=60&order=votes&reverse=true`;
-        
-        if (search) {
-          url = `${mirror}/json/stations/byname/${encodeURIComponent(search)}?limit=60`;
-        } else if (genre && genre !== 'all') {
-          url = `${mirror}/json/stations/bytag/${encodeURIComponent(genre)}?limit=60&order=votes&reverse=true`;
-        } else if (country === 'GLOBAL') {
-          url = `${mirror}/json/stations/topvote/60`;
-        }
-
-        try {
-          const res = await fetch(url);
-          if (!res.ok) throw new Error();
-          const data = await res.json();
-          const formatted = data.map(s => ({
-            id: s.stationuuid,
-            name: s.name.trim(),
-            url: s.url_resolved || s.url,
-            logo: s.favicon,
-            tags: s.tags ? s.tags.split(',').slice(0, 2).join(', ') : 'Radio',
-            type: 'audio'
-          })).filter(s => s.url && s.name);
-          return formatted.length ? formatted : (BACKUP_DATA[country]?.radios || BACKUP_DATA.FR.radios);
-        } catch {
-          this.rotateMirror();
-          return BACKUP_DATA[country]?.radios || BACKUP_DATA.FR.radios;
-        }
-      }
-
-      async getTV(country = 'FR', genre = 'all', search = '') {
-        try {
-          let targetUrl = `https://iptv-org.github.io/iptv/countries/${country.toLowerCase()}.m3u`;
-          if (country === 'GLOBAL') {
-            targetUrl = `https://iptv-org.github.io/iptv/index.m3u`;
-          }
-
-          const res = await fetch(targetUrl);
-          if (!res.ok) throw new Error();
-          const text = await res.text();
-          let parsed = this.parseM3U(text, search);
-
-          if (genre && genre !== 'all') {
-            const filterTerm = genre.toLowerCase();
-            parsed = parsed.filter(item => item.name.toLowerCase().includes(filterTerm) || item.tags.toLowerCase().includes(filterTerm));
-          }
-
-          return parsed.length ? parsed : (BACKUP_DATA[country]?.tv || BACKUP_DATA.FR.tv);
-        } catch {
-          return BACKUP_DATA[country]?.tv || BACKUP_DATA.FR.tv;
-        }
-      }
-
-      parseM3U(content, search = '') {
-        const lines = content.split('\n');
-        const list = [];
-        let item = null;
-
-        for (let line of lines) {
-          line = line.trim();
-          if (line.startsWith('#EXTINF:')) {
-            const name = (line.match(/,(.+)$/) || [])[1] || 'Chaîne TV';
-            const logo = (line.match(/tvg-logo="([^"]*)"/) || [])[1] || '';
-            const group = (line.match(/group-title="([^"]*)"/) || [])[1] || 'Direct TV';
-            
-            // Génération d'un ID unique stable pour chaque chaîne TV
-            const cleanId = 'tv_' + (name + logo).toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 40);
-            item = { id: cleanId, name, logo, tags: group, type: 'video' };
-          } else if (line && !line.startsWith('#') && item) {
-            item.url = line;
-            if (!search || item.name.toLowerCase().includes(search.toLowerCase())) {
-              list.push(item);
-            }
-            item = null;
-          }
-          if (list.length >= 80) break;
-        }
-        return list;
-      }
-    }
-
-    class VisualizerEngine {
-      constructor(canvas2D, canvas3D) {
-        this.canvas2D = canvas2D;
-        this.canvas3D = canvas3D;
-        this.ctx2D = canvas2D.getContext('2d');
-        
-        this.preset = 'cyber';
-        this.active = false;
-
-        this.threeRenderer = null;
-        this.threeScene = null;
-        this.threeCamera = null;
-        this.threeMeshGroup = null;
-        this.clock = new THREE.Clock();
-
-        this.initThreeJS();
-        window.addEventListener('resize', () => this.resize());
-      }
-
-      initThreeJS() {
-        try {
-          this.threeScene = new THREE.Scene();
-          this.threeCamera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-          this.threeCamera.position.z = 15;
-
-          this.threeRenderer = new THREE.WebGLRenderer({ canvas: this.canvas3D, alpha: true, antialias: true });
-          this.threeRenderer.setSize(this.canvas3D.offsetWidth || 800, this.canvas3D.offsetHeight || 450);
-          this.threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-
-          this.threeMeshGroup = new THREE.Group();
-          this.threeScene.add(this.threeMeshGroup);
-
-          const tunnelGeo = new THREE.CylinderGeometry(5, 5, 40, 16, 32, true);
-          const tunnelMat = new THREE.MeshBasicMaterial({ color: 0x6366f1, wireframe: true, transparent: true, opacity: 0.35 });
-          const tunnel = new THREE.Mesh(tunnelGeo, tunnelMat);
-          tunnel.rotation.x = Math.PI / 2;
-          tunnel.name = 'hyperdrive';
-          this.threeMeshGroup.add(tunnel);
-
-          const sphereGeo = new THREE.IcosahedronGeometry(4, 2);
-          const sphereMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4, wireframe: true });
-          const sphere = new THREE.Mesh(sphereGeo, sphereMat);
-          sphere.name = 'sphere';
-          this.threeMeshGroup.add(sphere);
-
-          const gridHelper = new THREE.GridHelper(40, 40, 0xef4444, 0x6366f1);
-          gridHelper.position.y = -4;
-          gridHelper.name = 'synthwave';
-          this.threeMeshGroup.add(gridHelper);
-
-          const particleCount = 1500;
-          const particleGeo = new THREE.BufferGeometry();
-          const positions = new Float32Array(particleCount * 3);
-          for(let i=0; i<particleCount*3; i+=3) {
-            positions[i] = (Math.random() - 0.5) * 30;
-            positions[i+1] = (Math.random() - 0.5) * 30;
-            positions[i+2] = (Math.random() - 0.5) * 30;
-          }
-          particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-          const particleMat = new THREE.PointsMaterial({ color: 0x06b6d4, size: 0.15 });
-          const vortex = new THREE.Points(particleGeo, particleMat);
-          vortex.name = 'vortex';
-          this.threeMeshGroup.add(vortex);
-
-          const cubeGroup = new THREE.Group();
-          cubeGroup.name = 'cubes';
-          for(let x=-2; x<=2; x++) {
-            for(let z=-2; z<=2; z++) {
-              const box = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), new THREE.MeshBasicMaterial({ color: 0x6366f1, wireframe: true }));
-              box.position.set(x * 2.2, 0, z * 2.2);
-              cubeGroup.add(box);
-            }
-          }
-          this.threeMeshGroup.add(cubeGroup);
-
-          this.updateVisibility();
-        } catch(e) {
-          console.warn('ThreeJS Error:', e);
-        }
-      }
-
-      setPreset(preset) {
-        this.preset = preset;
-        this.updateVisibility();
-      }
-
-      updateVisibility() {
-        const is3D = ['hyperdrive', 'sphere', 'synthwave', 'vortex', 'cubes'].includes(this.preset);
-        this.canvas3D.style.display = is3D ? 'block' : 'none';
-        this.canvas2D.style.display = is3D ? 'none' : 'block';
-
-        if (this.threeMeshGroup) {
-          this.threeMeshGroup.children.forEach(child => {
-            child.visible = (child.name === this.preset);
-          });
-        }
-      }
-
-      start() { this.active = true; this.render(); }
       stop() {
-        this.active = false;
-        this.canvas2D.style.display = 'none';
-        this.canvas3D.style.display = 'none';
-      }
-
-      resize() {
-        const w = this.canvas2D.parentElement.clientWidth;
-        const h = this.canvas2D.parentElement.clientHeight;
-        this.canvas2D.width = w; this.canvas2D.height = h;
-        this.canvas3D.width = w; this.canvas3D.height = h;
-
-        if (this.threeCamera && this.threeRenderer) {
-          this.threeCamera.aspect = w / h;
-          this.threeCamera.updateProjectionMatrix();
-          this.threeRenderer.setSize(w, h);
+        if (this.interval) {
+          clearInterval(this.interval);
+          this.interval = null;
         }
+        this.isActive = false;
+        this.stallCount = 0;
       }
 
-      render() {
-        if (!this.active) return;
-        requestAnimationFrame(() => this.render());
+      checkActivity() {
+        if (this.media.paused || this.media.ended) {
+          this.isActive = false;
+          this.onStatusChange({
+            status: 'PAUSED',
+            label: 'EN PAUSE',
+            badgeClass: 'is-buffering',
+            fps: 0,
+            active: false
+          });
+          return;
+        }
 
-        const is3D = ['hyperdrive', 'sphere', 'synthwave', 'vortex', 'cubes'].includes(this.preset);
-        const delta = this.clock.getDelta();
-        const time = Date.now() * 0.003;
+        const currentTime = this.media.currentTime;
+        const timeAdvanced = (currentTime - this.lastTime) > 0.15;
+        this.lastTime = currentTime;
 
-        if (is3D) {
-          if (this.threeRenderer && this.threeScene) {
-            if (this.preset === 'sphere') {
-              const s = this.threeMeshGroup.getObjectByName('sphere');
-              if (s) { s.rotation.x += delta * 0.5; s.rotation.y += delta * 0.8; }
-            } else if (this.preset === 'vortex') {
-              const v = this.threeMeshGroup.getObjectByName('vortex');
-              if (v) { v.rotation.y += delta * 0.4; }
-            } else if (this.preset === 'cubes') {
-              const c = this.threeMeshGroup.getObjectByName('cubes');
-              if (c) {
-                c.rotation.y += delta * 0.3;
-                c.children.forEach((b, idx) => { b.position.y = Math.sin(time + idx) * 1.5; });
-              }
-            } else if (this.preset === 'hyperdrive') {
-              const h = this.threeMeshGroup.getObjectByName('hyperdrive');
-              if (h) { h.rotation.z += delta * 0.6; }
-            }
-            this.threeRenderer.render(this.threeScene, this.threeCamera);
+        let fps = 0;
+        let framesAdvancing = true;
+
+        // Diagnostic Frame Counter (si flux vidéo)
+        if (typeof this.media.getVideoPlaybackQuality === 'function') {
+          const quality = this.media.getVideoPlaybackQuality();
+          const currentTotalFrames = quality.totalVideoFrames;
+          fps = currentTotalFrames - this.lastTotalFrames;
+          this.lastTotalFrames = currentTotalFrames;
+
+          if (this.lastTotalFrames > 0 && fps === 0) {
+            framesAdvancing = false;
           }
+        }
+
+        // Le flux est considéré physiquement ACTIF si le temps avance et que les images se rafraîchissent
+        if (timeAdvanced && framesAdvancing) {
+          this.stallCount = 0;
+          this.isActive = true;
+          this.onStatusChange({
+            status: 'ACTIVE',
+            label: 'FLUX ACTIF 🟢',
+            fpsDetails: fps > 0 ? `${fps} FPS` : 'Audio OK',
+            badgeClass: 'is-active',
+            active: true
+          });
         } else {
-          const w = this.canvas2D.width = this.canvas2D.offsetWidth;
-          const h = this.canvas2D.height = this.canvas2D.offsetHeight;
-          if (!w || !h) return;
-
-          this.ctx2D.clearRect(0, 0, w, h);
-
-          if (this.preset === 'cyber') {
-            const barCount = 48;
-            const barWidth = w / barCount;
-            for (let i = 0; i < barCount; i++) {
-              const bh = (Math.sin(time * 2 + i * 0.25) * 0.5 + 0.5) * (h * 0.6) + 10;
-              const grad = this.ctx2D.createLinearGradient(0, h, 0, 0);
-              grad.addColorStop(0, '#6366f1'); grad.addColorStop(1, '#06b6d4');
-              this.ctx2D.fillStyle = grad;
-              this.ctx2D.fillRect(i * barWidth + 2, h - bh, barWidth - 4, bh);
-            }
-          } else if (this.preset === 'particles') {
-            for (let i = 0; i < 50; i++) {
-              const px = (Math.sin(time + i) * 0.5 + 0.5) * w;
-              const py = (Math.cos(time * 0.8 + i * 1.5) * 0.5 + 0.5) * h;
-              this.ctx2D.fillStyle = i % 2 === 0 ? 'rgba(99, 102, 241, 0.7)' : 'rgba(6, 182, 212, 0.7)';
-              this.ctx2D.beginPath();
-              this.ctx2D.arc(px, py, (i % 5) + 3, 0, Math.PI * 2);
-              this.ctx2D.fill();
-            }
-          } else if (this.preset === 'aurora') {
-            const g1 = this.ctx2D.createRadialGradient(w * 0.3, h * 0.5, 10, w * 0.3, h * 0.5, w * 0.6);
-            g1.addColorStop(0, 'rgba(99, 102, 241, 0.35)'); g1.addColorStop(1, 'transparent');
-            this.ctx2D.fillStyle = g1;
-            this.ctx2D.fillRect(0, 0, w, h);
+          this.stallCount++;
+          if (this.stallCount >= 4) {
+            this.isActive = false;
+            this.onStatusChange({
+              status: 'DEAD',
+              label: 'SIGNAL PERDU 🔴',
+              fpsDetails: 'Recherche...',
+              badgeClass: 'is-dead',
+              active: false
+            });
+          } else {
+            this.onStatusChange({
+              status: 'BUFFERING',
+              label: 'CHARGEMENT 🟡',
+              fpsDetails: 'Buffering...',
+              badgeClass: 'is-buffering',
+              active: false
+            });
           }
         }
       }
@@ -1211,6 +812,25 @@
 
         this.initDOM();
         this.visualizer = new VisualizerEngine(this.canvas2D, this.canvas3D);
+        
+        // Initialisation du Moniteur d'Activité Réelle
+        this.streamMonitor = new StreamActivityMonitor(this.media, (info) => {
+          const badgeContainer = document.getElementById('live-badge-container');
+          const badgeText = document.getElementById('player-status-badge');
+          const badgeFps = document.getElementById('player-fps-badge');
+
+          if (badgeContainer && badgeText) {
+            badgeContainer.className = `live-badge ${info.badgeClass}`;
+            badgeText.textContent = info.label;
+            if (badgeFps) badgeFps.textContent = info.fpsDetails ? `(${info.fpsDetails})` : '';
+          }
+
+          // Si le flux est bloqué/inactif depuis plus de 4s, déclencher une notification
+          if (info.status === 'DEAD' && this.activeStation) {
+            this.showToast(`⚠️ Signal interrompu sur "${this.activeStation.name}"`);
+          }
+        });
+
         this.bindEvents();
         this.loadCatalog();
       }
@@ -1526,10 +1146,13 @@
             this.hls = new Hls({ enableWorker: true });
             this.hls.loadSource(s.url);
             this.hls.attachMedia(this.media);
-            this.hls.on(Hls.Events.MANIFEST_PARSED, () => this.media.play());
+            this.hls.on(Hls.Events.MANIFEST_PARSED, () => {
+              this.media.play();
+              this.streamMonitor.start();
+            });
           } else {
             this.media.src = s.url;
-            this.media.play().catch(() => {});
+            this.media.play().then(() => this.streamMonitor.start()).catch(() => {});
           }
         } else {
           this.media.style.display = 'none';
@@ -1538,7 +1161,7 @@
           this.visualizer.resize();
 
           this.media.src = s.url;
-          this.media.play().catch(() => {});
+          this.media.play().then(() => this.streamMonitor.start()).catch(() => {});
         }
 
         this.renderGrid();
