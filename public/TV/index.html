@@ -1142,9 +1142,28 @@
       async getPodcastEpisodes(feedUrl) {
         if (!feedUrl) return [];
 
-        // Stratégie 1: rss2json API (Conversion directe JSON sans problème de CORS)
+        // Normalisation de l'URL du flux en HTTPS
+        let cleanFeedUrl = feedUrl.trim();
+        if (cleanFeedUrl.startsWith('http://')) {
+          cleanFeedUrl = cleanFeedUrl.replace('http://', 'https://');
+        }
+
+        // Stratégie 1 : Fetch direct (très rapide pour les hébergeurs avec CORS activé comme Acast, Anchor, Radio France, Buzzsprout)
         try {
-          const rss2jsonUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(feedUrl)}&count=30`;
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 3500);
+          const res = await fetch(cleanFeedUrl, { signal: controller.signal });
+          clearTimeout(timer);
+          if (res.ok) {
+            const text = await res.text();
+            const episodes = this.parseRSSFeed(text);
+            if (episodes && episodes.length > 0) return episodes;
+          }
+        } catch(e) {}
+
+        // Stratégie 2 : Service rss2json API
+        try {
+          const rss2jsonUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(cleanFeedUrl)}&count=30`;
           const res = await fetch(rss2jsonUrl);
           if (res.ok) {
             const data = await res.json();
@@ -1174,76 +1193,146 @@
           }
         } catch (e) {}
 
-        // Stratégie 2: Multi-proxies CORS avec secours DOMParser + Regex
+        // Stratégie 3 : Service feed2json.org API
+        try {
+          const res = await fetch(`https://feed2json.org/convert?url=${encodeURIComponent(cleanFeedUrl)}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.items && data.items.length > 0) {
+              const episodes = [];
+              data.items.forEach((item, idx) => {
+                let audioUrl = item.attachments?.[0]?.url;
+                if (!audioUrl && item.content_html) {
+                  const m = item.content_html.match(/https?:\/\/[^\s"'<>]+\.(?:mp3|m4a|aac|ogg|wav)(\?[^\s"'<>]*)?/i);
+                  if (m) audioUrl = m[0];
+                }
+                if (audioUrl) {
+                  episodes.push({
+                    id: `ep_${idx}_${(item.title || '').replace(/[^a-z0-9]/gi, '')}`,
+                    title: item.title || `Épisode ${idx + 1}`,
+                    url: audioUrl,
+                    pubDate: item.date_published ? new Date(item.date_published).toLocaleDateString('fr-FR', { day:'numeric', month:'short', year:'numeric' }) : '',
+                    type: 'audio'
+                  });
+                }
+              });
+              if (episodes.length > 0) return episodes;
+            }
+          }
+        } catch(e) {}
+
+        // Stratégie 4 : Cascade de Proxies CORS distants avec extraction Regex
         const proxies = [
           url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
           url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
           url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
         ];
 
-        let xmlText = '';
         for (const proxyFn of proxies) {
           try {
             const controller = new AbortController();
             const timer = setTimeout(() => controller.abort(), 4000);
-            const res = await fetch(proxyFn(feedUrl), { signal: controller.signal });
+            const res = await fetch(proxyFn(cleanFeedUrl), { signal: controller.signal });
             clearTimeout(timer);
             if (res.ok) {
               const fetchedText = await res.text();
               if (fetchedText && (fetchedText.includes('<item') || fetchedText.includes('<entry'))) {
-                xmlText = fetchedText; break;
+                const episodes = this.parseRSSFeed(fetchedText);
+                if (episodes && episodes.length > 0) return episodes;
               }
             }
           } catch (e) {}
         }
-        if (!xmlText) return [];
 
-        try {
-          let doc;
-          try {
-            doc = new DOMParser().parseFromString(xmlText, 'text/xml');
-          } catch(e) {}
-          if (!doc || doc.querySelector('parsererror')) {
-            doc = new DOMParser().parseFromString(xmlText, 'text/html');
+        return [];
+      }
+
+      parseRSSFeed(xmlText) {
+        if (!xmlText) return [];
+        const episodes = [];
+
+        // Parsing robuste basé sur Regex pour éviter les plantages du DOMParser XML
+        const itemMatches = xmlText.match(/<(?:item|entry)[\s\S]*?<\/(?:item|entry)>/gi) || [];
+        
+        itemMatches.slice(0, 30).forEach((itemXml, idx) => {
+          let title = `Épisode ${idx + 1}`;
+          const titleMatch = itemXml.match(/<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i);
+          if (titleMatch && titleMatch[1]) {
+            title = titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim();
           }
 
-          const items = doc.querySelectorAll('item, entry');
-          const episodes = [];
+          let audioUrl = null;
+          const encMatch = itemXml.match(/<enclosure[^>]*url=["']([^"']+)["']/i);
+          if (encMatch) audioUrl = encMatch[1];
 
-          items.forEach((item, idx) => {
-            if (idx >= 30) return;
-            const titleEl = item.querySelector('title');
-            const title = titleEl ? titleEl.textContent.trim() : `Épisode ${idx + 1}`;
+          if (!audioUrl) {
+            const mediaMatch = itemXml.match(/<media:content[^>]*url=["']([^"']+)["']/i);
+            if (mediaMatch) audioUrl = mediaMatch[1];
+          }
 
-            let audioUrl = null;
-            const enclosure = item.querySelector('enclosure');
-            if (enclosure) audioUrl = enclosure.getAttribute('url');
-            if (!audioUrl) {
-              const media = item.querySelector('content, media\\:content, link[type*="audio"]');
-              if (media) audioUrl = media.getAttribute('url') || media.getAttribute('href');
+          if (!audioUrl) {
+            const urlMatch = itemXml.match(/(https?:\/\/[^"'\s<>]+\.(?:mp3|m4a|aac|ogg|wav)(?:\?[^"'\s<>]*)?)/i);
+            if (urlMatch) audioUrl = urlMatch[1];
+          }
+
+          let pubDate = '';
+          const dateMatch = itemXml.match(/<(?:pubDate|published|updated)>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/(?:pubDate|published|updated)>/i);
+          if (dateMatch && dateMatch[1]) {
+            const rawDate = dateMatch[1].trim();
+            try {
+              pubDate = new Date(rawDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
+            } catch(e) {
+              pubDate = rawDate.slice(0, 16);
             }
-            if (!audioUrl) {
-              const htmlStr = item.outerHTML || item.innerHTML || '';
-              const m = htmlStr.match(/url=["'](https?:\/\/[^"'\s<>]+\.(?:mp3|m4a|aac|ogg|wav)[^"'\s>]*)["']/i) ||
-                        htmlStr.match(/(https?:\/\/[^"'\s<>]+\.(?:mp3|m4a|aac|ogg|wav)(?:\?[^"'\s<>]*)?)/i);
-              if (m) audioUrl = m[1];
-            }
+          }
 
-            const pubDateEl = item.querySelector('pubDate, pubdate, updated');
-            let pubDate = pubDateEl ? pubDateEl.textContent.trim().slice(0, 22) : '';
+          if (audioUrl) {
+            title = title.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+            episodes.push({
+              id: `ep_${idx}_${title.replace(/[^a-z0-9]/gi, '')}`,
+              title,
+              url: audioUrl,
+              pubDate,
+              type: 'audio'
+            });
+          }
+        });
 
-            if (audioUrl) {
-              episodes.push({
-                id: `ep_${idx}_${title.replace(/[^a-z0-9]/gi, '')}`,
-                title,
-                url: audioUrl,
-                pubDate,
-                type: 'audio'
-              });
+        // Secours avec DOMParser si Regex n'a rien donné
+        if (episodes.length === 0) {
+          try {
+            const parser = new DOMParser();
+            let doc = parser.parseFromString(xmlText, 'text/xml');
+            if (doc.querySelector('parsererror')) {
+              doc = parser.parseFromString(xmlText, 'text/html');
             }
-          });
-          return episodes;
-        } catch { return []; }
+            const items = doc.querySelectorAll('item, entry');
+            items.forEach((item, idx) => {
+              if (idx >= 30) return;
+              const titleEl = item.querySelector('title');
+              const title = titleEl ? titleEl.textContent.trim() : `Épisode ${idx + 1}`;
+              
+              let audioUrl = null;
+              const enc = item.querySelector('enclosure');
+              if (enc) audioUrl = enc.getAttribute('url');
+              if (!audioUrl) {
+                const media = item.querySelector('content, media\\:content');
+                if (media) audioUrl = media.getAttribute('url');
+              }
+              if (audioUrl) {
+                episodes.push({
+                  id: `ep_${idx}_${title.replace(/[^a-z0-9]/gi, '')}`,
+                  title,
+                  url: audioUrl,
+                  pubDate: '',
+                  type: 'audio'
+                });
+              }
+            });
+          } catch(e) {}
+        }
+
+        return episodes;
       }
 
       parseM3U(content, search = '', country = 'FR') {
