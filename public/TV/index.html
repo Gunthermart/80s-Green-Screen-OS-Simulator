@@ -1283,19 +1283,30 @@
       }
 
       async getTV(country = 'FR', genre = 'all', search = '') {
-        const targetUrl = `https://iptv-org.github.io/iptv/countries/${country.toLowerCase()}.m3u`;
-        try {
-          const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 8000);
-          const res = await fetch(targetUrl, { signal: controller.signal });
-          clearTimeout(timer);
+        const targetUrl = country === 'GLOBAL'
+          ? 'https://iptv-org.github.io/iptv/index.m3u'
+          : `https://iptv-org.github.io/iptv/countries/${country.toLowerCase()}.m3u`;
 
-          if (res.ok) {
-            const text = await res.text();
-            const list = this.parseM3U(text, search, country, genre);
-            if (list.length > 0) return list;
-          }
-        } catch (e) {}
+        const urlsToTry = [
+          targetUrl,
+          `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
+          `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`
+        ];
+
+        for (const url of urlsToTry) {
+          try {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 6000);
+            const res = await fetch(url, { signal: controller.signal });
+            clearTimeout(timer);
+
+            if (res.ok) {
+              const text = await res.text();
+              const list = this.parseM3U(text, search, country, genre);
+              if (list && list.length > 0) return list;
+            }
+          } catch (e) {}
+        }
 
         return BACKUP_STATIONS.FR_TV;
       }
@@ -1416,26 +1427,32 @@
 
       parseM3U(content, search = '', country = 'FR', genre = 'all') {
         if (!content) return [];
-        const lines = content.split('\n');
+        const lines = content.split(/\r?\n/);
         const list = [];
         let item = null;
-        for (let line of lines) {
-          line = line.trim();
+        for (let l of lines) {
+          const line = l.trim();
+          if (!line) continue;
+
           if (line.startsWith('#EXTINF:')) {
             const name = (line.match(/,(.+)$/) || [])[1] || 'Chaîne TV';
             const logo = (line.match(/tvg-logo="([^"]*)"/) || [])[1] || '';
             const group = (line.match(/group-title="([^"]*)"/) || [])[1] || 'Direct TV';
-            const cleanId = `tv_${name.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
-            item = { id: cleanId, name, logo, country, tags: group, type: 'video' };
-          } else if (line && !line.startsWith('#') && item) {
-            item.url = line;
-            const matchesSearch = !search || item.name.toLowerCase().includes(search.toLowerCase()) || item.tags.toLowerCase().includes(search.toLowerCase());
-            const matchesGenre = genre === 'all' || item.tags.toLowerCase().includes(genre.toLowerCase()) || item.name.toLowerCase().includes(genre.toLowerCase());
+            const cleanId = `tv_${name.toLowerCase().replace(/[^a-z0-9]/g, '')}_${list.length}`;
+            item = { id: cleanId, name: name.trim(), logo: logo.trim(), country, tags: group.trim(), type: 'video' };
+          } else if (line.startsWith('#EXTGRP:')) {
+            if (item) item.tags = line.replace('#EXTGRP:', '').trim();
+          } else if (!line.startsWith('#')) {
+            if (item) {
+              item.url = line;
+              const matchesSearch = !search || item.name.toLowerCase().includes(search.toLowerCase()) || item.tags.toLowerCase().includes(search.toLowerCase());
+              const matchesGenre = genre === 'all' || item.tags.toLowerCase().includes(genre.toLowerCase()) || item.name.toLowerCase().includes(genre.toLowerCase());
 
-            if (matchesSearch && matchesGenre) {
-              list.push(item);
+              if (matchesSearch && matchesGenre) {
+                list.push(item);
+              }
+              item = null;
             }
-            item = null;
           }
         }
         return list;
