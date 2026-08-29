@@ -1141,13 +1141,47 @@
 
       async getPodcastEpisodes(feedUrl) {
         if (!feedUrl) return [];
+
+        // Stratégie 1: rss2json API (Conversion directe JSON sans problème de CORS)
+        try {
+          const rss2jsonUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(feedUrl)}&count=30`;
+          const res = await fetch(rss2jsonUrl);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.status === 'ok' && Array.isArray(data.items) && data.items.length > 0) {
+              const episodes = [];
+              data.items.forEach((item, idx) => {
+                let audioUrl = item.enclosure?.link || item.enclosure?.url;
+                if (!audioUrl && typeof item.description === 'string') {
+                  const m = item.description.match(/https?:\/\/[^\s"'<>]+\.(?:mp3|m4a|aac|ogg|wav)(\?[^\s"'<>]*)?/i);
+                  if (m) audioUrl = m[0];
+                }
+                if (!audioUrl && item.link && item.link.match(/\.(mp3|m4a|aac|ogg|wav)/i)) {
+                  audioUrl = item.link;
+                }
+                if (audioUrl) {
+                  episodes.push({
+                    id: `ep_${idx}_${(item.title || '').replace(/[^a-z0-9]/gi, '')}`,
+                    title: item.title || `Épisode ${idx + 1}`,
+                    url: audioUrl,
+                    pubDate: item.pubDate ? new Date(item.pubDate).toLocaleDateString('fr-FR', { day:'numeric', month:'short', year:'numeric' }) : '',
+                    type: 'audio'
+                  });
+                }
+              });
+              if (episodes.length > 0) return episodes;
+            }
+          }
+        } catch (e) {}
+
+        // Stratégie 2: Multi-proxies CORS avec secours DOMParser + Regex
         const proxies = [
           url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
           url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
           url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
         ];
 
-        let text = '';
+        let xmlText = '';
         for (const proxyFn of proxies) {
           try {
             const controller = new AbortController();
@@ -1157,16 +1191,22 @@
             if (res.ok) {
               const fetchedText = await res.text();
               if (fetchedText && (fetchedText.includes('<item') || fetchedText.includes('<entry'))) {
-                text = fetchedText; break;
+                xmlText = fetchedText; break;
               }
             }
           } catch (e) {}
         }
-        if (!text) return [];
+        if (!xmlText) return [];
 
         try {
-          const parser = new DOMParser();
-          const doc = parser.parseFromString(text, 'text/html');
+          let doc;
+          try {
+            doc = new DOMParser().parseFromString(xmlText, 'text/xml');
+          } catch(e) {}
+          if (!doc || doc.querySelector('parsererror')) {
+            doc = new DOMParser().parseFromString(xmlText, 'text/html');
+          }
+
           const items = doc.querySelectorAll('item, entry');
           const episodes = [];
 
@@ -1179,12 +1219,18 @@
             const enclosure = item.querySelector('enclosure');
             if (enclosure) audioUrl = enclosure.getAttribute('url');
             if (!audioUrl) {
-              const mediaContent = item.querySelector('content, media\\:content');
-              if (mediaContent) audioUrl = mediaContent.getAttribute('url');
+              const media = item.querySelector('content, media\\:content, link[type*="audio"]');
+              if (media) audioUrl = media.getAttribute('url') || media.getAttribute('href');
+            }
+            if (!audioUrl) {
+              const htmlStr = item.outerHTML || item.innerHTML || '';
+              const m = htmlStr.match(/url=["'](https?:\/\/[^"'\s<>]+\.(?:mp3|m4a|aac|ogg|wav)[^"'\s>]*)["']/i) ||
+                        htmlStr.match(/(https?:\/\/[^"'\s<>]+\.(?:mp3|m4a|aac|ogg|wav)(?:\?[^"'\s<>]*)?)/i);
+              if (m) audioUrl = m[1];
             }
 
             const pubDateEl = item.querySelector('pubDate, pubdate, updated');
-            let pubDate = pubDateEl ? pubDateEl.textContent.trim() : '';
+            let pubDate = pubDateEl ? pubDateEl.textContent.trim().slice(0, 22) : '';
 
             if (audioUrl) {
               episodes.push({
@@ -1564,10 +1610,30 @@
         const episodes = await this.fetcher.getPodcastEpisodes(podcast.feedUrl);
         const isSubbed = this.subStore.isSubbed(podcast.id);
 
+        if (!episodes || episodes.length === 0) {
+          this.episodesContainer.innerHTML = `
+            <div class="episodes-panel">
+              <div class="podcast-header-detail">
+                <img src="${podcast.logo}" class="podcast-detail-cover" onerror="this.style.display='none'">
+                <div class="podcast-header-info">
+                  <button class="stage-btn" onclick="app.closeEpisodes()" style="width:fit-content;">← Retour</button>
+                  <h3 style="font-size:1.15rem; font-weight:700;">${podcast.name}</h3>
+                  <p style="font-size:0.82rem; color:var(--text-secondary);">${podcast.artist || 'Podcast'}</p>
+                </div>
+              </div>
+              <div class="loader-container">
+                <p style="color:var(--text-secondary);">Impossible d'extraire les épisodes de ce flux pour le moment.</p>
+                <button class="stage-btn" onclick="app.loadPodcastEpisodes(app.selectedPodcast)" style="margin-top:10px;">Réessayer 🔄</button>
+              </div>
+            </div>
+          `;
+          return;
+        }
+
         this.episodesContainer.innerHTML = `
           <div class="episodes-panel">
             <div class="podcast-header-detail">
-              <img src="${podcast.logo}" class="podcast-detail-cover">
+              <img src="${podcast.logo}" class="podcast-detail-cover" onerror="this.style.display='none'">
               <div class="podcast-header-info">
                 <button class="stage-btn" onclick="app.closeEpisodes()" style="width:fit-content;">← Retour</button>
                 <h3 style="font-size:1.15rem; font-weight:700;">${podcast.name}</h3>
