@@ -1084,6 +1084,83 @@
       }
     }
 
+    class StreamHealthMonitor {
+      constructor(mediaElement, badgeTextEl, badgeContainerEl) {
+        this.media = mediaElement;
+        this.badgeText = badgeTextEl;
+        this.badgeContainer = badgeContainerEl;
+        this.lastTime = 0;
+        this.lastDecodedFrames = 0;
+        this.stuckCounter = 0;
+        this.timer = null;
+        this.initListeners();
+      }
+
+      initListeners() {
+        if (!this.media) return;
+        ['waiting', 'stalled', 'seeking'].forEach(evt => {
+          this.media.addEventListener(evt, () => this.setStatus('buffering', 'CHARGEMENT... 🟡'));
+        });
+        ['playing'].forEach(evt => {
+          this.stuckCounter = 0;
+          this.setStatus('active', 'FLUX ACTIF 🟢');
+        });
+        ['pause'].forEach(evt => {
+          if (this.media.paused && !this.media.ended) {
+            this.setStatus('', 'PAUSE ⏸️');
+          }
+        });
+        ['error'].forEach(evt => {
+          this.setStatus('dead', 'SIGNAL PERDU 🔴');
+        });
+        this.startHealthCheck();
+      }
+
+      startHealthCheck() {
+        if (this.timer) clearInterval(this.timer);
+        this.timer = setInterval(() => {
+          if (!this.media || this.media.paused) return;
+
+          const currTime = this.media.currentTime;
+          const isStuck = (currTime === this.lastTime && currTime > 0);
+          this.lastTime = currTime;
+
+          let fpsStr = '';
+          if (typeof this.media.getVideoPlaybackQuality === 'function') {
+            const q = this.media.getVideoPlaybackQuality();
+            const decoded = q.totalVideoFrames || 0;
+            const diff = decoded - this.lastDecodedFrames;
+            this.lastDecodedFrames = decoded;
+            if (diff > 0) {
+              fpsStr = ` (${diff} FPS)`;
+            }
+          }
+
+          if (isStuck) {
+            this.stuckCounter++;
+            if (this.stuckCounter >= 3) {
+              this.setStatus('dead', 'SIGNAL BLOQUÉ 🔴');
+            } else {
+              this.setStatus('buffering', 'BUFFÉRISE... 🟡');
+            }
+          } else {
+            this.stuckCounter = 0;
+            this.setStatus('active', `FLUX ACTIF 🟢${fpsStr}`);
+          }
+        }, 1000);
+      }
+
+      setStatus(stateClass, label) {
+        if (this.badgeContainer) {
+          this.badgeContainer.classList.remove('is-active', 'is-buffering', 'is-dead');
+          if (stateClass) this.badgeContainer.classList.add(`is-${stateClass}`);
+        }
+        if (this.badgeText) {
+          this.badgeText.textContent = label;
+        }
+      }
+    }
+
     const BACKUP_STATIONS = {
       FR_RADIO: [
         { id: 'fip', name: 'FIP Radio', url: 'https://stream.radiofrance.fr/fip/fip.m3u8?id=radiofrance', logo: 'https://www.radiofrance.fr/assets/images/brands/fip.svg', country: 'FR', tags: 'Éclectique, Jazz', type: 'audio' },
@@ -1868,6 +1945,12 @@
         this.timeDuration = document.getElementById('time-duration');
         this.speedBtn = document.getElementById('btn-speed-toggle');
         this.queueDrawer = document.getElementById('queue-drawer');
+
+        this.healthMonitor = new StreamHealthMonitor(
+          this.media,
+          document.getElementById('player-status-badge'),
+          document.getElementById('live-badge-container')
+        );
       }
 
       bindEvents() {
