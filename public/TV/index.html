@@ -701,7 +701,9 @@
         this.db = null;
         this.auth = null;
         this.userDocRef = null;
+        this.idb = null;
         this.initCloud();
+        this.initIndexedDB();
       }
 
       async initCloud() {
@@ -732,12 +734,14 @@
             if (docSnap.exists()) {
               const data = docSnap.data();
               if (Array.isArray(data.radioItems)) {
-                this.radioFavs.clear();
-                data.radioItems.forEach(item => this.radioFavs.set(item.id, item));
+                data.radioItems.forEach(item => {
+                  if (item && item.id) this.radioFavs.set(item.id, item);
+                });
               }
               if (Array.isArray(data.tvItems)) {
-                this.tvFavs.clear();
-                data.tvItems.forEach(item => this.tvFavs.set(item.id, item));
+                data.tvItems.forEach(item => {
+                  if (item && item.id) this.tvFavs.set(item.id, item);
+                });
               }
               if (this.onUpdate) this.onUpdate();
             }
@@ -745,7 +749,61 @@
             console.warn('Synchro cloud favoris indisponible:', err);
           });
         } catch (e) {
-          console.info('Mode mémoire actif pour les favoris');
+          console.info('Mode stockage local actif pour les favoris');
+        }
+      }
+
+      initIndexedDB() {
+        try {
+          const request = indexedDB.open('OmniStreamDB', 1);
+          request.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains('favorites')) {
+              db.createObjectStore('favorites', { keyPath: 'id' });
+            }
+          };
+          request.onsuccess = (e) => {
+            this.idb = e.target.result;
+            this.loadFromIndexedDB();
+          };
+        } catch (err) {
+          console.warn('IndexedDB non disponible:', err);
+        }
+      }
+
+      loadFromIndexedDB() {
+        if (!this.idb) return;
+        try {
+          const tx = this.idb.transaction('favorites', 'readonly');
+          const store = tx.objectStore('favorites');
+          const req = store.getAll();
+          req.onsuccess = () => {
+            const items = req.result || [];
+            items.forEach(item => {
+              if (item && item.id) {
+                if (item.type === 'video') this.tvFavs.set(item.id, item);
+                else this.radioFavs.set(item.id, item);
+              }
+            });
+            if (this.onUpdate) this.onUpdate();
+          };
+        } catch (e) {
+          console.warn('Erreur chargement IndexedDB:', e);
+        }
+      }
+
+      saveToIndexedDB(station, isFav) {
+        if (!this.idb) return;
+        try {
+          const tx = this.idb.transaction('favorites', 'readwrite');
+          const store = tx.objectStore('favorites');
+          if (isFav) {
+            store.put(station);
+          } else {
+            store.delete(station.id);
+          }
+        } catch (e) {
+          console.warn('Erreur sauvegarde IndexedDB:', e);
         }
       }
 
@@ -775,9 +833,11 @@
           store.set(station.id, station);
         }
 
+        const newlyFav = !isFav;
         this.syncToCloud();
+        this.saveToIndexedDB(station, newlyFav);
         if (this.onUpdate) this.onUpdate();
-        return !isFav;
+        return newlyFav;
       }
 
       isFavorite(id, type = 'audio') {
