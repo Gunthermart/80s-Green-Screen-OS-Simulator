@@ -1,0 +1,1786 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OmniStream — Live Radio & IPTV Player</title>
+  
+  <!-- Hls.js pour la prise en charge des flux .m3u8 en direct -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.8/dist/hls.min.js"></script>
+
+  <style>
+    /* ==========================================================================
+       VARIABLES ET THEME DARK GLASSMORPHISM
+       ========================================================================== */
+    :root {
+      --bg-base: #090a0f;
+      --bg-surface: #111420;
+      --bg-surface-elevated: #181c2e;
+      --bg-glass: rgba(17, 20, 32, 0.75);
+      --border-glass: rgba(255, 255, 255, 0.08);
+      --border-focus: rgba(99, 102, 241, 0.5);
+
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+
+      --accent-primary: #6366f1;
+      --accent-primary-hover: #4f46e5;
+      --accent-cyan: #06b6d4;
+      --accent-live: #ef4444;
+      --accent-emerald: #10b981;
+
+      --sidebar-width: 280px;
+      --player-height: 84px;
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 18px;
+      --radius-full: 9999px;
+
+      --shadow-subtle: 0 4px 20px rgba(0, 0, 0, 0.35);
+      --shadow-glow: 0 0 25px rgba(99, 102, 241, 0.25);
+      --transition-smooth: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background-color: var(--bg-base);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* Scrollbars personnalisées */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: var(--radius-full);
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.25);
+    }
+
+    /* ==========================================================================
+       LAYOUT GLOBAL
+       ========================================================================== */
+    #app-container {
+      display: flex;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Sidebar Navigation */
+    #sidebar {
+      width: var(--sidebar-width);
+      background: var(--bg-surface);
+      border-right: 1px solid var(--border-glass);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      z-index: 30;
+      transition: transform 0.3s ease;
+    }
+
+    .brand-section {
+      padding: 24px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--border-glass);
+    }
+
+    .brand-icon {
+      width: 38px;
+      height: 38px;
+      background: linear-gradient(135deg, var(--accent-primary), var(--accent-cyan));
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: var(--shadow-glow);
+    }
+
+    .brand-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #fff, var(--text-secondary));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .nav-tabs {
+      padding: 16px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 12px 16px;
+      border-radius: var(--radius-md);
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-weight: 500;
+      font-size: 0.95rem;
+      border: 1px solid transparent;
+      transition: var(--transition-smooth);
+      user-select: none;
+    }
+
+    .nav-item:hover {
+      background: var(--bg-surface-elevated);
+      color: var(--text-primary);
+    }
+
+    .nav-item.active {
+      background: rgba(99, 102, 241, 0.15);
+      color: var(--text-primary);
+      border-color: rgba(99, 102, 241, 0.3);
+    }
+
+    .nav-item.active svg {
+      stroke: var(--accent-primary);
+    }
+
+    .sidebar-filters {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .filter-group-title {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      padding: 4px 8px;
+      font-weight: 700;
+    }
+
+    .filter-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .chip {
+      font-size: 0.8rem;
+      padding: 6px 12px;
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-full);
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: var(--transition-smooth);
+    }
+
+    .chip:hover {
+      border-color: var(--border-focus);
+      color: var(--text-primary);
+    }
+
+    .chip.active {
+      background: var(--accent-primary);
+      color: #ffffff;
+      border-color: var(--accent-primary);
+    }
+
+    /* Main Content Area */
+    #main-wrapper {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+      background: radial-gradient(circle at 80% 20%, rgba(99, 102, 241, 0.05), transparent 40%),
+                  radial-gradient(circle at 20% 80%, rgba(6, 182, 212, 0.04), transparent 40%),
+                  var(--bg-base);
+    }
+
+    /* Top Bar */
+    .top-header {
+      height: 74px;
+      padding: 0 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      border-bottom: 1px solid var(--border-glass);
+      backdrop-filter: blur(12px);
+      background: var(--bg-glass);
+      z-index: 20;
+    }
+
+    .mobile-menu-btn {
+      display: none;
+      background: none;
+      border: none;
+      color: var(--text-primary);
+      cursor: pointer;
+      padding: 8px;
+    }
+
+    .search-box {
+      flex: 1;
+      max-width: 480px;
+      position: relative;
+    }
+
+    .search-box svg {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      stroke: var(--text-muted);
+      pointer-events: none;
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 10px 14px 10px 42px;
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-full);
+      color: var(--text-primary);
+      font-size: 0.9rem;
+      outline: none;
+      transition: var(--transition-smooth);
+    }
+
+    .search-input:focus {
+      border-color: var(--accent-primary);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+    }
+
+    .header-status {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    .channel-counter {
+      padding: 4px 12px;
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-full);
+    }
+
+    /* Scrollable Stage */
+    #content-stage {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 28px calc(var(--player-height) + 24px) 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* Lecteur Médias Haut (Mode Scène / Théâtre) */
+    #theater-stage {
+      width: 100%;
+      background: #000000;
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border-glass);
+      overflow: hidden;
+      display: none; /* Révélé quand un média est actif ou mode TV */
+      position: relative;
+      box-shadow: var(--shadow-subtle);
+      transition: all 0.3s ease;
+    }
+
+    #theater-stage.active {
+      display: block;
+    }
+
+    .video-viewport {
+      width: 100%;
+      max-height: 480px;
+      aspect-ratio: 16 / 9;
+      position: relative;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    video#unified-media {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #000;
+    }
+
+    /* Overlay Audio Visualizer */
+    .audio-visualizer-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(17, 20, 32, 0.9), rgba(9, 10, 15, 0.98));
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      z-index: 5;
+    }
+
+    .audio-cover {
+      width: 140px;
+      height: 140px;
+      border-radius: var(--radius-lg);
+      background: var(--bg-surface-elevated);
+      border: 2px solid var(--border-glass);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      object-fit: cover;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .audio-cover img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .audio-info-stage {
+      text-align: center;
+      max-width: 80%;
+    }
+
+    .audio-stage-title {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .audio-stage-meta {
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
+    canvas#audio-canvas {
+      width: 80%;
+      max-width: 600px;
+      height: 60px;
+      margin-top: 8px;
+    }
+
+    /* Grille de cartes de stations */
+    .catalog-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .catalog-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+    }
+
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+      gap: 18px;
+    }
+
+    .station-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-md);
+      padding: 14px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      transition: var(--transition-smooth);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .station-card:hover {
+      transform: translateY(-4px);
+      background: var(--bg-surface-elevated);
+      border-color: rgba(99, 102, 241, 0.4);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    }
+
+    .station-card.is-playing {
+      border-color: var(--accent-primary);
+      background: rgba(99, 102, 241, 0.12);
+      box-shadow: 0 0 15px rgba(99, 102, 241, 0.2);
+    }
+
+    .card-thumb-wrapper {
+      width: 100%;
+      aspect-ratio: 16 / 10;
+      border-radius: var(--radius-sm);
+      background: var(--bg-surface-elevated);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+      border: 1px solid var(--border-glass);
+    }
+
+    .card-thumb-wrapper img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      padding: 8px;
+      transition: transform 0.3s ease;
+    }
+
+    .station-card:hover .card-thumb-wrapper img {
+      transform: scale(1.06);
+    }
+
+    .thumb-fallback {
+      font-size: 1.5rem;
+      font-weight: 800;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .card-play-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    .station-card:hover .card-play-overlay {
+      opacity: 1;
+    }
+
+    .card-play-btn {
+      width: 44px;
+      height: 44px;
+      background: var(--accent-primary);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: var(--shadow-glow);
+    }
+
+    .card-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .card-name {
+      font-size: 0.95rem;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--text-primary);
+    }
+
+    .card-tags {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+    }
+
+    .card-badge {
+      font-size: 0.68rem;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.06);
+      text-transform: uppercase;
+    }
+
+    .playing-bars {
+      display: none;
+      align-items: flex-end;
+      gap: 3px;
+      height: 14px;
+    }
+
+    .station-card.is-playing .playing-bars {
+      display: flex;
+    }
+
+    .bar {
+      width: 3px;
+      background: var(--accent-primary);
+      border-radius: 2px;
+      animation: bounceBar 0.8s ease infinite alternate;
+    }
+    .bar:nth-child(2) { animation-delay: 0.2s; }
+    .bar:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes bounceBar {
+      0% { height: 3px; }
+      100% { height: 14px; }
+    }
+
+    /* Loader & Diagnostic States */
+    .loader-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 0;
+      gap: 16px;
+      color: var(--text-secondary);
+    }
+
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid rgba(255, 255, 255, 0.1);
+      border-top-color: var(--accent-primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .alert-banner {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      border-radius: var(--radius-md);
+      padding: 12px 18px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: #fca5a5;
+      font-size: 0.88rem;
+      margin-bottom: 12px;
+      animation: fadeIn 0.3s ease;
+    }
+
+    /* ==========================================================================
+       STICKY BOTTOM PLAYER
+       ========================================================================== */
+    #sticky-player {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: var(--player-height);
+      background: rgba(14, 17, 27, 0.92);
+      backdrop-filter: blur(20px);
+      border-top: 1px solid var(--border-glass);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 28px;
+      z-index: 50;
+      box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.5);
+    }
+
+    .player-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-width: 240px;
+      max-width: 320px;
+    }
+
+    .player-thumb {
+      width: 52px;
+      height: 52px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-glass);
+      object-fit: cover;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .player-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      padding: 4px;
+    }
+
+    .player-track-info {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .player-title {
+      font-size: 0.92rem;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .player-subtitle {
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 2px;
+    }
+
+    .player-center {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .player-controls {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+    }
+
+    .ctrl-btn {
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      transition: var(--transition-smooth);
+      padding: 8px;
+    }
+
+    .ctrl-btn:hover {
+      color: var(--text-primary);
+      transform: scale(1.08);
+    }
+
+    .ctrl-btn.play-main {
+      width: 48px;
+      height: 48px;
+      background: var(--text-primary);
+      color: var(--bg-base);
+    }
+
+    .ctrl-btn.play-main:hover {
+      background: #ffffff;
+      transform: scale(1.1);
+      box-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+    }
+
+    .live-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      color: var(--accent-live);
+      text-transform: uppercase;
+    }
+
+    .live-dot {
+      width: 7px;
+      height: 7px;
+      background: var(--accent-live);
+      border-radius: 50%;
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+      70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
+
+    .player-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      min-width: 240px;
+      justify-content: flex-end;
+    }
+
+    .volume-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .volume-slider {
+      -webkit-appearance: none;
+      width: 90px;
+      height: 4px;
+      border-radius: 2px;
+      background: rgba(255, 255, 255, 0.2);
+      outline: none;
+      transition: opacity 0.2s;
+    }
+
+    .volume-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--text-primary);
+      cursor: pointer;
+    }
+
+    .media-mode-toggle {
+      display: flex;
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-full);
+      padding: 2px;
+    }
+
+    .mode-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      padding: 6px 12px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      border-radius: var(--radius-full);
+      cursor: pointer;
+      transition: var(--transition-smooth);
+    }
+
+    .mode-btn.active {
+      background: var(--accent-primary);
+      color: #fff;
+    }
+
+    /* Utilitaires Responsive */
+    @media (max-width: 920px) {
+      #sidebar {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        transform: translateX(-100%);
+      }
+      #sidebar.open {
+        transform: translateX(0);
+      }
+      .mobile-menu-btn {
+        display: block;
+      }
+      .player-right .volume-group {
+        display: none;
+      }
+      #content-stage {
+        padding: 16px 16px calc(var(--player-height) + 16px) 16px;
+      }
+      .top-header {
+        padding: 0 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="app-container">
+
+    <!-- ==========================================================================
+         SIDEBAR NAVIGATION
+         ========================================================================== -->
+    <aside id="sidebar">
+      <div class="brand-section">
+        <div class="brand-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/>
+            <path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/>
+            <circle cx="12" cy="12" r="2"/>
+            <path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/>
+            <path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/>
+          </svg>
+        </div>
+        <span class="brand-title">OmniStream Live</span>
+      </div>
+
+      <nav class="nav-tabs">
+        <div class="nav-item active" data-source="radio" id="tab-radio">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/>
+            <path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/>
+            <circle cx="12" cy="12" r="2"/>
+            <path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/>
+            <path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/>
+          </svg>
+          <span>Radios du Monde</span>
+        </div>
+
+        <div class="nav-item" data-source="tv" id="tab-tv">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect width="20" height="15" x="2" y="7" rx="2" ry="2"/>
+            <polyline points="17 2 12 7 7 2"/>
+          </svg>
+          <span>Télévision en Direct</span>
+        </div>
+      </nav>
+
+      <div class="sidebar-filters">
+        <div class="filter-group-title">Région / Pays</div>
+        <div class="filter-chips" id="country-filters">
+          <button class="chip active" data-filter="FR">France</button>
+          <button class="chip" data-filter="GLOBAL">Top Monde</button>
+          <button class="chip" data-filter="US">États-Unis</button>
+          <button class="chip" data-filter="GB">Royaume-Uni</button>
+          <button class="chip" data-filter="CA">Canada</button>
+          <button class="chip" data-filter="BE">Belgique</button>
+          <button class="chip" data-filter="CH">Suisse</button>
+        </div>
+
+        <div class="filter-group-title" style="margin-top: 10px;">Thématiques / Genres</div>
+        <div class="filter-chips" id="genre-filters">
+          <button class="chip active" data-genre="all">Tous</button>
+          <button class="chip" data-genre="news">Information</button>
+          <button class="chip" data-genre="jazz">Jazz</button>
+          <button class="chip" data-genre="pop">Pop</button>
+          <button class="chip" data-genre="rock">Rock</button>
+          <button class="chip" data-genre="classical">Classique</button>
+          <button class="chip" data-genre="electro">Électro</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ==========================================================================
+         MAIN CONTENT AREA
+         ========================================================================== -->
+    <div id="main-wrapper">
+      
+      <!-- Top Navigation Header -->
+      <header class="top-header">
+        <button class="mobile-menu-btn" id="mobile-toggle" aria-label="Ouvrir le menu">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+        </button>
+
+        <div class="search-box">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input type="text" id="global-search" class="search-input" placeholder="Rechercher une station, un flux, une fréquence...">
+        </div>
+
+        <div class="header-status">
+          <div class="channel-counter" id="station-count">Chargement...</div>
+        </div>
+      </header>
+
+      <!-- Scrollable Stage -->
+      <main id="content-stage">
+        
+        <!-- Diagnostic Alert Banner -->
+        <div id="alert-zone"></div>
+
+        <!-- Theater Stage (Player Visuel / Vidéo / Audio Canvas) -->
+        <section id="theater-stage">
+          <div class="video-viewport">
+            <video id="unified-media" playsinline></video>
+            
+            <!-- Audio Visualizer Overlay -->
+            <div id="audio-overlay" class="audio-visualizer-overlay">
+              <div class="audio-cover">
+                <img id="stage-cover-img" src="" alt="Cover" style="display:none;">
+                <svg id="stage-cover-fallback" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M9 18V5l12-2v13"></path>
+                  <circle cx="6" cy="18" r="3"></circle>
+                  <circle cx="18" cy="16" r="3"></circle>
+                </svg>
+              </div>
+              <div class="audio-info-stage">
+                <h2 id="stage-title" class="audio-stage-title">Aucune station sélectionnée</h2>
+                <p id="stage-meta" class="audio-stage-meta">Sélectionnez un flux pour débuter la diffusion</p>
+              </div>
+              <canvas id="audio-canvas"></canvas>
+            </div>
+          </div>
+        </section>
+
+        <!-- Catalogue Grid -->
+        <div class="catalog-header">
+          <h2 class="catalog-title" id="catalog-heading">Radios Populaires</h2>
+        </div>
+
+        <div id="stations-grid" class="cards-grid">
+          <!-- Les cartes de stations sont générées dynamiquement ici -->
+        </div>
+
+      </main>
+
+    </div>
+
+    <!-- ==========================================================================
+         STICKY BOTTOM MEDIA PLAYER
+         ========================================================================== -->
+    <footer id="sticky-player">
+      
+      <div class="player-left">
+        <div class="player-thumb">
+          <img id="player-thumb-img" src="" alt="Station" style="display: none;">
+          <svg id="player-thumb-fallback" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polygon points="10 8 16 12 10 16 10 8"></polygon>
+          </svg>
+        </div>
+        <div class="player-track-info">
+          <span class="player-title" id="player-title">En attente</span>
+          <span class="player-subtitle" id="player-subtitle">Choisissez une chaîne</span>
+        </div>
+      </div>
+
+      <div class="player-center">
+        <div class="player-controls">
+          <button class="ctrl-btn" id="btn-prev" title="Station précédente">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="19 20 9 12 19 4 19 20"></polygon>
+              <line x1="5" y1="19" x2="5" y2="5"></line>
+            </svg>
+          </button>
+
+          <button class="ctrl-btn play-main" id="btn-play-pause" title="Lecture / Pause">
+            <svg id="icon-play" width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            <svg id="icon-pause" width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="display:none;">
+              <rect x="6" y="4" width="4" height="16"></rect>
+              <rect x="14" y="4" width="4" height="16"></rect>
+            </svg>
+          </button>
+
+          <button class="ctrl-btn" id="btn-next" title="Station suivante">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="5 4 15 12 5 20 5 4"></polygon>
+              <line x1="19" y1="5" x2="19" y2="19"></line>
+            </svg>
+          </button>
+        </div>
+        
+        <div class="live-badge">
+          <span class="live-dot"></span>
+          <span id="player-status-badge">DIRECT STREAM</span>
+        </div>
+      </div>
+
+      <div class="player-right">
+        <div class="volume-group">
+          <button class="ctrl-btn" id="btn-volume-toggle" title="Couper le son">
+            <svg id="icon-vol-high" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+            </svg>
+            <svg id="icon-vol-mute" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;">
+              <line x1="23" y1="9" x2="17" y2="15"></line>
+              <line x1="17" y1="9" x2="23" y2="15"></line>
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            </svg>
+          </button>
+          <input type="range" class="volume-slider" id="volume-range" min="0" max="1" step="0.01" value="0.8">
+        </div>
+
+        <button class="ctrl-btn" id="btn-fullscreen" title="Plein écran">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+          </svg>
+        </button>
+      </div>
+
+    </footer>
+
+  </div>
+
+  <!-- ==========================================================================
+       ARCHITECTURE LOGICIELLE JAVASCRIPT VANILLA (ES6+)
+       ========================================================================== -->
+  <script>
+    /**
+     * Module : Gestionnaire des APIs Radio Browser & IPTV Org
+     */
+    class MediaRepository {
+      constructor() {
+        // Liste de miroirs officiels pour Radio Browser avec basculement automatique
+        this.radioMirrors = [
+          'https://de1.api.radio-browser.info',
+          'https://nl1.api.radio-browser.info',
+          'https://at1.api.radio-browser.info'
+        ];
+        this.currentMirrorIndex = 0;
+
+        // Base URL des flux IPTV-ORG
+        this.iptvBase = 'https://iptv-org.github.io/iptv';
+      }
+
+      getRadioMirror() {
+        return this.radioMirrors[this.currentMirrorIndex];
+      }
+
+      rotateRadioMirror() {
+        this.currentMirrorIndex = (this.currentMirrorIndex + 1) % this.radioMirrors.length;
+      }
+
+      /**
+       * Récupération des stations de Radio via l'API Radio-Browser
+       */
+      async fetchRadios({ country = 'FR', tag = '', search = '' } = {}) {
+        let endpoint = '';
+        const mirror = this.getRadioMirror();
+
+        if (search.trim()) {
+          endpoint = `${mirror}/json/stations/byname/${encodeURIComponent(search)}?limit=90&order=votes&reverse=true`;
+        } else if (country === 'GLOBAL') {
+          endpoint = `${mirror}/json/stations/topvote/90`;
+        } else if (tag && tag !== 'all') {
+          endpoint = `${mirror}/json/stations/bytag/${encodeURIComponent(tag)}?limit=90&order=votes&reverse=true`;
+        } else {
+          endpoint = `${mirror}/json/stations/bycountrycodeexact/${country.toLowerCase()}?limit=90&order=votes&reverse=true`;
+        }
+
+        try {
+          const res = await fetch(endpoint, { cache: 'default' });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const stations = await res.json();
+          
+          return stations.map(s => ({
+            id: s.stationuuid,
+            name: s.name.trim(),
+            url: s.url_resolved || s.url,
+            logo: s.favicon,
+            country: s.countrycode || 'INT',
+            tags: s.tags ? s.tags.split(',').slice(0, 3).join(', ') : 'Radio',
+            type: 'audio',
+            bitrate: s.bitrate ? `${s.bitrate} kbps` : null
+          })).filter(s => s.url && s.name);
+        } catch (err) {
+          console.warn('Erreur Radio Browser sur le miroir courant, basculement en cours...', err);
+          this.rotateRadioMirror();
+          throw err;
+        }
+      }
+
+      /**
+       * Récupération et Parsing M3U des chaînes TV IPTV-ORG
+       */
+      async fetchTVChannels({ country = 'FR', genre = 'all', search = '' } = {}) {
+        let m3uUrl = '';
+
+        if (genre && genre !== 'all') {
+          // Utilisation des catégories pré-segmentées d'iptv-org
+          const genreMap = {
+            news: 'news',
+            music: 'music',
+            pop: 'entertainment',
+            rock: 'entertainment',
+            classical: 'culture',
+            electro: 'music'
+          };
+          const mappedGenre = genreMap[genre] || 'general';
+          m3uUrl = `${this.iptvBase}/categories/${mappedGenre}.m3u`;
+        } else if (country === 'GLOBAL') {
+          m3uUrl = `${this.iptvBase}/index.m3u`;
+        } else {
+          m3uUrl = `${this.iptvBase}/countries/${country.toLowerCase()}.m3u`;
+        }
+
+        try {
+          const res = await fetch(m3uUrl);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const m3uRaw = await res.text();
+          return this.parseM3U(m3uRaw, search);
+        } catch (err) {
+          console.error('Erreur récupération IPTV-ORG M3U:', err);
+          return this.getFallbackTVChannels();
+        }
+      }
+
+      /**
+       * Parseur M3U ultra-léger et résilient
+       */
+      parseM3U(m3uContent, searchFilter = '') {
+        const lines = m3uContent.split(/\r?\n/);
+        const channels = [];
+        let currentMeta = null;
+        const isHttpsPage = window.location.protocol === 'https:';
+
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i].trim();
+
+          if (line.startsWith('#EXTINF:')) {
+            const nameMatch = line.match(/,(.+)$/);
+            const logoMatch = line.match(/tvg-logo="([^"]*)"/);
+            const groupMatch = line.match(/group-title="([^"]*)"/);
+            const idMatch = line.match(/tvg-id="([^"]*)"/);
+
+            currentMeta = {
+              name: nameMatch ? nameMatch[1].trim() : 'Flux TV',
+              logo: logoMatch ? logoMatch[1] : '',
+              tags: groupMatch ? groupMatch[1] : 'Direct TV',
+              id: idMatch ? idMatch[1] : `tv_${Math.random().toString(36).substr(2, 9)}`,
+              type: 'video'
+            };
+          } else if (line && !line.startsWith('#') && currentMeta) {
+            // Filtrer les flux HTTP si nous sommes sur une page HTTPS pour éviter les erreurs de contenu mixte
+            if (isHttpsPage && line.startsWith('http:')) {
+              currentMeta = null;
+              continue;
+            }
+
+            currentMeta.url = line;
+            
+            // Filtre de recherche temps-réel
+            const matchQuery = !searchFilter || currentMeta.name.toLowerCase().includes(searchFilter.toLowerCase());
+            
+            if (matchQuery) {
+              channels.push(currentMeta);
+            }
+            currentMeta = null;
+          }
+
+          // Limitation pour préserver les performances du DOM
+          if (channels.length >= 100) break;
+        }
+
+        return channels;
+      }
+
+      /**
+       * Données de secours immédiates si CORS / Réseau bloque IPTV-Org
+       */
+      getFallbackTVChannels() {
+        return [
+          {
+            id: 'fr24_fr',
+            name: 'France 24 (Français)',
+            url: 'https://live.france24.com/hls/live/2037179-b/F24_FR_HI_HLS/master_5000.m3u8',
+            logo: 'https://upload.wikimedia.org/wikipedia/fr/4/4e/France_24_logo_2013.svg',
+            tags: 'Actualité, France',
+            type: 'video'
+          },
+          {
+            id: '20min_tv',
+            name: '20 Minutes TV',
+            url: 'https://live-20minutestv.digiteka.com/1961167769/index.m3u8',
+            logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/82/20_minutes_logo.svg/500px-20_minutes_logo.svg.png',
+            tags: 'Général, France',
+            type: 'video'
+          },
+          {
+            id: 'africa24_fr',
+            name: 'Africa 24',
+            url: 'https://africa24.vedge.infomaniak.com/livecast/ik:africa24/manifest.m3u8',
+            logo: 'https://upload.wikimedia.org/wikipedia/fr/b/bd/Africa24_logo.png',
+            tags: 'Information, Afrique',
+            type: 'video'
+          },
+          {
+            id: 'hd_blender_test',
+            name: 'Canal Test HLS 24/7 (HD)',
+            url: 'https://ireplay.tv/test/hd_blender.m3u8',
+            logo: 'https://upload.wikimedia.org/wikipedia/commons/e/e5/NASA_logo.svg',
+            tags: 'Test Stream, CORS OK',
+            type: 'video'
+          }
+        ];
+      }
+    }
+
+    /**
+     * Module : Moteur de Lecture Média Unifié (Audio / Vidéo / HLS / Web Audio Visualizer)
+     */
+    class UnifiedPlayer {
+      constructor({ videoElement, canvasElement, onStateChange, onError }) {
+        this.mediaEl = videoElement;
+        this.canvas = canvasElement;
+        this.ctx = canvasElement.getContext('2d');
+        this.onStateChange = onStateChange;
+        this.onError = onError;
+
+        this.hls = null;
+        this.currentStation = null;
+        this.audioCtx = null;
+        this.analyser = null;
+        this.isVisualizerInit = false;
+        this.networkRetryCount = 0;
+
+        this.initListeners();
+        this.startVisualizerLoop();
+      }
+
+      initListeners() {
+        this.mediaEl.addEventListener('playing', () => this.onStateChange('playing'));
+        this.mediaEl.addEventListener('pause', () => this.onStateChange('paused'));
+        this.mediaEl.addEventListener('waiting', () => this.onStateChange('buffering'));
+        this.mediaEl.addEventListener('error', (e) => {
+          console.error('Erreur du media element:', e);
+          this.onError('Flux multimédia inaccessible ou non supporté (erreur réseau / CORS).');
+        });
+      }
+
+      /**
+       * Initialisation sécurisée de l'AudioContext pour le visualiseur
+       */
+      initAudioVisualizer() {
+        if (this.isVisualizerInit) return;
+        try {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (!AudioContext) return;
+
+          this.audioCtx = new AudioContext();
+          this.analyser = this.audioCtx.createAnalyser();
+          this.analyser.fftSize = 128;
+
+          // Connecter le stream HTML5 à l'analyseur
+          const source = this.audioCtx.createMediaElementSource(this.mediaEl);
+          source.connect(this.analyser);
+          this.analyser.connect(this.audioCtx.destination);
+          this.isVisualizerInit = true;
+        } catch (e) {
+          // En cas de restriction CORS Web Audio API, un fallback d'onde procédurale est automatiquement affiché
+          console.warn('AudioContext bypass (CORS restrictif) -> Mode onde procédurale activé');
+        }
+      }
+
+      /**
+       * Chargement et lecture d'un flux (HLS .m3u8, direct MP3, AAC)
+       */
+      async loadSource(station) {
+        this.currentStation = station;
+        this.networkRetryCount = 0;
+        this.onStateChange('buffering');
+
+        // Nettoyage de l'instance HLS existante
+        if (this.hls) {
+          this.hls.destroy();
+          this.hls = null;
+        }
+
+        const isHls = station.url.includes('.m3u8') || station.type === 'video';
+
+        if (isHls && Hls.isSupported()) {
+          this.hls = new Hls({
+            enableWorker: true,
+            lowLatencyMode: true,
+            backBufferLength: 30,
+            xhrSetup: (xhr, url) => {
+              xhr.withCredentials = false;
+            }
+          });
+
+          this.hls.loadSource(station.url);
+          this.hls.attachMedia(this.mediaEl);
+
+          this.hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            this.mediaEl.play().catch(e => console.warn('Autoplay bloqué par le navigateur:', e));
+          });
+
+          this.hls.on(Hls.Events.ERROR, (event, data) => {
+            if (data.fatal) {
+              switch (data.type) {
+                case Hls.ErrorTypes.NETWORK_ERROR:
+                  this.networkRetryCount++;
+                  if (this.networkRetryCount <= 3) {
+                    console.warn(`HLS Network Error, tentative ${this.networkRetryCount}/3...`);
+                    setTimeout(() => {
+                      if (this.hls) this.hls.startLoad();
+                    }, 1000 * this.networkRetryCount);
+                  } else {
+                    console.error('Échec définitif de connexion au flux HLS.');
+                    if (this.hls) {
+                      this.hls.destroy();
+                      this.hls = null;
+                    }
+                    this.onError('Flux HLS actuellement indisponible ou bloqué par les restrictions CORS.');
+                  }
+                  break;
+                case Hls.ErrorTypes.MEDIA_ERROR:
+                  console.warn('HLS Media Error, tentative de récupération...');
+                  this.hls.recoverMediaError();
+                  break;
+                default:
+                  if (this.hls) {
+                    this.hls.destroy();
+                    this.hls = null;
+                  }
+                  this.onError('Flux HLS non supporté ou lien de diffusion expiré.');
+                  break;
+              }
+            }
+          });
+
+        } else if (this.mediaEl.canPlayType('application/vnd.apple.mpegurl') || !isHls) {
+          // Support natif HLS (Safari/iOS) ou flux HTTP Audio direct
+          this.mediaEl.src = station.url;
+          this.mediaEl.load();
+          this.mediaEl.play().catch(e => console.warn('Autoplay intercepté:', e));
+        } else {
+          this.onError('Votre navigateur ne prend pas en charge la lecture de ce format.');
+        }
+
+        // Débloquer l'audio context sur action utilisateur
+        if (this.audioCtx && this.audioCtx.state === 'suspended') {
+          this.audioCtx.resume();
+        }
+      }
+
+      togglePlay() {
+        if (this.mediaEl.paused) {
+          this.mediaEl.play();
+        } else {
+          this.mediaEl.pause();
+        }
+      }
+
+      setVolume(val) {
+        this.mediaEl.volume = Math.max(0, Math.min(1, val));
+      }
+
+      toggleMute() {
+        this.mediaEl.muted = !this.mediaEl.muted;
+        return this.mediaEl.muted;
+      }
+
+      startVisualizerLoop() {
+        const render = () => {
+          requestAnimationFrame(render);
+          const width = this.canvas.width = this.canvas.offsetWidth;
+          const height = this.canvas.height = this.canvas.offsetHeight;
+
+          if (!width || !height) return;
+
+          this.ctx.clearRect(0, 0, width, height);
+
+          if (this.analyser && !this.mediaEl.paused) {
+            const bufferLength = this.analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            this.analyser.getByteFrequencyData(dataArray);
+
+            const barWidth = (width / bufferLength) * 2.2;
+            let x = 0;
+
+            for (let i = 0; i < bufferLength; i++) {
+              const barHeight = (dataArray[i] / 255) * height;
+              
+              const grad = this.ctx.createLinearGradient(0, height, 0, 0);
+              grad.addColorStop(0, '#6366f1');
+              grad.addColorStop(1, '#06b6d4');
+
+              this.ctx.fillStyle = grad;
+              this.ctx.fillRect(x, height - barHeight, barWidth - 2, barHeight);
+              x += barWidth;
+            }
+          } else {
+            // Visualiseur animé d'ambiance fluide si pas d'accès direct aux fréquences
+            const time = Date.now() * 0.003;
+            const isPlaying = !this.mediaEl.paused;
+            const barCount = 36;
+            const barWidth = width / barCount;
+
+            for (let i = 0; i < barCount; i++) {
+              const h = isPlaying 
+                ? (Math.sin(time + i * 0.3) * 0.5 + 0.5) * (height * 0.7) + 6
+                : 4;
+
+              this.ctx.fillStyle = isPlaying ? 'rgba(99, 102, 241, 0.6)' : 'rgba(255, 255, 255, 0.1)';
+              this.ctx.fillRect(i * barWidth, height - h, barWidth - 3, h);
+            }
+          }
+        };
+
+        render();
+      }
+    }
+
+    /**
+     * Module : Contrôleur Principal de l'Application (UI, Filtres, Événements)
+     */
+    class AppController {
+      constructor() {
+        this.repo = new MediaRepository();
+        this.currentTab = 'radio'; // 'radio' | 'tv'
+        this.currentCountry = 'FR';
+        this.currentGenre = 'all';
+        this.searchQuery = '';
+        this.stations = [];
+        this.activeStationIndex = -1;
+
+        this.cacheDOM();
+        this.initPlayer();
+        this.bindEvents();
+        this.loadCatalog();
+      }
+
+      cacheDOM() {
+        this.dom = {
+          sidebar: document.getElementById('sidebar'),
+          mobileToggle: document.getElementById('mobile-toggle'),
+          tabRadio: document.getElementById('tab-radio'),
+          tabTv: document.getElementById('tab-tv'),
+          countryFilters: document.getElementById('country-filters'),
+          genreFilters: document.getElementById('genre-filters'),
+          globalSearch: document.getElementById('global-search'),
+          stationCount: document.getElementById('station-count'),
+          alertZone: document.getElementById('alert-zone'),
+          theaterStage: document.getElementById('theater-stage'),
+          unifiedMedia: document.getElementById('unified-media'),
+          audioOverlay: document.getElementById('audio-overlay'),
+          stageTitle: document.getElementById('stage-title'),
+          stageMeta: document.getElementById('stage-meta'),
+          stageCoverImg: document.getElementById('stage-cover-img'),
+          stageCoverFallback: document.getElementById('stage-cover-fallback'),
+          audioCanvas: document.getElementById('audio-canvas'),
+          catalogHeading: document.getElementById('catalog-heading'),
+          stationsGrid: document.getElementById('stations-grid'),
+          
+          // Contrôles Sticky Player
+          playerThumbImg: document.getElementById('player-thumb-img'),
+          playerThumbFallback: document.getElementById('player-thumb-fallback'),
+          playerTitle: document.getElementById('player-title'),
+          playerSubtitle: document.getElementById('player-subtitle'),
+          btnPrev: document.getElementById('btn-prev'),
+          btnNext: document.getElementById('btn-next'),
+          btnPlayPause: document.getElementById('btn-play-pause'),
+          iconPlay: document.getElementById('icon-play'),
+          iconPause: document.getElementById('icon-pause'),
+          playerStatusBadge: document.getElementById('player-status-badge'),
+          btnVolToggle: document.getElementById('btn-volume-toggle'),
+          iconVolHigh: document.getElementById('icon-vol-high'),
+          iconVolMute: document.getElementById('icon-vol-mute'),
+          volumeRange: document.getElementById('volume-range'),
+          btnFullscreen: document.getElementById('btn-fullscreen')
+        };
+      }
+
+      initPlayer() {
+        this.player = new UnifiedPlayer({
+          videoElement: this.dom.unifiedMedia,
+          canvasElement: this.dom.audioCanvas,
+          onStateChange: (state) => this.handlePlayerState(state),
+          onError: (msg) => this.showAlert(msg)
+        });
+      }
+
+      bindEvents() {
+        // Menu mobile
+        this.dom.mobileToggle.addEventListener('click', () => {
+          this.dom.sidebar.classList.toggle('open');
+        });
+
+        // Changement d'onglets (Radio / TV)
+        this.dom.tabRadio.addEventListener('click', () => this.switchTab('radio'));
+        this.dom.tabTv.addEventListener('click', () => this.switchTab('tv'));
+
+        // Filtre Pays
+        this.dom.countryFilters.addEventListener('click', (e) => {
+          const btn = e.target.closest('.chip');
+          if (!btn) return;
+          this.dom.countryFilters.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+          btn.classList.add('active');
+          this.currentCountry = btn.dataset.filter;
+          this.loadCatalog();
+        });
+
+        // Filtre Thématique / Genre
+        this.dom.genreFilters.addEventListener('click', (e) => {
+          const btn = e.target.closest('.chip');
+          if (!btn) return;
+          this.dom.genreFilters.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+          btn.classList.add('active');
+          this.currentGenre = btn.dataset.genre;
+          this.loadCatalog();
+        });
+
+        // Recherche en direct (Debounce 300ms)
+        let searchTimeout;
+        this.dom.globalSearch.addEventListener('input', (e) => {
+          clearTimeout(searchTimeout);
+          this.searchQuery = e.target.value.trim();
+          searchTimeout = setTimeout(() => this.loadCatalog(), 300);
+        });
+
+        // Contrôles du lecteur
+        this.dom.btnPlayPause.addEventListener('click', () => {
+          this.player.initAudioVisualizer();
+          this.player.togglePlay();
+        });
+
+        this.dom.btnPrev.addEventListener('click', () => this.playAdjacentStation(-1));
+        this.dom.btnNext.addEventListener('click', () => this.playAdjacentStation(1));
+
+        this.dom.volumeRange.addEventListener('input', (e) => {
+          this.player.setVolume(parseFloat(e.target.value));
+          this.updateVolumeIcons(e.target.value == 0);
+        });
+
+        this.dom.btnVolToggle.addEventListener('click', () => {
+          const isMuted = this.player.toggleMute();
+          this.updateVolumeIcons(isMuted);
+        });
+
+        this.dom.btnFullscreen.addEventListener('click', () => {
+          if (!document.fullscreenElement) {
+            this.dom.theaterStage.requestFullscreen().catch(err => console.warn(err));
+          } else {
+            document.exitFullscreen();
+          }
+        });
+      }
+
+      switchTab(tab) {
+        if (this.currentTab === tab) return;
+        this.currentTab = tab;
+
+        this.dom.tabRadio.classList.toggle('active', tab === 'radio');
+        this.dom.tabTv.classList.toggle('active', tab === 'tv');
+
+        this.dom.catalogHeading.textContent = tab === 'radio' ? 'Radios Populaires' : 'Télévision en Direct';
+        this.loadCatalog();
+      }
+
+      async loadCatalog() {
+        this.renderLoader();
+        this.hideAlert();
+
+        try {
+          if (this.currentTab === 'radio') {
+            this.stations = await this.repo.fetchRadios({
+              country: this.currentCountry,
+              tag: this.currentGenre,
+              search: this.searchQuery
+            });
+          } else {
+            this.stations = await this.repo.fetchTVChannels({
+              country: this.currentCountry,
+              genre: this.currentGenre,
+              search: this.searchQuery
+            });
+          }
+
+          this.dom.stationCount.textContent = `${this.stations.length} flux disponibles`;
+          this.renderGrid();
+        } catch (err) {
+          this.showAlert('Impossible de charger la liste des stations. Vérifiez votre connexion.');
+          this.dom.stationsGrid.innerHTML = `
+            <div class="loader-container">
+              <p>Échec du chargement des flux.</p>
+            </div>
+          `;
+        }
+      }
+
+      renderLoader() {
+        this.dom.stationsGrid.innerHTML = `
+          <div class="loader-container" style="grid-column: 1 / -1;">
+            <div class="spinner"></div>
+            <p>Chargement des chaînes en direct...</p>
+          </div>
+        `;
+      }
+
+      renderGrid() {
+        if (!this.stations.length) {
+          this.dom.stationsGrid.innerHTML = `
+            <div class="loader-container" style="grid-column: 1 / -1;">
+              <p>Aucune station trouvée pour ces critères.</p>
+            </div>
+          `;
+          return;
+        }
+
+        this.dom.stationsGrid.innerHTML = this.stations.map((station, index) => {
+          const isPlaying = this.activeStationIndex === index;
+          const initial = station.name.charAt(0).toUpperCase();
+
+          return `
+            <article class="station-card ${isPlaying ? 'is-playing' : ''}" data-index="${index}">
+              <div class="card-thumb-wrapper">
+                ${station.logo 
+                  ? `<img src="${station.logo}" alt="${station.name}" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                     <span class="thumb-fallback" style="display:none;">${initial}</span>`
+                  : `<span class="thumb-fallback">${initial}</span>`
+                }
+                <div class="card-play-overlay">
+                  <div class="card-play-btn">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff">
+                      <polygon points="6 4 18 12 6 20 6 4"></polygon>
+                    </svg>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card-meta">
+                <h3 class="card-name" title="${station.name}">${station.name}</h3>
+                <div class="card-tags">
+                  <span class="card-badge">${station.type === 'video' ? 'TV' : 'RADIO'}</span>
+                  <span>${station.tags || station.country}</span>
+                  <div class="playing-bars">
+                    <span class="bar"></span>
+                    <span class="bar"></span>
+                    <span class="bar"></span>
+                  </div>
+                </div>
+              </div>
+            </article>
+          `;
+        }).join('');
+
+        // Attachement des gestionnaires de clic par délégation
+        this.dom.stationsGrid.querySelectorAll('.station-card').forEach(card => {
+          card.addEventListener('click', () => {
+            const index = parseInt(card.dataset.index, 10);
+            this.selectStation(index);
+          });
+        });
+      }
+
+      selectStation(index) {
+        if (index < 0 || index >= this.stations.length) return;
+        this.activeStationIndex = index;
+        const station = this.stations[index];
+
+        this.updatePlayerUI(station);
+        this.player.initAudioVisualizer();
+        this.player.loadSource(station);
+
+        // Afficher le conteneur supérieur (Théâtre)
+        this.dom.theaterStage.classList.add('active');
+
+        // Basculement visuel audio vs vidéo
+        if (station.type === 'video') {
+          this.dom.audioOverlay.style.display = 'none';
+          this.dom.unifiedMedia.style.display = 'block';
+        } else {
+          this.dom.audioOverlay.style.display = 'flex';
+          this.dom.unifiedMedia.style.display = 'none';
+        }
+
+        // Rafraîchir l'état actif dans la grille
+        this.dom.stationsGrid.querySelectorAll('.station-card').forEach((card, idx) => {
+          card.classList.toggle('is-playing', idx === index);
+        });
+      }
+
+      playAdjacentStation(direction) {
+        if (!this.stations.length) return;
+        let nextIndex = this.activeStationIndex + direction;
+        if (nextIndex < 0) nextIndex = this.stations.length - 1;
+        if (nextIndex >= this.stations.length) nextIndex = 0;
+        this.selectStation(nextIndex);
+      }
+
+      updatePlayerUI(station) {
+        this.dom.playerTitle.textContent = station.name;
+        this.dom.playerSubtitle.textContent = `${station.tags || station.country} • DIRECT`;
+        this.dom.stageTitle.textContent = station.name;
+        this.dom.stageMeta.textContent = `${station.tags || station.country} ${station.bitrate ? '• ' + station.bitrate : ''}`;
+
+        // Jaquette / Logo
+        if (station.logo) {
+          this.dom.playerThumbImg.src = station.logo;
+          this.dom.playerThumbImg.style.display = 'block';
+          this.dom.playerThumbFallback.style.display = 'none';
+
+          this.dom.stageCoverImg.src = station.logo;
+          this.dom.stageCoverImg.style.display = 'block';
+          this.dom.stageCoverFallback.style.display = 'none';
+        } else {
+          this.dom.playerThumbImg.style.display = 'none';
+          this.dom.playerThumbFallback.style.display = 'block';
+
+          this.dom.stageCoverImg.style.display = 'none';
+          this.dom.stageCoverFallback.style.display = 'block';
+        }
+      }
+
+      handlePlayerState(state) {
+        if (state === 'playing') {
+          this.dom.iconPlay.style.display = 'none';
+          this.dom.iconPause.style.display = 'block';
+          this.dom.playerStatusBadge.textContent = 'EN DIRECT';
+          this.hideAlert();
+        } else if (state === 'paused') {
+          this.dom.iconPlay.style.display = 'block';
+          this.dom.iconPause.style.display = 'none';
+          this.dom.playerStatusBadge.textContent = 'EN PAUSE';
+        } else if (state === 'buffering') {
+          this.dom.playerStatusBadge.textContent = 'CONNEXION...';
+        }
+      }
+
+      updateVolumeIcons(isMuted) {
+        this.dom.iconVolHigh.style.display = isMuted ? 'none' : 'block';
+        this.dom.iconVolMute.style.display = isMuted ? 'block' : 'none';
+      }
+
+      showAlert(message, allowSkip = true) {
+        this.dom.alertZone.innerHTML = `
+          <div class="alert-banner">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+            <span style="flex: 1;">${message}</span>
+            ${allowSkip ? `<button id="btn-skip-stream" style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); color: #fff; padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600; white-space: nowrap;">Chaîne suivante &rarr;</button>` : ''}
+          </div>
+        `;
+        const skipBtn = document.getElementById('btn-skip-stream');
+        if (skipBtn) {
+          skipBtn.addEventListener('click', () => this.playAdjacentStation(1));
+        }
+      }
+
+      hideAlert() {
+        this.dom.alertZone.innerHTML = '';
+      }
+    }
+
+    // Démarrage de l'application dès le chargement complet du DOM
+    window.addEventListener('DOMContentLoaded', () => {
+      window.app = new AppController();
+    });
+  </script>
+</body>
+</html>
