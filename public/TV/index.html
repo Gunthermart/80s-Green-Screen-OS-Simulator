@@ -308,7 +308,6 @@
       display: block;
     }
 
-    /* Styles pour le mode Plein Écran Total */
     #theater-stage:fullscreen,
     #theater-stage:-webkit-full-screen {
       width: 100vw !important;
@@ -350,7 +349,6 @@
       background: #000;
     }
 
-    /* Canvas d'Animation Générative et Audio-Réactive */
     canvas#visualizer-canvas,
     canvas#visualizer-canvas-3d {
       position: absolute;
@@ -361,8 +359,16 @@
       pointer-events: none;
     }
 
-    /* Transition douce pour l'auto-masquage en mode Radio */
-    #audio-overlay {
+    .audio-visualizer-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 4;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: radial-gradient(circle at center, rgba(15, 18, 29, 0.45) 0%, rgba(7, 8, 12, 0.9) 100%);
       transition: background 0.5s ease;
     }
 
@@ -386,7 +392,43 @@
       pointer-events: none;
     }
 
-    /* Selector de mode graphique */
+    .audio-cover {
+      width: 110px;
+      height: 110px;
+      border-radius: var(--radius-md);
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-glass);
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: var(--shadow-subtle);
+      margin-bottom: 12px;
+    }
+
+    .audio-cover img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .audio-info-stage {
+      text-align: center;
+      z-index: 5;
+    }
+
+    .audio-stage-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #ffffff;
+    }
+
+    .audio-stage-meta {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
     .visualizer-preset-selector {
       display: flex;
       flex-wrap: wrap;
@@ -399,7 +441,7 @@
       border-radius: var(--radius-md);
       padding: 6px;
       z-index: 6;
-      margin-top: 8px;
+      margin-top: 14px;
     }
 
     .preset-btn {
@@ -419,7 +461,33 @@
       color: #fff;
     }
 
-    /* HUD Plein Écran Auto-Escomptable (3s inactivité) */
+    .stage-top-bar {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      z-index: 10;
+    }
+
+    .stage-action-btn {
+      background: rgba(15, 18, 29, 0.65);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border-glass);
+      color: var(--text-primary);
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: var(--transition-smooth);
+    }
+
+    .stage-action-btn:hover {
+      background: var(--accent-primary);
+      color: #fff;
+    }
+
     .fullscreen-hud-container {
       position: absolute;
       inset: 0;
@@ -878,7 +946,6 @@
 
   <div id="app-container">
 
-    <!-- Sidebar Navigation -->
     <aside id="sidebar">
       <div class="brand-section">
         <div class="brand-icon">
@@ -982,7 +1049,6 @@
           <div class="video-viewport" id="video-viewport">
             <video id="unified-media" playsinline></video>
 
-            <!-- Canvas 2D & Canvas 3D WebGL (Three.js) -->
             <canvas id="visualizer-canvas"></canvas>
             <canvas id="visualizer-canvas-3d"></canvas>
             
@@ -1000,7 +1066,6 @@
                 <p id="stage-meta" class="audio-stage-meta">Sélectionnez un flux pour débuter la diffusion</p>
               </div>
 
-              <!-- Selector de style visuel (2D + 3D Three.js) -->
               <div class="visualizer-preset-selector" id="visualizer-preset-selector">
                 <button class="preset-btn active" data-preset="spectrum">Spectre Cyber</button>
                 <button class="preset-btn" data-preset="particles">Particules Pulse</button>
@@ -1014,7 +1079,6 @@
             </div>
           </div>
 
-          <!-- Overlay HUD Auto-Escomptable en Plein Écran (Inactivité 3s) -->
           <div class="fullscreen-hud-container" id="fullscreen-hud">
             <div class="hud-header">
               <div class="hud-title-box">
@@ -1070,7 +1134,6 @@
 
     </div>
 
-    <!-- Sticky Bottom Player -->
     <footer id="sticky-player">
       
       <div class="player-left">
@@ -1349,9 +1412,6 @@
       }
     }
 
-    /**
-     * Engine d'animation graphique réactif au son & 3D WebGL (Three.js)
-     */
     class ReactiveVisualizerEngine {
       constructor(canvas2DElement, canvas3DElement, mediaElement) {
         this.canvas2D = canvas2DElement;
@@ -1359,10 +1419,10 @@
         this.canvas3D = canvas3DElement;
         this.mediaEl = mediaElement;
         
-        this.preset = 'spectrum'; // 2D: 'spectrum','particles','aurora' | 3D: 'tunnel','cybersphere','synthwave','vortex','matrixCubes'
+        this.preset = 'spectrum';
         this.particles = [];
         this.isLoopRunning = false;
-        this.enabled = true; // Actif uniquement en mode Radio
+        this.enabled = true;
 
         this.initThreeJS();
         this.resize();
@@ -1370,7 +1430,123 @@
         this.initParticles();
       }
 
-      /* Activer ou désactiver les animations (ex: Désactivé en mode TV) */
+      initThreeJS() {
+        if (typeof THREE === 'undefined') return;
+
+        this.scene = new THREE.Scene();
+        this.camera = new THREE.PerspectiveCamera(60, (this.width || 600) / (this.height || 300), 0.1, 1000);
+        this.camera.position.z = 15;
+
+        this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas3D, alpha: true, antialias: true });
+        this.renderer.setSize(this.width || 600, this.height || 300, false);
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+
+        this.threeGroups = {};
+
+        // 1. Tunnel Hyperdrive 3D
+        const tunnelGroup = new THREE.Group();
+        const tunnelGeo = new THREE.BufferGeometry();
+        const tunnelCount = 800;
+        const tunnelPos = new Float32Array(tunnelCount * 3);
+        for (let i = 0; i < tunnelCount; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const radius = 3 + Math.random() * 5;
+          tunnelPos[i * 3] = Math.cos(angle) * radius;
+          tunnelPos[i * 3 + 1] = Math.sin(angle) * radius;
+          tunnelPos[i * 3 + 2] = (Math.random() - 0.5) * 60;
+        }
+        tunnelGeo.setAttribute('position', new THREE.BufferAttribute(tunnelPos, 3));
+        const tunnelMat = new THREE.PointsMaterial({ color: 0x06b6d4, size: 0.15, transparent: true, opacity: 0.8 });
+        this.tunnelPoints = new THREE.Points(tunnelGeo, tunnelMat);
+        tunnelGroup.add(this.tunnelPoints);
+        tunnelGroup.visible = false;
+        this.scene.add(tunnelGroup);
+        this.threeGroups.tunnel = tunnelGroup;
+
+        // 2. Cybersphere 3D
+        const sphereGroup = new THREE.Group();
+        const sphereGeo = new THREE.IcosahedronGeometry(4, 2);
+        const sphereMat = new THREE.MeshBasicMaterial({ color: 0x6366f1, wireframe: true, transparent: true, opacity: 0.6 });
+        this.cyberSphereMesh = new THREE.Mesh(sphereGeo, sphereMat);
+        sphereGroup.add(this.cyberSphereMesh);
+
+        const particlesGeo = new THREE.BufferGeometry();
+        const pCount = 300;
+        const pPos = new Float32Array(pCount * 3);
+        for (let i = 0; i < pCount; i++) {
+          const u = Math.random();
+          const v = Math.random();
+          const theta = u * 2.0 * Math.PI;
+          const phi = Math.acos(2.0 * v - 1.0);
+          const r = 5.5 + Math.random() * 1.5;
+          pPos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+          pPos[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+          pPos[i * 3 + 2] = r * Math.cos(phi);
+        }
+        particlesGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+        const pMat = new THREE.PointsMaterial({ color: 0xec4899, size: 0.12 });
+        this.cyberSphereParticles = new THREE.Points(particlesGeo, pMat);
+        sphereGroup.add(this.cyberSphereParticles);
+        sphereGroup.visible = false;
+        this.scene.add(sphereGroup);
+        this.threeGroups.cybersphere = sphereGroup;
+
+        // 3. Synthwave Grid 3D
+        const synthGroup = new THREE.Group();
+        const gridGeo = new THREE.PlaneGeometry(60, 60, 30, 30);
+        const gridMat = new THREE.MeshBasicMaterial({ color: 0xec4899, wireframe: true, transparent: true, opacity: 0.5 });
+        this.synthwaveGrid = new THREE.Mesh(gridGeo, gridMat);
+        this.synthwaveGrid.rotation.x = -Math.PI / 2.2;
+        this.synthwaveGrid.position.y = -4;
+        synthGroup.add(this.synthwaveGrid);
+
+        const sunGeo = new THREE.CircleGeometry(5, 32);
+        const sunMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b, transparent: true, opacity: 0.85 });
+        const sun = new THREE.Mesh(sunGeo, sunMat);
+        sun.position.set(0, 2, -25);
+        synthGroup.add(sun);
+        synthGroup.visible = false;
+        this.scene.add(synthGroup);
+        this.threeGroups.synthwave = synthGroup;
+
+        // 4. Vortex 3D
+        const vortexGroup = new THREE.Group();
+        const vCount = 1000;
+        const vPos = new Float32Array(vCount * 3);
+        for (let i = 0; i < vCount; i++) {
+          const r = (i / vCount) * 12 + 0.5;
+          const theta = i * 0.1;
+          vPos[i * 3] = Math.cos(theta) * r;
+          vPos[i * 3 + 1] = (Math.random() - 0.5) * 2;
+          vPos[i * 3 + 2] = Math.sin(theta) * r;
+        }
+        const vGeo = new THREE.BufferGeometry();
+        vGeo.setAttribute('position', new THREE.BufferAttribute(vPos, 3));
+        const vMat = new THREE.PointsMaterial({ color: 0x06b6d4, size: 0.15, transparent: true, opacity: 0.75 });
+        this.vortexParticles = new THREE.Points(vGeo, vMat);
+        vortexGroup.add(this.vortexParticles);
+        vortexGroup.visible = false;
+        this.scene.add(vortexGroup);
+        this.threeGroups.vortex = vortexGroup;
+
+        // 5. Matrix Cubes 3D
+        const matrixGroup = new THREE.Group();
+        this.matrixCubesList = [];
+        const cubeGeo = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+        const cubeMat = new THREE.MeshBasicMaterial({ color: 0x6366f1, wireframe: true });
+        for (let x = -3; x <= 3; x += 1.5) {
+          for (let z = -3; z <= 3; z += 1.5) {
+            const cube = new THREE.Mesh(cubeGeo, cubeMat);
+            cube.position.set(x, 0, z);
+            matrixGroup.add(cube);
+            this.matrixCubesList.push({ mesh: cube, baseX: x, baseZ: z });
+          }
+        }
+        matrixGroup.visible = false;
+        this.scene.add(matrixGroup);
+        this.threeGroups.matrixCubes = matrixGroup;
+      }
+
       setVisible(visible) {
         this.enabled = visible;
         if (!visible) {
@@ -1387,13 +1563,14 @@
 
         const is3DPreset = ['tunnel', 'cybersphere', 'synthwave', 'vortex', 'matrixCubes'].includes(newPreset);
 
-        // Basculer l'affichage des canvas 2D et 3D
         this.canvas2D.style.display = is3DPreset ? 'none' : 'block';
         this.canvas3D.style.display = is3DPreset ? 'block' : 'none';
 
         if (is3DPreset && this.threeGroups) {
           Object.keys(this.threeGroups).forEach(key => {
-            this.threeGroups[key].visible = (key === newPreset);
+            if (this.threeGroups[key]) {
+              this.threeGroups[key].visible = (key === newPreset);
+            }
           });
         }
       }
@@ -1403,12 +1580,10 @@
         this.width = this.canvas2D.offsetWidth || 600;
         this.height = this.canvas2D.offsetHeight || 300;
 
-        // Resize Canvas 2D
         this.canvas2D.width = this.width * dpr;
         this.canvas2D.height = this.height * dpr;
         this.ctx2D.scale(dpr, dpr);
 
-        // Resize Canvas 3D Three.js
         if (this.renderer) {
           this.renderer.setSize(this.width, this.height, false);
           this.camera.aspect = this.width / this.height;
@@ -1441,7 +1616,6 @@
         if (!this.isLoopRunning) return;
         requestAnimationFrame(() => this.loop());
 
-        // Si désactivé (ex: mode TV), ne rien calculer ni afficher
         if (!this.enabled) return;
 
         const isPlaying = !this.mediaEl.paused;
@@ -1467,11 +1641,10 @@
         }
       }
 
-      /* --- ANIMATION RENDU THREE.JS 3D --- */
       renderThreeJS(time, isPlaying) {
         const speed = isPlaying ? 1.5 : 0.4;
 
-        if (this.preset === 'tunnel') {
+        if (this.preset === 'tunnel' && this.tunnelPoints) {
           const pos = this.tunnelPoints.geometry.attributes.position.array;
           for (let i = 0; i < pos.length / 3; i++) {
             pos[i * 3 + 2] += 0.25 * speed;
@@ -1480,7 +1653,7 @@
           this.tunnelPoints.geometry.attributes.position.needsUpdate = true;
           this.threeGroups.tunnel.rotation.z = time * 0.15 * speed;
 
-        } else if (this.preset === 'cybersphere') {
+        } else if (this.preset === 'cybersphere' && this.cyberSphereMesh) {
           this.cyberSphereMesh.rotation.x = time * 0.3 * speed;
           this.cyberSphereMesh.rotation.y = time * 0.5 * speed;
           this.cyberSphereParticles.rotation.y = -time * 0.2 * speed;
@@ -1488,15 +1661,15 @@
           const scale = isPlaying ? 1 + Math.sin(time * 3) * 0.12 : 1;
           this.cyberSphereMesh.scale.set(scale, scale, scale);
 
-        } else if (this.preset === 'synthwave') {
+        } else if (this.preset === 'synthwave' && this.synthwaveGrid) {
           this.synthwaveGrid.position.z = (time * 4 * speed) % 2;
           this.threeGroups.synthwave.rotation.y = Math.sin(time * 0.5) * 0.05;
 
-        } else if (this.preset === 'vortex') {
+        } else if (this.preset === 'vortex' && this.vortexParticles) {
           this.vortexParticles.rotation.y = time * 0.4 * speed;
           this.vortexParticles.rotation.z = Math.sin(time * 0.2) * 0.2;
 
-        } else if (this.preset === 'matrixCubes') {
+        } else if (this.preset === 'matrixCubes' && this.matrixCubesList) {
           this.threeGroups.matrixCubes.rotation.y = time * 0.25 * speed;
           this.matrixCubesList.forEach((item, index) => {
             const h = isPlaying ? Math.sin(time * 2.5 + index) * 2.5 : Math.sin(time * 0.8 + index) * 0.4;
@@ -1508,7 +1681,6 @@
         this.renderer.render(this.scene, this.camera);
       }
 
-      /* --- ANIMATIONS 2D CANVAS --- */
       renderCyberSpectrum(w, h, time, isPlaying) {
         const barCount = 42;
         const barGap = 4;
@@ -1711,7 +1883,6 @@
         this.stations = [];
         this.activeStationIndex = -1;
 
-        // Timers d'inactivité
         this.hudInactivityTimer = null;
         this.radioInactivityTimer = null;
 
@@ -1748,7 +1919,6 @@
           btnStageFullscreen: document.getElementById('btn-stage-fullscreen'),
           visualizerPresetSelector: document.getElementById('visualizer-preset-selector'),
 
-          // Fullscreen HUD Elements
           fullscreenHud: document.getElementById('fullscreen-hud'),
           hudTitle: document.getElementById('hud-title'),
           hudSubtitle: document.getElementById('hud-subtitle'),
@@ -1758,7 +1928,6 @@
           hudBtnNext: document.getElementById('hud-btn-next'),
           hudVolumeRange: document.getElementById('hud-volume-range'),
 
-          // Sticky Bottom Player
           playerThumbImg: document.getElementById('player-thumb-img'),
           playerThumbFallback: document.getElementById('player-thumb-fallback'),
           playerTitle: document.getElementById('player-title'),
@@ -1775,6 +1944,16 @@
           volumeRange: document.getElementById('volume-range'),
           btnFullscreen: document.getElementById('btn-fullscreen')
         };
+      }
+
+      initPlayer() {
+        this.player = new UnifiedPlayer({
+          videoElement: this.dom.unifiedMedia,
+          canvas2DElement: this.dom.visualizerCanvas,
+          canvas3DElement: this.dom.visualizerCanvas3D,
+          onStateChange: (state) => this.handlePlayerState(state),
+          onError: (msg) => this.showAlert(msg)
+        });
       }
 
       bindEvents() {
@@ -1830,7 +2009,6 @@
         this.dom.btnStageFullscreen.addEventListener('click', () => this.toggleFullscreen());
         this.dom.videoViewport.addEventListener('dblclick', () => this.toggleFullscreen());
 
-        // Preset Selector Visualizer
         this.dom.visualizerPresetSelector.addEventListener('click', (e) => {
           const btn = e.target.closest('.preset-btn');
           if (!btn) return;
@@ -1839,7 +2017,6 @@
           this.player.visualizer.setPreset(btn.dataset.preset);
         });
 
-        // Key shortcuts (F for fullscreen)
         window.addEventListener('keydown', (e) => {
           if ((e.key === 'f' || e.key === 'F') && e.target.tagName !== 'INPUT') {
             e.preventDefault();
@@ -1847,7 +2024,6 @@
           }
         });
 
-        // Masquage automatique du menu et du nom de la radio après 3 secondes d'inactivité
         const resetRadioOverlayTimer = () => {
           if (this.currentTab !== 'radio' || this.activeStationIndex === -1) return;
           this.dom.audioOverlay.classList.remove('overlay-hidden');
@@ -1881,7 +2057,6 @@
           this.updateVolumeIcons(val === 0);
         });
 
-        // Détection d'inactivité de la souris en plein écran (3 secondes)
         const resetHUDTimer = () => {
           this.showHUD();
           clearTimeout(this.hudInactivityTimer);
@@ -2039,18 +2214,15 @@
         this.dom.theaterStage.classList.add('active');
 
         if (station.type === 'video') {
-          // MODE TV: Désactiver complètement les animations graphiques et afficher uniquement la vidéo
           this.player.visualizer.setVisible(false);
           this.dom.audioOverlay.style.display = 'none';
           this.dom.unifiedMedia.style.display = 'block';
         } else {
-          // MODE RADIO: Activer les animations 2D/3D et afficher l'overlay avec auto-masquage
           this.player.visualizer.setVisible(true);
           this.dom.audioOverlay.style.display = 'flex';
           this.dom.audioOverlay.classList.remove('overlay-hidden');
           this.dom.unifiedMedia.style.display = 'none';
 
-          // Démarrer le timer de 3s
           clearTimeout(this.radioInactivityTimer);
           this.radioInactivityTimer = setTimeout(() => {
             if (this.currentTab === 'radio') {
