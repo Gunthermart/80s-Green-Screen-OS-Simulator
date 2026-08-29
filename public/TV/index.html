@@ -850,6 +850,9 @@
                 <option value="aurora">🌌 Aurore Floue (2D)</option>
                 <option value="hyperdrive">🚀 Hyperdrive (3D)</option>
                 <option value="sphere">🌐 Sphère Cyber (3D)</option>
+                <option value="synthwave">🌅 Grille Synthwave (3D)</option>
+                <option value="vortex">🌀 Vortex Quantique (3D)</option>
+                <option value="matrix">🧊 Cubes Matrice (3D)</option>
               </select>
               <button class="stage-btn" id="btn-stage-fullscreen" title="Plein écran total [F]">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
@@ -1358,45 +1361,161 @@
     }
 
     class VisualizerEngine {
-      constructor(canvas2D, canvas3D) {
+      constructor(canvas2D, canvas3D, audioElement) {
         this.c2d = canvas2D;
         this.ctx2d = canvas2D.getContext('2d');
         this.c3d = canvas3D;
+        this.audioEl = audioElement;
         this.preset = 'cyber';
         this.isRunning = false;
+
+        this.initAudioAnalyzer();
         this.initThreeJS();
+        this.resize();
+        window.addEventListener('resize', () => this.resize());
         this.startLoop();
+      }
+
+      initAudioAnalyzer() {
+        try {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (AudioContext && this.audioEl && !this.audioCtx) {
+            this.audioCtx = new AudioContext();
+            this.analyser = this.audioCtx.createAnalyser();
+            this.analyser.fftSize = 64;
+            this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+            
+            // Try connecting audio source (safely handles CORS restrictions)
+            try {
+              this.source = this.audioCtx.createMediaElementSource(this.audioEl);
+              this.source.connect(this.analyser);
+              this.analyser.connect(this.audioCtx.destination);
+            } catch(e) {
+              this.source = null; // Fallback to beat simulation if CORS blocked
+            }
+          }
+        } catch(e) {
+          this.analyser = null;
+        }
+      }
+
+      getFrequencyData() {
+        if (this.audioCtx && this.audioCtx.state === 'suspended') {
+          this.audioCtx.resume().catch(() => {});
+        }
+        if (this.analyser && this.source) {
+          this.analyser.getByteFrequencyData(this.dataArray);
+          return this.dataArray;
+        }
+        // Simulated procedural frequency spectrum if Web Audio source isn't bound due to CORS
+        const time = Date.now() * 0.003;
+        const fakeData = new Uint8Array(32);
+        for (let i = 0; i < 32; i++) {
+          const val = Math.sin(time * 2 + i * 0.3) * 0.5 + 0.5;
+          const noise = Math.cos(time * 4 - i * 0.1) * 0.3 + 0.3;
+          fakeData[i] = Math.min(255, Math.floor((val * 0.7 + noise * 0.3) * 220 + 35));
+        }
+        return fakeData;
+      }
+
+      resize() {
+        if (this.c2d) {
+          this.c2d.width = this.c2d.offsetWidth || 800;
+          this.c2d.height = this.c2d.offsetHeight || 450;
+        }
+        if (this.renderer && this.c3d) {
+          const w = this.c3d.offsetWidth || 800;
+          const h = this.c3d.offsetHeight || 450;
+          this.renderer.setSize(w, h, false);
+          this.camera.aspect = w / h;
+          this.camera.updateProjectionMatrix();
+        }
       }
 
       initThreeJS() {
         if (typeof THREE === 'undefined') return;
         this.scene = new THREE.Scene();
-        this.camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
+        this.camera = new THREE.PerspectiveCamera(60, 16 / 9, 0.1, 1000);
         this.camera.position.z = 50;
         this.renderer = new THREE.WebGLRenderer({ canvas: this.c3d, alpha: true, antialias: true });
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
         this.meshGroups = {};
+
+        // 1. Sphere 3D
         const sphereGroup = new THREE.Group();
-        const sphereGeo = new THREE.IcosahedronGeometry(15, 2);
-        const sphereMat = new THREE.MeshBasicMaterial({ color: 0x6366f1, wireframe: true, transparent: true, opacity: 0.8 });
+        const sphereGeo = new THREE.IcosahedronGeometry(14, 2);
+        const sphereMat = new THREE.MeshBasicMaterial({ color: 0x6366f1, wireframe: true, transparent: true, opacity: 0.85 });
         this.sphereMesh = new THREE.Mesh(sphereGeo, sphereMat);
         sphereGroup.add(this.sphereMesh);
+        
+        const coreGeo = new THREE.SphereGeometry(6, 16, 16);
+        const coreMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4, wireframe: true });
+        this.coreMesh = new THREE.Mesh(coreGeo, coreMat);
+        sphereGroup.add(this.coreMesh);
         this.meshGroups['sphere'] = sphereGroup;
 
+        // 2. Hyperdrive 3D
         const hyperGroup = new THREE.Group();
         const starGeo = new THREE.BufferGeometry();
-        const starCount = 600;
+        const starCount = 800;
         const starPos = new Float32Array(starCount * 3);
         for (let i = 0; i < starCount * 3; i += 3) {
-          starPos[i] = (Math.random() - 0.5) * 200;
-          starPos[i + 1] = (Math.random() - 0.5) * 200;
-          starPos[i + 2] = (Math.random() - 0.5) * 400;
+          starPos[i] = (Math.random() - 0.5) * 300;
+          starPos[i + 1] = (Math.random() - 0.5) * 300;
+          starPos[i + 2] = (Math.random() - 0.5) * 600;
         }
         starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
-        const starMat = new THREE.PointsMaterial({ color: 0xa855f7, size: 1.5, transparent: true });
-        hyperGroup.add(new THREE.Points(starGeo, starMat));
+        const starMat = new THREE.PointsMaterial({ color: 0xa855f7, size: 2.2, transparent: true, opacity: 0.9 });
+        this.starPoints = new THREE.Points(starGeo, starMat);
+        hyperGroup.add(this.starPoints);
         this.meshGroups['hyperdrive'] = hyperGroup;
+
+        // 3. Synthwave Grid 3D
+        const synthGroup = new THREE.Group();
+        const gridHelper = new THREE.GridHelper(200, 40, 0x06b6d4, 0x6366f1);
+        gridHelper.position.y = -20;
+        synthGroup.add(gridHelper);
+
+        const sunGeo = new THREE.CircleGeometry(16, 32);
+        const sunMat = new THREE.MeshBasicMaterial({ color: 0xef4444, wireframe: true });
+        const sunMesh = new THREE.Mesh(sunGeo, sunMat);
+        sunMesh.position.set(0, 5, -80);
+        synthGroup.add(sunMesh);
+        this.meshGroups['synthwave'] = synthGroup;
+
+        // 4. Vortex 3D
+        const vortexGroup = new THREE.Group();
+        const vortexGeo = new THREE.BufferGeometry();
+        const vortexCount = 1000;
+        const vPos = new Float32Array(vortexCount * 3);
+        for (let i = 0; i < vortexCount; i++) {
+          const angle = i * 0.1;
+          const r = 2 + i * 0.08;
+          vPos[i * 3] = Math.cos(angle) * r;
+          vPos[i * 3 + 1] = (Math.random() - 0.5) * 20;
+          vPos[i * 3 + 2] = Math.sin(angle) * r - 40;
+        }
+        vortexGeo.setAttribute('position', new THREE.BufferAttribute(vPos, 3));
+        const vortexMat = new THREE.PointsMaterial({ color: 0xec4899, size: 1.8, transparent: true });
+        this.vortexPoints = new THREE.Points(vortexGeo, vortexMat);
+        vortexGroup.add(this.vortexPoints);
+        this.meshGroups['vortex'] = vortexGroup;
+
+        // 5. Matrix Cubes 3D
+        const matrixGroup = new THREE.Group();
+        this.matrixCubes = [];
+        const cubeGeo = new THREE.BoxGeometry(2.5, 2.5, 2.5);
+        for (let x = -4; x <= 4; x++) {
+          for (let z = -2; z <= 2; z++) {
+            const cubeMat = new THREE.MeshBasicMaterial({ color: 0x10b981, wireframe: true });
+            const cube = new THREE.Mesh(cubeGeo, cubeMat);
+            cube.position.set(x * 4, -10, z * 4 - 20);
+            matrixGroup.add(cube);
+            this.matrixCubes.push(cube);
+          }
+        }
+        this.meshGroups['matrix'] = matrixGroup;
 
         Object.values(this.meshGroups).forEach(g => this.scene.add(g));
         this.update3DVisibility();
@@ -1404,15 +1523,18 @@
 
       setPreset(preset) {
         this.preset = preset;
-        const is3D = ['hyperdrive', 'sphere'].includes(preset);
+        const is3D = ['hyperdrive', 'sphere', 'synthwave', 'vortex', 'matrix'].includes(preset);
         this.c2d.style.display = is3D ? 'none' : 'block';
         this.c3d.style.display = is3D ? 'block' : 'none';
         this.update3DVisibility();
+        this.resize();
       }
 
       update3DVisibility() {
         if (!this.meshGroups) return;
-        Object.keys(this.meshGroups).forEach(k => { this.meshGroups[k].visible = (k === this.preset); });
+        Object.keys(this.meshGroups).forEach(k => {
+          this.meshGroups[k].visible = (k === this.preset);
+        });
       }
 
       stop() {
@@ -1426,26 +1548,96 @@
         const animate = () => {
           if (!this.isRunning) return;
           requestAnimationFrame(animate);
-          const time = Date.now() * 0.002;
-          const w = this.c2d.width = this.c2d.offsetWidth;
-          const h = this.c2d.height = this.c2d.offsetHeight;
 
+          const freqs = this.getFrequencyData();
+          const avgFreq = freqs.reduce((a, b) => a + b, 0) / freqs.length;
+          const bass = (freqs[0] + freqs[1] + freqs[2] + freqs[3]) / 4;
+          const w = this.c2d.width;
+          const h = this.c2d.height;
+
+          // 2D Canvas Visualizers
           if (this.c2d.style.display !== 'none' && w && h) {
             this.ctx2d.clearRect(0, 0, w, h);
-            const bars = 32;
-            const barW = w / bars;
-            for (let i = 0; i < bars; i++) {
-              const bh = (Math.sin(time + i * 0.25) * 0.5 + 0.5) * (h * 0.6) + 10;
-              this.ctx2d.fillStyle = '#a855f7';
-              this.ctx2d.fillRect(i * barW, h - bh, barW - 3, bh);
+
+            if (this.preset === 'cyber') {
+              const bars = 28;
+              const barW = (w / bars) - 4;
+              for (let i = 0; i < bars; i++) {
+                const fVal = freqs[i % freqs.length] / 255;
+                const bh = fVal * (h * 0.55) + 12;
+                const x = i * (barW + 4) + 2;
+                const y = h - bh;
+
+                const grad = this.ctx2d.createLinearGradient(0, y, 0, h);
+                grad.addColorStop(0, '#a855f7');
+                grad.addColorStop(0.5, '#6366f1');
+                grad.addColorStop(1, '#06b6d4');
+
+                this.ctx2d.fillStyle = grad;
+                this.ctx2d.beginPath();
+                this.ctx2d.roundRect(x, y, barW, bh, [6, 6, 0, 0]);
+                this.ctx2d.fill();
+
+                // Peak dot
+                this.ctx2d.fillStyle = '#67e8f9';
+                this.ctx2d.fillRect(x, y - 6, barW, 3);
+              }
+            } else if (this.preset === 'particles') {
+              const cx = w / 2;
+              const cy = h / 2;
+              const pCount = 24;
+              for (let i = 0; i < pCount; i++) {
+                const angle = (i / pCount) * Math.PI * 2 + (Date.now() * 0.001);
+                const r = 90 + (freqs[i % freqs.length] / 255) * 80;
+                const px = cx + Math.cos(angle) * r;
+                const py = cy + Math.sin(angle) * r;
+
+                this.ctx2d.fillStyle = i % 2 === 0 ? '#06b6d4' : '#a855f7';
+                this.ctx2d.beginPath();
+                this.ctx2d.arc(px, py, 4 + (freqs[i % freqs.length] / 255) * 6, 0, Math.PI * 2);
+                this.ctx2d.fill();
+              }
+            } else if (this.preset === 'aurora') {
+              const time = Date.now() * 0.002;
+              this.ctx2d.lineWidth = 4;
+              for (let j = 0; j < 3; j++) {
+                this.ctx2d.beginPath();
+                this.ctx2d.strokeStyle = j === 0 ? '#6366f1' : (j === 1 ? '#06b6d4' : '#a855f7');
+                for (let x = 0; x < w; x += 15) {
+                  const y = h / 2 + Math.sin(x * 0.01 + time + j) * 40 + Math.cos(x * 0.02 - time) * (bass * 0.3);
+                  if (x === 0) this.ctx2d.moveTo(x, y);
+                  else this.ctx2d.lineTo(x, y);
+                }
+                this.ctx2d.stroke();
+              }
             }
           }
 
-          if (this.scene && this.c3d.style.display !== 'none' && this.c3d.offsetWidth) {
-            this.renderer.setSize(this.c3d.offsetWidth, this.c3d.offsetHeight, false);
-            this.camera.aspect = this.c3d.offsetWidth / this.c3d.offsetHeight;
-            this.camera.updateProjectionMatrix();
-            if (this.sphereMesh) this.sphereMesh.rotation.y += 0.008;
+          // 3D Three.js Visualizers
+          if (this.scene && this.c3d.style.display !== 'none') {
+            if (this.preset === 'sphere' && this.sphereMesh) {
+              this.sphereMesh.rotation.y += 0.01;
+              this.sphereMesh.rotation.x += 0.005;
+              const scale = 1 + (bass / 255) * 0.4;
+              this.sphereMesh.scale.set(scale, scale, scale);
+              if (this.coreMesh) this.coreMesh.rotation.y -= 0.02;
+            } else if (this.preset === 'hyperdrive' && this.starPoints) {
+              const positions = this.starPoints.geometry.attributes.position.array;
+              const speed = 2 + (bass / 255) * 6;
+              for (let i = 2; i < positions.length; i += 3) {
+                positions[i] += speed;
+                if (positions[i] > 100) positions[i] = -500;
+              }
+              this.starPoints.geometry.attributes.position.needsUpdate = true;
+            } else if (this.preset === 'vortex' && this.vortexPoints) {
+              this.vortexPoints.rotation.z += 0.01 + (bass / 255) * 0.02;
+            } else if (this.preset === 'matrix' && this.matrixCubes) {
+              this.matrixCubes.forEach((cube, idx) => {
+                const fVal = freqs[idx % freqs.length] / 255;
+                cube.scale.y = 1 + fVal * 6;
+              });
+            }
+
             this.renderer.render(this.scene, this.camera);
           }
         };
@@ -1472,7 +1664,7 @@
         this.queue = new QueueManager(() => this.renderQueueUI());
 
         this.initDOM();
-        this.visualizer = new VisualizerEngine(this.canvas2D, this.canvas3D);
+        this.visualizer = new VisualizerEngine(this.canvas2D, this.canvas3D, this.media);
         this.bindEvents();
         this.initFullscreenAndHUD();
         this.updateBadgesUI();
@@ -1506,6 +1698,14 @@
         document.getElementById('tab-tv-fav').onclick = () => this.switchTab('tv-fav');
         document.getElementById('tab-podcasts').onclick = () => this.switchTab('podcasts');
         document.getElementById('tab-podcast-subs').onclick = () => this.switchTab('podcast-subs');
+
+        // Visualizer Preset Change
+        const animSelect = document.getElementById('anim-preset-select');
+        if (animSelect) {
+          animSelect.onchange = (e) => {
+            this.visualizer.setPreset(e.target.value);
+          };
+        }
 
         document.getElementById('country-filters').onclick = (e) => {
           if (!e.target.classList.contains('chip')) return;
@@ -1593,6 +1793,42 @@
         this.media.onpause = () => {
           document.getElementById('icon-play').style.display = 'block';
           document.getElementById('icon-pause').style.display = 'none';
+        };
+      }
+
+      updateMetadata(title, subtitle, logo) {
+        document.getElementById('player-title').textContent = title || 'Sans titre';
+        document.getElementById('player-subtitle').textContent = subtitle || 'Direct Stream';
+        document.getElementById('stage-title').textContent = title || 'OmniStream';
+
+        const stageImg = document.getElementById('stage-cover-img');
+        const stageFallback = document.getElementById('stage-cover-fallback');
+        const playerImg = document.getElementById('player-thumb-img');
+        const playerFallback = document.getElementById('player-thumb-fallback');
+
+        if (logo) {
+          stageImg.src = logo;
+          stageImg.style.display = 'block';
+          if (stageFallback) stageFallback.style.display = 'none';
+
+          playerImg.src = logo;
+          playerImg.style.display = 'block';
+          if (playerFallback) playerFallback.style.display = 'none';
+        } else {
+          stageImg.style.display = 'none';
+          if (stageFallback) stageFallback.style.display = 'block';
+
+          playerImg.style.display = 'none';
+          if (playerFallback) playerFallback.style.display = 'block';
+        }
+
+        stageImg.onerror = () => {
+          stageImg.style.display = 'none';
+          if (stageFallback) stageFallback.style.display = 'block';
+        };
+        playerImg.onerror = () => {
+          playerImg.style.display = 'none';
+          if (playerFallback) playerFallback.style.display = 'block';
         };
       }
 
@@ -1789,18 +2025,13 @@
       playPodcastEpisodeObj(ep, podcast) {
         this.currentPlayingEpisode = ep;
         this.theater.classList.add('active');
-        document.getElementById('player-title').textContent = ep.title;
-        document.getElementById('player-subtitle').textContent = podcast ? podcast.name : 'Podcast';
-        document.getElementById('stage-title').textContent = ep.title;
+
+        const logoUrl = podcast ? podcast.logo : '';
+        this.updateMetadata(ep.title, podcast ? podcast.name : 'Podcast', logoUrl);
 
         this.media.style.display = 'none';
         this.audioOverlay.style.display = 'flex';
-        this.visualizer.setPreset('cyber');
-
-        if (podcast && podcast.logo) {
-          document.getElementById('stage-cover-img').src = podcast.logo;
-          document.getElementById('stage-cover-img').style.display = 'block';
-        }
+        this.visualizer.setPreset(document.getElementById('anim-preset-select').value || 'cyber');
 
         this.media.src = ep.url;
         
@@ -1821,9 +2052,7 @@
         this.activeStationIndex = index;
         this.theater.classList.add('active');
 
-        document.getElementById('player-title').textContent = s.name;
-        document.getElementById('player-subtitle').textContent = s.tags || s.country;
-        document.getElementById('stage-title').textContent = s.name;
+        this.updateMetadata(s.name, s.tags || s.country, s.logo);
 
         if (s.type === 'video' || s.type === 'tv') {
           this.audioOverlay.style.display = 'none';
@@ -1834,47 +2063,11 @@
         } else {
           this.media.style.display = 'none';
           this.audioOverlay.style.display = 'flex';
-          this.visualizer.setPreset('cyber');
+          this.visualizer.setPreset(document.getElementById('anim-preset-select').value || 'cyber');
           this.media.src = s.url;
           this.media.play().catch(() => {});
         }
       }
 
       updateBadgesUI() {
-        document.getElementById('fav-radio-badge').textContent = this.favStore.getRadioFavs().length;
-        document.getElementById('fav-tv-badge').textContent = this.favStore.getTvFavs().length;
-        document.getElementById('sub-podcast-badge').textContent = this.subStore.getSubs().length;
-      }
-
-      renderQueueUI() {
-        document.getElementById('queue-badge').textContent = this.queue.queue.length;
-        const list = document.getElementById('queue-items-list');
-        if (!this.queue.queue.length) {
-          list.innerHTML = '<p style="color:var(--text-secondary); font-size:0.85rem;">Aucun épisode dans la file d\'attente.</p>';
-          return;
-        }
-
-        list.innerHTML = this.queue.queue.map((item, i) => `
-          <div class="queue-item">
-            <div style="overflow:hidden;">
-              <div style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${item.episode.title}</div>
-              <div style="font-size:0.75rem; color:var(--text-secondary);">${item.podcast ? item.podcast.name : ''}</div>
-            </div>
-            <button class="btn-action-sm" onclick="app.queue.remove(${i})">✕</button>
-          </div>
-        `).join('');
-      }
-
-      showToast(msg) {
-        const toast = document.createElement('div');
-        toast.className = 'toast-notification';
-        toast.textContent = msg;
-        document.body.appendChild(toast);
-        setTimeout(() => toast.remove(), 2500);
-      }
-    }
-
-    window.onload = () => { window.app = new AppController(); };
-  </script>
-</body>
-</html>
+<!-- ... existing code -->
