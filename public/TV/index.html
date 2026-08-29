@@ -922,33 +922,90 @@
        * Parser de flux RSS XML d'épisodes de Podcast
        */
       async getPodcastEpisodes(feedUrl) {
-        try {
-          // Utiliser AllOrigins Proxy pour contourner les restrictions CORS sur les flux RSS distants
-          const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(feedUrl)}`;
-          let res = await fetch(proxyUrl);
-          if (!res.ok) res = await fetch(feedUrl);
-          const text = await res.text();
+        if (!feedUrl) return [];
 
+        // Proxies de secours multiples pour contourner CORS et erreurs de réseaux
+        const proxies = [
+          url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+          url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+          url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+          url => url
+        ];
+
+        let text = '';
+        for (const proxyFn of proxies) {
+          try {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 4000);
+            const res = await fetch(proxyFn(feedUrl), { signal: controller.signal });
+            clearTimeout(timer);
+
+            if (res.ok) {
+              const fetchedText = await res.text();
+              if (fetchedText && (fetchedText.includes('<item') || fetchedText.includes('<entry'))) {
+                text = fetchedText;
+                break;
+              }
+            }
+          } catch (e) {
+            console.warn('Proxy RSS échoué, tentative sur le suivant...', e);
+          }
+        }
+
+        if (!text) return [];
+
+        try {
           const parser = new DOMParser();
-          const xmlDoc = parser.parseFromString(text, 'text/xml');
-          const items = xmlDoc.querySelectorAll('item');
+          // Utilisation de 'text/html' pour une tolérance maximale aux erreurs de syntaxe XML et CDATA
+          const doc = parser.parseFromString(text, 'text/html');
+          const items = doc.querySelectorAll('item, entry');
 
           const episodes = [];
           items.forEach((item, idx) => {
             if (idx >= 30) return; // Limiter aux 30 derniers épisodes
-            const title = item.querySelector('title')?.textContent || 'Épisode sans titre';
+
+            const titleEl = item.querySelector('title');
+            const title = titleEl ? titleEl.textContent.trim() : `Épisode ${idx + 1}`;
+
+            // Recherche de l'URL audio (enclosure, media:content, ou lien direct)
+            let audioUrl = null;
             const enclosure = item.querySelector('enclosure');
-            const audioUrl = enclosure ? enclosure.getAttribute('url') : null;
-            const pubDate = item.querySelector('pubDate')?.textContent || '';
-            const description = item.querySelector('description')?.textContent?.replace(/<[^>]*>/g, '').slice(0, 160) || '';
+            if (enclosure) {
+              audioUrl = enclosure.getAttribute('url');
+            }
+            if (!audioUrl) {
+              const mediaContent = item.querySelector('content, media\\:content');
+              if (mediaContent) audioUrl = mediaContent.getAttribute('url');
+            }
+            if (!audioUrl) {
+              const link = item.querySelector('link');
+              if (link && link.textContent && link.textContent.match(/\.(mp3|m4a|aac|ogg|wav)($|\?)/i)) {
+                audioUrl = link.textContent.trim();
+              }
+            }
+
+            const pubDateEl = item.querySelector('pubDate, pubdate, updated, issued');
+            let pubDate = pubDateEl ? pubDateEl.textContent.trim() : '';
+            if (pubDate) {
+              try {
+                const parsedDate = new Date(pubDate);
+                if (!isNaN(parsedDate)) {
+                  pubDate = parsedDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
+                }
+              } catch (err) {}
+            }
+
+            const descEl = item.querySelector('description, summary');
+            let description = descEl ? descEl.textContent.replace(/<[^>]*>/g, '').trim() : '';
+            if (description.length > 160) description = description.slice(0, 160) + '...';
 
             if (audioUrl) {
               episodes.push({
                 id: `ep_${idx}_${Date.now()}`,
-                title: title.trim(),
+                title,
                 url: audioUrl,
-                pubDate: pubDate ? new Date(pubDate).toLocaleDateString('fr-FR') : '',
-                description: description ? `${description}...` : '',
+                pubDate,
+                description,
                 type: 'audio'
               });
             }
@@ -1361,8 +1418,11 @@
         if (!episodes.length) {
           this.episodesContainer.innerHTML = `
             <div class="episodes-panel">
-              <button class="stage-btn" onclick="app.closeEpisodes()">← Retour aux podcasts</button>
-              <p>Impossible de charger les épisodes de ce flux RSS.</p>
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <button class="stage-btn" onclick="app.closeEpisodes()">← Retour aux podcasts</button>
+              </div>
+              <p style="color:var(--text-secondary);">Impossible d'extraire la liste des épisodes de ce flux RSS. Le serveur hôte bloque potentiellement l'accès distant.</p>
+              <button class="stage-btn" style="margin-top:12px; width:fit-content;" onclick="app.loadPodcastEpisodes(app.selectedPodcast)">🔄 Réessayer le chargement</button>
             </div>
           `;
           return;
@@ -1371,7 +1431,7 @@
         this.episodesContainer.innerHTML = `
           <div class="episodes-panel">
             <div class="podcast-header-detail">
-              <img src="${podcast.logo}" class="podcast-detail-cover">
+              <img src="${podcast.logo}" class="podcast-detail-cover" onerror="this.src='https://placehold.co/100x100/181c2e/ffffff?text=Podcast'">
               <div>
                 <button class="stage-btn" onclick="app.closeEpisodes()" style="margin-bottom:8px;">← Retour à la liste</button>
                 <h3 style="font-size:1.2rem; font-weight:700;">${podcast.name}</h3>
@@ -1385,7 +1445,7 @@
                     <div style="font-weight:600; font-size:0.9rem;">${ep.title}</div>
                     <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:2px;">${ep.pubDate} ${ep.description ? '— ' + ep.description : ''}</div>
                   </div>
-                  <button class="ctrl-btn play-main" style="width:36px; height:36px; flex-shrink:0;">
+                  <button class="ctrl-btn play-main" style="width:36px; height:36px; flex-shrink:0;" title="Écouter l'épisode">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                   </button>
                 </div>
