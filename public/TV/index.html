@@ -2378,18 +2378,69 @@
           this.hlsPlayer = null;
         }
 
+        let cleanUrl = (url || '').trim();
+        if (window.location.protocol === 'https:' && cleanUrl.startsWith('http://')) {
+          cleanUrl = cleanUrl.replace('http://', 'https://');
+        }
+
         this.media.muted = false;
         if (!this.media.volume || this.media.volume === 0) this.media.volume = 0.8;
 
-        if (url.includes('.m3u8') && typeof Hls !== 'undefined' && Hls.isSupported()) {
-          this.hlsPlayer = new Hls({ enableWorker: true, lowLatencyMode: true });
-          this.hlsPlayer.loadSource(url);
+        // Détection élargie des flux HLS (pas seulement l'extension .m3u8)
+        const isAudioFile = /\.(mp3|aac|ogg|wav|m4a)(\?.*)?$/i.test(cleanUrl);
+        const isHlsUrl = cleanUrl.includes('.m3u8') || cleanUrl.includes('/hls/') || cleanUrl.includes('manifest') || cleanUrl.includes('playlist') || isVideo || !isAudioFile;
+
+        if (isHlsUrl && typeof Hls !== 'undefined' && Hls.isSupported()) {
+          const config = {
+            enableWorker: true,
+            lowLatencyMode: true,
+            backBufferLength: 90,
+            maxBufferLength: 30,
+            maxMaxBufferLength: 600,
+            maxBufferHole: 0.5,
+            manifestLoadingTimeOut: 12000,
+            manifestLoadingMaxRetry: 4,
+            levelLoadingMaxRetry: 4,
+            fragLoadingMaxRetry: 6
+          };
+
+          this.hlsPlayer = new Hls(config);
+          this.hlsPlayer.loadSource(cleanUrl);
           this.hlsPlayer.attachMedia(this.media);
+
           this.hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
             this.media.play().catch(() => {});
           });
+
+          // Système d'auto-récupération en cas d'erreur réseau ou buffer (comme les lecteurs HLS professionnels)
+          this.hlsPlayer.on(Hls.Events.ERROR, (event, data) => {
+            if (data.fatal) {
+              switch (data.type) {
+                case Hls.ErrorTypes.NETWORK_ERROR:
+                  console.warn('Problème réseau HLS, tentative de reconnexion...');
+                  this.hlsPlayer.startLoad();
+                  break;
+                case Hls.ErrorTypes.MEDIA_ERROR:
+                  console.warn('Erreur média HLS, tentative de récupération...');
+                  this.hlsPlayer.recoverMediaError();
+                  break;
+                default:
+                  console.error('Erreur HLS irrécupérable, bascule sur lecteur natif');
+                  this.hlsPlayer.destroy();
+                  this.hlsPlayer = null;
+                  this.media.src = cleanUrl;
+                  this.media.play().catch(() => {});
+                  break;
+              }
+            }
+          });
+        } else if (this.media.canPlayType('application/vnd.apple.mpegurl') && cleanUrl.includes('.m3u8')) {
+          // Support natif HLS (Safari/iOS)
+          this.media.src = cleanUrl;
+          this.media.play().catch(() => {});
         } else {
-          this.media.src = url;
+          // Fichiers audio directs (MP3/AAC/OGG)
+          this.media.src = cleanUrl;
           this.media.play().catch(() => {});
         }
       }
