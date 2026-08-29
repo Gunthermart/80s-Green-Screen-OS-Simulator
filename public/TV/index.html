@@ -342,6 +342,7 @@
       gap: 24px;
     }
 
+    /* Theater Stage & Fullscreen HUD */
     #theater-stage {
       width: 100%;
       background: #000;
@@ -410,6 +411,7 @@
       align-items: center;
       gap: 6px;
       outline: none;
+      transition: var(--transition-smooth);
     }
     .stage-btn:hover { background: rgba(99, 102, 241, 0.4); }
 
@@ -422,6 +424,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
+      cursor: pointer;
     }
 
     #theater-stage:fullscreen .video-viewport {
@@ -505,7 +508,6 @@
     }
     .card-thumb-wrapper img { width: 100%; height: 100%; object-fit: contain; padding: 8px; }
 
-    /* Modal / Épisodes de Podcast */
     .episodes-panel {
       background: var(--bg-surface);
       border: 1px solid var(--border-glass);
@@ -626,7 +628,6 @@
           <span id="fav-tv-badge" style="margin-left:auto; font-size:0.7rem; padding:2px 8px; background:rgba(6,182,212,0.2); color:#67e8f9; border-radius:10px; font-weight:700;">0</span>
         </div>
 
-        <!-- Nouvel Onglet Podcasts & Replays -->
         <div class="nav-item" id="tab-podcasts" style="margin-top:4px;">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
           <span style="font-size:0.9rem; font-weight:600;">Podcasts & Replays</span>
@@ -701,7 +702,7 @@
             </div>
           </div>
 
-          <div class="video-viewport">
+          <div class="video-viewport" id="video-viewport-wrapper" title="Double-cliquez pour basculer en Plein Écran">
             <canvas id="visualizer-canvas-3d" class="canvas-layer"></canvas>
             <canvas id="visualizer-canvas-2d" class="canvas-layer"></canvas>
             <video id="unified-media" playsinline></video>
@@ -881,9 +882,6 @@
         }
       }
 
-      /**
-       * Moteur d'interrogation de l'iTunes Search API pour les Podcasts
-       */
       async getPodcasts(search = '', genre = 'all', country = 'FR') {
         let term = search.trim() || 'podcast';
         if (!search.trim() && genre && genre !== 'all') {
@@ -918,13 +916,9 @@
         }
       }
 
-      /**
-       * Parser de flux RSS XML d'épisodes de Podcast
-       */
       async getPodcastEpisodes(feedUrl) {
         if (!feedUrl) return [];
 
-        // Proxies de secours multiples pour contourner CORS et erreurs de réseaux
         const proxies = [
           url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
           url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
@@ -948,7 +942,7 @@
               }
             }
           } catch (e) {
-            console.warn('Proxy RSS échoué, tentative sur le suivant...', e);
+            console.warn('Proxy RSS échoué, tentative suivante...', e);
           }
         }
 
@@ -956,18 +950,16 @@
 
         try {
           const parser = new DOMParser();
-          // Utilisation de 'text/html' pour une tolérance maximale aux erreurs de syntaxe XML et CDATA
           const doc = parser.parseFromString(text, 'text/html');
           const items = doc.querySelectorAll('item, entry');
 
           const episodes = [];
           items.forEach((item, idx) => {
-            if (idx >= 30) return; // Limiter aux 30 derniers épisodes
+            if (idx >= 30) return;
 
             const titleEl = item.querySelector('title');
             const title = titleEl ? titleEl.textContent.trim() : `Épisode ${idx + 1}`;
 
-            // Recherche de l'URL audio (enclosure, media:content, ou lien direct)
             let audioUrl = null;
             const enclosure = item.querySelector('enclosure');
             if (enclosure) {
@@ -1068,7 +1060,6 @@
 
         this.meshGroups = {};
 
-        // 1. Sphère Cyber
         const sphereGroup = new THREE.Group();
         const sphereGeo = new THREE.IcosahedronGeometry(15, 2);
         const sphereMat = new THREE.MeshBasicMaterial({ color: 0x6366f1, wireframe: true, transparent: true, opacity: 0.8 });
@@ -1080,7 +1071,6 @@
         sphereGroup.add(new THREE.Mesh(coreGeo, coreMat));
         this.meshGroups['sphere'] = sphereGroup;
 
-        // 2. Hyperdrive
         const hyperGroup = new THREE.Group();
         const starGeo = new THREE.BufferGeometry();
         const starCount = 800;
@@ -1096,7 +1086,6 @@
         hyperGroup.add(this.starParticles);
         this.meshGroups['hyperdrive'] = hyperGroup;
 
-        // Ajouter tous les groupes à la scène
         Object.values(this.meshGroups).forEach(g => this.scene.add(g));
         this.update3DVisibility();
       }
@@ -1231,6 +1220,7 @@
         });
 
         this.bindEvents();
+        this.initFullscreenAndHUD();
         this.updateFavBadges();
         this.loadCatalog();
       }
@@ -1245,6 +1235,7 @@
         this.audioOverlay = document.getElementById('audio-overlay');
         this.canvas2D = document.getElementById('visualizer-canvas-2d');
         this.canvas3D = document.getElementById('visualizer-canvas-3d');
+        this.videoViewport = document.getElementById('video-viewport-wrapper');
       }
 
       bindEvents() {
@@ -1293,6 +1284,21 @@
           else this.media.pause();
         };
 
+        document.getElementById('btn-prev').onclick = () => {
+          if (this.stations.length > 0) {
+            let prevIndex = this.activeStationIndex - 1;
+            if (prevIndex < 0) prevIndex = this.stations.length - 1;
+            this.handleCardClick(prevIndex);
+          }
+        };
+
+        document.getElementById('btn-next').onclick = () => {
+          if (this.stations.length > 0) {
+            let nextIndex = (this.activeStationIndex + 1) % this.stations.length;
+            this.handleCardClick(nextIndex);
+          }
+        };
+
         document.getElementById('volume-range').oninput = (e) => {
           this.media.volume = parseFloat(e.target.value);
         };
@@ -1301,6 +1307,10 @@
           this.media.muted = !this.media.muted;
           document.getElementById('icon-vol-high').style.display = this.media.muted ? 'none' : 'block';
           document.getElementById('icon-vol-mute').style.display = this.media.muted ? 'block' : 'none';
+        };
+
+        document.getElementById('anim-preset-select').onchange = (e) => {
+          this.visualizer.setPreset(e.target.value);
         };
 
         this.media.onplay = () => {
@@ -1316,6 +1326,54 @@
         };
       }
 
+      initFullscreenAndHUD() {
+        const toggleFullscreen = () => {
+          if (!document.fullscreenElement) {
+            if (this.theater.requestFullscreen) {
+              this.theater.requestFullscreen();
+            } else if (this.theater.webkitRequestFullscreen) {
+              this.theater.webkitRequestFullscreen();
+            }
+          } else {
+            if (document.exitFullscreen) {
+              document.exitFullscreen();
+            } else if (document.webkitExitFullscreen) {
+              document.webkitExitFullscreen();
+            }
+          }
+        };
+
+        document.getElementById('btn-stage-fullscreen').onclick = toggleFullscreen;
+        document.getElementById('btn-fullscreen').onclick = toggleFullscreen;
+        
+        // Double-clic sur le lecteur pour basculer en plein écran
+        this.videoViewport.ondblclick = toggleFullscreen;
+
+        // Raccourci clavier 'F' pour le plein écran
+        document.addEventListener('keydown', (e) => {
+          if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+          if (e.key === 'f' || e.key === 'F') {
+            e.preventDefault();
+            toggleFullscreen();
+          }
+        });
+
+        // Gestion de l'inactivité de la souris pour le masquage automatique du HUD
+        let hudTimeout;
+        const resetHUDTimer = () => {
+          document.body.classList.remove('hide-hud', 'hide-cursor');
+          clearTimeout(hudTimeout);
+          hudTimeout = setTimeout(() => {
+            if (document.fullscreenElement || this.theater.classList.contains('active')) {
+              document.body.classList.add('hide-hud', 'hide-cursor');
+            }
+          }, 3000);
+        };
+
+        window.addEventListener('mousemove', resetHUDTimer);
+        window.addEventListener('touchstart', resetHUDTimer);
+      }
+
       switchTab(tab) {
         this.currentTab = tab;
         document.getElementById('tab-radio').classList.toggle('active', tab === 'radio');
@@ -1324,7 +1382,7 @@
         document.getElementById('tab-tv-fav').classList.toggle('active', tab === 'tv-fav');
         document.getElementById('tab-podcasts').classList.toggle('active', tab === 'podcasts');
 
-        this.episodesContainer.innerHTML = ''; // Réinitialiser le conteneur d'épisodes
+        this.episodesContainer.innerHTML = '';
 
         const heading = document.getElementById('catalog-heading');
         if (tab === 'radio') heading.textContent = 'Radios Populaires';
@@ -1380,6 +1438,9 @@
           return `
             <div class="station-card ${isPlaying ? 'is-playing' : ''}">
               ${s.type !== 'podcast' ? `
+                <button class="card-fs-btn" onclick="event.stopPropagation(); app.playStationFullscreen(${i});" title="Lancer en Plein Écran">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+                </button>
                 <button class="card-fav-btn ${isFav ? 'is-fav' : ''}" onclick="event.stopPropagation(); app.toggleStationFav(${i});" title="Favori">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l8.72-8.72 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
                 </button>
@@ -1396,12 +1457,26 @@
         }).join('');
       }
 
+      toggleStationFav(index) {
+        const station = this.stations[index];
+        if (!station) return;
+        const added = this.favStore.toggle(station);
+        this.showToast(added ? `❤️ "${station.name}" ajouté aux favoris` : `Retiré des favoris`);
+        this.renderGrid();
+      }
+
+      playStationFullscreen(index) {
+        this.playStation(index);
+        if (!document.fullscreenElement) {
+          if (this.theater.requestFullscreen) this.theater.requestFullscreen();
+        }
+      }
+
       async handleCardClick(index) {
         const item = this.stations[index];
         if (!item) return;
 
         if (item.type === 'podcast') {
-          // Charger la liste des épisodes du podcast via le flux RSS
           this.loadPodcastEpisodes(item);
         } else {
           this.playStation(index);
@@ -1421,7 +1496,7 @@
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
                 <button class="stage-btn" onclick="app.closeEpisodes()">← Retour aux podcasts</button>
               </div>
-              <p style="color:var(--text-secondary);">Impossible d'extraire la liste des épisodes de ce flux RSS. Le serveur hôte bloque potentiellement l'accès distant.</p>
+              <p style="color:var(--text-secondary);">Impossible d'extraire la liste des épisodes de ce flux RSS.</p>
               <button class="stage-btn" style="margin-top:12px; width:fit-content;" onclick="app.loadPodcastEpisodes(app.selectedPodcast)">🔄 Réessayer le chargement</button>
             </div>
           `;
