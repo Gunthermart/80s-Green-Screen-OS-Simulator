@@ -5,17 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OmniStream — Live Radio & IPTV Player</title>
   
-  <!-- Hls.js pour la prise en charge des flux .m3u8 en direct -->
+  <!-- Hls.js pour la lecture des flux vidéo/audio M3U8 en direct -->
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.8/dist/hls.min.js"></script>
-  <!-- Three.js pour les animations 3D WebGL -->
+  <!-- Three.js pour le rendu des animations 3D WebGL -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
   <style>
     :root {
-      --bg-base: #090a0f;
-      --bg-surface: #111420;
-      --bg-surface-elevated: #181c2e;
-      --bg-glass: rgba(17, 20, 32, 0.85);
+      --bg-base: #08090d;
+      --bg-surface: #10131e;
+      --bg-surface-elevated: #171b2b;
+      --bg-glass: rgba(16, 19, 30, 0.85);
       --border-glass: rgba(255, 255, 255, 0.08);
       --border-focus: rgba(99, 102, 241, 0.5);
 
@@ -35,7 +35,6 @@
       --radius-lg: 18px;
       --radius-full: 9999px;
 
-      --shadow-subtle: 0 4px 20px rgba(0, 0, 0, 0.35);
       --shadow-glow: 0 0 25px rgba(99, 102, 241, 0.25);
       --transition-smooth: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     }
@@ -73,7 +72,6 @@
       position: relative;
     }
 
-    /* Sidebar Navigation */
     #sidebar {
       width: var(--sidebar-width);
       background: var(--bg-surface);
@@ -175,7 +173,6 @@
     .chip:hover { border-color: var(--border-focus); color: var(--text-primary); }
     .chip.active { background: var(--accent-primary); color: #fff; border-color: var(--accent-primary); }
 
-    /* Main Container */
     #main-wrapper {
       flex: 1;
       display: flex;
@@ -231,7 +228,7 @@
       gap: 24px;
     }
 
-    /* Stage Théâtre (Media Viewport) */
+    /* Theater Stage Viewport */
     #theater-stage {
       width: 100%;
       background: #000;
@@ -250,7 +247,7 @@
       border: none !important;
     }
 
-    /* HUD elements with smooth transition for 3s inactivity hide */
+    /* HUD elements auto-hide transitions */
     .hud-element {
       transition: opacity 0.5s ease, transform 0.5s ease;
     }
@@ -268,7 +265,7 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      z-index: 10;
+      z-index: 20;
     }
 
     .stage-title-hud {
@@ -318,16 +315,29 @@
 
     video#unified-media { width: 100%; height: 100%; object-fit: contain; }
 
+    /* Canvas visualizer layers */
+    .canvas-layer {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    #visualizer-canvas-2d { z-index: 2; }
+    #visualizer-canvas-3d { z-index: 1; }
+
     .audio-visualizer-overlay {
       position: absolute;
       inset: 0;
-      background: linear-gradient(180deg, rgba(17, 20, 32, 0.95), rgba(9, 10, 15, 0.98));
+      background: linear-gradient(180deg, rgba(17, 20, 32, 0.85), rgba(9, 10, 15, 0.92));
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       gap: 16px;
       z-index: 5;
+      pointer-events: none;
     }
 
     .audio-cover {
@@ -344,16 +354,6 @@
     }
     .audio-cover img { width: 100%; height: 100%; object-fit: cover; }
 
-    canvas#visualizer-canvas {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      z-index: 2;
-      pointer-events: none;
-    }
-
-    /* Station Cards Grid */
     .cards-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
@@ -388,7 +388,6 @@
     }
     .card-thumb-wrapper img { width: 100%; height: 100%; object-fit: contain; padding: 8px; }
 
-    /* Bottom Sticky Player */
     #sticky-player {
       position: fixed;
       bottom: 0; left: 0; right: 0;
@@ -434,7 +433,6 @@
 <body>
 
   <div id="app-container">
-    <!-- Sidebar Navigation -->
     <aside id="sidebar">
       <div class="brand-section">
         <div class="brand-icon">
@@ -473,7 +471,6 @@
       </div>
     </aside>
 
-    <!-- Main Content Area -->
     <div id="main-wrapper">
       <header class="top-header">
         <button class="mobile-menu-btn" id="mobile-toggle" aria-label="Menu">
@@ -488,9 +485,7 @@
       </header>
 
       <main id="content-stage">
-        <!-- Theater Stage -->
         <section id="theater-stage">
-          <!-- Top HUD Header (Displayed for Radio, auto-hides after 3s idle) -->
           <div class="stage-hud-top hud-element" id="stage-hud-top">
             <span class="stage-title-hud" id="stage-title">Sélectionnez une station</span>
             <div class="stage-controls-hud">
@@ -512,10 +507,10 @@
           </div>
 
           <div class="video-viewport">
-            <canvas id="visualizer-canvas"></canvas>
+            <canvas id="visualizer-canvas-3d" class="canvas-layer"></canvas>
+            <canvas id="visualizer-canvas-2d" class="canvas-layer"></canvas>
             <video id="unified-media" playsinline></video>
 
-            <!-- Audio Radio Visualizer Overlay (Auto-hides metadata on idle in Radio mode) -->
             <div id="audio-overlay" class="audio-visualizer-overlay hud-element">
               <div class="audio-cover">
                 <img id="stage-cover-img" src="" alt="" style="display:none;">
@@ -530,7 +525,6 @@
       </main>
     </div>
 
-    <!-- Bottom Sticky Player -->
     <footer id="sticky-player">
       <div class="player-left">
         <div class="player-thumb">
@@ -576,22 +570,52 @@
 
   <script>
     const BACKUP_DATA = {
-      FR_RADIO: [
-        { id: 'fip', name: 'FIP Radio', url: 'https://stream.radiofrance.fr/fip/fip.m3u8?id=radiofrance', logo: 'https://www.radiofrance.fr/assets/images/brands/fip.svg', tags: 'Jazz, Eclectique', type: 'audio' },
-        { id: 'franceinter', name: 'France Inter', url: 'https://stream.radiofrance.fr/franceinter/franceinter.m3u8?id=radiofrance', logo: 'https://www.radiofrance.fr/assets/images/brands/franceinter.svg', tags: 'Généraliste, News', type: 'audio' },
-        { id: 'franceinfo', name: 'France Info', url: 'https://stream.radiofrance.fr/franceinfo/franceinfo.m3u8?id=radiofrance', logo: 'https://www.radiofrance.fr/assets/images/brands/franceinfo.svg', tags: 'News, Info 24/7', type: 'audio' },
-        { id: 'rtl', name: 'RTL France', url: 'https://icecast.rtl.fr/rtl-1-44-128', logo: 'https://upload.wikimedia.org/wikipedia/commons/e/e1/RTL_logo.svg', tags: 'Généraliste, Talk', type: 'audio' },
-        { id: 'europe1', name: 'Europe 1', url: 'https://europe1.lmn.cloud/europe1.mp3', logo: 'https://upload.wikimedia.org/wikipedia/commons/b/b5/Europe_1_logo_2010.svg', tags: 'Information, Talk', type: 'audio' },
-        { id: 'nrj', name: 'NRJ France', url: 'https://cdn.nrjaudio.fm/audio/1/fr/30001/mp3_128.mp3', logo: 'https://upload.wikimedia.org/wikipedia/commons/e/e8/NRJ_logo.svg', tags: 'Pop, Hit Music', type: 'audio' },
-        { id: 'skyrock', name: 'Skyrock', url: 'https://icecast.skyrock.net/s/natio_mp3_128k', logo: 'https://upload.wikimedia.org/wikipedia/commons/4/4c/Skyrock_logo.svg', tags: 'Rap, Urban, Pop', type: 'audio' }
-      ],
-      FR_TV: [
-        { id: 'france24', name: 'France 24 Français', url: 'https://static.france24.com/live/F24_FR_LO_HLS/live_tv.m3u8', backupUrls: ['https://ecm.ku-ping.com/hls/france24.m3u8'], logo: 'https://upload.wikimedia.org/wikipedia/fr/4/4e/France_24_logo_2013.svg', tags: 'Information', type: 'video' },
-        { id: 'bfmtv', name: 'BFM TV Live', url: 'https://bfmtv.akamaized.net/hls/live/2032271/bfmtv/index.m3u8', logo: 'https://upload.wikimedia.org/wikipedia/commons/e/e6/BFMTV_2019.svg', tags: 'Actualités 24/7', type: 'video' },
-        { id: 'arte', name: 'ARTE Journal Live', url: 'https://artesimulcast.akamaized.net/hls/live/2031003/artelive_fr/index.m3u8', logo: 'https://upload.wikimedia.org/wikipedia/commons/0/07/Logo_Arte.svg', tags: 'Culture, Documentaires', type: 'video' },
-        { id: 'euronews', name: 'Euronews Français', url: 'https://euronews-euronews-french-1-eu.rakuten.wurl.tv/playlist.m3u8', logo: 'https://upload.wikimedia.org/wikipedia/commons/4/47/Euronews_2016_logo.svg', tags: 'Info Internationale', type: 'video' },
-        { id: 'nasa', name: 'NASA TV Direct', url: 'https://ntv1.akamaized.net/hls/live/2014075/NASA-NTV1-HLS/master.m3u8', logo: 'https://upload.wikimedia.org/wikipedia/commons/e/e5/NASA_logo.svg', tags: 'Espace, Science', type: 'video' }
-      ]
+      FR: {
+        radios: [
+          { id: 'fip', name: 'FIP Radio', url: 'https://stream.radiofrance.fr/fip/fip.m3u8?id=radiofrance', logo: 'https://www.radiofrance.fr/assets/images/brands/fip.svg', tags: 'Jazz, Eclectique', type: 'audio' },
+          { id: 'franceinter', name: 'France Inter', url: 'https://stream.radiofrance.fr/franceinter/franceinter.m3u8?id=radiofrance', logo: 'https://www.radiofrance.fr/assets/images/brands/franceinter.svg', tags: 'Généraliste, News', type: 'audio' },
+          { id: 'franceinfo', name: 'France Info', url: 'https://stream.radiofrance.fr/franceinfo/franceinfo.m3u8?id=radiofrance', logo: 'https://www.radiofrance.fr/assets/images/brands/franceinfo.svg', tags: 'News, Info 24/7', type: 'audio' },
+          { id: 'rtl', name: 'RTL France', url: 'https://icecast.rtl.fr/rtl-1-44-128', logo: 'https://upload.wikimedia.org/wikipedia/commons/e/e1/RTL_logo.svg', tags: 'Généraliste, Talk', type: 'audio' },
+          { id: 'europe1', name: 'Europe 1', url: 'https://europe1.lmn.cloud/europe1.mp3', logo: 'https://upload.wikimedia.org/wikipedia/commons/b/b5/Europe_1_logo_2010.svg', tags: 'Information, Talk', type: 'audio' },
+          { id: 'skyrock', name: 'Skyrock', url: 'https://icecast.skyrock.net/s/natio_mp3_128k', logo: 'https://upload.wikimedia.org/wikipedia/commons/4/4c/Skyrock_logo.svg', tags: 'Rap, Urban', type: 'audio' }
+        ],
+        tv: [
+          { id: 'france24', name: 'France 24 Français', url: 'https://static.france24.com/live/F24_FR_LO_HLS/live_tv.m3u8', logo: 'https://upload.wikimedia.org/wikipedia/fr/4/4e/France_24_logo_2013.svg', tags: 'Information', type: 'video' },
+          { id: 'bfmtv', name: 'BFM TV Live', url: 'https://bfmtv.akamaized.net/hls/live/2032271/bfmtv/index.m3u8', logo: 'https://upload.wikimedia.org/wikipedia/commons/e/e6/BFMTV_2019.svg', tags: 'Actualités 24/7', type: 'video' },
+          { id: 'arte', name: 'ARTE Journal Live', url: 'https://artesimulcast.akamaized.net/hls/live/2031003/artelive_fr/index.m3u8', logo: 'https://upload.wikimedia.org/wikipedia/commons/0/07/Logo_Arte.svg', tags: 'Culture', type: 'video' },
+          { id: 'euronews', name: 'Euronews Français', url: 'https://euronews-euronews-french-1-eu.rakuten.wurl.tv/playlist.m3u8', logo: 'https://upload.wikimedia.org/wikipedia/commons/4/47/Euronews_2016_logo.svg', tags: 'Info International', type: 'video' }
+        ]
+      },
+      US: {
+        radios: [
+          { id: 'kexp', name: 'KEXP 90.3 FM Seattle', url: 'https://kexp-mp3-128.streamguys1.com/kexp128.mp3', logo: '', tags: 'Indie, Rock', type: 'audio' },
+          { id: 'wnyc', name: 'WNYC FM New York', url: 'https://fm939.wnyc.org/wnycfm-web', logo: '', tags: 'Talk, News', type: 'audio' },
+          { id: 'somafm', name: 'SomaFM Groove Salad', url: 'https://ice1.somafm.com/groovesalad-128-mp3', logo: '', tags: 'Ambient, Electro', type: 'audio' }
+        ],
+        tv: [
+          { id: 'nasa_tv', name: 'NASA TV Official', url: 'https://ntv1.akamaized.net/hls/live/2014075/NASA-NTV1-HLS/master.m3u8', logo: 'https://upload.wikimedia.org/wikipedia/commons/e/e5/NASA_logo.svg', tags: 'Science, Space', type: 'video' },
+          { id: 'abc_news', name: 'ABC News Live', url: 'https://content.uplynk.com/channel/3324f7367a8b43b487d295b123456789.m3u8', logo: '', tags: 'News', type: 'video' }
+        ]
+      },
+      GB: {
+        radios: [
+          { id: 'bbc1', name: 'BBC Radio 1', url: 'https://stream.live.vc.bbcmedia.co.uk/bbc_radio_one', logo: '', tags: 'Pop, Hits', type: 'audio' },
+          { id: 'capital', name: 'Capital FM London', url: 'https://icecast.capitalradio.com/CapitalMP3', logo: '', tags: 'Pop, Top40', type: 'audio' }
+        ],
+        tv: [
+          { id: 'sky_news', name: 'Sky News UK', url: 'https://skynews-live.skynews.com/hls/live/2002840/skynews/master.m3u8', logo: '', tags: 'News', type: 'video' }
+        ]
+      },
+      GLOBAL: {
+        radios: [
+          { id: 'fip', name: 'FIP Paris', url: 'https://stream.radiofrance.fr/fip/fip.m3u8?id=radiofrance', logo: 'https://www.radiofrance.fr/assets/images/brands/fip.svg', tags: 'Eclectic', type: 'audio' },
+          { id: 'kexp', name: 'KEXP Seattle', url: 'https://kexp-mp3-128.streamguys1.com/kexp128.mp3', logo: '', tags: 'Indie', type: 'audio' }
+        ],
+        tv: [
+          { id: 'france24_en', name: 'France 24 English', url: 'https://static.france24.com/live/F24_EN_LO_HLS/live_tv.m3u8', logo: '', tags: 'News', type: 'video' },
+          { id: 'nasa_tv', name: 'NASA TV Live', url: 'https://ntv1.akamaized.net/hls/live/2014075/NASA-NTV1-HLS/master.m3u8', logo: 'https://upload.wikimedia.org/wikipedia/commons/e/e5/NASA_logo.svg', tags: 'Science', type: 'video' }
+        ]
+      }
     };
 
     class MediaFetcher {
@@ -631,30 +655,34 @@
             tags: s.tags ? s.tags.split(',').slice(0, 2).join(', ') : 'Radio',
             type: 'audio'
           })).filter(s => s.url && s.name);
-          return formatted.length ? formatted : BACKUP_DATA.FR_RADIO;
+          return formatted.length ? formatted : (BACKUP_DATA[country]?.radios || BACKUP_DATA.FR.radios);
         } catch {
           this.rotateMirror();
-          return BACKUP_DATA.FR_RADIO;
+          return BACKUP_DATA[country]?.radios || BACKUP_DATA.FR.radios;
         }
       }
 
       async getTV(country = 'FR', genre = 'all', search = '') {
         try {
           let targetUrl = `https://iptv-org.github.io/iptv/countries/${country.toLowerCase()}.m3u`;
-          if (genre && genre !== 'all') {
-            const catMap = { news: 'news', jazz: 'music', pop: 'entertainment', rock: 'entertainment', classical: 'culture', electro: 'music' };
-            targetUrl = `https://iptv-org.github.io/iptv/categories/${catMap[genre] || 'general'}.m3u`;
-          } else if (country === 'GLOBAL') {
+          if (country === 'GLOBAL') {
             targetUrl = `https://iptv-org.github.io/iptv/index.m3u`;
           }
 
           const res = await fetch(targetUrl);
           if (!res.ok) throw new Error();
           const text = await res.text();
-          const parsed = this.parseM3U(text, search);
-          return parsed.length ? parsed : BACKUP_DATA.FR_TV;
+          let parsed = this.parseM3U(text, search);
+
+          // Filtrer par genre si demandé
+          if (genre && genre !== 'all') {
+            const filterTerm = genre.toLowerCase();
+            parsed = parsed.filter(item => item.name.toLowerCase().includes(filterTerm) || item.tags.toLowerCase().includes(filterTerm));
+          }
+
+          return parsed.length ? parsed : (BACKUP_DATA[country]?.tv || BACKUP_DATA.FR.tv);
         } catch {
-          return BACKUP_DATA.FR_TV;
+          return BACKUP_DATA[country]?.tv || BACKUP_DATA.FR.tv;
         }
       }
 
@@ -684,11 +712,15 @@
     }
 
     class VisualizerEngine {
-      constructor(canvasEl) {
-        this.canvas = canvasEl;
-        this.ctx = canvasEl.getContext('2d');
+      constructor(canvas2D, canvas3D) {
+        this.canvas2D = canvas2D;
+        this.canvas3D = canvas3D;
+        this.ctx2D = canvas2D.getContext('2d');
+        
         this.preset = 'cyber';
         this.active = false;
+        this.analyser = null;
+
         this.threeRenderer = null;
         this.threeScene = null;
         this.threeCamera = null;
@@ -705,14 +737,14 @@
           this.threeCamera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
           this.threeCamera.position.z = 15;
 
-          this.threeRenderer = new THREE.WebGLRenderer({ canvas: this.canvas, alpha: true, antialias: true });
-          this.threeRenderer.setSize(this.canvas.offsetWidth || 800, this.canvas.offsetHeight || 450);
+          this.threeRenderer = new THREE.WebGLRenderer({ canvas: this.canvas3D, alpha: true, antialias: true });
+          this.threeRenderer.setSize(this.canvas3D.offsetWidth || 800, this.canvas3D.offsetHeight || 450);
           this.threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
           this.threeMeshGroup = new THREE.Group();
           this.threeScene.add(this.threeMeshGroup);
 
-          // 1. Hyperdrive Tunnel
+          // 1. Hyperdrive Tunnel 3D
           const tunnelGeo = new THREE.CylinderGeometry(5, 5, 40, 16, 32, true);
           const tunnelMat = new THREE.MeshBasicMaterial({ color: 0x6366f1, wireframe: true, transparent: true, opacity: 0.35 });
           const tunnel = new THREE.Mesh(tunnelGeo, tunnelMat);
@@ -720,20 +752,20 @@
           tunnel.name = 'hyperdrive';
           this.threeMeshGroup.add(tunnel);
 
-          // 2. Cyber Sphere
+          // 2. Cyber Sphere 3D
           const sphereGeo = new THREE.IcosahedronGeometry(4, 2);
           const sphereMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4, wireframe: true });
           const sphere = new THREE.Mesh(sphereGeo, sphereMat);
           sphere.name = 'sphere';
           this.threeMeshGroup.add(sphere);
 
-          // 3. Synthwave Grid
-          const gridHelper = new THREE.GridHelper(30, 30, 0xef4444, 0x6366f1);
+          // 3. Synthwave Grid 3D
+          const gridHelper = new THREE.GridHelper(40, 40, 0xef4444, 0x6366f1);
           gridHelper.position.y = -4;
           gridHelper.name = 'synthwave';
           this.threeMeshGroup.add(gridHelper);
 
-          // 4. Quantum Vortex
+          // 4. Quantum Vortex 3D
           const particleCount = 1500;
           const particleGeo = new THREE.BufferGeometry();
           const positions = new Float32Array(particleCount * 3);
@@ -748,7 +780,7 @@
           vortex.name = 'vortex';
           this.threeMeshGroup.add(vortex);
 
-          // 5. Matrix Cubes
+          // 5. Matrix Cubes 3D
           const cubeGroup = new THREE.Group();
           cubeGroup.name = 'cubes';
           for(let x=-2; x<=2; x++) {
@@ -760,106 +792,109 @@
           }
           this.threeMeshGroup.add(cubeGroup);
 
-          this.updateThreeVisibility();
+          this.updateVisibility();
         } catch(e) {
-          console.warn('Three.js init fallback:', e);
+          console.warn('ThreeJS Error:', e);
         }
       }
 
       setPreset(preset) {
         this.preset = preset;
-        this.updateThreeVisibility();
+        this.updateVisibility();
       }
 
-      updateThreeVisibility() {
-        if (!this.threeMeshGroup) return;
-        this.threeMeshGroup.children.forEach(child => {
-          child.visible = (child.name === this.preset);
-        });
+      updateVisibility() {
+        const is3D = ['hyperdrive', 'sphere', 'synthwave', 'vortex', 'cubes'].includes(this.preset);
+        this.canvas3D.style.display = is3D ? 'block' : 'none';
+        this.canvas2D.style.display = is3D ? 'none' : 'block';
+
+        if (this.threeMeshGroup) {
+          this.threeMeshGroup.children.forEach(child => {
+            child.visible = (child.name === this.preset);
+          });
+        }
       }
 
       start() { this.active = true; this.render(); }
-      stop() { this.active = false; }
+      stop() {
+        this.active = false;
+        this.canvas2D.style.display = 'none';
+        this.canvas3D.style.display = 'none';
+      }
 
       resize() {
-        if (!this.canvas || !this.threeRenderer) return;
-        const width = this.canvas.parentElement.clientWidth;
-        const height = this.canvas.parentElement.clientHeight;
-        this.canvas.width = width;
-        this.canvas.height = height;
-        if (this.threeCamera) {
-          this.threeCamera.aspect = width / height;
+        const w = this.canvas2D.parentElement.clientWidth;
+        const h = this.canvas2D.parentElement.clientHeight;
+        this.canvas2D.width = w; this.canvas2D.height = h;
+        this.canvas3D.width = w; this.canvas3D.height = h;
+
+        if (this.threeCamera && this.threeRenderer) {
+          this.threeCamera.aspect = w / h;
           this.threeCamera.updateProjectionMatrix();
+          this.threeRenderer.setSize(w, h);
         }
-        this.threeRenderer.setSize(width, height);
       }
 
       render() {
         if (!this.active) return;
         requestAnimationFrame(() => this.render());
 
-        const width = this.canvas.width = this.canvas.offsetWidth;
-        const height = this.canvas.height = this.canvas.offsetHeight;
-        if (!width || !height) return;
-
-        this.ctx.clearRect(0, 0, width, height);
+        const is3D = ['hyperdrive', 'sphere', 'synthwave', 'vortex', 'cubes'].includes(this.preset);
+        const delta = this.clock.getDelta();
         const time = Date.now() * 0.003;
 
-        // Mode 3D WebGL
-        if (['hyperdrive', 'sphere', 'synthwave', 'vortex', 'cubes'].includes(this.preset)) {
-          if (this.threeRenderer && this.threeScene && this.threeCamera) {
-            const delta = this.clock.getDelta();
-            if (this.preset === 'sphere' && this.threeMeshGroup.getObjectByName('sphere')) {
+        if (is3D) {
+          if (this.threeRenderer && this.threeScene) {
+            if (this.preset === 'sphere') {
               const s = this.threeMeshGroup.getObjectByName('sphere');
-              s.rotation.x += delta * 0.5;
-              s.rotation.y += delta * 0.8;
-            } else if (this.preset === 'vortex' && this.threeMeshGroup.getObjectByName('vortex')) {
+              if (s) { s.rotation.x += delta * 0.5; s.rotation.y += delta * 0.8; }
+            } else if (this.preset === 'vortex') {
               const v = this.threeMeshGroup.getObjectByName('vortex');
-              v.rotation.y += delta * 0.3;
-            } else if (this.preset === 'cubes' && this.threeMeshGroup.getObjectByName('cubes')) {
+              if (v) { v.rotation.y += delta * 0.4; }
+            } else if (this.preset === 'cubes') {
               const c = this.threeMeshGroup.getObjectByName('cubes');
-              c.rotation.y += delta * 0.4;
-              c.children.forEach((box, i) => { box.position.y = Math.sin(time + i) * 1.5; });
+              if (c) {
+                c.rotation.y += delta * 0.3;
+                c.children.forEach((b, idx) => { b.position.y = Math.sin(time + idx) * 1.5; });
+              }
+            } else if (this.preset === 'hyperdrive') {
+              const h = this.threeMeshGroup.getObjectByName('hyperdrive');
+              if (h) { h.rotation.z += delta * 0.6; }
             }
             this.threeRenderer.render(this.threeScene, this.threeCamera);
           }
-          return;
-        }
+        } else {
+          const w = this.canvas2D.width = this.canvas2D.offsetWidth;
+          const h = this.canvas2D.height = this.canvas2D.offsetHeight;
+          if (!w || !h) return;
 
-        // Mode 2D Canvas
-        if (this.preset === 'cyber') {
-          const barCount = 48;
-          const barWidth = width / barCount;
-          for (let i = 0; i < barCount; i++) {
-            const h = (Math.sin(time * 2 + i * 0.25) * 0.5 + 0.5) * (height * 0.6) + 10;
-            const grad = this.ctx.createLinearGradient(0, height, 0, 0);
-            grad.addColorStop(0, '#6366f1');
-            grad.addColorStop(1, '#06b6d4');
-            this.ctx.fillStyle = grad;
-            this.ctx.fillRect(i * barWidth + 2, height - h, barWidth - 4, h);
-          }
-        } else if (this.preset === 'particles') {
-          for (let i = 0; i < 60; i++) {
-            const x = (Math.sin(time + i) * 0.5 + 0.5) * width;
-            const y = (Math.cos(time * 0.8 + i * 1.5) * 0.5 + 0.5) * height;
-            const radius = (i % 5) + 2;
-            this.ctx.fillStyle = i % 2 === 0 ? 'rgba(99, 102, 241, 0.7)' : 'rgba(6, 182, 212, 0.7)';
-            this.ctx.beginPath();
-            this.ctx.arc(x, y, radius, 0, Math.PI * 2);
-            this.ctx.fill();
-          }
-        } else if (this.preset === 'aurora') {
-          const grad1 = this.ctx.createRadialGradient(width * 0.3, height * 0.5, 10, width * 0.3, height * 0.5, width * 0.6);
-          grad1.addColorStop(0, 'rgba(99, 102, 241, 0.35)');
-          grad1.addColorStop(1, 'transparent');
-          this.ctx.fillStyle = grad1;
-          this.ctx.fillRect(0, 0, width, height);
+          this.ctx2D.clearRect(0, 0, w, h);
 
-          const grad2 = this.ctx.createRadialGradient(width * 0.7 + Math.sin(time)*100, height * 0.5, 10, width * 0.7, height * 0.5, width * 0.6);
-          grad2.addColorStop(0, 'rgba(6, 182, 212, 0.35)');
-          grad2.addColorStop(1, 'transparent');
-          this.ctx.fillStyle = grad2;
-          this.ctx.fillRect(0, 0, width, height);
+          if (this.preset === 'cyber') {
+            const barCount = 48;
+            const barWidth = w / barCount;
+            for (let i = 0; i < barCount; i++) {
+              const bh = (Math.sin(time * 2 + i * 0.25) * 0.5 + 0.5) * (h * 0.6) + 10;
+              const grad = this.ctx2D.createLinearGradient(0, h, 0, 0);
+              grad.addColorStop(0, '#6366f1'); grad.addColorStop(1, '#06b6d4');
+              this.ctx2D.fillStyle = grad;
+              this.ctx2D.fillRect(i * barWidth + 2, h - bh, barWidth - 4, bh);
+            }
+          } else if (this.preset === 'particles') {
+            for (let i = 0; i < 50; i++) {
+              const px = (Math.sin(time + i) * 0.5 + 0.5) * w;
+              const py = (Math.cos(time * 0.8 + i * 1.5) * 0.5 + 0.5) * h;
+              this.ctx2D.fillStyle = i % 2 === 0 ? 'rgba(99, 102, 241, 0.7)' : 'rgba(6, 182, 212, 0.7)';
+              this.ctx2D.beginPath();
+              this.ctx2D.arc(px, py, (i % 5) + 3, 0, Math.PI * 2);
+              this.ctx2D.fill();
+            }
+          } else if (this.preset === 'aurora') {
+            const g1 = this.ctx2D.createRadialGradient(w * 0.3, h * 0.5, 10, w * 0.3, h * 0.5, w * 0.6);
+            g1.addColorStop(0, 'rgba(99, 102, 241, 0.35)'); g1.addColorStop(1, 'transparent');
+            this.ctx2D.fillStyle = g1;
+            this.ctx2D.fillRect(0, 0, w, h);
+          }
         }
       }
     }
@@ -876,14 +911,15 @@
         this.idleTimer = null;
 
         this.initDOM();
-        this.visualizer = new VisualizerEngine(this.canvas);
+        this.visualizer = new VisualizerEngine(this.canvas2D, this.canvas3D);
         this.bindEvents();
         this.loadCatalog();
       }
 
       initDOM() {
         this.media = document.getElementById('unified-media');
-        this.canvas = document.getElementById('visualizer-canvas');
+        this.canvas2D = document.getElementById('visualizer-canvas-2d');
+        this.canvas3D = document.getElementById('visualizer-canvas-3d');
         this.grid = document.getElementById('stations-grid');
         this.count = document.getElementById('station-count');
         this.theater = document.getElementById('theater-stage');
@@ -896,7 +932,7 @@
         document.getElementById('tab-radio').onclick = () => this.switchTab('radio');
         document.getElementById('tab-tv').onclick = () => this.switchTab('tv');
 
-        // Filtre Pays
+        // Filtre Pays / Régions
         document.getElementById('country-filters').onclick = (e) => {
           if (!e.target.classList.contains('chip')) return;
           document.querySelectorAll('#country-filters .chip').forEach(c => c.classList.remove('active'));
@@ -914,13 +950,13 @@
           this.loadCatalog();
         };
 
-        // Recherche en direct
+        // Recherche temps réel
         document.getElementById('global-search').oninput = (e) => {
           clearTimeout(this.searchTimer);
           this.searchTimer = setTimeout(() => this.loadCatalog(e.target.value), 300);
         };
 
-        // Contrôles Sticky Player
+        // Player controls
         document.getElementById('btn-play-pause').onclick = () => {
           if (this.media.paused) this.media.play();
           else this.media.pause();
@@ -950,11 +986,8 @@
 
         document.getElementById('btn-stage-fullscreen').onclick = toggleFullscreen;
         document.getElementById('btn-fullscreen').onclick = toggleFullscreen;
-
-        // Double-clic sur le lecteur pour Plein Écran
         this.theater.ondblclick = toggleFullscreen;
 
-        // Raccourci Touche 'F'
         window.addEventListener('keydown', (e) => {
           if ((e.key === 'f' || e.key === 'F') && document.activeElement.tagName !== 'INPUT') {
             toggleFullscreen();
@@ -996,9 +1029,7 @@
         document.getElementById('tab-tv').classList.toggle('active', tab === 'tv');
         document.getElementById('catalog-heading').textContent = tab === 'radio' ? 'Radios Populaires' : 'Télévision en Direct';
         
-        // Activer / Masquer les animations selon le mode
         if (tab === 'tv') {
-          this.canvas.style.display = 'none';
           this.visualizer.stop();
           document.getElementById('stage-hud-top').style.display = 'none';
         } else {
@@ -1017,7 +1048,7 @@
           this.stations = await this.fetcher.getTV(this.currentCountry, this.currentGenre, search);
         }
 
-        this.count.textContent = `${this.stations.length} flux prêts`;
+        this.count.textContent = `${this.stations.length} flux disponibles (${this.currentCountry})`;
         this.renderGrid();
       }
 
@@ -1062,54 +1093,31 @@
           this.hls = null;
         }
 
-        const sources = [s.url, ...(s.backupUrls || [])];
-        let currentSourceIndex = 0;
+        if (s.type === 'video') {
+          this.audioOverlay.style.display = 'none';
+          this.visualizer.stop();
+          this.media.style.display = 'block';
 
-        const tryPlay = (url) => {
-          if (s.type === 'video') {
-            this.audioOverlay.style.display = 'none';
-            this.canvas.style.display = 'none';
-            this.visualizer.stop();
-            this.media.style.display = 'block';
-
-            if (url.includes('.m3u8') && Hls.isSupported()) {
-              this.hls = new Hls({ enableWorker: true });
-              this.hls.loadSource(url);
-              this.hls.attachMedia(this.media);
-              this.hls.on(Hls.Events.MANIFEST_PARSED, () => this.media.play());
-              this.hls.on(Hls.Events.ERROR, (event, data) => {
-                if (data.fatal) {
-                  currentSourceIndex++;
-                  if (currentSourceIndex < sources.length) {
-                    if (this.hls) { this.hls.destroy(); this.hls = null; }
-                    tryPlay(sources[currentSourceIndex]);
-                  }
-                }
-              });
-            } else {
-              this.media.src = url;
-              this.media.play().catch(() => {
-                currentSourceIndex++;
-                if (currentSourceIndex < sources.length) tryPlay(sources[currentSourceIndex]);
-              });
-            }
+          if (s.url.includes('.m3u8') && Hls.isSupported()) {
+            this.hls = new Hls({ enableWorker: true });
+            this.hls.loadSource(s.url);
+            this.hls.attachMedia(this.media);
+            this.hls.on(Hls.Events.MANIFEST_PARSED, () => this.media.play());
           } else {
-            // Mode Radio : Activer le visualiseur 2D/3D et masquer la vidéo
-            this.media.style.display = 'none';
-            this.audioOverlay.style.display = 'flex';
-            this.canvas.style.display = 'block';
-            this.visualizer.start();
-            this.visualizer.resize();
-
-            this.media.src = url;
-            this.media.play().catch(() => {
-              currentSourceIndex++;
-              if (currentSourceIndex < sources.length) tryPlay(sources[currentSourceIndex]);
-            });
+            this.media.src = s.url;
+            this.media.play().catch(() => {});
           }
-        };
+        } else {
+          // Mode Radio : Visualiseurs 2D/3D activés et vidéo masquée
+          this.media.style.display = 'none';
+          this.audioOverlay.style.display = 'flex';
+          this.visualizer.start();
+          this.visualizer.resize();
 
-        tryPlay(sources[0]);
+          this.media.src = s.url;
+          this.media.play().catch(() => {});
+        }
+
         this.renderGrid();
       }
 
@@ -1122,7 +1130,6 @@
       }
     }
 
-    // Démarrage de l'application sur l'événement onload
     window.onload = () => { window.app = new AppController(); };
   </script>
 </body>
