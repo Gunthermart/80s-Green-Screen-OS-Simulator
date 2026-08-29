@@ -444,7 +444,7 @@
     .audio-visualizer-overlay {
       position: absolute;
       inset: 0;
-      background: linear-gradient(180deg, rgba(17, 20, 32, 0.85), rgba(9, 10, 15, 0.92));
+      background: radial-gradient(circle at center, rgba(17, 20, 32, 0.2) 0%, rgba(9, 10, 15, 0.85) 100%);
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -641,14 +641,19 @@
                 <span id="label-stage-fav">Favori</span>
               </button>
               <select id="anim-preset-select" class="stage-btn" title="Sélection de l'animation visuelle">
-                <option value="cyber">Spectre Cyber (2D)</option>
-                <option value="particles">Particules Pulse (2D)</option>
-                <option value="aurora">Aurore Floue (2D)</option>
+                <option value="cyber">⚡ Spectre Cyber (2D)</option>
+                <option value="particles">✨ Particules Pulse (2D)</option>
+                <option value="aurora">🌌 Aurore Floue (2D)</option>
                 <option value="hyperdrive">🚀 Hyperdrive (3D)</option>
                 <option value="sphere">🌐 Sphère Cyber (3D)</option>
                 <option value="synthwave">🌅 Grille Synthwave (3D)</option>
                 <option value="vortex">🌀 Vortex Quantique (3D)</option>
                 <option value="cubes">🧊 Cubes Matrice (3D)</option>
+                <option value="tunnel">⚡ Tunnel Néon (3D)</option>
+                <option value="blackhole">🪐 Trou Noir Cosmique (3D)</option>
+                <option value="dna">🧬 Double Hélice (3D)</option>
+                <option value="fireworks">🎆 Feux d'Artifice (3D)</option>
+                <option value="ocean">🌊 Océan Digital (3D)</option>
               </select>
               <button class="stage-btn" id="btn-stage-fullscreen" title="Plein écran total [F]">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
@@ -876,23 +881,191 @@
 
       initThreeJS() {
         if (typeof THREE === 'undefined') return;
+        
         this.scene = new THREE.Scene();
         this.camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
-        this.renderer = new THREE.WebGLRenderer({ canvas: this.c3d, alpha: true, antialias: true });
-        this.camera.position.z = 40;
+        this.camera.position.z = 50;
 
-        // Visual 3D Object: Cyber Sphere
-        const geo = new THREE.IcosahedronGeometry(15, 2);
-        const mat = new THREE.MeshBasicMaterial({ color: 0x6366f1, wireframe: true });
-        this.sphereMesh = new THREE.Mesh(geo, mat);
-        this.scene.add(this.sphereMesh);
+        this.renderer = new THREE.WebGLRenderer({ canvas: this.c3d, alpha: true, antialias: true });
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+        // Groupes d'objets pour chaque preset 3D
+        this.meshGroups = {};
+
+        // 1. Sphère Cyber
+        const sphereGroup = new THREE.Group();
+        const sphereGeo = new THREE.IcosahedronGeometry(15, 2);
+        const sphereMat = new THREE.MeshBasicMaterial({ color: 0x6366f1, wireframe: true, transparent: true, opacity: 0.8 });
+        this.sphereMesh = new THREE.Mesh(sphereGeo, sphereMat);
+        sphereGroup.add(this.sphereMesh);
+        
+        const coreGeo = new THREE.SphereGeometry(7, 16, 16);
+        const coreMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4, wireframe: true });
+        sphereGroup.add(new THREE.Mesh(coreGeo, coreMat));
+        this.meshGroups['sphere'] = sphereGroup;
+
+        // 2. Hyperdrive
+        const hyperGroup = new THREE.Group();
+        const starGeo = new THREE.BufferGeometry();
+        const starCount = 800;
+        const starPos = new Float32Array(starCount * 3);
+        for (let i = 0; i < starCount * 3; i += 3) {
+          starPos[i] = (Math.random() - 0.5) * 200;
+          starPos[i + 1] = (Math.random() - 0.5) * 200;
+          starPos[i + 2] = (Math.random() - 0.5) * 400;
+        }
+        starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+        const starMat = new THREE.PointsMaterial({ color: 0x6366f1, size: 1.5, transparent: true });
+        this.starParticles = new THREE.Points(starGeo, starMat);
+        hyperGroup.add(this.starParticles);
+        this.meshGroups['hyperdrive'] = hyperGroup;
+
+        // 3. Synthwave Grid
+        const synthGroup = new THREE.Group();
+        const gridHelper = new THREE.GridHelper(200, 40, 0xff007f, 0x00f0ff);
+        gridHelper.position.y = -20;
+        synthGroup.add(gridHelper);
+        
+        const sunGeo = new THREE.CircleGeometry(25, 32);
+        const sunMat = new THREE.MeshBasicMaterial({ color: 0xff0055, wireframe: true });
+        const sun = new THREE.Mesh(sunGeo, sunMat);
+        sun.position.set(0, 10, -80);
+        synthGroup.add(sun);
+        this.meshGroups['synthwave'] = synthGroup;
+
+        // 4. Vortex Quantique
+        const vortexGroup = new THREE.Group();
+        const vortexCount = 1200;
+        const vortexGeo = new THREE.BufferGeometry();
+        const vortexPos = new Float32Array(vortexCount * 3);
+        for (let i = 0; i < vortexCount; i++) {
+          const angle = i * 0.1;
+          const radius = i * 0.08;
+          vortexPos[i * 3] = Math.cos(angle) * radius;
+          vortexPos[i * 3 + 1] = (Math.random() - 0.5) * 15;
+          vortexPos[i * 3 + 2] = Math.sin(angle) * radius - 40;
+        }
+        vortexGeo.setAttribute('position', new THREE.BufferAttribute(vortexPos, 3));
+        const vortexMat = new THREE.PointsMaterial({ color: 0x06b6d4, size: 1.8, transparent: true });
+        vortexGroup.add(new THREE.Points(vortexGeo, vortexMat));
+        this.meshGroups['vortex'] = vortexGroup;
+
+        // 5. Cubes Matrice
+        const cubesGroup = new THREE.Group();
+        this.cubeArray = [];
+        const cubeMat = new THREE.MeshBasicMaterial({ color: 0x6366f1, wireframe: true });
+        for (let x = -3; x <= 3; x++) {
+          for (let z = -3; z <= 3; z++) {
+            const cubeGeo = new THREE.BoxGeometry(4, 4, 4);
+            const cube = new THREE.Mesh(cubeGeo, cubeMat);
+            cube.position.set(x * 7, -10, z * 7);
+            cubesGroup.add(cube);
+            this.cubeArray.push(cube);
+          }
+        }
+        this.meshGroups['cubes'] = cubesGroup;
+
+        // 6. Tunnel Néon (3D)
+        const tunnelGroup = new THREE.Group();
+        this.tunnelRings = [];
+        for (let i = 0; i < 20; i++) {
+          const ringGeo = new THREE.TorusGeometry(18, 0.4, 8, 30);
+          const ringMat = new THREE.MeshBasicMaterial({ color: i % 2 === 0 ? 0x6366f1 : 0x06b6d4, wireframe: true });
+          const ring = new THREE.Mesh(ringGeo, ringMat);
+          ring.position.z = -i * 15;
+          tunnelGroup.add(ring);
+          this.tunnelRings.push(ring);
+        }
+        this.meshGroups['tunnel'] = tunnelGroup;
+
+        // 7. Trou Noir Cosmique (3D)
+        const bhGroup = new THREE.Group();
+        const bhCoreGeo = new THREE.SphereGeometry(10, 32, 32);
+        const bhCoreMat = new THREE.MeshBasicMaterial({ color: 0x05050d });
+        bhGroup.add(new THREE.Mesh(bhCoreGeo, bhCoreMat));
+        
+        const bhDiskCount = 1500;
+        const bhDiskGeo = new THREE.BufferGeometry();
+        const bhDiskPos = new Float32Array(bhDiskCount * 3);
+        for (let i = 0; i < bhDiskCount; i++) {
+          const r = 12 + Math.random() * 25;
+          const theta = Math.random() * Math.PI * 2;
+          bhDiskPos[i * 3] = Math.cos(theta) * r;
+          bhDiskPos[i * 3 + 1] = (Math.random() - 0.5) * 2;
+          bhDiskPos[i * 3 + 2] = Math.sin(theta) * r;
+        }
+        bhDiskGeo.setAttribute('position', new THREE.BufferAttribute(bhDiskPos, 3));
+        const bhDiskMat = new THREE.PointsMaterial({ color: 0xef4444, size: 1.4, transparent: true });
+        this.bhDisk = new THREE.Points(bhDiskGeo, bhDiskMat);
+        bhGroup.add(this.bhDisk);
+        this.meshGroups['blackhole'] = bhGroup;
+
+        // 8. Double Hélice DNA (3D)
+        const dnaGroup = new THREE.Group();
+        this.dnaNodes = [];
+        const dnaMat1 = new THREE.MeshBasicMaterial({ color: 0x6366f1 });
+        const dnaMat2 = new THREE.MeshBasicMaterial({ color: 0x06b6d4 });
+        for (let i = 0; i < 30; i++) {
+          const y = (i - 15) * 3;
+          const a = i * 0.4;
+          const m1 = new THREE.Mesh(new THREE.SphereGeometry(1.2, 8, 8), dnaMat1);
+          const m2 = new THREE.Mesh(new THREE.SphereGeometry(1.2, 8, 8), dnaMat2);
+          m1.position.set(Math.cos(a) * 10, y, Math.sin(a) * 10);
+          m2.position.set(Math.cos(a + Math.PI) * 10, y, Math.sin(a + Math.PI) * 10);
+          dnaGroup.add(m1);
+          dnaGroup.add(m2);
+          this.dnaNodes.push({ m1, m2, a, y });
+        }
+        this.meshGroups['dna'] = dnaGroup;
+
+        // 9. Feux d'Artifice (3D)
+        const fwGroup = new THREE.Group();
+        const fwCount = 800;
+        const fwGeo = new THREE.BufferGeometry();
+        this.fwPos = new Float32Array(fwCount * 3);
+        this.fwVel = new Float32Array(fwCount * 3);
+        for (let i = 0; i < fwCount; i++) {
+          this.fwPos[i * 3] = 0;
+          this.fwPos[i * 3 + 1] = -10;
+          this.fwPos[i * 3 + 2] = 0;
+          this.fwVel[i * 3] = (Math.random() - 0.5) * 1.5;
+          this.fwVel[i * 3 + 1] = Math.random() * 2 + 0.5;
+          this.fwVel[i * 3 + 2] = (Math.random() - 0.5) * 1.5;
+        }
+        fwGeo.setAttribute('position', new THREE.BufferAttribute(this.fwPos, 3));
+        const fwMat = new THREE.PointsMaterial({ color: 0x10b981, size: 1.6, transparent: true });
+        this.fwPoints = new THREE.Points(fwGeo, fwMat);
+        fwGroup.add(this.fwPoints);
+        this.meshGroups['fireworks'] = fwGroup;
+
+        // 10. Océan Digital (3D)
+        const oceanGroup = new THREE.Group();
+        const oceanGeo = new THREE.PlaneGeometry(120, 120, 24, 24);
+        const oceanMat = new THREE.MeshBasicMaterial({ color: 0x6366f1, wireframe: true });
+        this.oceanMesh = new THREE.Mesh(oceanGeo, oceanMat);
+        this.oceanMesh.rotation.x = -Math.PI / 2.5;
+        this.oceanMesh.position.y = -12;
+        oceanGroup.add(this.oceanMesh);
+        this.meshGroups['ocean'] = oceanGroup;
+
+        // Ajouter tous les groupes à la scène
+        Object.values(this.meshGroups).forEach(g => this.scene.add(g));
+        this.update3DVisibility();
       }
 
       setPreset(preset) {
         this.preset = preset;
-        const is3D = ['hyperdrive', 'sphere', 'synthwave', 'vortex', 'cubes'].includes(preset);
+        const is3D = ['hyperdrive', 'sphere', 'synthwave', 'vortex', 'cubes', 'tunnel', 'blackhole', 'dna', 'fireworks', 'ocean'].includes(preset);
         this.c2d.style.display = is3D ? 'none' : 'block';
         this.c3d.style.display = is3D ? 'block' : 'none';
+        this.update3DVisibility();
+      }
+
+      update3DVisibility() {
+        if (!this.meshGroups) return;
+        Object.keys(this.meshGroups).forEach(key => {
+          this.meshGroups[key].visible = (key === this.preset);
+        });
       }
 
       stop() {
@@ -911,21 +1084,95 @@
           const w = this.c2d.width = this.c2d.offsetWidth;
           const h = this.c2d.height = this.c2d.offsetHeight;
 
-          if (this.preset === 'cyber' && w && h) {
+          // Animations 2D Canvas
+          if (this.c2d.style.display !== 'none' && w && h) {
             this.ctx2d.clearRect(0, 0, w, h);
-            const bars = 32;
-            const barW = w / bars;
-            for (let i = 0; i < bars; i++) {
-              const bh = (Math.sin(time + i * 0.2) * 0.5 + 0.5) * (h * 0.6) + 10;
-              this.ctx2d.fillStyle = 'rgba(99, 102, 241, 0.6)';
-              this.ctx2d.fillRect(i * barW, h - bh, barW - 3, bh);
+
+            if (this.preset === 'cyber') {
+              const bars = 36;
+              const barW = w / bars;
+              for (let i = 0; i < bars; i++) {
+                const bh = (Math.sin(time + i * 0.25) * 0.5 + 0.5) * (h * 0.65) + 12;
+                const grad = this.ctx2d.createLinearGradient(0, h, 0, h - bh);
+                grad.addColorStop(0, '#6366f1');
+                grad.addColorStop(1, '#06b6d4');
+                this.ctx2d.fillStyle = grad;
+                this.ctx2d.fillRect(i * barW, h - bh, barW - 3, bh);
+              }
+            } else if (this.preset === 'particles') {
+              for (let i = 0; i < 40; i++) {
+                const px = (Math.sin(time * 0.5 + i) * 0.4 + 0.5) * w;
+                const py = (Math.cos(time * 0.7 + i * 2) * 0.4 + 0.5) * h;
+                const pr = (Math.sin(time + i) * 0.5 + 0.5) * 6 + 2;
+                this.ctx2d.fillStyle = 'rgba(6, 182, 212, 0.6)';
+                this.ctx2d.beginPath();
+                this.ctx2d.arc(px, py, pr, 0, Math.PI * 2);
+                this.ctx2d.fill();
+              }
+            } else if (this.preset === 'aurora') {
+              this.ctx2d.beginPath();
+              this.ctx2d.moveTo(0, h / 2);
+              for (let x = 0; x < w; x += 10) {
+                const y = Math.sin(x * 0.01 + time) * 35 + Math.cos(x * 0.02 + time * 1.5) * 20 + h / 2;
+                this.ctx2d.lineTo(x, y);
+              }
+              this.ctx2d.lineTo(w, h);
+              this.ctx2d.lineTo(0, h);
+              this.ctx2d.fillStyle = 'rgba(99, 102, 241, 0.25)';
+              this.ctx2d.fill();
             }
           }
 
-          if (this.sphereMesh && this.c3d.style.display !== 'none') {
+          // Animations 3D Three.js
+          if (this.scene && this.c3d.style.display !== 'none' && this.c3d.offsetWidth && this.c3d.offsetHeight) {
             this.renderer.setSize(this.c3d.offsetWidth, this.c3d.offsetHeight, false);
-            this.sphereMesh.rotation.x += 0.005;
-            this.sphereMesh.rotation.y += 0.008;
+            this.camera.aspect = this.c3d.offsetWidth / this.c3d.offsetHeight;
+            this.camera.updateProjectionMatrix();
+
+            const p = this.preset;
+            if (p === 'sphere' && this.sphereMesh) {
+              this.sphereMesh.rotation.x += 0.006;
+              this.sphereMesh.rotation.y += 0.009;
+            } else if (p === 'hyperdrive' && this.starParticles) {
+              const pos = this.starParticles.geometry.attributes.position.array;
+              for (let i = 2; i < pos.length; i += 3) {
+                pos[i] += 2.5;
+                if (pos[i] > 100) pos[i] = -300;
+              }
+              this.starParticles.geometry.attributes.position.needsUpdate = true;
+            } else if (p === 'synthwave') {
+              this.meshGroups['synthwave'].rotation.y = Math.sin(time * 0.5) * 0.08;
+            } else if (p === 'vortex') {
+              this.meshGroups['vortex'].rotation.z += 0.01;
+            } else if (p === 'cubes' && this.cubeArray) {
+              this.cubeArray.forEach((c, idx) => {
+                c.scale.y = (Math.sin(time * 2 + idx * 0.3) * 0.5 + 0.5) * 3 + 0.5;
+                c.rotation.y += 0.01;
+              });
+            } else if (p === 'tunnel' && this.tunnelRings) {
+              this.tunnelRings.forEach(r => {
+                r.position.z += 0.8;
+                r.rotation.z += 0.008;
+                if (r.position.z > 20) r.position.z = -280;
+              });
+            } else if (p === 'blackhole' && this.bhDisk) {
+              this.bhDisk.rotation.y += 0.015;
+            } else if (p === 'dna' && this.dnaNodes) {
+              this.meshGroups['dna'].rotation.y += 0.01;
+            } else if (p === 'fireworks' && this.fwPos) {
+              for (let i = 0; i < this.fwPos.length / 3; i++) {
+                this.fwPos[i * 3 + 1] += this.fwVel[i * 3 + 1] * 0.2;
+                if (this.fwPos[i * 3 + 1] > 40) {
+                  this.fwPos[i * 3 + 1] = -20;
+                  this.fwPos[i * 3] = (Math.random() - 0.5) * 10;
+                  this.fwPos[i * 3 + 2] = (Math.random() - 0.5) * 10;
+                }
+              }
+              this.fwPoints.geometry.attributes.position.needsUpdate = true;
+            } else if (p === 'ocean' && this.oceanMesh) {
+              this.oceanMesh.rotation.z = Math.sin(time * 0.3) * 0.05;
+            }
+
             this.renderer.render(this.scene, this.camera);
           }
         };
