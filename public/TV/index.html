@@ -823,7 +823,7 @@
 
       toggle(station) {
         if (!station || !station.id) return false;
-        const isTv = station.type === 'video';
+        const isTv = station.type === 'video' || station.type === 'tv';
         const store = isTv ? this.tvFavs : this.radioFavs;
 
         const isFav = store.has(station.id);
@@ -834,15 +834,16 @@
         }
 
         const newlyFav = !isFav;
-        this.syncToCloud();
         this.saveToIndexedDB(station, newlyFav);
+        this.syncToCloud();
         if (this.onUpdate) this.onUpdate();
         return newlyFav;
       }
 
       isFavorite(id, type = 'audio') {
         if (!id) return false;
-        const store = (type === 'video' || type === 'tv') ? this.tvFavs : this.radioFavs;
+        const isTv = type === 'video' || type === 'tv';
+        const store = isTv ? this.tvFavs : this.radioFavs;
         return store.has(id);
       }
 
@@ -1233,11 +1234,17 @@
         document.getElementById('tab-tv-fav').onclick = () => this.switchTab('tv-fav');
 
         const handleFavToggle = () => {
-          if (this.activeStationIndex < 0 || !this.stations[this.activeStationIndex]) return;
-          const station = this.stations[this.activeStationIndex];
+          if (!this.activeStation) return;
+          const station = this.activeStation;
           const added = this.favStore.toggle(station);
-          const typeLabel = station.type === 'video' ? 'Chaîne TV' : 'Radio';
+          const typeLabel = (station.type === 'video' || station.type === 'tv') ? 'Chaîne TV' : 'Radio';
           this.showToast(added ? `❤️ ${typeLabel} "${station.name}" ajoutée aux favoris` : `Retirée des favoris`);
+          this.updateFavButtonsUI();
+          if (this.currentTab === 'radio-fav' || this.currentTab === 'tv-fav') {
+            this.loadCatalog();
+          } else {
+            this.renderGrid();
+          }
         };
 
         document.getElementById('btn-stage-fav').onclick = handleFavToggle;
@@ -1417,8 +1424,14 @@
         const s = this.stations[index];
         if (!s) return;
         const added = this.favStore.toggle(s);
-        const typeLabel = s.type === 'video' ? 'Chaîne TV' : 'Radio';
+        const typeLabel = (s.type === 'video' || s.type === 'tv') ? 'Chaîne TV' : 'Radio';
         this.showToast(added ? `❤️ ${typeLabel} "${s.name}" ajoutée aux favoris` : `Retirée des favoris`);
+        this.updateFavButtonsUI();
+        if (this.currentTab === 'radio-fav' || this.currentTab === 'tv-fav') {
+          this.loadCatalog();
+        } else {
+          this.renderGrid();
+        }
       }
 
       updateFavBadges() {
@@ -1431,12 +1444,13 @@
       }
 
       updateFavButtonsUI() {
-        if (this.activeStationIndex < 0 || !this.stations[this.activeStationIndex]) return;
-        const s = this.stations[this.activeStationIndex];
+        if (!this.activeStation) return;
+        const s = this.activeStation;
         const isFav = this.favStore.isFavorite(s.id, s.type);
 
         const btnStageIcon = document.getElementById('icon-stage-fav');
         const btnStageLabel = document.getElementById('label-stage-fav');
+        const btnPlayer = document.getElementById('btn-player-fav');
         const btnPlayerIcon = document.getElementById('icon-player-fav');
 
         if (btnStageIcon) {
@@ -1445,6 +1459,9 @@
         }
         if (btnStageLabel) {
           btnStageLabel.textContent = isFav ? 'Favori ❤️' : 'Favori';
+        }
+        if (btnPlayer) {
+          btnPlayer.style.color = isFav ? '#ef4444' : 'var(--text-secondary)';
         }
         if (btnPlayerIcon) {
           btnPlayerIcon.style.fill = isFav ? '#ef4444' : 'none';
@@ -1473,6 +1490,7 @@
         const s = this.stations[index];
         if (!s) return;
 
+        this.activeStation = s;
         this.activeStationIndex = index;
         this.updateFavButtonsUI();
         this.theater.classList.add('active');
