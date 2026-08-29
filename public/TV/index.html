@@ -1309,42 +1309,21 @@
       }
 
       initAudioAnalyzer() {
-        try {
-          const AudioContext = window.AudioContext || window.webkitAudioContext;
-          if (AudioContext && this.audioEl && !this.audioCtx) {
-            this.audioCtx = new AudioContext();
-            this.analyser = this.audioCtx.createAnalyser();
-            this.analyser.fftSize = 64;
-            this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
-            
-            try {
-              this.source = this.audioCtx.createMediaElementSource(this.audioEl);
-              this.source.connect(this.analyser);
-              this.analyser.connect(this.audioCtx.destination);
-            } catch(e) {
-              this.source = null;
-            }
-          }
-        } catch(e) {
-          this.analyser = null;
-        }
+        // Désactivation de createMediaElementSource pour éviter le muet automatique du navigateur dû aux règles CORS des flux radio distants
+        this.analyser = null;
       }
 
       getFrequencyData() {
-        if (this.audioCtx && this.audioCtx.state === 'suspended') {
-          this.audioCtx.resume().catch(() => {});
-        }
-        if (this.analyser && this.source) {
-          this.analyser.getByteFrequencyData(this.dataArray);
-          return this.dataArray;
-        }
-
-        const time = Date.now() * 0.003;
+        const isPlaying = this.audioEl && !this.audioEl.paused && !this.audioEl.ended;
         const fakeData = new Uint8Array(32);
+        if (!isPlaying) return fakeData;
+
+        const time = Date.now() * 0.004;
         for (let i = 0; i < 32; i++) {
-          const val = Math.sin(time * 2 + i * 0.3) * 0.5 + 0.5;
-          const noise = Math.cos(time * 4 - i * 0.1) * 0.3 + 0.3;
-          fakeData[i] = Math.min(255, Math.floor((val * 0.7 + noise * 0.3) * 220 + 35));
+          const val = Math.sin(time * 2.5 + i * 0.35) * 0.5 + 0.5;
+          const beat = Math.pow(Math.sin(time * 1.8), 4) * 0.4;
+          const noise = Math.cos(time * 5.2 - i * 0.15) * 0.25 + 0.25;
+          fakeData[i] = Math.min(255, Math.floor((val * 0.5 + beat + noise * 0.25) * 210 + 45));
         }
         return fakeData;
       }
@@ -2035,6 +2014,9 @@
           this.hlsPlayer.destroy();
           this.hlsPlayer = null;
         }
+
+        this.media.muted = false;
+        if (!this.media.volume || this.media.volume === 0) this.media.volume = 0.8;
 
         if (url.includes('.m3u8') && typeof Hls !== 'undefined' && Hls.isSupported()) {
           this.hlsPlayer = new Hls({ enableWorker: true, lowLatencyMode: true });
