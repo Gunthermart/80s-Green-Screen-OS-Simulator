@@ -1264,23 +1264,10 @@
        */
       initAudioVisualizer() {
         if (this.isVisualizerInit) return;
-        try {
-          const AudioContext = window.AudioContext || window.webkitAudioContext;
-          if (!AudioContext) return;
-
-          this.audioCtx = new AudioContext();
-          this.analyser = this.audioCtx.createAnalyser();
-          this.analyser.fftSize = 128;
-
-          // Connecter le stream HTML5 à l'analyseur
-          const source = this.audioCtx.createMediaElementSource(this.mediaEl);
-          source.connect(this.analyser);
-          this.analyser.connect(this.audioCtx.destination);
-          this.isVisualizerInit = true;
-        } catch (e) {
-          // En cas de restriction CORS Web Audio API, un fallback d'onde procédurale est automatiquement affiché
-          console.warn('AudioContext bypass (CORS restrictif) -> Mode onde procédurale activé');
-        }
+        // Eviter createMediaElementSource sur les flux radio cross-origin (Icecast/Shoutcast)
+        // car le navigateur muette automatiquement le son si les entêtes CORS sont absentes.
+        // Le mode animation procédurale fluide garantit un son 100% fonctionnel sur toutes les radios.
+        this.isVisualizerInit = true;
       }
 
       /**
@@ -1290,6 +1277,11 @@
         this.currentStation = station;
         this.networkRetryCount = 0;
         this.onStateChange('buffering');
+
+        // Réinitialiser le volume et s'assurer que le son n'est pas coupé
+        if (this.mediaEl.volume === 0) {
+          this.mediaEl.volume = 0.8;
+        }
 
         // Nettoyage de l'instance HLS existante
         if (this.hls) {
