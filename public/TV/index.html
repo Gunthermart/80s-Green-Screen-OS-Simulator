@@ -173,7 +173,6 @@
     .chip:hover { border-color: var(--border-focus); color: var(--text-primary); }
     .chip.active { background: var(--accent-primary); color: #fff; border-color: var(--accent-primary); }
 
-    /* Favoris & Boutons vignettes */
     .card-fav-btn {
       position: absolute;
       top: 8px;
@@ -210,7 +209,6 @@
       stroke: #ef4444;
     }
 
-    /* Bouton plein écran direct sur les vignettes */
     .card-fs-btn {
       position: absolute;
       top: 8px;
@@ -314,7 +312,10 @@
       overflow-y: auto;
       padding: 24px 28px calc(var(--player-height) + 24px) 28px;
       display: flex;
-    /* Theater Stage Viewport - Amélioration du mode réduit */
+      flex-direction: column;
+      gap: 24px;
+    }
+
     #theater-stage {
       width: 100%;
       background: #000;
@@ -337,7 +338,6 @@
       border: none !important;
     }
 
-    /* HUD elements auto-hide transitions */
     .hud-element {
       transition: opacity 0.5s ease, transform 0.5s ease;
     }
@@ -405,7 +405,6 @@
 
     video#unified-media { width: 100%; height: 100%; object-fit: contain; }
 
-    /* Canvas visualizer layers */
     .canvas-layer {
       position: absolute;
       inset: 0;
@@ -460,6 +459,7 @@
       flex-direction: column;
       gap: 12px;
       transition: var(--transition-smooth);
+      position: relative;
     }
 
     .station-card:hover { transform: translateY(-4px); background: var(--bg-surface-elevated); border-color: rgba(99, 102, 241, 0.4); }
@@ -475,8 +475,18 @@
       justify-content: center;
       overflow: hidden;
       border: 1px solid var(--border-glass);
+      position: relative;
     }
     .card-thumb-wrapper img { width: 100%; height: 100%; object-fit: contain; padding: 8px; }
+
+    .card-badge {
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text-secondary);
+    }
 
     #sticky-player {
       position: fixed;
@@ -685,7 +695,7 @@
         try {
           const { initializeApp } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
           const { getAuth, signInAnonymously, signInWithCustomToken } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js");
-          const { getFirestore, doc, setDoc, onSnapshot } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+          const { getFirestore, doc, onSnapshot } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
 
           const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
           if (!firebaseConfig) return;
@@ -703,7 +713,6 @@
           }
 
           const userId = this.auth.currentUser?.uid || 'anon_user';
-          // Alignement strict avec la règle de chemin d'accès privé
           this.userDocRef = doc(this.db, 'artifacts', appId, 'users', userId, 'favorites', 'my_favorites');
 
           onSnapshot(this.userDocRef, (docSnap) => {
@@ -863,7 +872,6 @@
           const text = await res.text();
           let parsed = this.parseM3U(text, search);
 
-          // Filtrer par genre si demandé
           if (genre && genre !== 'all') {
             const filterTerm = genre.toLowerCase();
             parsed = parsed.filter(item => item.name.toLowerCase().includes(filterTerm) || item.tags.toLowerCase().includes(filterTerm));
@@ -908,7 +916,6 @@
         
         this.preset = 'cyber';
         this.active = false;
-        this.analyser = null;
 
         this.threeRenderer = null;
         this.threeScene = null;
@@ -933,7 +940,6 @@
           this.threeMeshGroup = new THREE.Group();
           this.threeScene.add(this.threeMeshGroup);
 
-          // 1. Hyperdrive Tunnel 3D
           const tunnelGeo = new THREE.CylinderGeometry(5, 5, 40, 16, 32, true);
           const tunnelMat = new THREE.MeshBasicMaterial({ color: 0x6366f1, wireframe: true, transparent: true, opacity: 0.35 });
           const tunnel = new THREE.Mesh(tunnelGeo, tunnelMat);
@@ -941,20 +947,17 @@
           tunnel.name = 'hyperdrive';
           this.threeMeshGroup.add(tunnel);
 
-          // 2. Cyber Sphere 3D
           const sphereGeo = new THREE.IcosahedronGeometry(4, 2);
           const sphereMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4, wireframe: true });
           const sphere = new THREE.Mesh(sphereGeo, sphereMat);
           sphere.name = 'sphere';
           this.threeMeshGroup.add(sphere);
 
-          // 3. Synthwave Grid 3D
           const gridHelper = new THREE.GridHelper(40, 40, 0xef4444, 0x6366f1);
           gridHelper.position.y = -4;
           gridHelper.name = 'synthwave';
           this.threeMeshGroup.add(gridHelper);
 
-          // 4. Quantum Vortex 3D
           const particleCount = 1500;
           const particleGeo = new THREE.BufferGeometry();
           const positions = new Float32Array(particleCount * 3);
@@ -969,7 +972,6 @@
           vortex.name = 'vortex';
           this.threeMeshGroup.add(vortex);
 
-          // 5. Matrix Cubes 3D
           const cubeGroup = new THREE.Group();
           cubeGroup.name = 'cubes';
           for(let x=-2; x<=2; x++) {
@@ -1111,13 +1113,23 @@
         this.loadCatalog();
       }
 
+      initDOM() {
+        this.grid = document.getElementById('stations-grid');
+        this.count = document.getElementById('station-count');
+        this.theater = document.getElementById('theater-stage');
+        this.media = document.getElementById('unified-media');
+        this.sidebar = document.getElementById('sidebar');
+        this.audioOverlay = document.getElementById('audio-overlay');
+        this.canvas2D = document.getElementById('visualizer-canvas-2d');
+        this.canvas3D = document.getElementById('visualizer-canvas-3d');
+      }
+
       bindEvents() {
         document.getElementById('mobile-toggle').onclick = () => this.sidebar.classList.toggle('open');
         document.getElementById('tab-radio').onclick = () => this.switchTab('radio');
         document.getElementById('tab-tv').onclick = () => this.switchTab('tv');
         document.getElementById('tab-fav').onclick = () => this.switchTab('fav');
 
-        // Boutons de favoris
         const handleFavToggle = () => {
           if (this.activeStationIndex < 0 || !this.stations[this.activeStationIndex]) return;
           const station = this.stations[this.activeStationIndex];
@@ -1128,7 +1140,6 @@
         document.getElementById('btn-stage-fav').onclick = handleFavToggle;
         document.getElementById('btn-player-fav').onclick = handleFavToggle;
 
-        // Filtre Pays / Régions
         document.getElementById('country-filters').onclick = (e) => {
           if (!e.target.classList.contains('chip')) return;
           document.querySelectorAll('#country-filters .chip').forEach(c => c.classList.remove('active'));
@@ -1137,7 +1148,6 @@
           this.loadCatalog();
         };
 
-        // Filtre Thématique / Genre
         document.getElementById('genre-filters').onclick = (e) => {
           if (!e.target.classList.contains('chip')) return;
           document.querySelectorAll('#genre-filters .chip').forEach(c => c.classList.remove('active'));
@@ -1146,13 +1156,11 @@
           this.loadCatalog();
         };
 
-        // Recherche temps réel
         document.getElementById('global-search').oninput = (e) => {
           clearTimeout(this.searchTimer);
           this.searchTimer = setTimeout(() => this.loadCatalog(e.target.value), 300);
         };
 
-        // Player controls
         document.getElementById('btn-play-pause').onclick = () => {
           if (this.media.paused) this.media.play();
           else this.media.pause();
@@ -1190,7 +1198,6 @@
           }
         });
 
-        // Auto-masquage du HUD après 3 secondes d'inactivité
         const resetIdleTimer = () => {
           document.body.classList.remove('hide-hud');
           document.body.classList.remove('hide-cursor');
@@ -1398,7 +1405,6 @@
             this.media.play().catch(() => {});
           }
         } else {
-          // Mode Radio : Visualiseurs 2D/3D activés et vidéo masquée
           this.media.style.display = 'none';
           this.audioOverlay.style.display = 'flex';
           this.visualizer.start();
