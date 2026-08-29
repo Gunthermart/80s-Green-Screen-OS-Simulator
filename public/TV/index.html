@@ -1159,7 +1159,7 @@
        ========================================================================== -->
   <script>
     /**
-     * Module : Gestionnaire des APIs Radio Browser & IPTV Org
+     * Module : Gestionnaire des APIs Radio Browser & IPTV Org (Haute Disponibilité)
      */
     class MediaRepository {
       constructor() {
@@ -1184,42 +1184,83 @@
       }
 
       /**
-       * Récupération des stations de Radio via l'API Radio-Browser
+       * Récupération des stations de Radio avec mécanisme de retry sur miroirs et fallback local
        */
       async fetchRadios({ country = 'FR', tag = '', search = '' } = {}) {
-        let endpoint = '';
-        const mirror = this.getRadioMirror();
+        let lastError = null;
 
-        if (search.trim()) {
-          endpoint = `${mirror}/json/stations/byname/${encodeURIComponent(search)}?limit=90&order=votes&reverse=true`;
-        } else if (country === 'GLOBAL') {
-          endpoint = `${mirror}/json/stations/topvote/90`;
-        } else if (tag && tag !== 'all') {
-          endpoint = `${mirror}/json/stations/bytag/${encodeURIComponent(tag)}?limit=90&order=votes&reverse=true`;
-        } else {
-          endpoint = `${mirror}/json/stations/bycountrycodeexact/${country.toLowerCase()}?limit=90&order=votes&reverse=true`;
+        // Tenter l'appel sur chaque miroir disponible
+        for (let attempt = 0; attempt < this.radioMirrors.length; attempt++) {
+          const mirror = this.getRadioMirror();
+          let endpoint = '';
+
+          if (search.trim()) {
+            endpoint = `${mirror}/json/stations/byname/${encodeURIComponent(search)}?limit=90&order=votes&reverse=true`;
+          } else if (country === 'GLOBAL') {
+            endpoint = `${mirror}/json/stations/topvote/90`;
+          } else if (tag && tag !== 'all') {
+            endpoint = `${mirror}/json/stations/bytag/${encodeURIComponent(tag)}?limit=90&order=votes&reverse=true`;
+          } else {
+            endpoint = `${mirror}/json/stations/bycountrycodeexact/${country.toLowerCase()}?limit=90&order=votes&reverse=true`;
+          }
+
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 4000); // Timeout 4s
+
+            const res = await fetch(endpoint, { cache: 'default', signal: controller.signal });
+            clearTimeout(timeoutId);
+
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const stations = await res.json();
+            
+            const formatted = stations.map(s => ({
+              id: s.stationuuid,
+              name: s.name.trim(),
+              url: s.url_resolved || s.url,
+              logo: s.favicon,
+              country: s.countrycode || 'INT',
+              tags: s.tags ? s.tags.split(',').slice(0, 3).join(', ') : 'Radio',
+              type: 'audio',
+              bitrate: s.bitrate ? `${s.bitrate} kbps` : null
+            })).filter(s => s.url && s.name);
+
+            if (formatted.length > 0) return formatted;
+          } catch (err) {
+            console.warn(`Tentative miroir Radio-Browser (${mirror}) échouée:`, err);
+            lastError = err;
+            this.rotateRadioMirror();
+          }
         }
 
-        try {
-          const res = await fetch(endpoint, { cache: 'default' });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const stations = await res.json();
-          
-          return stations.map(s => ({
-            id: s.stationuuid,
-            name: s.name.trim(),
-            url: s.url_resolved || s.url,
-            logo: s.favicon,
-            country: s.countrycode || 'INT',
-            tags: s.tags ? s.tags.split(',').slice(0, 3).join(', ') : 'Radio',
-            type: 'audio',
-            bitrate: s.bitrate ? `${s.bitrate} kbps` : null
-          })).filter(s => s.url && s.name);
-        } catch (err) {
-          console.warn('Erreur Radio Browser sur le miroir courant, basculement en cours...', err);
-          this.rotateRadioMirror();
-          throw err;
-        }
+        // Si tous les miroirs API échouent, injection du catalogue de secours Radio
+        console.warn('Utilisation du catalogue de secours Radio local.');
+        return this.getFallbackRadios(country, tag, search);
+      }
+
+      /**
+       * Catalogue Radio de secours haute fiabilité
+       */
+      getFallbackRadios(country = 'FR', tag = 'all', searchFilter = '') {
+        const radiosDB = [
+          { id: 'finfo', name: 'France Info', url: 'https://stream.radiofrance.fr/franceinfo/franceinfo_hifi.m3u8', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/37/France_Info_logo_2017.svg/512px-France_Info_logo_2017.svg.png', country: 'FR', tags: 'News, Information', type: 'audio', bitrate: '192 kbps' },
+          { id: 'finter', name: 'France Inter', url: 'https://stream.radiofrance.fr/franceinter/franceinter_hifi.m3u8', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a2/France_Inter_logo_2021.svg/512px-France_Inter_logo_2021.svg.png', country: 'FR', tags: 'Généraliste, Culture', type: 'audio', bitrate: '192 kbps' },
+          { id: 'fip', name: 'FIP Radio', url: 'https://stream.radiofrance.fr/fip/fip_hifi.m3u8', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d5/FIP_logo_2021.svg/512px-FIP_logo_2021.svg.png', country: 'FR', tags: 'Eclectique, Jazz', type: 'audio', bitrate: '192 kbps' },
+          { id: 'rtl', name: 'RTL France', url: 'https://icecast.rtl.fr/rtl-1-44-128?listen=webCwsBCgwMDAwMDAwMDAwMDA', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/75/RTL_logo.svg/512px-RTL_logo.svg.png', country: 'FR', tags: 'Information, Talk', type: 'audio', bitrate: '128 kbps' },
+          { id: 'nrj', name: 'NRJ Hit Music Only', url: 'https://cdn.nrjaudio.fm/audio/1/fr/30001/mp3_128.mp3', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6b/NRJ_logo_2014.svg/512px-NRJ_logo_2014.svg.png', country: 'FR', tags: 'Pop, Hits', type: 'audio', bitrate: '128 kbps' },
+          { id: 'skyrock', name: 'Skyrock FM', url: 'https://icecast.skyrock.net/s/natio_mp3_128k', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9f/Skyrock_logo.svg/512px-Skyrock_logo.svg.png', country: 'FR', tags: 'Rap, Urban', type: 'audio', bitrate: '128 kbps' },
+          { id: 'nostalgie', name: 'Nostalgie France', url: 'https://cdn.nrjaudio.fm/audio/1/fr/30601/mp3_128.mp3', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/52/Nostalgie_logo_2014.svg/512px-Nostalgie_logo_2014.svg.png', country: 'FR', tags: 'Retro, Oldies', type: 'audio', bitrate: '128 kbps' },
+          { id: 'jazzradio', name: 'Jazz Radio', url: 'https://jazzradio.ice.infomaniak.ch/jazzradio-high.mp3', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a8/Jazz_Radio_logo.svg/512px-Jazz_Radio_logo.svg.png', country: 'FR', tags: 'Jazz, Soul', type: 'audio', bitrate: '128 kbps' },
+          { id: 'bbc1', name: 'BBC Radio 1 UK', url: 'https://stream.live.vc.bbcmedia.co.uk/bbc_radio_one', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/70/BBC_Radio_1.svg/512px-BBC_Radio_1.svg.png', country: 'GB', tags: 'Pop, Rock', type: 'audio', bitrate: '128 kbps' },
+          { id: 'smoothjazz', name: 'Smooth Jazz US', url: 'https://smoothjazz.cdnstream1.com/2585_128.mp3', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a8/Jazz_Radio_logo.svg/512px-Jazz_Radio_logo.svg.png', country: 'US', tags: 'Jazz, Relax', type: 'audio', bitrate: '128 kbps' }
+        ];
+
+        return radiosDB.filter(r => {
+          const matchCountry = country === 'GLOBAL' || r.country === country;
+          const matchSearch = !searchFilter || r.name.toLowerCase().includes(searchFilter.toLowerCase());
+          const matchTag = tag === 'all' || r.tags.toLowerCase().includes(tag.toLowerCase());
+          return matchCountry && matchSearch && matchTag;
+        });
       }
 
       /**
@@ -1228,7 +1269,6 @@
       async fetchTVChannels({ country = 'FR', genre = 'all', search = '' } = {}) {
         let m3uUrl = '';
 
-        // Si un pays spécifique est sélectionné (autre que GLOBAL), on charge la playlist du pays
         if (country !== 'GLOBAL') {
           m3uUrl = `${this.iptvBase}/countries/${country.toLowerCase()}.m3u`;
         } else if (genre && genre !== 'all') {
@@ -1247,12 +1287,16 @@
         }
 
         try {
-          const res = await fetch(m3uUrl);
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 5000); // Timeout 5s
+
+          const res = await fetch(m3uUrl, { signal: controller.signal });
+          clearTimeout(timeoutId);
+
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const m3uRaw = await res.text();
           let channels = this.parseM3U(m3uRaw, search);
 
-          // Si un genre est également sélectionné en plus du pays, on filtre le résultat
           if (genre && genre !== 'all' && country !== 'GLOBAL') {
             const lowerGenre = genre.toLowerCase();
             const genreFiltered = channels.filter(c => 
@@ -1267,7 +1311,7 @@
           }
           return channels;
         } catch (err) {
-          console.warn(`Erreur récupération IPTV-ORG pour ${country}, basculement sur la liste locale:`, err);
+          console.warn(`Erreur récupération IPTV-ORG pour ${country}, chargement des chaînes de secours:`, err);
           return this.getFallbackTVChannels(country, search);
         }
       }
@@ -1300,14 +1344,12 @@
             };
           } else if (line && !line.startsWith('#') && currentMeta) {
             let streamUrl = line;
-            // Tenter la mise à niveau HTTPS si le site est en HTTPS pour éviter le blocage mixte
             if (isHttpsPage && streamUrl.startsWith('http:')) {
               streamUrl = streamUrl.replace('http://', 'https://');
             }
 
             currentMeta.url = streamUrl;
             
-            // Filtre de recherche temps-réel
             const matchQuery = !searchFilter || currentMeta.name.toLowerCase().includes(searchFilter.toLowerCase());
             
             if (matchQuery) {
@@ -1323,7 +1365,7 @@
       }
 
       /**
-       * Données de secours structurées par pays si IPTV-Org est indisponible ou filtré
+       * Données de secours structurées par pays
        */
       getFallbackTVChannels(country = 'FR', searchFilter = '') {
         const fallbackDatabase = {
