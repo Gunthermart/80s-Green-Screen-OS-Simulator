@@ -12,7 +12,6 @@ exports.handler = async function (event, context) {
   }
 
   let targetUrl = null;
-
   if (event.queryStringParameters && event.queryStringParameters.url) {
     targetUrl = event.queryStringParameters.url;
   } else if (event.rawQuery) {
@@ -25,6 +24,7 @@ exports.handler = async function (event, context) {
     }
   }
 
+  // Validate target URL presence and structure
   if (!targetUrl || (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://'))) {
     return {
       statusCode: 400,
@@ -35,13 +35,13 @@ exports.handler = async function (event, context) {
 
   try {
     const fetchFn = typeof fetch !== 'undefined' ? fetch : globalThis.fetch;
-
     const reqHeaders = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
       'Accept': '*/*',
       'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7'
     };
 
+    // Inject domain-specific headers to bypass hotlink protection
     try {
       const parsedUrl = new URL(targetUrl);
       if (parsedUrl.hostname.includes('sfr.net') || parsedUrl.hostname.includes('bfm')) {
@@ -62,6 +62,7 @@ exports.handler = async function (event, context) {
       }
     } catch (e) {}
 
+    // Forward Range header if provided by client for video scrubbing
     const clientRange = event.headers ? (event.headers.range || event.headers.Range) : null;
     if (clientRange) {
       reqHeaders['Range'] = clientRange;
@@ -73,6 +74,7 @@ exports.handler = async function (event, context) {
       headers: reqHeaders
     });
 
+    // Retry without Referer/Origin if forbidden
     if (!response.ok && (response.status === 403 || response.status === 400)) {
       delete reqHeaders['Referer'];
       delete reqHeaders['Origin'];
@@ -99,11 +101,13 @@ exports.handler = async function (event, context) {
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
+    // Identify if target is text/manifest or binary media segment
     const isText = (contentType.includes('text') || 
                    contentType.includes('json') || 
                    contentType.includes('xml') || 
                    contentType.includes('mpegurl') || 
                    targetUrl.includes('.m3u8') || 
+                   targetUrl.includes('.m3u') || 
                    targetUrl.includes('.json')) && 
                    !targetUrl.includes('.ts');
 
