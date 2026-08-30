@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OmniStream — Live Radio, TV & Podcasts Pro</title>
   
-  <!-- Hls.js pour la lecture des flux video et audio HLS M3U8 -->
+  <!-- Hls.js pour la lecture des flux vidéo et audio HLS M3U8 -->
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.8/dist/hls.min.js"></script>
   <!-- Three.js pour le rendu des animations WebGL 3D -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -1172,15 +1172,60 @@
         return `${rawStreamUrl}${separator}sid=${sid}&deviceType=web&deviceMake=Chrome&deviceModel=web&deviceVersion=1.0.0`;
       }
 
-      async getPlutoChannels(search = '', genre = 'all') {
+      async getPlutoChannels(search = '', genre = 'all', country = 'FR') {
+        const countryCode = country.toLowerCase();
+        const supportedCountryCodes = ["br", "de", "es", "fr", "mx", "uk", "us"];
+        const targetCountry = supportedCountryCodes.includes(countryCode) ? countryCode : 'fr';
+
+        try {
+          const { PlutoTV } = await import('https://cdn.jsdelivr.net/gh/MarketingPipeline/Pluto-TV.js@main/dist/pluto-tv.min.js');
+          let rawData = [];
+
+          if (search && search.trim()) {
+            rawData = await PlutoTV().searchChannels(search.trim(), targetCountry);
+          } else {
+            rawData = await PlutoTV().fetchAllChannels(targetCountry);
+          }
+
+          if (Array.isArray(rawData) && rawData.length > 0) {
+            const parsed = rawData.map((ch, idx) => {
+              const rawStream = ch.url || ch.streamUrl || ch.stream || (ch.stitched && ch.stitched.urls && ch.stitched.urls[0] ? ch.stitched.urls[0].url : '');
+              const channelName = ch.name || ch.title || `Pluto Channel ${idx + 1}`;
+              const logoUrl = ch.logo || ch.colorLogoPNG?.path || ch.featuredImage?.path || `https://images.pluto.tv/channels/${ch._id || ch.id}/colorLogoPNG.png`;
+              const categoryName = ch.category || ch.genre || 'Pluto TV 24/7';
+
+              return {
+                id: `pluto_${ch._id || ch.id || idx}`,
+                rawId: ch._id || ch.id,
+                rawStreamUrl: rawStream,
+                name: channelName,
+                url: rawStream,
+                logo: logoUrl,
+                country: country.toUpperCase(),
+                tags: categoryName,
+                type: 'video',
+                category: categoryName.toLowerCase()
+              };
+            }).filter(c => c.rawStreamUrl);
+
+            const filtered = parsed.filter(ch => {
+              const matchSearch = !search || ch.name.toLowerCase().includes(search.toLowerCase()) || ch.tags.toLowerCase().includes(search.toLowerCase());
+              const matchGenre = genre === 'all' || ch.category.includes(genre.toLowerCase()) || ch.tags.toLowerCase().includes(genre.toLowerCase());
+              return matchSearch && matchGenre;
+            });
+
+            if (filtered.length > 0) return filtered;
+          }
+        } catch (err) {
+          console.warn("Pluto-TV.js ESM import exception, switching to API proxy fallback...", err);
+        }
+
         try {
           const controller = new AbortController();
           const timer = setTimeout(() => controller.abort(), 4000);
           
           let apiUrl = 'https://api.pluto.tv/v0/channels?clientModelNumber=0.0.0&serverSideAds=true';
-          if (window.location.hostname !== 'localhost') {
-            apiUrl = `/.netlify/functions/IPTV?url=${encodeURIComponent(apiUrl)}`;
-          }
+          apiUrl = `/.netlify/functions/IPTV?url=${encodeURIComponent(apiUrl)}`;
 
           const res = await fetch(apiUrl, { signal: controller.signal }).catch(() => null);
           clearTimeout(timer);
@@ -1205,7 +1250,7 @@
                     name: ch.name,
                     url: rawStreamUrl,
                     logo: logo,
-                    country: 'FR',
+                    country: country.toUpperCase(),
                     tags: ch.category || 'Pluto TV 24/7',
                     type: 'video',
                     category: ch.category ? ch.category.toLowerCase() : 'all'
@@ -1223,7 +1268,7 @@
             }
           }
         } catch (e) {
-          console.warn("Pluto TV API v0 fallback actif", e);
+          console.warn("Pluto TV API proxy fallback actif", e);
         }
 
         return this.getBackupPlutoChannels(search, genre);
@@ -1358,8 +1403,8 @@
         this.pluto = new PlutoTVService();
       }
 
-      async getPlutoTV(search = '', genre = 'all') {
-        return await this.pluto.getPlutoChannels(search, genre);
+      async getPlutoTV(search = '', genre = 'all', country = 'FR') {
+        return await this.pluto.getPlutoChannels(search, genre, country);
       }
 
       async getRadios(country = 'FR', genre = 'all', search = '') {
@@ -1376,7 +1421,8 @@
           const timer = setTimeout(() => controller.abort(), 3500);
           const countryParam = country === 'GLOBAL' ? '' : `bycountrycodeexact/${country.toLowerCase()}`;
           const apiUrl = `https://de1.api.radio-browser.info/json/stations/${countryParam}?order=clickcount&reverse=true&limit=80`;
-          const res = await fetch(apiUrl, { signal: controller.signal }).catch(() => null);
+          const proxiedUrl = `/.netlify/functions/IPTV?url=${encodeURIComponent(apiUrl)}`;
+          const res = await fetch(proxiedUrl, { signal: controller.signal }).catch(() => null);
           clearTimeout(timer);
 
           if (res && res.ok) {
@@ -1429,9 +1475,11 @@
           humor: ['humour', 'comedy', 'séries', 'divertissement']
         };
 
-        const targetUrl = country === 'GLOBAL' 
+        const rawUrl = country === 'GLOBAL' 
           ? `https://iptv-org.github.io/iptv/index.m3u`
           : `https://iptv-org.github.io/iptv/countries/${country.toLowerCase()}.m3u`;
+
+        const proxiedUrl = `/.netlify/functions/IPTV?url=${encodeURIComponent(rawUrl)}`;
 
         const backups = BACKUP_STATIONS.FR_TV || [];
         let fetchedList = [];
@@ -1439,7 +1487,7 @@
         try {
           const controller = new AbortController();
           const timer = setTimeout(() => controller.abort(), 4000);
-          const res = await fetch(targetUrl, { signal: controller.signal }).catch(() => null);
+          const res = await fetch(proxiedUrl, { signal: controller.signal }).catch(() => null);
           clearTimeout(timer);
 
           if (res && res.ok) {
@@ -1475,9 +1523,10 @@
           term = genreTerms[genre] || genre;
         }
 
-        const url = `https://itunes.apple.com/search?media=podcast&entity=podcast&term=${encodeURIComponent(term)}&limit=50&country=${country.toLowerCase()}`;
+        const rawUrl = `https://itunes.apple.com/search?media=podcast&entity=podcast&term=${encodeURIComponent(term)}&limit=50&country=${country.toLowerCase()}`;
+        const proxiedUrl = `/.netlify/functions/IPTV?url=${encodeURIComponent(rawUrl)}`;
         try {
-          const res = await fetch(url).catch(() => null);
+          const res = await fetch(proxiedUrl).catch(() => null);
           if (res && res.ok) {
             const data = await res.json();
             return data.results.map(p => ({
@@ -1506,7 +1555,8 @@
         try {
           const controller = new AbortController();
           const timer = setTimeout(() => controller.abort(), 3500);
-          const res = await fetch(cleanFeedUrl, { signal: controller.signal }).catch(() => null);
+          const proxiedUrl = `/.netlify/functions/IPTV?url=${encodeURIComponent(cleanFeedUrl)}`;
+          const res = await fetch(proxiedUrl, { signal: controller.signal }).catch(() => null);
           clearTimeout(timer);
           if (res && res.ok) {
             const text = await res.text();
@@ -1517,7 +1567,8 @@
 
         try {
           const rss2jsonUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(cleanFeedUrl)}&count=30`;
-          const res = await fetch(rss2jsonUrl).catch(() => null);
+          const proxiedUrl = `/.netlify/functions/IPTV?url=${encodeURIComponent(rss2jsonUrl)}`;
+          const res = await fetch(proxiedUrl).catch(() => null);
           if (res && res.ok) {
             const data = await res.json();
             if (data.status === 'ok' && Array.isArray(data.items) && data.items.length > 0) {
@@ -2064,7 +2115,7 @@
 
         if (this.currentTab === 'radio') this.stations = await this.fetcher.getRadios(this.currentCountry, this.currentGenre, search);
         else if (this.currentTab === 'tv') this.stations = await this.fetcher.getTV(this.currentCountry, this.currentGenre, search);
-        else if (this.currentTab === 'pluto') this.stations = await this.fetcher.getPlutoTV(search, this.currentGenre);
+        else if (this.currentTab === 'pluto') this.stations = await this.fetcher.getPlutoTV(search, this.currentGenre, this.currentCountry);
         else if (this.currentTab === 'podcasts') this.stations = await this.fetcher.getPodcasts(search, this.currentGenre, this.currentCountry);
         else if (this.currentTab === 'radio-fav') this.stations = this.favStore.getRadioFavs();
         else if (this.currentTab === 'tv-fav') this.stations = this.favStore.getTvFavs();
@@ -2331,8 +2382,6 @@
                 }
               }
 
-              // Smart Proxying: Try Direct HTTPS first for clean CORS-enabled streams.
-              // Force Proxy for HTTP (Mixed Content prevention) or known blocked domains (Pluto, BFM, SFR).
               const isHttp = targetUrl.startsWith('http://');
               const isBlockedDomain = targetUrl.includes('pluto.tv') || targetUrl.includes('stitch') || targetUrl.includes('sfr.net') || targetUrl.includes('bfm');
               
@@ -2356,8 +2405,6 @@
 
               const originalOnError = callbacks.onError;
               callbacks.onError = (error, contextFunc, networkDetails) => {
-                // Smart Retry: If Direct failed, retry via Netlify IPTV Proxy.
-                // If Netlify IPTV Proxy failed, retry Direct.
                 if (!context.retryAttempted && targetUrl && (targetUrl.startsWith('http://') || targetUrl.startsWith('https://'))) {
                   context.retryAttempted = true;
                   if (shouldUseProxy) {
