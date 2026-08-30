@@ -1170,68 +1170,138 @@
         if (!rawStreamUrl) return '';
         const sid = this.getUUID();
         const separator = rawStreamUrl.includes('?') ? '&' : '?';
-        return `${rawStreamUrl}${separator}sid=${sid}&deviceType=web&deviceMake=Chrome&deviceModel=web&deviceVersion=1.0.0`;
+        let url = rawStreamUrl;
+        if (!url.includes('sid=')) {
+          url += `${separator}sid=${sid}&deviceType=web&deviceMake=Chrome&deviceModel=web&deviceVersion=1.0.0`;
+        }
+        return url;
       }
 
       async getPlutoChannels(search = '', genre = 'all') {
-        const directUrl = 'https://api.pluto.tv/v0/channels?clientModelNumber=0.0.0&serverSideAds=true';
-        const proxiedUrl = `/.netlify/functions/IPTV?url=${encodeURIComponent(directUrl)}`;
+        let channels = [];
 
-        let data = null;
-        try {
-          const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 3500);
-          const res = await fetch(directUrl, { signal: controller.signal }).catch(() => null);
-          clearTimeout(timer);
-          if (res && res.ok) data = await res.json();
-        } catch (e) {}
+        // Source 1 : Listes M3U Pluto TV auto-mises à jour (France & Global)
+        const m3uSources = [
+          'https://raw.githubusercontent.com/BuddyChewChew/pluto/main/pluto_fr.m3u',
+          'https://raw.githubusercontent.com/BuddyChewChew/pluto/main/pluto_all.m3u'
+        ];
 
-        if (!data) {
+        for (const m3uUrl of m3uSources) {
           try {
             const controller = new AbortController();
             const timer = setTimeout(() => controller.abort(), 4000);
-            const res = await fetch(proxiedUrl, { signal: controller.signal }).catch(() => null);
+            const res = await fetch(m3uUrl, { signal: controller.signal }).catch(() => null);
             clearTimeout(timer);
-            if (res && res.ok) data = await res.json();
+            if (res && res.ok) {
+              const text = await res.text();
+              const parsed = this.parsePlutoM3U(text);
+              if (parsed && parsed.length > 0) {
+                channels = parsed;
+                break;
+              }
+            }
           } catch(e) {}
         }
 
-        if (Array.isArray(data) && data.length > 0) {
-          const parsed = [];
-          data.forEach(ch => {
-            if (ch.isLive !== false) {
-              let rawStreamUrl = '';
-              if (ch.stitched && ch.stitched.urls && ch.stitched.urls[0] && ch.stitched.urls[0].url) {
-                rawStreamUrl = ch.stitched.urls[0].url;
+        // Source 2 : API Pluto TV Direct v0/v4
+        if (!channels || channels.length === 0) {
+          const directUrl = 'https://api.pluto.tv/v0/channels?clientModelNumber=0.0.0&serverSideAds=true';
+          const proxiedUrl = `/.netlify/functions/IPTV?url=${encodeURIComponent(directUrl)}`;
+
+          let data = null;
+          try {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 3500);
+            const res = await fetch(directUrl, { signal: controller.signal }).catch(() => null);
+            clearTimeout(timer);
+            if (res && res.ok) data = await res.json();
+          } catch (e) {}
+
+          if (!data) {
+            try {
+              const controller = new AbortController();
+              const timer = setTimeout(() => controller.abort(), 4000);
+              const res = await fetch(proxiedUrl, { signal: controller.signal }).catch(() => null);
+              clearTimeout(timer);
+              if (res && res.ok) data = await res.json();
+            } catch(e) {}
+          }
+
+          if (Array.isArray(data) && data.length > 0) {
+            data.forEach(ch => {
+              if (ch.isLive !== false) {
+                let rawStreamUrl = '';
+                if (ch.stitched && ch.stitched.urls && ch.stitched.urls[0] && ch.stitched.urls[0].url) {
+                  rawStreamUrl = ch.stitched.urls[0].url;
+                } else {
+                  rawStreamUrl = `https://stitcher.pluto.tv/stitch/hls/channel/${ch._id}/master.m3u8`;
+                }
+
+                let logo = '';
+                if (ch.colorLogoPNG) logo = typeof ch.colorLogoPNG === 'string' ? ch.colorLogoPNG : (ch.colorLogoPNG.path || '');
+                if (!logo && ch.featuredImage) logo = typeof ch.featuredImage === 'string' ? ch.featuredImage : (ch.featuredImage.path || '');
+                if (!logo && ch.heroImage) logo = typeof ch.heroImage === 'string' ? ch.heroImage : (ch.heroImage.path || '');
+                if (!logo) logo = `https://images.pluto.tv/channels/${ch._id}/colorLogoPNG.png`;
+
+                channels.push({
+                  id: `pluto_${ch._id}`,
+                  rawId: ch._id,
+                  rawStreamUrl: rawStreamUrl,
+                  name: ch.name || 'Pluto TV',
+                  url: this.buildPlutoStreamUrl(rawStreamUrl),
+                  logo: logo,
+                  country: 'FR',
+                  tags: ch.category || 'Pluto TV Direct',
+                  type: 'video',
+                  category: ch.category ? ch.category.toLowerCase() : 'all'
+                });
               }
-
-              const logo = ch.colorLogoPNG?.path || ch.featuredImage?.path || `https://images.pluto.tv/channels/${ch._id}/colorLogoPNG.png`;
-
-              parsed.push({
-                id: `pluto_${ch._id}`,
-                rawId: ch._id,
-                rawStreamUrl: rawStreamUrl,
-                name: ch.name,
-                url: rawStreamUrl,
-                logo: logo,
-                country: 'FR',
-                tags: ch.category || 'Pluto TV 24/7',
-                type: 'video',
-                category: ch.category ? ch.category.toLowerCase() : 'all'
-              });
-            }
-          });
-
-          const filtered = parsed.filter(ch => {
-            const matchSearch = !search || ch.name.toLowerCase().includes(search.toLowerCase()) || ch.tags.toLowerCase().includes(search.toLowerCase());
-            const matchGenre = genre === 'all' || ch.category.includes(genre.toLowerCase()) || ch.tags.toLowerCase().includes(genre.toLowerCase());
-            return matchSearch && matchGenre;
-          });
-
-          if (filtered.length > 0) return filtered;
+            });
+          }
         }
 
-        return this.getBackupPlutoChannels(search, genre);
+        // Source 3 : Backup local secours de chaînes populaires Pluto TV
+        if (!channels || channels.length === 0) {
+          channels = this.getBackupPlutoChannels();
+        }
+
+        return channels.filter(ch => {
+          const matchSearch = !search || ch.name.toLowerCase().includes(search.toLowerCase()) || ch.tags.toLowerCase().includes(search.toLowerCase());
+          const matchGenre = genre === 'all' || ch.category.includes(genre.toLowerCase()) || ch.tags.toLowerCase().includes(genre.toLowerCase());
+          return matchSearch && matchGenre;
+        });
+      }
+
+      parsePlutoM3U(content) {
+        const lines = content.split('\n');
+        const list = [];
+        let item = null;
+        for (let rawLine of lines) {
+          const line = rawLine.trim();
+          if (line.startsWith('#EXTINF:')) {
+            const name = (line.match(/,(.+)$/) || [])[1] || 'Pluto TV';
+            const logo = (line.match(/tvg-logo="([^"]*)"/) || [])[1] || '';
+            const group = (line.match(/group-title="([^"]*)"/) || [])[1] || 'Pluto TV Direct';
+            const tvgId = (line.match(/tvg-id="([^"]*)"/) || [])[1] || '';
+            const cleanId = `pluto_${tvgId || name.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+            
+            item = {
+              id: cleanId,
+              name: name.trim(),
+              logo: logo,
+              country: 'FR',
+              tags: group,
+              type: 'video',
+              category: group.toLowerCase()
+            };
+          } else if (line && !line.startsWith('#') && item) {
+            item.url = this.buildPlutoStreamUrl(line);
+            item.rawStreamUrl = line;
+            list.push(item);
+            item = null;
+          }
+        }
+        return list;
       }
 
       getBackupPlutoChannels(search = '', genre = 'all') {
@@ -1249,11 +1319,7 @@
           { id: 'pluto_mtv', rawId: '5fa0163f8e37600007cdbf69', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5fa0163f8e37600007cdbf69/master.m3u8', name: 'MTV Classics 24/7', logo: 'https://images.pluto.tv/channels/5fa0163f8e37600007cdbf69/colorLogoPNG.png', country: 'FR', tags: 'Musique, MTV', type: 'video', category: 'culture' },
           { id: 'pluto_kids', rawId: '5fa016ad8e37600007cdbf7e', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5fa016ad8e37600007cdbf7e/master.m3u8', name: 'Pluto TV Kids', logo: 'https://images.pluto.tv/channels/5fa016ad8e37600007cdbf7e/colorLogoPNG.png', country: 'FR', tags: 'Jeunesse, Dessins Animés', type: 'video', category: 'culture' }
         ];
-        return backupPluto.filter(ch => {
-          const matchSearch = !search || ch.name.toLowerCase().includes(search.toLowerCase()) || ch.tags.toLowerCase().includes(search.toLowerCase());
-          const matchGenre = genre === 'all' || ch.category === genre || ch.tags.toLowerCase().includes(genre.toLowerCase());
-          return matchSearch && matchGenre;
-        });
+        return backupPluto.map(ch => ({ ...ch, url: this.buildPlutoStreamUrl(ch.rawStreamUrl) }));
       }
     }
 
@@ -2135,7 +2201,7 @@
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
               </button>
               <div class="card-thumb-wrapper">
-                ${s.logo ? `<img src="${s.logo}" alt="${safeName}" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';">` : ''}
+                ${s.logo ? `<img src="${s.logo}" alt="${safeName}" loading="lazy" onerror="this.onerror=null; this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';">` : ''}
                 <div class="card-thumb-fallback-box" style="${s.logo ? 'display:none;' : 'display:flex;'}">
                   <span style="font-size:1.6rem; margin-bottom:2px;">${iconType}</span>
                   <span style="font-size:0.82rem; font-weight:700; max-width:90%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${s.name}</span>
@@ -2289,6 +2355,11 @@
         this.activeStationIndex = index;
         this.theater.classList.add('active');
 
+        // Faire défiler l'écran vers le lecteur pour centrer le flux vidéo
+        if (this.theater) {
+          this.theater.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
         let streamUrl = s.url;
         if (s.id && s.id.startsWith('pluto_')) {
           const rawUrl = s.rawStreamUrl || s.url || `https://stitcher.pluto.tv/stitch/hls/channel/${s.rawId}/master.m3u8`;
@@ -2329,8 +2400,6 @@
         const isHls = url.includes('.m3u8') || isVideo || url.includes('pluto.tv') || url.includes('stitch');
 
         if (isHls && typeof Hls !== 'undefined' && Hls.isSupported()) {
-          let currentRealBaseUrl = url;
-
           class CustomHlsLoader extends Hls.DefaultConfig.loader {
             constructor(config) {
               super(config);
@@ -2347,37 +2416,10 @@
                 } catch(e) {}
               }
 
-              if (targetUrl.startsWith(window.location.origin)) {
-                try {
-                  const uObj = new URL(targetUrl);
-                  let relativePath = uObj.pathname + uObj.search;
-                  relativePath = relativePath.replace(/^\/\.netlify\/functions\/(IPTV)?/i, '');
-                  if (currentRealBaseUrl) {
-                    targetUrl = new URL(relativePath, currentRealBaseUrl).href;
-                  }
-                } catch(e) {}
-              }
+              // Les flux Pluto TV & CDN Akamai gèrent le CORS nativement. Chargement direct sans passer par le proxy serveur
+              const isPlutoStream = targetUrl.includes('pluto.tv') || targetUrl.includes('stitch') || targetUrl.includes('siloh.pluto');
 
-              if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
-                if (currentRealBaseUrl) {
-                  try {
-                    targetUrl = new URL(targetUrl, currentRealBaseUrl).href;
-                  } catch(e) {}
-                }
-              }
-
-              if (targetUrl.startsWith('http://') || targetUrl.startsWith('https://')) {
-                if (!targetUrl.startsWith(window.location.origin)) {
-                  currentRealBaseUrl = targetUrl;
-                }
-              }
-
-              const isHttp = targetUrl.startsWith('http://');
-              const isProxyTargetDomain = targetUrl.includes('pluto.tv') || targetUrl.includes('stitch') || targetUrl.includes('sfr.net') || targetUrl.includes('bfm') || targetUrl.includes('canalplus');
-
-              const shouldUseProxy = (isHttp || isProxyTargetDomain || context.useProxy) && !context.isDirectRetry;
-
-              if (shouldUseProxy) {
+              if (context.useProxy && !isPlutoStream) {
                 context.url = `/.netlify/functions/IPTV?url=${encodeURIComponent(targetUrl)}`;
               } else {
                 context.url = targetUrl;
@@ -2397,11 +2439,7 @@
               callbacks.onError = (error, contextFunc, networkDetails) => {
                 if (!context.retryAttempted && targetUrl && (targetUrl.startsWith('http://') || targetUrl.startsWith('https://'))) {
                   context.retryAttempted = true;
-                  if (shouldUseProxy) {
-                    context.isDirectRetry = true;
-                    context.useProxy = false;
-                    context.url = targetUrl;
-                  } else {
+                  if (!context.useProxy && !isPlutoStream) {
                     context.useProxy = true;
                     context.url = `/.netlify/functions/IPTV?url=${encodeURIComponent(targetUrl)}`;
                   }
@@ -2438,9 +2476,7 @@
           this.hlsPlayer.on(Hls.Events.ERROR, (event, data) => {
             if (data.fatal) {
               this.hlsRetryCount = (this.hlsRetryCount || 0) + 1;
-              
               if (this.hlsRetryCount > 3) {
-                console.warn('Nombre maximal de tentatives HLS atteint pour ce flux.');
                 if (this.hlsPlayer) {
                   this.hlsPlayer.destroy();
                   this.hlsPlayer = null;
