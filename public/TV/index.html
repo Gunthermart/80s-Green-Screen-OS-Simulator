@@ -2578,6 +2578,51 @@
 
           const startHls = (streamUrl) => {
             if (this.hlsPlayer) this.hlsPlayer.destroy();
+
+            class CustomHlsLoader extends Hls.DefaultConfig.loader {
+              constructor(config) {
+                super(config);
+                const originalLoad = this.load.bind(this);
+                this.load = function(context, config, callbacks) {
+                  let rawUrl = context.url;
+
+                  // 1. Si l'URL est déjà encapsulée dans le proxy Netlify, extraire l'URL réelle
+                  if (rawUrl.includes('/.netlify/functions/')) {
+                    try {
+                      const uObj = new URL(rawUrl, window.location.origin);
+                      const extracted = uObj.searchParams.get('url');
+                      if (extracted) {
+                        rawUrl = extracted;
+                      }
+                    } catch(e) {}
+                  }
+
+                  // 2. Résoudre les sous-requêtes relatives (.m3u8 / .ts) par rapport au domaine source d'origine
+                  if (!rawUrl.startsWith('http://') && !rawUrl.startsWith('https://')) {
+                    if (window.currentHlsTargetBase) {
+                      try {
+                        rawUrl = new URL(rawUrl, window.currentHlsTargetBase).href;
+                      } catch(e) {}
+                    }
+                  }
+
+                  // 3. Mettre à jour la base HLS pour la résolution des futurs fragments vidéo
+                  if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
+                    window.currentHlsTargetBase = rawUrl;
+                  }
+
+                  // 4. Rediriger la requête via le proxy Netlify IPTV.js
+                  if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
+                    context.url = `/.netlify/functions/IPTV?url=${encodeURIComponent(rawUrl)}`;
+                  } else {
+                    context.url = rawUrl;
+                  }
+
+                  originalLoad(context, config, callbacks);
+                };
+              }
+            }
+
             this.hlsPlayer = new Hls({
               enableWorker: true,
               lowLatencyMode: true,
