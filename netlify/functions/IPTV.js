@@ -13,7 +13,7 @@ export async function handler(event, context) {
 
   let targetUrl = null;
 
-  // Extraction robuste et complete du parametre url
+  // 1. Extract target URL cleanly from query parameters
   if (event.queryStringParameters && event.queryStringParameters.url) {
     targetUrl = event.queryStringParameters.url;
   } else if (event.rawQuery) {
@@ -24,7 +24,7 @@ export async function handler(event, context) {
     }
   }
 
-  // Protection contre les requetes recursives et invalides
+  // 2. Validate URL protocol
   if (!targetUrl || (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://'))) {
     return {
       statusCode: 400,
