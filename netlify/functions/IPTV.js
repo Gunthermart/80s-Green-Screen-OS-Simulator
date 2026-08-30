@@ -13,7 +13,6 @@ export async function handler(event, context) {
 
   let targetUrl = null;
 
-  // 1. Extract target URL cleanly from query parameters
   if (event.queryStringParameters && event.queryStringParameters.url) {
     targetUrl = event.queryStringParameters.url;
   } else if (event.rawQuery) {
@@ -24,7 +23,6 @@ export async function handler(event, context) {
     }
   }
 
-  // 2. Validate URL protocol
   if (!targetUrl || (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://'))) {
     return {
       statusCode: 400,
@@ -37,6 +35,7 @@ export async function handler(event, context) {
     const fetchFn = typeof fetch !== 'undefined' ? fetch : globalThis.fetch;
     const response = await fetchFn(targetUrl, {
       method: 'GET',
+      redirect: 'follow',
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         'Accept': '*/*',
