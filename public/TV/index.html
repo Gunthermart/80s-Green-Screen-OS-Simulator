@@ -773,6 +773,13 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"/><polyline points="17 2 12 7 7 2"/></svg>
           <span>Télévision TV</span>
         </div>
+
+        <div class="nav-item" id="tab-pluto" style="margin-top:2px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <span>Pluto TV (Direct 24/7)</span>
+          <span id="pluto-badge" class="badge-counter" style="background:rgba(245,158,11,0.2); color:#fde047;">100+</span>
+        </div>
+
         <div class="nav-item" id="tab-tv-fav">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l8.72-8.72 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
           <span>Favoris TV</span>
@@ -1183,40 +1190,85 @@
       ]
     };
 
-    class MediaFetcher {
-      async getRadios(country = 'FR', genre = 'all', search = '') {
-        const mirrors = [
-          'https://de1.api.radio-browser.info',
-          'https://nl1.api.radio-browser.info',
-          'https://at1.api.radio-browser.info'
+    class PlutoTVService {
+      constructor() {
+        this.deviceId = this.getDeviceId();
+        this.sid = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
+      }
+
+      getDeviceId() {
+        let id = localStorage.getItem('omni_pluto_device_id');
+        if (!id) {
+          id = crypto.randomUUID ? crypto.randomUUID() : 'dev_' + Math.random().toString(36).substring(2, 15);
+          localStorage.setItem('omni_pluto_device_id', id);
+        }
+        return id;
+      }
+
+      async getPlutoChannels(search = '', genre = 'all') {
+        const apiUrl = `https://api.pluto.tv/v2/channels`;
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 4000);
+          const res = await fetch(apiUrl, { signal: controller.signal });
+          clearTimeout(timer);
+
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data) && data.length > 0) {
+              return data
+                .filter(ch => ch.isLive !== false)
+                .map(ch => {
+                  const streamUrl = this.buildStreamUrl(ch._id);
+                  const logo = ch.colorLogoPNG?.path || ch.featuredImage?.path || 'https://images.pluto.tv/channels/' + ch._id + '/colorLogoPNG.png';
+                  return {
+                    id: `pluto_${ch._id}`,
+                    name: ch.name,
+                    url: streamUrl,
+                    logo: logo,
+                    country: 'FR',
+                    tags: ch.category || 'Pluto TV 24/7',
+                    type: 'video',
+                    category: ch.category ? ch.category.toLowerCase() : 'all'
+                  };
+                })
+                .filter(ch => {
+                  const matchesSearch = !search || ch.name.toLowerCase().includes(search.toLowerCase()) || ch.tags.toLowerCase().includes(search.toLowerCase());
+                  const matchesGenre = genre === 'all' || ch.category.includes(genre.toLowerCase()) || ch.tags.toLowerCase().includes(genre.toLowerCase());
+                  return matchesSearch && matchesGenre;
+                });
+            }
+          }
+        } catch (e) {}
+
+        return this.getBackupPlutoChannels(search, genre);
+      }
+
+      buildStreamUrl(channelId) {
+        return `https://service-stitch.clusters.pluto.tv/stitch/hls/channel/${channelId}/master.m3u8?advertisingId=&appName=web&appVersion=unknown&deviceDNT=0&deviceId=${this.deviceId}&deviceMake=web&deviceModel=web&deviceType=web&deviceVersion=unknown&sid=${this.sid}`;
+      }
+
+      getBackupPlutoChannels(search = '', genre = 'all') {
+        const backupPluto = [
+          { id: 'pluto_southpark', name: 'Pluto TV South Park', url: 'https://service-stitch.clusters.pluto.tv/stitch/hls/channel/5fa016c68e37600007cdbf83/master.m3u8?appName=web&deviceMake=web&deviceModel=web&deviceType=web', logo: 'https://images.pluto.tv/channels/5fa016c68e37600007cdbf83/colorLogoPNG.png', country: 'FR', tags: 'Séries & Humour', type: 'video' },
+          { id: 'pluto_cine', name: 'Pluto TV Ciné', url: 'https://service-stitch.clusters.pluto.tv/stitch/hls/channel/5d8b894ec4e3d3000969678c/master.m3u8?appName=web&deviceMake=web&deviceModel=web&deviceType=web', logo: 'https://images.pluto.tv/channels/5d8b894ec4e3d3000969678c/colorLogoPNG.png', country: 'FR', tags: 'Films 24/7', type: 'video' },
+          { id: 'pluto_action', name: 'Pluto TV Ciné Action', url: 'https://service-stitch.clusters.pluto.tv/stitch/hls/channel/5d8b8979c4e3d300096967a1/master.m3u8?appName=web&deviceMake=web&deviceModel=web&deviceType=web', logo: 'https://images.pluto.tv/channels/5d8b8979c4e3d300096967a1/colorLogoPNG.png', country: 'FR', tags: 'Action & Thriller', type: 'video' },
+          { id: 'pluto_anime', name: 'Pluto TV Anime', url: 'https://service-stitch.clusters.pluto.tv/stitch/hls/channel/5fa0165c8e37600007cdbf6e/master.m3u8?appName=web&deviceMake=web&deviceModel=web&deviceType=web', logo: 'https://images.pluto.tv/channels/5fa0165c8e37600007cdbf6e/colorLogoPNG.png', country: 'FR', tags: 'Animation & Manga', type: 'video' },
+          { id: 'pluto_crime', name: 'Pluto TV Crime', url: 'https://service-stitch.clusters.pluto.tv/stitch/hls/channel/5d8b89cfc4e3d300096967be/master.m3u8?appName=web&deviceMake=web&deviceModel=web&deviceType=web', logo: 'https://images.pluto.tv/channels/5d8b89cfc4e3d300096967be/colorLogoPNG.png', country: 'FR', tags: 'Investigation & Crime', type: 'video' },
+          { id: 'pluto_scifi', name: 'Pluto TV Sci-Fi', url: 'https://service-stitch.clusters.pluto.tv/stitch/hls/channel/5fa0168b8e37600007cdbf78/master.m3u8?appName=web&deviceMake=web&deviceModel=web&deviceType=web', logo: 'https://images.pluto.tv/channels/5fa0168b8e37600007cdbf78/colorLogoPNG.png', country: 'FR', tags: 'Science-Fiction', type: 'video' }
         ];
+        return backupPluto.filter(c => !search || c.name.toLowerCase().includes(search.toLowerCase()));
+      }
+    }
 
-        let fetchedList = null;
-        for (const mirror of mirrors) {
-          try {
-            let url = `${mirror}/json/stations/bycountrycodeexact/${country.toLowerCase()}?limit=60&order=votes&reverse=true`;
-            if (search) url = `${mirror}/json/stations/byname/${encodeURIComponent(search)}?limit=60`;
-            else if (genre && genre !== 'all') url = `${mirror}/json/stations/bytag/${encodeURIComponent(genre)}?limit=60`;
+    class MediaFetcher {
+      constructor() {
+        this.pluto = new PlutoTVService();
+      }
 
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), 3000);
-            const res = await fetch(url, { signal: controller.signal });
-            clearTimeout(timer);
-
-            if (res.ok) {
-              const data = await res.json();
-              if (Array.isArray(data) && data.length > 0) {
-                fetchedList = data.map(s => ({
-                  id: s.stationuuid || `rad_${Math.random().toString(36).substr(2,9)}`,
-                  name: s.name.trim(),
-                  url: s.url_resolved || s.url,
-                  logo: s.favicon || '',
-                  country: s.countrycode || country,
-                  tags: s.tags ? s.tags.split(',').slice(0, 2).join(', ') : 'Radio',
-                  type: 'audio'
-                })).filter(s => s.url && s.name);
-                break;
-              }
+      async getPlutoTV(search = '', genre = 'all') {
+        return await this.pluto.getPlutoChannels(search, genre);
+      }
             }
           } catch (e) {}
         }
@@ -1958,6 +2010,7 @@
         document.getElementById('tab-radio').onclick = () => this.switchTab('radio');
         document.getElementById('tab-radio-fav').onclick = () => this.switchTab('radio-fav');
         document.getElementById('tab-tv').onclick = () => this.switchTab('tv');
+        document.getElementById('tab-pluto').onclick = () => this.switchTab('pluto');
         document.getElementById('tab-tv-fav').onclick = () => this.switchTab('tv-fav');
         document.getElementById('tab-podcasts').onclick = () => this.switchTab('podcasts');
         document.getElementById('tab-podcast-subs').onclick = () => this.switchTab('podcast-subs');
@@ -2160,7 +2213,8 @@
         const heading = document.getElementById('catalog-heading');
         if (tab === 'radio') heading.textContent = 'Radios Populaires';
         else if (tab === 'radio-fav') heading.textContent = 'Mes Radios Favorites';
-        else if (tab === 'tv') heading.textContent = 'Télévision en Direct';
+        else if (tab === 'tv') heading.textContent = 'Télévision TV (Direct TNT)';
+        else if (tab === 'pluto') heading.textContent = 'Pluto TV — Chaînes Gratuitement en Direct 24/7';
         else if (tab === 'tv-fav') heading.textContent = 'Mes Chaînes TV Favorites';
         else if (tab === 'podcasts') heading.textContent = 'Podcasts & Replays';
         else if (tab === 'podcast-subs') heading.textContent = 'Mes Podcasts Suivis';
@@ -2175,6 +2229,7 @@
 
         if (this.currentTab === 'radio') this.stations = await this.fetcher.getRadios(this.currentCountry, this.currentGenre, search);
         else if (this.currentTab === 'tv') this.stations = await this.fetcher.getTV(this.currentCountry, this.currentGenre, search);
+        else if (this.currentTab === 'pluto') this.stations = await this.fetcher.getPlutoTV(search, this.currentGenre);
         else if (this.currentTab === 'podcasts') this.stations = await this.fetcher.getPodcasts(search, this.currentGenre, this.currentCountry);
         else if (this.currentTab === 'radio-fav') this.stations = this.favStore.getRadioFavs();
         else if (this.currentTab === 'tv-fav') this.stations = this.favStore.getTvFavs();
