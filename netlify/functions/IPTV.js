@@ -43,6 +43,14 @@ export async function handler(event, context) {
       }
     });
 
+    if (!response.ok) {
+      return {
+        statusCode: response.status,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        body: JSON.stringify({ error: `Erreur distante HTTP ${response.status}`, targetUrl })
+      };
+    }
+
     const contentType = response.headers.get("content-type") || "application/octet-stream";
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
