@@ -6,7 +6,7 @@ exports.handler = async function (event, context) {
       statusCode: 200,
       headers: {
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization, Range",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization, Range, Accept",
         "Access-Control-Allow-Methods": "GET, POST, OPTIONS"
       },
       body: ""
@@ -32,20 +32,45 @@ exports.handler = async function (event, context) {
       }
     });
 
-    const contentType = response.headers.get("content-type") || "text/plain; charset=utf-8";
-    const bodyText = await response.text();
+    const contentType = response.headers.get("content-type") || "application/octet-stream";
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
 
-    return {
-      statusCode: response.status,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization, Range",
-        "Access-Control-Allow-Methods": "GET, OPTIONS",
-        "Content-Type": contentType,
-        "Cache-Control": "no-cache, no-store, must-revalidate"
-      },
-      body: bodyText
-    };
+    // Vérifie si le contenu est textuel (manifeste m3u8, xml, json, etc.) ou binaire (.ts, vidéo)
+    const isText = contentType.includes('text') || 
+                   contentType.includes('json') || 
+                   contentType.includes('xml') || 
+                   contentType.includes('mpegurl') || 
+                   targetUrl.includes('.m3u8') || 
+                   targetUrl.includes('.json');
+
+    if (isText) {
+      return {
+        statusCode: response.status,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Headers": "Content-Type, Authorization, Range",
+          "Access-Control-Allow-Methods": "GET, OPTIONS",
+          "Content-Type": contentType,
+          "Cache-Control": "no-cache, no-store, must-revalidate"
+        },
+        body: buffer.toString('utf-8')
+      };
+    } else {
+      // Support binaire pour les segments vidéo .ts
+      return {
+        statusCode: response.status,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Headers": "Content-Type, Authorization, Range",
+          "Access-Control-Allow-Methods": "GET, OPTIONS",
+          "Content-Type": contentType,
+          "Cache-Control": "public, max-age=3600"
+        },
+        body: buffer.toString('base64'),
+        isBase64Encoded: true
+      };
+    }
   } catch (err) {
     return {
       statusCode: 500,
