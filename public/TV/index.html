@@ -2541,130 +2541,98 @@
         this.media.muted = false;
         if (!this.media.volume || this.media.volume === 0) this.media.volume = 0.8;
 
-        window.currentHlsTargetBase = url;
         const isHls = url.includes('.m3u8') || isVideo || url.includes('pluto.tv') || url.includes('stitch');
 
         if (isHls && typeof Hls !== 'undefined' && Hls.isSupported()) {
-          let attemptedProxy = false;
+          let currentRealBaseUrl = url;
 
           class CustomHlsLoader extends Hls.DefaultConfig.loader {
             constructor(config) {
               super(config);
               const originalLoad = this.load.bind(this);
+
               this.load = function(context, config, callbacks) {
-                let u = context.url;
-                
-                // Nettoyage si l'URL contenait corsproxy
-                if (u.includes('corsproxy.io/?')) {
-                  u = decodeURIComponent(u.split('corsproxy.io/?')[1]);
-                } else if (u.includes('corsproxy.io/')) {
-                  u = u.replace('https://corsproxy.io/', '');
+                let realUrl = context.url;
+
+                // 1. Extraire l'URL réelle si déjà proxifiée
+                if (realUrl.includes('/.netlify/functions/')) {
+                  try {
+                    const uObj = new URL(realUrl, window.location.origin);
+                    const extracted = uObj.searchParams.get('url');
+                    if (extracted) realUrl = extracted;
+                  } catch(e) {}
                 }
 
-                // Resolution des chemins relatifs des fragments .ts
-                if (!u.startsWith('http://') && !u.startsWith('https://') && !u.startsWith('/.')) {
-                  if (window.currentHlsTargetBase) {
+                // 2. Détecter et corriger la résolution relative erronée sur notre domaine (leonce.fyi)
+                if (realUrl.startsWith(window.location.origin)) {
+                  try {
+                    const uObj = new URL(realUrl);
+                    const relativePath = uObj.pathname + uObj.search;
+                    if (currentRealBaseUrl) {
+                      realUrl = new URL(relativePath, currentRealBaseUrl).href;
+                    }
+                  } catch(e) {}
+                }
+
+                // 3. Si l'URL est un chemin relatif pur (ex: segment01.ts)
+                if (!realUrl.startsWith('http://') && !realUrl.startsWith('https://')) {
+                  if (currentRealBaseUrl) {
                     try {
-                      u = new URL(u, window.currentHlsTargetBase).href;
+                      realUrl = new URL(realUrl, currentRealBaseUrl).href;
                     } catch(e) {}
                   }
                 }
 
-                // Redirection de Pluto TV et des flux soumis aux CORS vers la fonction Netlify IPTV.js
-                if (u.includes('pluto.tv') || u.includes('stitch') || (window.location.hostname !== 'localhost' && !u.startsWith(window.location.origin) && !u.startsWith('/.'))) {
-                  u = `/.netlify/functions/IPTV?url=${encodeURIComponent(u)}`;
+                // 4. Mettre à jour l'URL de base distante pour les sous-fragments
+                if (realUrl.startsWith('http://') || realUrl.startsWith('https://')) {
+                  if (!realUrl.startsWith(window.location.origin)) {
+                    currentRealBaseUrl = realUrl;
+                  }
                 }
 
-                context.url = u;
+                // 5. Transmettre l'URL distante nettoyée au proxy Netlify IPTV.js
+                if (realUrl.startsWith('http://') || realUrl.startsWith('https://')) {
+                  if (!realUrl.startsWith(window.location.origin)) {
+                    context.url = `/.netlify/functions/IPTV?url=${encodeURIComponent(realUrl)}`;
+                  } else {
+                    context.url = realUrl;
+                  }
+                }
+
                 originalLoad(context, config, callbacks);
               };
             }
           }
 
-          const startHls = (streamUrl) => {
-            if (this.hlsPlayer) this.hlsPlayer.destroy();
+          this.hlsPlayer = new Hls({
+            enableWorker: true,
+            lowLatencyMode: true,
+            backBufferLength: 90,
+            loader: CustomHlsLoader
+          });
 
-            class CustomHlsLoader extends Hls.DefaultConfig.loader {
-              constructor(config) {
-                super(config);
-                const originalLoad = this.load.bind(this);
-                this.load = function(context, config, callbacks) {
-                  let rawUrl = context.url;
+          this.hlsPlayer.loadSource(url);
+          this.hlsPlayer.attachMedia(this.media);
 
-                  // 1. Si l'URL est déjà encapsulée dans le proxy Netlify, extraire l'URL réelle
-                  if (rawUrl.includes('/.netlify/functions/')) {
-                    try {
-                      const uObj = new URL(rawUrl, window.location.origin);
-                      const extracted = uObj.searchParams.get('url');
-                      if (extracted) {
-                        rawUrl = extracted;
-                      }
-                    } catch(e) {}
-                  }
+          this.hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
+            this.media.play().catch(() => {});
+          });
 
-                  // 2. Résoudre les sous-requêtes relatives (.m3u8 / .ts) par rapport au domaine source d'origine
-                  if (!rawUrl.startsWith('http://') && !rawUrl.startsWith('https://')) {
-                    if (window.currentHlsTargetBase) {
-                      try {
-                        rawUrl = new URL(rawUrl, window.currentHlsTargetBase).href;
-                      } catch(e) {}
-                    }
-                  }
-
-                  // 3. Mettre à jour la base HLS pour la résolution des futurs fragments vidéo
-                  if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
-                    window.currentHlsTargetBase = rawUrl;
-                  }
-
-                  // 4. Rediriger la requête via le proxy Netlify IPTV.js
-                  if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
-                    context.url = `/.netlify/functions/IPTV?url=${encodeURIComponent(rawUrl)}`;
-                  } else {
-                    context.url = rawUrl;
-                  }
-
-                  originalLoad(context, config, callbacks);
-                };
+          this.hlsPlayer.on(Hls.Events.ERROR, (event, data) => {
+            if (data.fatal) {
+              switch (data.type) {
+                case Hls.ErrorTypes.NETWORK_ERROR:
+                  this.hlsPlayer.startLoad();
+                  break;
+                case Hls.ErrorTypes.MEDIA_ERROR:
+                  this.hlsPlayer.recoverMediaError();
+                  break;
+                default:
+                  this.hlsPlayer.destroy();
+                  break;
               }
             }
-
-            this.hlsPlayer = new Hls({
-              enableWorker: true,
-              lowLatencyMode: true,
-              backBufferLength: 90,
-              loader: CustomHlsLoader
-            });
-            this.hlsPlayer.loadSource(streamUrl);
-            this.hlsPlayer.attachMedia(this.media);
-
-            this.hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
-              this.media.play().catch(() => {});
-            });
-
-            this.hlsPlayer.on(Hls.Events.ERROR, (event, data) => {
-              if (data.fatal) {
-                switch (data.type) {
-                  case Hls.ErrorTypes.NETWORK_ERROR:
-                    if (!attemptedProxy) {
-                      attemptedProxy = true;
-                      const proxyUrl = `/.netlify/functions/IPTV?url=${encodeURIComponent(url)}`;
-                      startHls(proxyUrl);
-                    } else {
-                      this.hlsPlayer.startLoad();
-                    }
-                    break;
-                  case Hls.ErrorTypes.MEDIA_ERROR:
-                    this.hlsPlayer.recoverMediaError();
-                    break;
-                  default:
-                    this.hlsPlayer.destroy();
-                    break;
-                }
-              }
-            });
-          };
-
-          startHls(url);
+          });
         } else {
           this.media.src = url;
           this.media.play().catch(() => {});
