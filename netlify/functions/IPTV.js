@@ -33,15 +33,44 @@ export async function handler(event, context) {
 
   try {
     const fetchFn = typeof fetch !== 'undefined' ? fetch : globalThis.fetch;
-    const response = await fetchFn(targetUrl, {
+
+    // Injection dynamique des en-têtes (Referer / Origin) selon le diffuseur (BFM, SFR, Canal+)
+    const reqHeaders = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      'Accept': '*/*',
+      'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7'
+    };
+
+    try {
+      const parsedUrl = new URL(targetUrl);
+      if (parsedUrl.hostname.includes('sfr.net') || parsedUrl.hostname.includes('bfm')) {
+        reqHeaders['Referer'] = 'https://www.bfmtv.com/';
+        reqHeaders['Origin'] = 'https://www.bfmtv.com';
+      } else if (parsedUrl.hostname.includes('canalplus')) {
+        reqHeaders['Referer'] = 'https://www.canalplus.com/';
+        reqHeaders['Origin'] = 'https://www.canalplus.com';
+      } else if (parsedUrl.hostname.includes('france24')) {
+        reqHeaders['Referer'] = 'https://www.france24.com/';
+      } else {
+        reqHeaders['Referer'] = `${parsedUrl.protocol}//${parsedUrl.hostname}/`;
+      }
+    } catch (e) {}
+
+    let response = await fetchFn(targetUrl, {
       method: 'GET',
       redirect: 'follow',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Accept': '*/*',
-        'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7'
-      }
+      headers: reqHeaders
     });
+
+    if (!response.ok && response.status === 403) {
+      delete reqHeaders['Referer'];
+      delete reqHeaders['Origin'];
+      response = await fetchFn(targetUrl, {
+        method: 'GET',
+        redirect: 'follow',
+        headers: reqHeaders
+      });
+    }
 
     if (!response.ok) {
       return {
