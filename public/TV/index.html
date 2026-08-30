@@ -367,7 +367,6 @@
       gap: 20px;
     }
 
-    /* Theater Stage & Fullscreen HUD */
     #theater-stage {
       width: 100%;
       background: #000;
@@ -490,7 +489,6 @@
       gap: 16px;
     }
 
-    /* Backdrop Overlay pour le Sidebar Mobile */
     #sidebar-backdrop {
       display: none;
       position: fixed;
@@ -723,7 +721,6 @@
     .volume-group { display: flex; align-items: center; gap: 8px; }
     .volume-slider { width: 70px; height: 4px; accent-color: var(--accent-primary); cursor: pointer; }
 
-    /* Drawer Queue Panel */
     #queue-drawer {
       position: fixed;
       top: 70px; right: -360px; bottom: var(--player-height);
@@ -1131,60 +1128,32 @@
     class PlutoTVService {
       constructor() {
         this.deviceId = this.getDeviceId();
-        this.sessionToken = null;
-        this.tokenExpiry = 0;
       }
 
       getDeviceId() {
         let id = localStorage.getItem('omni_pluto_device_id');
         if (!id) {
-          id = (typeof crypto !== 'undefined' && crypto.randomUUID) 
-            ? crypto.randomUUID() 
-            : 'dev_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+          id = this.getUUID();
           localStorage.setItem('omni_pluto_device_id', id);
         }
         return id;
       }
 
-      async getSessionToken() {
-        const now = Date.now();
-        if (this.sessionToken && this.tokenExpiry > now) {
-          return this.sessionToken;
+      getUUID() {
+        if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+          return crypto.randomUUID();
         }
-
-        try {
-          const devId = this.deviceId;
-          let bootUrl = `https://boot.pluto.tv/v4/start?appName=web&appVersion=1.0.0&deviceDNT=0&deviceId=${devId}&deviceMake=Chrome&deviceModel=web&deviceType=web&deviceVersion=1.0.0`;
-          
-          if (window.location.hostname !== 'localhost') {
-            bootUrl = `/.netlify/functions/IPTV?url=${encodeURIComponent(bootUrl)}`;
-          }
-
-          const res = await fetch(bootUrl);
-          if (res.ok) {
-            const data = await res.json();
-            if (data && data.sessionToken) {
-              this.sessionToken = data.sessionToken;
-              this.tokenExpiry = now + (4 * 3600 * 1000); // Cache JWT for 4 hours
-              return this.sessionToken;
-            }
-          }
-        } catch(e) {
-          console.warn("Could not fetch Pluto JWT session token", e);
-        }
-        return null;
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+          let r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+          return v.toString(16);
+        });
       }
 
-      async buildPlutoStreamUrl(channelId) {
-        const jwt = await this.getSessionToken();
-        const devId = this.deviceId;
-        const sid = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2);
-
-        if (jwt) {
-          return `https://cfd-v4-service-channel-stitcher-use1-1.prd.pluto.tv/v2/stitch/hls/channel/${channelId}/master.m3u8?includeExtendedEvents=true&masterJWTPassthrough=true&jwt=${jwt}&deviceId=${devId}&sid=${sid}`;
-        }
-
-        return `https://stitcher.pluto.tv/stitch/hls/channel/${channelId}/master.m3u8?appName=web&appVersion=1.0.0&deviceDNT=0&deviceId=${devId}&deviceMake=Chrome&deviceModel=web&deviceType=web&deviceVersion=1.0.0&sid=${sid}`;
+      buildPlutoStreamUrl(rawStreamUrl) {
+        if (!rawStreamUrl) return '';
+        const sid = this.getUUID();
+        const separator = rawStreamUrl.includes('?') ? '&' : '?';
+        return `${rawStreamUrl}${separator}sid=${sid}&deviceType=web&deviceMake=Chrome&deviceModel=web&deviceVersion=1.0.0`;
       }
 
       async getPlutoChannels(search = '', genre = 'all') {
@@ -1192,7 +1161,7 @@
           const controller = new AbortController();
           const timer = setTimeout(() => controller.abort(), 4000);
           
-          let apiUrl = 'https://api.pluto.tv/v2/channels';
+          let apiUrl = 'https://api.pluto.tv/v0/channels?clientModelNumber=0.0.0&serverSideAds=true';
           if (window.location.hostname !== 'localhost') {
             apiUrl = `/.netlify/functions/IPTV?url=${encodeURIComponent(apiUrl)}`;
           }
@@ -1203,46 +1172,58 @@
           if (res.ok) {
             const data = await res.json();
             if (Array.isArray(data) && data.length > 0) {
-              const parsed = data
-                .filter(ch => ch.isLive !== false)
-                .map(ch => {
+              const parsed = [];
+              data.forEach(ch => {
+                if (ch.isLive !== false) {
+                  let rawStreamUrl = '';
+                  if (ch.stitched && ch.stitched.urls && ch.stitched.urls[0] && ch.stitched.urls[0].url) {
+                    rawStreamUrl = ch.stitched.urls[0].url;
+                  }
+
                   const logo = ch.colorLogoPNG?.path || ch.featuredImage?.path || `https://images.pluto.tv/channels/${ch._id}/colorLogoPNG.png`;
-                  return {
+
+                  parsed.push({
                     id: `pluto_${ch._id}`,
                     rawId: ch._id,
+                    rawStreamUrl: rawStreamUrl,
                     name: ch.name,
-                    url: '', // Built dynamically on play to inject fresh JWT
+                    url: rawStreamUrl,
                     logo: logo,
                     country: 'FR',
                     tags: ch.category || 'Pluto TV 24/7',
                     type: 'video',
                     category: ch.category ? ch.category.toLowerCase() : 'all'
-                  };
-                })
-                .filter(ch => {
-                  const matchSearch = !search || ch.name.toLowerCase().includes(search.toLowerCase()) || ch.tags.toLowerCase().includes(search.toLowerCase());
-                  const matchGenre = genre === 'all' || ch.category.includes(genre.toLowerCase()) || ch.tags.toLowerCase().includes(genre.toLowerCase());
-                  return matchSearch && matchGenre;
-                });
-              if (parsed.length > 0) return parsed;
+                  });
+                }
+              });
+
+              const filtered = parsed.filter(ch => {
+                const matchSearch = !search || ch.name.toLowerCase().includes(search.toLowerCase()) || ch.tags.toLowerCase().includes(search.toLowerCase());
+                const matchGenre = genre === 'all' || ch.category.includes(genre.toLowerCase()) || ch.tags.toLowerCase().includes(genre.toLowerCase());
+                return matchSearch && matchGenre;
+              });
+
+              if (filtered.length > 0) return filtered;
             }
           }
-        } catch (e) {}
+        } catch (e) {
+          console.warn("Moteur Pluto TV API v0 fallback", e);
+        }
 
         return this.getBackupPlutoChannels(search, genre);
       }
 
       getBackupPlutoChannels(search = '', genre = 'all') {
         const backupPluto = [
-          { id: 'pluto_daria', rawId: '5f9b177d8e37600007cdb3c8', name: 'Daria 24/7', logo: 'https://images.pluto.tv/channels/5f9b177d8e37600007cdb3c8/colorLogoPNG.png', country: 'FR', tags: 'Animation, Séries', type: 'video', category: 'humor' },
-          { id: 'pluto_cine', rawId: '5d8b894ec4e3d3000969678c', name: 'Pluto TV Ciné', logo: 'https://images.pluto.tv/channels/5d8b894ec4e3d3000969678c/colorLogoPNG.png', country: 'FR', tags: 'Films 24/7, Cinema', type: 'video', category: 'culture' },
-          { id: 'pluto_action', rawId: '5d8b8979c4e3d300096967a1', name: 'Pluto TV Ciné Action', logo: 'https://images.pluto.tv/channels/5d8b8979c4e3d300096967a1/colorLogoPNG.png', country: 'FR', tags: 'Action, Thriller', type: 'video', category: 'culture' },
-          { id: 'pluto_southpark', rawId: '5fa016c68e37600007cdbf83', name: 'South Park 24/7', logo: 'https://images.pluto.tv/channels/5fa016c68e37600007cdbf83/colorLogoPNG.png', country: 'FR', tags: 'Séries, Humour', type: 'video', category: 'humor' },
-          { id: 'pluto_anime', rawId: '5fa0165c8e37600007cdbf6e', name: 'Pluto TV Anime', logo: 'https://images.pluto.tv/channels/5fa0165c8e37600007cdbf6e/colorLogoPNG.png', country: 'FR', tags: 'Animation, Manga', type: 'video', category: 'culture' },
-          { id: 'pluto_crime', rawId: '5d8b89cfc4e3d300096967be', name: 'Pluto TV Crime', logo: 'https://images.pluto.tv/channels/5d8b89cfc4e3d300096967be/colorLogoPNG.png', country: 'FR', tags: 'True Crime, Investigation', type: 'video', category: 'crime' },
-          { id: 'pluto_scifi', rawId: '5fa0168b8e37600007cdbf78', name: 'Pluto TV Sci-Fi', logo: 'https://images.pluto.tv/channels/5fa0168b8e37600007cdbf78/colorLogoPNG.png', country: 'FR', tags: 'Science-Fiction, Tech', type: 'video', category: 'science' },
-          { id: 'pluto_docs', rawId: '5e34360a8274020009a2caed', name: 'Pluto TV Documentaires', logo: 'https://images.pluto.tv/channels/5e34360a8274020009a2caed/colorLogoPNG.png', country: 'FR', tags: 'Histoire, Science, Culture', type: 'video', category: 'science' },
-          { id: 'pluto_comedy', rawId: '5fa015fb8e37600007cdbf5c', name: 'Pluto TV Comédie', logo: 'https://images.pluto.tv/channels/5fa015fb8e37600007cdbf5c/colorLogoPNG.png', country: 'FR', tags: 'Humour, Comédie', type: 'video', category: 'humor' }
+          { id: 'pluto_daria', rawId: '5f9b177d8e37600007cdb3c8', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5f9b177d8e37600007cdb3c8/master.m3u8', name: 'Daria 24/7', logo: 'https://images.pluto.tv/channels/5f9b177d8e37600007cdb3c8/colorLogoPNG.png', country: 'FR', tags: 'Animation, Séries', type: 'video', category: 'humor' },
+          { id: 'pluto_cine', rawId: '5d8b894ec4e3d3000969678c', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5d8b894ec4e3d3000969678c/master.m3u8', name: 'Pluto TV Ciné', logo: 'https://images.pluto.tv/channels/5d8b894ec4e3d3000969678c/colorLogoPNG.png', country: 'FR', tags: 'Films 24/7, Cinema', type: 'video', category: 'culture' },
+          { id: 'pluto_action', rawId: '5d8b8979c4e3d300096967a1', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5d8b8979c4e3d300096967a1/master.m3u8', name: 'Pluto TV Ciné Action', logo: 'https://images.pluto.tv/channels/5d8b8979c4e3d300096967a1/colorLogoPNG.png', country: 'FR', tags: 'Action, Thriller', type: 'video', category: 'culture' },
+          { id: 'pluto_southpark', rawId: '5fa016c68e37600007cdbf83', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5fa016c68e37600007cdbf83/master.m3u8', name: 'South Park 24/7', logo: 'https://images.pluto.tv/channels/5fa016c68e37600007cdbf83/colorLogoPNG.png', country: 'FR', tags: 'Séries, Humour', type: 'video', category: 'humor' },
+          { id: 'pluto_anime', rawId: '5fa0165c8e37600007cdbf6e', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5fa0165c8e37600007cdbf6e/master.m3u8', name: 'Pluto TV Anime', logo: 'https://images.pluto.tv/channels/5fa0165c8e37600007cdbf6e/colorLogoPNG.png', country: 'FR', tags: 'Animation, Manga', type: 'video', category: 'culture' },
+          { id: 'pluto_crime', rawId: '5d8b89cfc4e3d300096967be', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5d8b89cfc4e3d300096967be/master.m3u8', name: 'Pluto TV Crime', logo: 'https://images.pluto.tv/channels/5d8b89cfc4e3d300096967be/colorLogoPNG.png', country: 'FR', tags: 'True Crime, Investigation', type: 'video', category: 'crime' },
+          { id: 'pluto_scifi', rawId: '5fa0168b8e37600007cdbf78', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5fa0168b8e37600007cdbf78/master.m3u8', name: 'Pluto TV Sci-Fi', logo: 'https://images.pluto.tv/channels/5fa0168b8e37600007cdbf78/colorLogoPNG.png', country: 'FR', tags: 'Science-Fiction, Tech', type: 'video', category: 'science' },
+          { id: 'pluto_docs', rawId: '5e34360a8274020009a2caed', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5e34360a8274020009a2caed/master.m3u8', name: 'Pluto TV Documentaires', logo: 'https://images.pluto.tv/channels/5e34360a8274020009a2caed/colorLogoPNG.png', country: 'FR', tags: 'Histoire, Science, Culture', type: 'video', category: 'science' },
+          { id: 'pluto_comedy', rawId: '5fa015fb8e37600007cdbf5c', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5fa015fb8e37600007cdbf5c/master.m3u8', name: 'Pluto TV Comédie', logo: 'https://images.pluto.tv/channels/5fa015fb8e37600007cdbf5c/colorLogoPNG.png', country: 'FR', tags: 'Humour, Comédie', type: 'video', category: 'humor' }
         ];
         return backupPluto.filter(ch => {
           const matchSearch = !search || ch.name.toLowerCase().includes(search.toLowerCase()) || ch.tags.toLowerCase().includes(search.toLowerCase());
@@ -1670,7 +1651,6 @@
 
         this.meshGroups = {};
 
-        // 1. Sphere 3D
         const sphereGroup = new THREE.Group();
         const sphereGeo = new THREE.IcosahedronGeometry(14, 2);
         const sphereMat = new THREE.MeshBasicMaterial({ color: 0x6366f1, wireframe: true, transparent: true, opacity: 0.85 });
@@ -1682,7 +1662,6 @@
         sphereGroup.add(this.coreMesh);
         this.meshGroups['sphere'] = sphereGroup;
 
-        // 2. Hyperdrive 3D
         const hyperGroup = new THREE.Group();
         const starGeo = new THREE.BufferGeometry();
         const starCount = 800;
@@ -1698,7 +1677,6 @@
         hyperGroup.add(this.starPoints);
         this.meshGroups['hyperdrive'] = hyperGroup;
 
-        // 3. Synthwave Grid 3D
         const synthGroup = new THREE.Group();
         const gridHelper = new THREE.GridHelper(200, 40, 0x06b6d4, 0x6366f1);
         gridHelper.position.y = -20;
@@ -1710,7 +1688,6 @@
         synthGroup.add(sunMesh);
         this.meshGroups['synthwave'] = synthGroup;
 
-        // 4. Vortex 3D
         const vortexGroup = new THREE.Group();
         const vortexGeo = new THREE.BufferGeometry();
         const vortexCount = 1000;
@@ -1728,7 +1705,6 @@
         vortexGroup.add(this.vortexPoints);
         this.meshGroups['vortex'] = vortexGroup;
 
-        // 5. Matrix Cubes 3D
         const matrixGroup = new THREE.Group();
         this.matrixCubes = [];
         const cubeGeo = new THREE.BoxGeometry(2.5, 2.5, 2.5);
@@ -1743,7 +1719,6 @@
         }
         this.meshGroups['matrix'] = matrixGroup;
 
-        // 6. Tunnel Néon 3D
         const tunnelGroup = new THREE.Group();
         for (let i = 0; i < 25; i++) {
             const ringGeo = new THREE.TorusGeometry(12, 0.15, 8, 64);
@@ -1754,7 +1729,6 @@
         }
         this.meshGroups['neon_tunnel'] = tunnelGroup;
 
-        // 7. Trou Noir Cosmique 3D
         const bhGroup = new THREE.Group();
         const bhCoreGeo = new THREE.SphereGeometry(6, 32, 32);
         const bhCoreMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
@@ -1776,7 +1750,6 @@
         bhGroup.add(this.bhDisk);
         this.meshGroups['blackhole'] = bhGroup;
 
-        // 8. Double Hélice DNA
         const dnaGroup = new THREE.Group();
         const dnaGeo = new THREE.BufferGeometry();
         const dnaCount = 200;
@@ -1797,7 +1770,6 @@
         dnaGroup.add(this.dnaPoints);
         this.meshGroups['dna'] = dnaGroup;
 
-        // 9. Feux d'Artifice
         const fwGroup = new THREE.Group();
         const fwGeo = new THREE.BufferGeometry();
         const fwCount = 1200;
@@ -1817,7 +1789,6 @@
         fwGroup.add(this.fwPoints);
         this.meshGroups['fireworks'] = fwGroup;
 
-        // 10. Océan Digital
         const oceanGroup = new THREE.Group();
         const oceanGeo = new THREE.PlaneGeometry(120, 80, 50, 40);
         oceanGeo.rotateX(-Math.PI / 2);
@@ -1827,7 +1798,6 @@
         oceanGroup.add(this.oceanMesh);
         this.meshGroups['ocean'] = oceanGroup;
 
-        // 11. Cité Cyberpunk 3D
         const cityGroup = new THREE.Group();
         this.cityBuildings = [];
         for (let x = -6; x <= 6; x++) {
@@ -1846,7 +1816,6 @@
         }
         this.meshGroups['cybercity'] = cityGroup;
 
-        // 12. Porte des Étoiles / Stargate 3D
         const sgGroup = new THREE.Group();
         this.sgRings = [];
         for (let r = 0; r < 5; r++) {
@@ -1862,7 +1831,6 @@
         sgGroup.add(this.sgCore);
         this.meshGroups['stargate'] = sgGroup;
 
-        // 13. Éclipse Solaire 3D
         const eclGroup = new THREE.Group();
         const eclSunGeo = new THREE.SphereGeometry(10, 32, 32);
         const eclSunMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
@@ -1885,7 +1853,6 @@
         eclGroup.add(this.coronaPoints);
         this.meshGroups['eclipse'] = eclGroup;
 
-        // 14. Tesseract 4D
         const tessGroup = new THREE.Group();
         const outerGeo = new THREE.BoxGeometry(16, 16, 16);
         const outerMat = new THREE.MeshBasicMaterial({ color: 0xec4899, wireframe: true });
@@ -1897,7 +1864,6 @@
         tessGroup.add(this.tessInner);
         this.meshGroups['tesseract'] = tessGroup;
 
-        // 15. Nébuleuse & Pulsar 3D
         const nebGroup = new THREE.Group();
         const nebGeo = new THREE.BufferGeometry();
         const nCount = 3000;
@@ -1969,7 +1935,6 @@
           const w = this.c2d ? this.c2d.width : 0;
           const h = this.c2d ? this.c2d.height : 0;
 
-          // 2D Visualizer
           if (this.c2d && this.c2d.style.display !== 'none' && w && h) {
             this.ctx2d.clearRect(0, 0, w, h);
 
@@ -2026,7 +1991,6 @@
             }
           }
 
-          // 3D Three.js Visualizer
           if (this.scene && this.c3d && this.c3d.style.display !== 'none') {
             if (this.preset === 'sphere' && this.sphereMesh) {
               this.sphereMesh.rotation.y += 0.01;
@@ -2200,7 +2164,6 @@
         document.getElementById('mobile-toggle').onclick = toggleSidebarMobile;
         if (backdrop) backdrop.onclick = closeSidebarMobile;
 
-        // Auto-fermeture du menu sur mobile lors de la sélection d'un onglet
         ['radio', 'radio-fav', 'tv', 'pluto', 'tv-fav', 'podcasts', 'podcast-subs'].forEach(tabId => {
           const el = document.getElementById(`tab-${tabId}`);
           if (el) {
@@ -2239,7 +2202,6 @@
           this.searchTimer = setTimeout(() => this.loadCatalog(e.target.value), 300);
         };
 
-        // Player Controls
         document.getElementById('btn-play-pause').onclick = () => {
           if (this.media.paused) this.media.play();
           else this.media.pause();
@@ -2273,7 +2235,6 @@
         document.getElementById('btn-toggle-queue').onclick = () => this.queueDrawer.classList.toggle('open');
         document.getElementById('btn-clear-queue').onclick = () => this.queue.clear();
 
-        // Favorite stage & player buttons
         const stageFavBtn = document.getElementById('btn-stage-fav');
         if (stageFavBtn) {
           stageFavBtn.onclick = () => {
@@ -2601,9 +2562,10 @@
         this.activeStationIndex = index;
         this.theater.classList.add('active');
 
-        // Resolve Pluto TV stream URL dynamically with JWT token
-        if (s.id && s.id.startsWith('pluto_') && s.rawId) {
-          s.url = await this.fetcher.pluto.buildPlutoStreamUrl(s.rawId);
+        let streamUrl = s.url;
+        if (s.id && s.id.startsWith('pluto_')) {
+          const rawUrl = s.rawStreamUrl || s.url || `https://stitcher.pluto.tv/stitch/hls/channel/${s.rawId}/master.m3u8`;
+          streamUrl = this.fetcher.pluto.buildPlutoStreamUrl(rawUrl);
         }
 
         this.updateMetadata(s.name, s.tags || s.country, s.logo);
@@ -2613,13 +2575,13 @@
           this.audioOverlay.style.display = 'none';
           this.media.style.display = 'block';
           this.visualizer.stop();
-          this.playMediaStream(s.url, true);
+          this.playMediaStream(streamUrl, true);
         } else {
           this.media.style.display = 'none';
           this.audioOverlay.style.display = 'flex';
           this.visualizer.start();
           this.visualizer.setPreset(document.getElementById('anim-preset-select').value || 'cyber');
-          this.playMediaStream(s.url, false);
+          this.playMediaStream(streamUrl, false);
         }
       }
 
@@ -2650,7 +2612,6 @@
             load(context, config, callbacks) {
               let targetUrl = context.url;
 
-              // 1. Nettoyage si déjà encapsulé dans le proxy Netlify
               if (targetUrl.includes('/.netlify/functions/IPTV')) {
                 try {
                   const uObj = new URL(targetUrl, window.location.origin);
@@ -2659,7 +2620,6 @@
                 } catch(e) {}
               }
 
-              // 2. Si l'URL a été résolue par erreur sur l'origine locale
               if (targetUrl.startsWith(window.location.origin)) {
                 try {
                   const uObj = new URL(targetUrl);
@@ -2671,7 +2631,6 @@
                 } catch(e) {}
               }
 
-              // 3. Traitement des URLs relatives
               if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
                 if (currentRealBaseUrl) {
                   try {
@@ -2680,14 +2639,12 @@
                 }
               }
 
-              // 4. Mémorisation de l'URL d'origine distante réelle
               if (targetUrl.startsWith('http://') || targetUrl.startsWith('https://')) {
                 if (!targetUrl.startsWith(window.location.origin)) {
                   currentRealBaseUrl = targetUrl;
                 }
               }
 
-              // 5. Encapsulation dans le proxy Netlify
               if (targetUrl.startsWith('http://') || targetUrl.startsWith('https://')) {
                 if (!targetUrl.startsWith(window.location.origin)) {
                   context.url = `/.netlify/functions/IPTV?url=${encodeURIComponent(targetUrl)}`;
@@ -2696,7 +2653,6 @@
                 }
               }
 
-              // 6. Injection de l'URL cible d'origine dans la réponse HLS
               const originalOnSuccess = callbacks.onSuccess;
               callbacks.onSuccess = (response, stats, contextFunc, networkDetails) => {
                 if (response) {
@@ -2726,7 +2682,6 @@
             this.media.play().catch(() => {});
           });
 
-          // Compteur et temporisateur anti-crash (évite la récursion infinie synchrone)
           this.hlsRetryCount = 0;
           this.hlsPlayer.on(Hls.Events.ERROR, (event, data) => {
             if (data.fatal) {
