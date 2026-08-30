@@ -1,6 +1,4 @@
-// Netlify Serverless Function "IPTV.js" pour contourner les restrictions CORS des flux Radio, TV, RSS & Pluto TV
-
-exports.handler = async function (event, context) {
+export async function handler(event, context) {
   if (event.httpMethod === "OPTIONS") {
     return {
       statusCode: 200,
@@ -24,7 +22,8 @@ exports.handler = async function (event, context) {
   }
 
   try {
-    const response = await fetch(targetUrl, {
+    const fetchFn = typeof fetch !== 'undefined' ? fetch : globalThis.fetch;
+    const response = await fetchFn(targetUrl, {
       method: 'GET',
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -36,7 +35,6 @@ exports.handler = async function (event, context) {
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Vérifie si le contenu est textuel (manifeste m3u8, xml, json, etc.) ou binaire (.ts, vidéo)
     const isText = contentType.includes('text') || 
                    contentType.includes('json') || 
                    contentType.includes('xml') || 
@@ -57,7 +55,6 @@ exports.handler = async function (event, context) {
         body: buffer.toString('utf-8')
       };
     } else {
-      // Support binaire pour les segments vidéo .ts
       return {
         statusCode: response.status,
         headers: {
@@ -78,4 +75,4 @@ exports.handler = async function (event, context) {
       body: JSON.stringify({ error: "Erreur Proxy Node.js IPTV.js", details: err.message })
     };
   }
-};
+}
