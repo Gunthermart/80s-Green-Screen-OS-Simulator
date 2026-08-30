@@ -24,7 +24,6 @@ exports.handler = async function (event, context) {
     }
   }
 
-  // Validate target URL presence and structure
   if (!targetUrl || (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://'))) {
     return {
       statusCode: 400,
@@ -32,6 +31,17 @@ exports.handler = async function (event, context) {
       body: JSON.stringify({ error: "Paramètre 'url' absent ou invalide", received: targetUrl })
     };
   }
+
+  if (targetUrl.includes('/.netlify/functions/IPTV')) {
+    try {
+      const parsed = new URL(targetUrl);
+      const innerUrl = parsed.searchParams.get('url');
+      if (innerUrl) targetUrl = innerUrl;
+    } catch(e) {}
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 7500);
 
   try {
     const fetchFn = typeof fetch !== 'undefined' ? fetch : globalThis.fetch;
@@ -41,7 +51,6 @@ exports.handler = async function (event, context) {
       'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7'
     };
 
-    // Inject domain-specific headers to bypass hotlink protection
     try {
       const parsedUrl = new URL(targetUrl);
       if (parsedUrl.hostname.includes('sfr.net') || parsedUrl.hostname.includes('bfm')) {
@@ -62,7 +71,6 @@ exports.handler = async function (event, context) {
       }
     } catch (e) {}
 
-    // Forward Range header if provided by client for video scrubbing
     const clientRange = event.headers ? (event.headers.range || event.headers.Range) : null;
     if (clientRange) {
       reqHeaders['Range'] = clientRange;
@@ -71,18 +79,26 @@ exports.handler = async function (event, context) {
     let response = await fetchFn(targetUrl, {
       method: 'GET',
       redirect: 'follow',
-      headers: reqHeaders
+      headers: reqHeaders,
+      signal: controller.signal
     });
 
-    // Retry without Referer/Origin if forbidden
+    clearTimeout(timeoutId);
+
     if (!response.ok && (response.status === 403 || response.status === 400)) {
       delete reqHeaders['Referer'];
       delete reqHeaders['Origin'];
-      response = await fetchFn(targetUrl, {
-        method: 'GET',
-        redirect: 'follow',
-        headers: reqHeaders
-      });
+      const retryController = new AbortController();
+      const retryTimeout = setTimeout(() => retryController.abort(), 5000);
+      try {
+        response = await fetchFn(targetUrl, {
+          method: 'GET',
+          redirect: 'follow',
+          headers: reqHeaders,
+          signal: retryController.signal
+        });
+      } catch (e) {}
+      clearTimeout(retryTimeout);
     }
 
     if (!response.ok) {
@@ -101,7 +117,6 @@ exports.handler = async function (event, context) {
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Identify if target is text/manifest or binary media segment
     const isText = (contentType.includes('text') || 
                    contentType.includes('json') || 
                    contentType.includes('xml') || 
@@ -138,8 +153,9 @@ exports.handler = async function (event, context) {
       };
     }
   } catch (err) {
+    clearTimeout(timeoutId);
     return {
-      statusCode: 500,
+      statusCode: 502,
       headers: { "Access-Control-Allow-Origin": "*" },
       body: JSON.stringify({ error: "Erreur Proxy Node.js IPTV.js", details: err.message })
     };
