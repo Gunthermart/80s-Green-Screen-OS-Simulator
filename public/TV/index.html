@@ -2554,7 +2554,7 @@
               this.load = function(context, config, callbacks) {
                 let realUrl = context.url;
 
-                // 1. Extraire l'URL réelle si déjà proxifiée
+                // 1. Extraire l'URL réelle si déjà sous forme de proxy Netlify
                 if (realUrl.includes('/.netlify/functions/')) {
                   try {
                     const uObj = new URL(realUrl, window.location.origin);
@@ -2563,18 +2563,19 @@
                   } catch(e) {}
                 }
 
-                // 2. Détecter et corriger la résolution relative erronée sur notre domaine (leonce.fyi)
+                // 2. Si l'URL a été résolue par erreur sur notre domaine local
                 if (realUrl.startsWith(window.location.origin)) {
                   try {
                     const uObj = new URL(realUrl);
-                    const relativePath = uObj.pathname + uObj.search;
+                    let relativePath = uObj.pathname + uObj.search;
+                    relativePath = relativePath.replace(/^\/\.netlify\/functions\/(IPTV)?/i, '');
                     if (currentRealBaseUrl) {
                       realUrl = new URL(relativePath, currentRealBaseUrl).href;
                     }
                   } catch(e) {}
                 }
 
-                // 3. Si l'URL est un chemin relatif pur (ex: segment01.ts)
+                // 3. Si l'URL est un chemin relatif distant pur
                 if (!realUrl.startsWith('http://') && !realUrl.startsWith('https://')) {
                   if (currentRealBaseUrl) {
                     try {
@@ -2583,14 +2584,14 @@
                   }
                 }
 
-                // 4. Mettre à jour l'URL de base distante pour les sous-fragments
+                // 4. Mettre à jour l'URL de base distante active
                 if (realUrl.startsWith('http://') || realUrl.startsWith('https://')) {
                   if (!realUrl.startsWith(window.location.origin)) {
                     currentRealBaseUrl = realUrl;
                   }
                 }
 
-                // 5. Transmettre l'URL distante nettoyée au proxy Netlify IPTV.js
+                // 5. Encapsuler dans le proxy Netlify
                 if (realUrl.startsWith('http://') || realUrl.startsWith('https://')) {
                   if (!realUrl.startsWith(window.location.origin)) {
                     context.url = `/.netlify/functions/IPTV?url=${encodeURIComponent(realUrl)}`;
@@ -2598,6 +2599,17 @@
                     context.url = realUrl;
                   }
                 }
+
+                // 6. Indiquer à Hls.js la véritable URL distante pour la résolution des liens relatifs
+                const originalOnSuccess = callbacks.onSuccess;
+                callbacks.onSuccess = function(response, stats, context, networkDetails) {
+                  if (response) {
+                    response.url = realUrl;
+                  }
+                  if (originalOnSuccess) {
+                    originalOnSuccess(response, stats, context, networkDetails);
+                  }
+                };
 
                 originalLoad(context, config, callbacks);
               };
