@@ -34,7 +34,6 @@ export async function handler(event, context) {
   try {
     const fetchFn = typeof fetch !== 'undefined' ? fetch : globalThis.fetch;
 
-    // Injection dynamique des en-têtes (Referer / Origin) selon le diffuseur
     const reqHeaders = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
       'Accept': '*/*',
@@ -61,7 +60,6 @@ export async function handler(event, context) {
       }
     } catch (e) {}
 
-    // Transmission de l'en-tête Range si fourni par le client (support de la recherche vidéo)
     const clientRange = event.headers ? (event.headers.range || event.headers.Range) : null;
     if (clientRange) {
       reqHeaders['Range'] = clientRange;
@@ -95,7 +93,6 @@ export async function handler(event, context) {
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Exclusion explicite des fichiers .ts (segments vidéo MPEG-TS) pour forcer le binaire Base64
     const isText = (contentType.includes('text') || 
                    contentType.includes('json') || 
                    contentType.includes('xml') || 
