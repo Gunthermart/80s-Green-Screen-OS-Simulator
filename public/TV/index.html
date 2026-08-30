@@ -960,7 +960,7 @@
     <footer id="sticky-player">
       <div class="player-scrub-container">
         <span class="time-label" id="time-current">00:00</span>
-        <input type="range" class="scrub-slider" id="scrub-range" min="0" max="1" value="0">
+        <input type="range" class="scrub-slider" id="scrub-range" min="0" max="100" value="0">
         <span class="time-label right" id="time-duration">00:00</span>
       </div>
 
@@ -1018,12 +1018,6 @@
   </div>
 
   <script>
-    // Build Netlify serverless IPTV proxy endpoint URL
-    function getProxiedUrl(targetUrl) {
-      if (!targetUrl) return '';
-      return `/.netlify/functions/IPTV?url=${encodeURIComponent(targetUrl)}`;
-    }
-
     class FavoritesStore {
       constructor(onChange) {
         this.onChange = onChange;
@@ -1183,13 +1177,15 @@
           const controller = new AbortController();
           const timer = setTimeout(() => controller.abort(), 4000);
           
-          const rawApiUrl = 'https://api.pluto.tv/v0/channels?clientModelNumber=0.0.0&serverSideAds=true';
-          const apiUrl = getProxiedUrl(rawApiUrl);
+          let apiUrl = 'https://api.pluto.tv/v0/channels?clientModelNumber=0.0.0&serverSideAds=true';
+          if (window.location.hostname !== 'localhost') {
+            apiUrl = `/.netlify/functions/IPTV?url=${encodeURIComponent(apiUrl)}`;
+          }
 
-          const res = await fetch(apiUrl, { signal: controller.signal });
+          const res = await fetch(apiUrl, { signal: controller.signal }).catch(() => null);
           clearTimeout(timer);
 
-          if (res.ok) {
+          if (res && res.ok) {
             const data = await res.json();
             if (Array.isArray(data) && data.length > 0) {
               const parsed = [];
@@ -1379,13 +1375,11 @@
           const controller = new AbortController();
           const timer = setTimeout(() => controller.abort(), 3500);
           const countryParam = country === 'GLOBAL' ? '' : `bycountrycodeexact/${country.toLowerCase()}`;
-          const rawApiUrl = `https://de1.api.radio-browser.info/json/stations/${countryParam}?order=clickcount&reverse=true&limit=80`;
-          const apiUrl = getProxiedUrl(rawApiUrl);
-
-          const res = await fetch(apiUrl, { signal: controller.signal });
+          const apiUrl = `https://de1.api.radio-browser.info/json/stations/${countryParam}?order=clickcount&reverse=true&limit=80`;
+          const res = await fetch(apiUrl, { signal: controller.signal }).catch(() => null);
           clearTimeout(timer);
 
-          if (res.ok) {
+          if (res && res.ok) {
             const data = await res.json();
             const list = data
               .filter(st => st.url_resolved && (st.codec === 'MP3' || st.codec === 'AAC' || st.url_resolved.includes('.m3u8') || st.url_resolved.includes('.mp3')))
@@ -1435,21 +1429,20 @@
           humor: ['humour', 'comedy', 'séries', 'divertissement']
         };
 
-        const rawTargetUrl = country === 'GLOBAL' 
+        const targetUrl = country === 'GLOBAL' 
           ? `https://iptv-org.github.io/iptv/index.m3u`
           : `https://iptv-org.github.io/iptv/countries/${country.toLowerCase()}.m3u`;
 
-        const targetUrl = getProxiedUrl(rawTargetUrl);
         const backups = BACKUP_STATIONS.FR_TV || [];
         let fetchedList = [];
 
         try {
           const controller = new AbortController();
           const timer = setTimeout(() => controller.abort(), 4000);
-          const res = await fetch(targetUrl, { signal: controller.signal });
+          const res = await fetch(targetUrl, { signal: controller.signal }).catch(() => null);
           clearTimeout(timer);
 
-          if (res.ok) {
+          if (res && res.ok) {
             const text = await res.text();
             fetchedList = this.parseM3U(text, search, country);
           }
@@ -1482,12 +1475,10 @@
           term = genreTerms[genre] || genre;
         }
 
-        const rawUrl = `https://itunes.apple.com/search?media=podcast&entity=podcast&term=${encodeURIComponent(term)}&limit=50&country=${country.toLowerCase()}`;
-        const url = getProxiedUrl(rawUrl);
-
+        const url = `https://itunes.apple.com/search?media=podcast&entity=podcast&term=${encodeURIComponent(term)}&limit=50&country=${country.toLowerCase()}`;
         try {
-          const res = await fetch(url);
-          if (res.ok) {
+          const res = await fetch(url).catch(() => null);
+          if (res && res.ok) {
             const data = await res.json();
             return data.results.map(p => ({
               id: `pod_${p.collectionId}`,
@@ -1515,10 +1506,9 @@
         try {
           const controller = new AbortController();
           const timer = setTimeout(() => controller.abort(), 3500);
-          const proxiedUrl = getProxiedUrl(cleanFeedUrl);
-          const res = await fetch(proxiedUrl, { signal: controller.signal });
+          const res = await fetch(cleanFeedUrl, { signal: controller.signal }).catch(() => null);
           clearTimeout(timer);
-          if (res.ok) {
+          if (res && res.ok) {
             const text = await res.text();
             const episodes = this.parseRSSFeed(text);
             if (episodes && episodes.length > 0) return episodes;
@@ -1526,9 +1516,9 @@
         } catch(e) {}
 
         try {
-          const rss2jsonUrl = getProxiedUrl(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(cleanFeedUrl)}&count=30`);
-          const res = await fetch(rss2jsonUrl);
-          if (res.ok) {
+          const rss2jsonUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(cleanFeedUrl)}&count=30`;
+          const res = await fetch(rss2jsonUrl).catch(() => null);
+          if (res && res.ok) {
             const data = await res.json();
             if (data.status === 'ok' && Array.isArray(data.items) && data.items.length > 0) {
               const episodes = [];
@@ -1630,9 +1620,7 @@
         this.initAudioAnalyzer();
         try {
           this.initThreeJS();
-        } catch (e) {
-          console.warn('WebGL non supporté ou désactivé:', e);
-        }
+        } catch(e) {}
         this.resize();
         window.addEventListener('resize', () => this.resize());
         this.start();
@@ -1707,217 +1695,6 @@
         hyperGroup.add(this.starPoints);
         this.meshGroups['hyperdrive'] = hyperGroup;
 
-        const synthGroup = new THREE.Group();
-        const gridHelper = new THREE.GridHelper(200, 40, 0x06b6d4, 0x6366f1);
-        gridHelper.position.y = -20;
-        synthGroup.add(gridHelper);
-        const sunGeo = new THREE.CircleGeometry(16, 32);
-        const sunMat = new THREE.MeshBasicMaterial({ color: 0xef4444, wireframe: true });
-        const sunMesh = new THREE.Mesh(sunGeo, sunMat);
-        sunMesh.position.set(0, 5, -80);
-        synthGroup.add(sunMesh);
-        this.meshGroups['synthwave'] = synthGroup;
-
-        const vortexGroup = new THREE.Group();
-        const vortexGeo = new THREE.BufferGeometry();
-        const vortexCount = 1000;
-        const vPos = new Float32Array(vortexCount * 3);
-        for (let i = 0; i < vortexCount; i++) {
-          const angle = i * 0.1;
-          const r = 2 + i * 0.08;
-          vPos[i * 3] = Math.cos(angle) * r;
-          vPos[i * 3 + 1] = (Math.random() - 0.5) * 20;
-          vPos[i * 3 + 2] = Math.sin(angle) * r - 40;
-        }
-        vortexGeo.setAttribute('position', new THREE.BufferAttribute(vPos, 3));
-        const vortexMat = new THREE.PointsMaterial({ color: 0xec4899, size: 1.8, transparent: true });
-        this.vortexPoints = new THREE.Points(vortexGeo, vortexMat);
-        vortexGroup.add(this.vortexPoints);
-        this.meshGroups['vortex'] = vortexGroup;
-
-        const matrixGroup = new THREE.Group();
-        this.matrixCubes = [];
-        const cubeGeo = new THREE.BoxGeometry(2.5, 2.5, 2.5);
-        for (let x = -4; x <= 4; x++) {
-          for (let z = -2; z <= 2; z++) {
-            const cubeMat = new THREE.MeshBasicMaterial({ color: 0x10b981, wireframe: true });
-            const cube = new THREE.Mesh(cubeGeo, cubeMat);
-            cube.position.set(x * 4, -10, z * 4 - 20);
-            matrixGroup.add(cube);
-            this.matrixCubes.push(cube);
-          }
-        }
-        this.meshGroups['matrix'] = matrixGroup;
-
-        const tunnelGroup = new THREE.Group();
-        for (let i = 0; i < 25; i++) {
-            const ringGeo = new THREE.TorusGeometry(12, 0.15, 8, 64);
-            const ringMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4, wireframe: true });
-            const ring = new THREE.Mesh(ringGeo, ringMat);
-            ring.position.z = -i * 8;
-            tunnelGroup.add(ring);
-        }
-        this.meshGroups['neon_tunnel'] = tunnelGroup;
-
-        const bhGroup = new THREE.Group();
-        const bhCoreGeo = new THREE.SphereGeometry(6, 32, 32);
-        const bhCoreMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
-        const bhCore = new THREE.Mesh(bhCoreGeo, bhCoreMat);
-        bhGroup.add(bhCore);
-        const diskGeo = new THREE.BufferGeometry();
-        const diskCount = 2500;
-        const dPos = new Float32Array(diskCount * 3);
-        for(let i=0; i<diskCount; i++) {
-            const r = 7 + Math.random() * 20;
-            const theta = Math.random() * Math.PI * 2;
-            dPos[i*3] = r * Math.cos(theta);
-            dPos[i*3+1] = (Math.random()-0.5) * 0.8;
-            dPos[i*3+2] = r * Math.sin(theta);
-        }
-        diskGeo.setAttribute('position', new THREE.BufferAttribute(dPos, 3));
-        const diskMat = new THREE.PointsMaterial({ color: 0xf59e0b, size: 0.6, transparent: true, opacity: 0.8 });
-        this.bhDisk = new THREE.Points(diskGeo, diskMat);
-        bhGroup.add(this.bhDisk);
-        this.meshGroups['blackhole'] = bhGroup;
-
-        const dnaGroup = new THREE.Group();
-        const dnaGeo = new THREE.BufferGeometry();
-        const dnaCount = 200;
-        const dnaPos = new Float32Array(dnaCount * 3);
-        for(let i=0; i<dnaCount; i+=2) {
-            const y = (i - dnaCount/2) * 0.5;
-            const angle = i * 0.2;
-            dnaPos[i*3] = Math.cos(angle) * 6;
-            dnaPos[i*3+1] = y;
-            dnaPos[i*3+2] = Math.sin(angle) * 6;
-            dnaPos[(i+1)*3] = Math.cos(angle + Math.PI) * 6;
-            dnaPos[(i+1)*3+1] = y;
-            dnaPos[(i+1)*3+2] = Math.sin(angle + Math.PI) * 6;
-        }
-        dnaGeo.setAttribute('position', new THREE.BufferAttribute(dnaPos, 3));
-        const dnaMat = new THREE.PointsMaterial({ color: 0x10b981, size: 1.2 });
-        this.dnaPoints = new THREE.Points(dnaGeo, dnaMat);
-        dnaGroup.add(this.dnaPoints);
-        this.meshGroups['dna'] = dnaGroup;
-
-        const fwGroup = new THREE.Group();
-        const fwGeo = new THREE.BufferGeometry();
-        const fwCount = 1200;
-        const fwPos = new Float32Array(fwCount * 3);
-        this.fwVels = new Float32Array(fwCount * 3);
-        for(let i=0; i<fwCount; i++) {
-            const theta = Math.random() * Math.PI * 2;
-            const phi = Math.acos((Math.random() * 2) - 1);
-            const speed = Math.random() * 1.5;
-            this.fwVels[i*3] = Math.sin(phi) * Math.cos(theta) * speed;
-            this.fwVels[i*3+1] = Math.sin(phi) * Math.sin(theta) * speed;
-            this.fwVels[i*3+2] = Math.cos(phi) * speed;
-        }
-        fwGeo.setAttribute('position', new THREE.BufferAttribute(fwPos, 3));
-        const fwMat = new THREE.PointsMaterial({ color: 0xec4899, size: 1.2, transparent: true, opacity: 0.9 });
-        this.fwPoints = new THREE.Points(fwGeo, fwMat);
-        fwGroup.add(this.fwPoints);
-        this.meshGroups['fireworks'] = fwGroup;
-
-        const oceanGroup = new THREE.Group();
-        const oceanGeo = new THREE.PlaneGeometry(120, 80, 50, 40);
-        oceanGeo.rotateX(-Math.PI / 2);
-        const oceanMat = new THREE.MeshBasicMaterial({ color: 0x3b82f6, wireframe: true });
-        this.oceanMesh = new THREE.Mesh(oceanGeo, oceanMat);
-        this.oceanMesh.position.y = -12;
-        oceanGroup.add(this.oceanMesh);
-        this.meshGroups['ocean'] = oceanGroup;
-
-        const cityGroup = new THREE.Group();
-        this.cityBuildings = [];
-        for (let x = -6; x <= 6; x++) {
-          for (let z = -4; z <= 2; z++) {
-            if (Math.random() > 0.25) {
-              const h = 6 + Math.random() * 20;
-              const bGeo = new THREE.BoxGeometry(3.2, h, 3.2);
-              const color = (x + z) % 2 === 0 ? 0x6366f1 : 0x06b6d4;
-              const bMat = new THREE.MeshBasicMaterial({ color, wireframe: true });
-              const building = new THREE.Mesh(bGeo, bMat);
-              building.position.set(x * 6, h / 2 - 18, z * 7 - 12);
-              cityGroup.add(building);
-              this.cityBuildings.push({ mesh: building, baseHeight: h });
-            }
-          }
-        }
-        this.meshGroups['cybercity'] = cityGroup;
-
-        const sgGroup = new THREE.Group();
-        this.sgRings = [];
-        for (let r = 0; r < 5; r++) {
-          const rGeo = new THREE.TorusGeometry(8 + r * 3.5, 0.2, 16, 64);
-          const rMat = new THREE.MeshBasicMaterial({ color: r % 2 === 0 ? 0xa855f7 : 0x06b6d4, wireframe: true });
-          const ring = new THREE.Mesh(rGeo, rMat);
-          sgGroup.add(ring);
-          this.sgRings.push(ring);
-        }
-        const sgCoreGeo = new THREE.SphereGeometry(6, 32, 32);
-        const sgCoreMat = new THREE.MeshBasicMaterial({ color: 0x6366f1, wireframe: true });
-        this.sgCore = new THREE.Mesh(sgCoreGeo, sgCoreMat);
-        sgGroup.add(this.sgCore);
-        this.meshGroups['stargate'] = sgGroup;
-
-        const eclGroup = new THREE.Group();
-        const eclSunGeo = new THREE.SphereGeometry(10, 32, 32);
-        const eclSunMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
-        const eclSun = new THREE.Mesh(eclSunGeo, eclSunMat);
-        eclGroup.add(eclSun);
-
-        const coronaGeo = new THREE.BufferGeometry();
-        const cCount = 2000;
-        const cPos = new Float32Array(cCount * 3);
-        for (let i = 0; i < cCount; i++) {
-          const angle = Math.random() * Math.PI * 2;
-          const rad = 10.2 + Math.random() * 14;
-          cPos[i * 3] = Math.cos(angle) * rad;
-          cPos[i * 3 + 1] = Math.sin(angle) * rad;
-          cPos[i * 3 + 2] = (Math.random() - 0.5) * 4;
-        }
-        coronaGeo.setAttribute('position', new THREE.BufferAttribute(cPos, 3));
-        const coronaMat = new THREE.PointsMaterial({ color: 0xf59e0b, size: 1.1, transparent: true, opacity: 0.85 });
-        this.coronaPoints = new THREE.Points(coronaGeo, coronaMat);
-        eclGroup.add(this.coronaPoints);
-        this.meshGroups['eclipse'] = eclGroup;
-
-        const tessGroup = new THREE.Group();
-        const outerGeo = new THREE.BoxGeometry(16, 16, 16);
-        const outerMat = new THREE.MeshBasicMaterial({ color: 0xec4899, wireframe: true });
-        this.tessOuter = new THREE.Mesh(outerGeo, outerMat);
-        const innerGeo = new THREE.BoxGeometry(8, 8, 8);
-        const innerMat = new THREE.MeshBasicMaterial({ color: 0x10b981, wireframe: true });
-        this.tessInner = new THREE.Mesh(innerGeo, innerMat);
-        tessGroup.add(this.tessOuter);
-        tessGroup.add(this.tessInner);
-        this.meshGroups['tesseract'] = tessGroup;
-
-        const nebGroup = new THREE.Group();
-        const nebGeo = new THREE.BufferGeometry();
-        const nCount = 3000;
-        const nPos = new Float32Array(nCount * 3);
-        for (let i = 0; i < nCount; i++) {
-          const u = Math.random();
-          const theta = Math.random() * Math.PI * 2;
-          const phi = Math.acos(2 * u - 1);
-          const r = 4 + Math.random() * 26;
-          nPos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-          nPos[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
-          nPos[i * 3 + 2] = r * Math.cos(phi);
-        }
-        nebGeo.setAttribute('position', new THREE.BufferAttribute(nPos, 3));
-        const nebMat = new THREE.PointsMaterial({ color: 0xa855f7, size: 0.8, transparent: true, opacity: 0.75 });
-        this.nebPoints = new THREE.Points(nebGeo, nebMat);
-        nebGroup.add(this.nebPoints);
-
-        const pulsarGeo = new THREE.OctahedronGeometry(4, 2);
-        const pulsarMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4, wireframe: true });
-        this.pulsarMesh = new THREE.Mesh(pulsarGeo, pulsarMat);
-        nebGroup.add(this.pulsarMesh);
-        this.meshGroups['nebula'] = nebGroup;
-
         Object.values(this.meshGroups).forEach(g => {
           g.visible = false;
           this.scene.add(g);
@@ -1927,7 +1704,7 @@
 
       setPreset(preset) {
         this.preset = preset;
-        const is3D = ['hyperdrive', 'sphere', 'synthwave', 'vortex', 'matrix', 'neon_tunnel', 'blackhole', 'dna', 'fireworks', 'ocean', 'cybercity', 'stargate', 'eclipse', 'tesseract', 'nebula'].includes(preset);
+        const is3D = ['hyperdrive', 'sphere'].includes(preset);
         if (this.c2d) this.c2d.style.display = (!this.isRunning || is3D) ? 'none' : 'block';
         if (this.c3d) this.c3d.style.display = (!this.isRunning || !is3D) ? 'none' : 'block';
         this.update3DVisibility();
@@ -1967,161 +1744,32 @@
 
           if (this.c2d && this.c2d.style.display !== 'none' && w && h) {
             this.ctx2d.clearRect(0, 0, w, h);
+            const bars = 28;
+            const barW = (w / bars) - 4;
+            for (let i = 0; i < bars; i++) {
+              const fVal = freqs[i % freqs.length] / 255;
+              const bh = fVal * (h * 0.55) + 12;
+              const x = i * (barW + 4) + 2;
+              const y = h - bh;
 
-            if (this.preset === 'cyber') {
-              const bars = 28;
-              const barW = (w / bars) - 4;
-              for (let i = 0; i < bars; i++) {
-                const fVal = freqs[i % freqs.length] / 255;
-                const bh = fVal * (h * 0.55) + 12;
-                const x = i * (barW + 4) + 2;
-                const y = h - bh;
+              const grad = this.ctx2d.createLinearGradient(0, y, 0, h);
+              grad.addColorStop(0, '#a855f7');
+              grad.addColorStop(0.5, '#6366f1');
+              grad.addColorStop(1, '#06b6d4');
 
-                const grad = this.ctx2d.createLinearGradient(0, y, 0, h);
-                grad.addColorStop(0, '#a855f7');
-                grad.addColorStop(0.5, '#6366f1');
-                grad.addColorStop(1, '#06b6d4');
-
-                this.ctx2d.fillStyle = grad;
-                this.ctx2d.beginPath();
-                this.ctx2d.roundRect(x, y, barW, bh, [6, 6, 0, 0]);
-                this.ctx2d.fill();
-
-                this.ctx2d.fillStyle = '#67e8f9';
-                this.ctx2d.fillRect(x, y - 6, barW, 3);
-              }
-            } else if (this.preset === 'particles') {
-              const cx = w / 2;
-              const cy = h / 2;
-              const pCount = 24;
-              for (let i = 0; i < pCount; i++) {
-                const angle = (i / pCount) * Math.PI * 2 + (Date.now() * 0.001);
-                const r = 90 + (freqs[i % freqs.length] / 255) * 80;
-                const px = cx + Math.cos(angle) * r;
-                const py = cy + Math.sin(angle) * r;
-
-                this.ctx2d.fillStyle = i % 2 === 0 ? '#06b6d4' : '#a855f7';
-                this.ctx2d.beginPath();
-                this.ctx2d.arc(px, py, 4 + (freqs[i % freqs.length] / 255) * 6, 0, Math.PI * 2);
-                this.ctx2d.fill();
-              }
-            } else if (this.preset === 'aurora') {
-              const time = Date.now() * 0.002;
-              this.ctx2d.lineWidth = 4;
-              for (let j = 0; j < 3; j++) {
-                this.ctx2d.beginPath();
-                this.ctx2d.strokeStyle = j === 0 ? '#6366f1' : (j === 1 ? '#06b6d4' : '#a855f7');
-                for (let x = 0; x < w; x += 15) {
-                  const y = h / 2 + Math.sin(x * 0.01 + time + j) * 40 + Math.cos(x * 0.02 - time) * (bass * 0.3);
-                  if (x === 0) this.ctx2d.moveTo(x, y);
-                  else this.ctx2d.lineTo(x, y);
-                }
-                this.ctx2d.stroke();
-              }
+              this.ctx2d.fillStyle = grad;
+              this.ctx2d.beginPath();
+              this.ctx2d.roundRect(x, y, barW, bh, [6, 6, 0, 0]);
+              this.ctx2d.fill();
             }
           }
 
           if (this.scene && this.c3d && this.c3d.style.display !== 'none') {
-            if (this.preset === 'sphere' && this.sphereMesh) {
+            if (this.sphereMesh) {
               this.sphereMesh.rotation.y += 0.01;
-              this.sphereMesh.rotation.x += 0.005;
               const scale = 1 + (bass / 255) * 0.4;
               this.sphereMesh.scale.set(scale, scale, scale);
-              if (this.coreMesh) this.coreMesh.rotation.y -= 0.02;
-            } else if (this.preset === 'hyperdrive' && this.starPoints) {
-              const positions = this.starPoints.geometry.attributes.position.array;
-              const speed = 2 + (bass / 255) * 6;
-              for (let i = 2; i < positions.length; i += 3) {
-                positions[i] += speed;
-                if (positions[i] > 100) positions[i] = -500;
-              }
-              this.starPoints.geometry.attributes.position.needsUpdate = true;
-            } else if (this.preset === 'vortex' && this.vortexPoints) {
-              this.vortexPoints.rotation.z += 0.01 + (bass / 255) * 0.02;
-            } else if (this.preset === 'matrix' && this.matrixCubes) {
-              this.matrixCubes.forEach((cube, idx) => {
-                const fVal = freqs[idx % freqs.length] / 255;
-                cube.scale.y = 1 + fVal * 6;
-              });
-            } else if (this.preset === 'neon_tunnel' && this.meshGroups['neon_tunnel']) {
-              const group = this.meshGroups['neon_tunnel'];
-              const speed = 0.5 + (bass / 255) * 1.5;
-              group.children.forEach(ring => {
-                  ring.position.z += speed;
-                  if (ring.position.z > 10) ring.position.z -= 190;
-                  ring.scale.setScalar(1 + (bass / 255) * 0.2);
-              });
-            } else if (this.preset === 'blackhole' && this.bhDisk) {
-              this.meshGroups['blackhole'].rotation.y += 0.02 + (bass/255) * 0.05;
-              this.meshGroups['blackhole'].rotation.x = 0.2;
-              const positions = this.bhDisk.geometry.attributes.position.array;
-              for(let i = 1; i < positions.length; i += 3) {
-                  positions[i] = (Math.random() - 0.5) * (1 + (bass/255) * 4);
-              }
-              this.bhDisk.geometry.attributes.position.needsUpdate = true;
-            } else if (this.preset === 'dna' && this.meshGroups['dna']) {
-              this.meshGroups['dna'].rotation.y += 0.01 + (bass/255) * 0.02;
-              this.meshGroups['dna'].scale.setScalar(1 + (bass/255) * 0.3);
-            } else if (this.preset === 'fireworks' && this.fwPoints) {
-              const positions = this.fwPoints.geometry.attributes.position.array;
-              const speedMult = 0.2 + (bass/255) * 1.5;
-              for(let i = 0; i < positions.length; i += 3) {
-                  positions[i] += this.fwVels[i] * speedMult;
-                  positions[i+1] += this.fwVels[i+1] * speedMult;
-                  positions[i+2] += this.fwVels[i+2] * speedMult;
-                  if (Math.abs(positions[i]) > 80 || Math.abs(positions[i+1]) > 80 || Math.abs(positions[i+2]) > 80) {
-                      positions[i] = 0; positions[i+1] = 0; positions[i+2] = 0;
-                  }
-              }
-              this.fwPoints.geometry.attributes.position.needsUpdate = true;
-              this.meshGroups['fireworks'].rotation.y += 0.005;
-            } else if (this.preset === 'ocean' && this.oceanMesh) {
-              const time = Date.now() * 0.002;
-              const pos = this.oceanMesh.geometry.attributes.position;
-              for(let i = 0; i < pos.count; i++) {
-                  const u = i % 51;
-                  const v = Math.floor(i / 51);
-                  const wave = Math.sin(u * 0.4 + time) * Math.cos(v * 0.4 + time) * 2;
-                  pos.setZ(i, wave * (1 + (bass/255) * 2));
-              }
-              pos.needsUpdate = true;
-            } else if (this.preset === 'cybercity' && this.cityBuildings) {
-              this.cityBuildings.forEach((b, idx) => {
-                const fVal = freqs[idx % freqs.length] / 255;
-                const targetScaleY = 1 + fVal * 2.8;
-                b.mesh.scale.y += (targetScaleY - b.mesh.scale.y) * 0.15;
-              });
-              this.meshGroups['cybercity'].rotation.y += 0.003;
-            } else if (this.preset === 'stargate' && this.sgRings) {
-              this.sgRings.forEach((ring, idx) => {
-                const dir = idx % 2 === 0 ? 1 : -1;
-                ring.rotation.z += dir * (0.008 + (bass / 255) * 0.02);
-                ring.rotation.x += dir * 0.004;
-              });
-              if (this.sgCore) {
-                const scale = 1 + (bass / 255) * 0.5;
-                this.sgCore.scale.set(scale, scale, scale);
-                this.sgCore.rotation.y += 0.02;
-              }
-            } else if (this.preset === 'eclipse' && this.coronaPoints) {
-              this.meshGroups['eclipse'].rotation.z += 0.005;
-              const scale = 1 + (bass / 255) * 0.35;
-              this.coronaPoints.scale.set(scale, scale, scale);
-            } else if (this.preset === 'tesseract' && this.tessOuter && this.tessInner) {
-              this.tessOuter.rotation.x += 0.01 + (bass / 255) * 0.02;
-              this.tessOuter.rotation.y += 0.012;
-              this.tessInner.rotation.x -= 0.015;
-              this.tessInner.rotation.z += 0.02 + (bass / 255) * 0.03;
-              const scaleInner = 1 + (bass / 255) * 0.4;
-              this.tessInner.scale.setScalar(scaleInner);
-            } else if (this.preset === 'nebula' && this.nebPoints && this.pulsarMesh) {
-              this.nebPoints.rotation.y += 0.004 + (bass / 255) * 0.01;
-              this.pulsarMesh.rotation.x += 0.02;
-              this.pulsarMesh.rotation.y += 0.03;
-              const scale = 1 + (bass / 255) * 0.6;
-              this.pulsarMesh.scale.setScalar(scale);
             }
-
             this.renderer.render(this.scene, this.camera);
           }
         };
@@ -2414,18 +2062,13 @@
         this.episodesContainer.innerHTML = '';
         this.grid.innerHTML = '<div class="loader-container"><div class="spinner"></div><p>Chargement en cours...</p></div>';
 
-        try {
-          if (this.currentTab === 'radio') this.stations = await this.fetcher.getRadios(this.currentCountry, this.currentGenre, search);
-          else if (this.currentTab === 'tv') this.stations = await this.fetcher.getTV(this.currentCountry, this.currentGenre, search);
-          else if (this.currentTab === 'pluto') this.stations = await this.fetcher.getPlutoTV(search, this.currentGenre);
-          else if (this.currentTab === 'podcasts') this.stations = await this.fetcher.getPodcasts(search, this.currentGenre, this.currentCountry);
-          else if (this.currentTab === 'radio-fav') this.stations = this.favStore.getRadioFavs();
-          else if (this.currentTab === 'tv-fav') this.stations = this.favStore.getTvFavs();
-          else if (this.currentTab === 'podcast-subs') this.stations = this.subStore.getSubs();
-        } catch(err) {
-          console.warn("Erreur chargement catalogue, basculement secours:", err);
-          this.stations = BACKUP_STATIONS.FR_RADIO || [];
-        }
+        if (this.currentTab === 'radio') this.stations = await this.fetcher.getRadios(this.currentCountry, this.currentGenre, search);
+        else if (this.currentTab === 'tv') this.stations = await this.fetcher.getTV(this.currentCountry, this.currentGenre, search);
+        else if (this.currentTab === 'pluto') this.stations = await this.fetcher.getPlutoTV(search, this.currentGenre);
+        else if (this.currentTab === 'podcasts') this.stations = await this.fetcher.getPodcasts(search, this.currentGenre, this.currentCountry);
+        else if (this.currentTab === 'radio-fav') this.stations = this.favStore.getRadioFavs();
+        else if (this.currentTab === 'tv-fav') this.stations = this.favStore.getTvFavs();
+        else if (this.currentTab === 'podcast-subs') this.stations = this.subStore.getSubs();
 
         this.renderGrid();
       }
@@ -2653,7 +2296,7 @@
             load(context, config, callbacks) {
               let targetUrl = context.url;
 
-              // Unpack nested Netlify function proxy URL parameter if present
+              // Unpack Netlify proxy wrapper if nested
               if (targetUrl.includes('/.netlify/functions/IPTV')) {
                 try {
                   const uObj = new URL(targetUrl, window.location.origin);
@@ -2662,7 +2305,7 @@
                 } catch(e) {}
               }
 
-              // Resolve relative URL against remote origin base URL
+              // Resolve relative segment paths against real base domain
               if (targetUrl.startsWith(window.location.origin)) {
                 try {
                   const uObj = new URL(targetUrl);
@@ -2688,12 +2331,15 @@
                 }
               }
 
-              // Route all stream requests through Netlify Serverless IPTV Function
-              const shouldUseProxy = !context.isDirectRetry;
-              if (shouldUseProxy && (targetUrl.startsWith('http://') || targetUrl.startsWith('https://'))) {
-                context.url = getProxiedUrl(targetUrl);
-              } else if (context.isDirectRetry && (targetUrl.startsWith('http://') || targetUrl.startsWith('https://'))) {
-                context.url = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
+              // Smart Proxying: Try Direct HTTPS first for clean CORS-enabled streams.
+              // Force Proxy for HTTP (Mixed Content prevention) or known blocked domains (Pluto, BFM, SFR).
+              const isHttp = targetUrl.startsWith('http://');
+              const isBlockedDomain = targetUrl.includes('pluto.tv') || targetUrl.includes('stitch') || targetUrl.includes('sfr.net') || targetUrl.includes('bfm');
+              
+              const shouldUseProxy = (isHttp || isBlockedDomain || context.useProxy) && !context.isDirectRetry;
+
+              if (shouldUseProxy) {
+                context.url = `/.netlify/functions/IPTV?url=${encodeURIComponent(targetUrl)}`;
               } else {
                 context.url = targetUrl;
               }
@@ -2710,13 +2356,23 @@
 
               const originalOnError = callbacks.onError;
               callbacks.onError = (error, contextFunc, networkDetails) => {
-                if (!context.isDirectRetry && targetUrl && (targetUrl.startsWith('http://') || targetUrl.startsWith('https://'))) {
-                  context.isDirectRetry = true;
-                  context.url = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
+                // Smart Retry: If Direct failed, retry via Netlify IPTV Proxy.
+                // If Netlify IPTV Proxy failed, retry Direct.
+                if (!context.retryAttempted && targetUrl && (targetUrl.startsWith('http://') || targetUrl.startsWith('https://'))) {
+                  context.retryAttempted = true;
+                  if (shouldUseProxy) {
+                    context.isDirectRetry = true;
+                    context.useProxy = false;
+                    context.url = targetUrl;
+                  } else {
+                    context.useProxy = true;
+                    context.url = `/.netlify/functions/IPTV?url=${encodeURIComponent(targetUrl)}`;
+                  }
                   const retryLoader = new Hls.DefaultConfig.loader(config);
                   retryLoader.load(context, config, callbacks);
                   return;
                 }
+
                 if (originalOnError) {
                   originalOnError(error, contextFunc, networkDetails);
                 }
@@ -2774,7 +2430,7 @@
             }
           });
         } else {
-          this.media.src = getProxiedUrl(url);
+          this.media.src = url;
           this.media.play().catch(() => {});
         }
       }
