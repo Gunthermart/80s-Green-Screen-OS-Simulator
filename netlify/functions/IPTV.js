@@ -1,4 +1,4 @@
-export async function handler(event, context) {
+exports.handler = async function (event, context) {
   if (event.httpMethod === "OPTIONS") {
     return {
       statusCode: 200,
@@ -140,4 +140,4 @@ export async function handler(event, context) {
       body: JSON.stringify({ error: "Erreur Proxy Node.js IPTV.js", details: err.message })
     };
   }
-}
+};
