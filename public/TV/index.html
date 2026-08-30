@@ -1221,7 +1221,13 @@
         try {
           const controller = new AbortController();
           const timer = setTimeout(() => controller.abort(), 3500);
-          const res = await fetch(`https://api.pluto.tv/v2/channels`, { signal: controller.signal });
+          
+          let apiUrl = 'https://api.pluto.tv/v2/channels';
+          if (window.location.hostname !== 'localhost') {
+            apiUrl = `/.netlify/functions/IPTV?url=${encodeURIComponent(apiUrl)}`;
+          }
+
+          const res = await fetch(apiUrl, { signal: controller.signal });
           clearTimeout(timer);
 
           if (res.ok) {
@@ -2543,19 +2549,27 @@
               this.load = function(context, config, callbacks) {
                 let u = context.url;
                 
-                const netlifyProxyEndpoint = '/.netlify/functions/IPTV?url=';
-                
-                if (u.startsWith('https://corsproxy.io/') && !u.startsWith('https://corsproxy.io/?')) {
-                  const rawPath = u.replace('https://corsproxy.io/', '');
+                // Nettoyage si l'URL contenait corsproxy
+                if (u.includes('corsproxy.io/?')) {
+                  u = decodeURIComponent(u.split('corsproxy.io/?')[1]);
+                } else if (u.includes('corsproxy.io/')) {
+                  u = u.replace('https://corsproxy.io/', '');
+                }
+
+                // Resolution des chemins relatifs des fragments .ts
+                if (!u.startsWith('http://') && !u.startsWith('https://') && !u.startsWith('/.')) {
                   if (window.currentHlsTargetBase) {
                     try {
-                      const resolvedUrl = new URL(rawPath, window.currentHlsTargetBase).href;
-                      u = window.location.hostname.includes('netlify')
-                        ? `${netlifyProxyEndpoint}${encodeURIComponent(resolvedUrl)}`
-                        : `https://corsproxy.io/?${encodeURIComponent(resolvedUrl)}`;
+                      u = new URL(u, window.currentHlsTargetBase).href;
                     } catch(e) {}
                   }
                 }
+
+                // Redirection de Pluto TV et des flux soumis aux CORS vers la fonction Netlify IPTV.js
+                if (u.includes('pluto.tv') || u.includes('stitch') || (window.location.hostname !== 'localhost' && !u.startsWith(window.location.origin) && !u.startsWith('/.'))) {
+                  u = `/.netlify/functions/IPTV?url=${encodeURIComponent(u)}`;
+                }
+
                 context.url = u;
                 originalLoad(context, config, callbacks);
               };
@@ -2583,9 +2597,7 @@
                   case Hls.ErrorTypes.NETWORK_ERROR:
                     if (!attemptedProxy) {
                       attemptedProxy = true;
-                      const proxyUrl = window.location.hostname.includes('netlify') 
-                        ? `/.netlify/functions/IPTV?url=${encodeURIComponent(url)}`
-                        : `https://corsproxy.io/?${encodeURIComponent(url)}`;
+                      const proxyUrl = `/.netlify/functions/IPTV?url=${encodeURIComponent(url)}`;
                       startHls(proxyUrl);
                     } else {
                       this.hlsPlayer.startLoad();
