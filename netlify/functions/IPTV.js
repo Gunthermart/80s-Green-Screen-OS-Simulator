@@ -13,22 +13,23 @@ export async function handler(event, context) {
 
   let targetUrl = null;
 
-  // Extraction robuste du paramètre url
+  // Extraction robuste et complete du parametre url
   if (event.queryStringParameters && event.queryStringParameters.url) {
     targetUrl = event.queryStringParameters.url;
   } else if (event.rawQuery) {
-    const match = event.rawQuery.match(/(?:^|&)url=([^&]+)/);
-    if (match) {
-      targetUrl = decodeURIComponent(match[1]);
+    const raw = event.rawQuery;
+    const urlIdx = raw.indexOf('url=');
+    if (urlIdx !== -1) {
+      targetUrl = decodeURIComponent(raw.substring(urlIdx + 4));
     }
   }
 
-  // Protection contre les requêtes récursives et invalides
-  if (!targetUrl || targetUrl.startsWith('/') || targetUrl.includes('.netlify/functions')) {
+  // Protection contre les requetes recursives et invalides
+  if (!targetUrl || (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://'))) {
     return {
       statusCode: 400,
       headers: { "Access-Control-Allow-Origin": "*" },
-      body: JSON.stringify({ error: "Paramètre 'url' absent ou invalide." })
+      body: JSON.stringify({ error: "Paramètre 'url' absent ou invalide. L'URL doit commencer par http:// ou https://" })
     };
   }
 
@@ -37,7 +38,7 @@ export async function handler(event, context) {
     const response = await fetchFn(targetUrl, {
       method: 'GET',
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         'Accept': '*/*',
         'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7'
       }
