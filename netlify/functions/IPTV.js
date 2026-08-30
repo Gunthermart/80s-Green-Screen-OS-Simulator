@@ -34,7 +34,7 @@ export async function handler(event, context) {
   try {
     const fetchFn = typeof fetch !== 'undefined' ? fetch : globalThis.fetch;
 
-    // Injection dynamique des en-têtes (Referer / Origin) selon le diffuseur (BFM, SFR, Canal+)
+    // Injection dynamique des en-têtes (Referer / Origin) selon le diffuseur
     const reqHeaders = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
       'Accept': '*/*',
@@ -49,12 +49,23 @@ export async function handler(event, context) {
       } else if (parsedUrl.hostname.includes('canalplus')) {
         reqHeaders['Referer'] = 'https://www.canalplus.com/';
         reqHeaders['Origin'] = 'https://www.canalplus.com';
+      } else if (parsedUrl.hostname.includes('pluto.tv') || parsedUrl.hostname.includes('pluto')) {
+        reqHeaders['Referer'] = 'https://pluto.tv/';
+        reqHeaders['Origin'] = 'https://pluto.tv';
+      } else if (parsedUrl.hostname.includes('arte.tv')) {
+        reqHeaders['Referer'] = 'https://www.arte.tv/';
       } else if (parsedUrl.hostname.includes('france24')) {
         reqHeaders['Referer'] = 'https://www.france24.com/';
       } else {
         reqHeaders['Referer'] = `${parsedUrl.protocol}//${parsedUrl.hostname}/`;
       }
     } catch (e) {}
+
+    // Transmission de l'en-tête Range si fourni par le client (support de la recherche vidéo)
+    const clientRange = event.headers ? (event.headers.range || event.headers.Range) : null;
+    if (clientRange) {
+      reqHeaders['Range'] = clientRange;
+    }
 
     let response = await fetchFn(targetUrl, {
       method: 'GET',
@@ -84,12 +95,14 @@ export async function handler(event, context) {
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    const isText = contentType.includes('text') || 
+    // Exclusion explicite des fichiers .ts (segments vidéo MPEG-TS) pour forcer le binaire Base64
+    const isText = (contentType.includes('text') || 
                    contentType.includes('json') || 
                    contentType.includes('xml') || 
                    contentType.includes('mpegurl') || 
                    targetUrl.includes('.m3u8') || 
-                   targetUrl.includes('.json');
+                   targetUrl.includes('.json')) && 
+                   !targetUrl.includes('.ts');
 
     if (isText) {
       return {
