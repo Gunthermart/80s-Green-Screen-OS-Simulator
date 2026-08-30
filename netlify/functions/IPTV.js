@@ -37,7 +37,7 @@ export async function handler(event, context) {
     const fetchFn = typeof fetch !== 'undefined' ? fetch : globalThis.fetch;
 
     const reqHeaders = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
       'Accept': '*/*',
       'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7'
     };
@@ -73,7 +73,7 @@ export async function handler(event, context) {
       headers: reqHeaders
     });
 
-    if (!response.ok && response.status === 403) {
+    if (!response.ok && (response.status === 403 || response.status === 400)) {
       delete reqHeaders['Referer'];
       delete reqHeaders['Origin'];
       response = await fetchFn(targetUrl, {
@@ -86,7 +86,11 @@ export async function handler(event, context) {
     if (!response.ok) {
       return {
         statusCode: response.status,
-        headers: { "Access-Control-Allow-Origin": "*" },
+        headers: { 
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Headers": "Content-Type, Authorization, Range",
+          "Access-Control-Allow-Methods": "GET, OPTIONS"
+        },
         body: JSON.stringify({ error: `Erreur distante HTTP ${response.status}`, targetUrl })
       };
     }
