@@ -11,13 +11,24 @@ export async function handler(event, context) {
     };
   }
 
-  const targetUrl = event.queryStringParameters ? event.queryStringParameters.url : null;
+  let targetUrl = null;
 
-  if (!targetUrl) {
+  // Extraction robuste du paramètre url
+  if (event.queryStringParameters && event.queryStringParameters.url) {
+    targetUrl = event.queryStringParameters.url;
+  } else if (event.rawQuery) {
+    const match = event.rawQuery.match(/(?:^|&)url=([^&]+)/);
+    if (match) {
+      targetUrl = decodeURIComponent(match[1]);
+    }
+  }
+
+  // Protection contre les requêtes récursives et invalides
+  if (!targetUrl || targetUrl.startsWith('/') || targetUrl.includes('.netlify/functions')) {
     return {
       statusCode: 400,
       headers: { "Access-Control-Allow-Origin": "*" },
-      body: JSON.stringify({ error: "Paramètre 'url' manquant." })
+      body: JSON.stringify({ error: "Paramètre 'url' absent ou invalide." })
     };
   }
 
@@ -27,7 +38,8 @@ export async function handler(event, context) {
       method: 'GET',
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': '*/*'
+        'Accept': '*/*',
+        'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7'
       }
     });
 
