@@ -1584,27 +1584,37 @@
       }
 
       parseM3U(content, search = '', country = 'FR') {
-        const lines = content.split('\n');
+        const lines = content.split(/\r?\n/);
         const list = [];
         let item = null;
-        for (let rawLine of lines) {
-          const line = rawLine.trim();
+
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
+
           if (line.startsWith('#EXTINF:')) {
-            const name = (line.match(/,(.+)$/) || [])[1] || 'Chaîne TV';
-            const logo = (line.match(/tvg-logo="([^"]*)"/) || [])[1] || '';
-            const group = (line.match(/group-title="([^"]*)"/) || [])[1] || 'TV Direct';
+            const logoMatch = line.match(/tvg-logo="([^"]+)"/);
+            const logo = logoMatch ? logoMatch[1] : '';
+
+            const groupMatch = line.match(/group-title="([^"]+)"/);
+            const group = groupMatch ? groupMatch[1] : 'TV Direct';
+
+            const commaIdx = line.lastIndexOf(',');
+            let name = commaIdx !== -1 ? line.substring(commaIdx + 1).trim() : 'Chaîne TV';
+            name = name.replace(/\[.*?\]/g, '').trim();
+
             const cleanId = `tv_${name.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
             item = { id: cleanId, name, logo, country, tags: group, type: 'video' };
           } else if (line.startsWith('#EXTGRP:')) {
             if (item) item.tags = line.replace('#EXTGRP:', '').trim();
-          } else if (line && !line.startsWith('#') && item) {
+          } else if (!line.startsWith('#') && item) {
             item.url = line;
             if (!search || item.name.toLowerCase().includes(search.toLowerCase())) {
               list.push(item);
             }
             item = null;
           }
-          if (list.length >= 100) break;
+          if (list.length >= 120) break;
         }
         return list;
       }
@@ -1661,7 +1671,6 @@
 
       initThreeJS() {
         if (typeof THREE === 'undefined' || !this.c3d) return;
-
         try {
           this.scene = new THREE.Scene();
           this.camera = new THREE.PerspectiveCamera(60, 16 / 9, 0.1, 1000);
@@ -1913,9 +1922,7 @@
             this.scene.add(g);
           });
           this.update3DVisibility();
-        } catch(e) {
-          console.warn("Rendu 3D WebGL désactivé ou non supporté :", e);
-        }
+        } catch(e) { console.warn("WebGL non supporté", e); }
       }
 
       setPreset(preset) {
@@ -2634,6 +2641,12 @@
         this.media.muted = false;
         if (!this.media.volume || this.media.volume === 0) this.media.volume = 0.8;
 
+        // Automatically wrap insecure HTTP streams in HTTPS proxy to avoid Mixed Content errors
+        let initialUrl = url;
+        if (window.location.protocol === 'https:' && url.startsWith('http://')) {
+          initialUrl = `/.netlify/functions/IPTV?url=${encodeURIComponent(url)}`;
+        }
+
         const isHls = url.includes('.m3u8') || isVideo || url.includes('pluto.tv') || url.includes('stitch');
 
         if (isHls && typeof Hls !== 'undefined' && Hls.isSupported()) {
@@ -2687,6 +2700,8 @@
                 } else {
                   context.url = targetUrl;
                 }
+              } else if (context.isDirectRetry && (targetUrl.startsWith('http://') || targetUrl.startsWith('https://'))) {
+                context.url = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
               } else {
                 context.url = targetUrl;
               }
@@ -2705,7 +2720,7 @@
               callbacks.onError = (error, contextFunc, networkDetails) => {
                 if (!context.isDirectRetry && targetUrl && (targetUrl.startsWith('http://') || targetUrl.startsWith('https://'))) {
                   context.isDirectRetry = true;
-                  context.url = targetUrl;
+                  context.url = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
                   const retryLoader = new Hls.DefaultConfig.loader(config);
                   retryLoader.load(context, config, callbacks);
                   return;
@@ -2726,7 +2741,7 @@
             loader: CustomHlsLoader
           });
 
-          this.hlsPlayer.loadSource(url);
+          this.hlsPlayer.loadSource(initialUrl);
           this.hlsPlayer.attachMedia(this.media);
 
           this.hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -2767,7 +2782,7 @@
             }
           });
         } else {
-          this.media.src = url;
+          this.media.src = initialUrl;
           this.media.play().catch(() => {});
         }
       }
