@@ -17,9 +17,11 @@ export async function handler(event, context) {
     targetUrl = event.queryStringParameters.url;
   } else if (event.rawQuery) {
     const raw = event.rawQuery;
-    const urlIdx = raw.indexOf('url=');
-    if (urlIdx !== -1) {
-      targetUrl = decodeURIComponent(raw.substring(urlIdx + 4));
+    const match = raw.match(/(?:^|&)url=([^&]+)/);
+    if (match) {
+      targetUrl = decodeURIComponent(match[1]);
+    } else if (raw.startsWith('url=')) {
+      targetUrl = decodeURIComponent(raw.substring(4));
     }
   }
 
@@ -27,7 +29,7 @@ export async function handler(event, context) {
     return {
       statusCode: 400,
       headers: { "Access-Control-Allow-Origin": "*" },
-      body: JSON.stringify({ error: "Paramètre 'url' absent ou invalide. L'URL doit commencer par http:// ou https://" })
+      body: JSON.stringify({ error: "Paramètre 'url' absent ou invalide", received: targetUrl })
     };
   }
 
