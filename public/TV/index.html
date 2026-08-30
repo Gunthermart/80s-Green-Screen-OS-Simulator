@@ -2544,12 +2544,19 @@
               const originalLoad = this.load.bind(this);
               this.load = function(context, config, callbacks) {
                 let u = context.url;
+                
+                // Prise en charge prioritaire de la fonction Netlify IPTV.js
+                const netlifyProxyEndpoint = '/.netlify/functions/IPTV?url=';
+                
                 if (u.startsWith('https://corsproxy.io/') && !u.startsWith('https://corsproxy.io/?')) {
                   const rawPath = u.replace('https://corsproxy.io/', '');
                   if (window.currentHlsTargetBase) {
                     try {
                       const resolvedUrl = new URL(rawPath, window.currentHlsTargetBase).href;
-                      u = `https://corsproxy.io/?${encodeURIComponent(resolvedUrl)}`;
+                      // Utilise le proxy Netlify local ou le proxy public
+                      u = window.location.hostname.includes('netlify')
+                        ? `${netlifyProxyEndpoint}${encodeURIComponent(resolvedUrl)}`
+                        : `https://corsproxy.io/?${encodeURIComponent(resolvedUrl)}`;
                     } catch(e) {}
                   }
                 }
@@ -2580,7 +2587,10 @@
                   case Hls.ErrorTypes.NETWORK_ERROR:
                     if (!attemptedProxy) {
                       attemptedProxy = true;
-                      const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+                      // Bascule sur la fonction Netlify IPTV.js locale ou le fallback public
+                      const proxyUrl = window.location.hostname.includes('netlify') 
+                        ? `/.netlify/functions/IPTV?url=${encodeURIComponent(url)}`
+                        : `https://corsproxy.io/?${encodeURIComponent(url)}`;
                       startHls(proxyUrl);
                     } else {
                       this.hlsPlayer.startLoad();
@@ -2608,62 +2618,6 @@
         const s = this.stations[index];
         if (s) this.toggleFav(s);
       }
-
-      toggleFav(station) {
-        const added = this.favStore.toggle(station);
-        this.showToast(added ? `⭐ "${station.name}" ajouté aux favoris` : `Retiré des favoris`);
-        this.renderGrid();
-      }
-
-      updateBadgesUI() {
-        const radioBadge = document.getElementById('fav-radio-badge');
-        const tvBadge = document.getElementById('fav-tv-badge');
-        const subBadge = document.getElementById('sub-podcast-badge');
-
-        if (radioBadge) radioBadge.textContent = this.favStore.getRadioFavs().length;
-        if (tvBadge) tvBadge.textContent = this.favStore.getTvFavs().length;
-        if (subBadge) subBadge.textContent = this.subStore.getSubs().length;
-      }
-
-      renderQueueUI() {
-        const listEl = document.getElementById('queue-items-list');
-        const badgeEl = document.getElementById('queue-badge');
-        if (!listEl) return;
-
-        if (badgeEl) badgeEl.textContent = this.queue.queue.length;
-
-        if (this.queue.queue.length === 0) {
-          listEl.innerHTML = '<p style="color:var(--text-secondary); font-size:0.85rem;">Aucun épisode dans la file d\'attente.</p>';
-          return;
-        }
-
-        listEl.innerHTML = this.queue.queue.map((item, idx) => `
-          <div class="queue-item">
-            <div style="flex:1; overflow:hidden;">
-              <div style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${item.episode.title}</div>
-              <div style="font-size:0.75rem; color:var(--text-secondary);">${item.podcast?.name || 'Podcast'}</div>
-            </div>
-            <button class="btn-action-sm" onclick="app.queue.remove(${idx})">✕</button>
-          </div>
-        `).join('');
-      }
-
-      showToast(msg) {
-        const existing = document.querySelector('.toast-notification');
-        if (existing) existing.remove();
-
-        const toast = document.createElement('div');
-        toast.className = 'toast-notification';
-        toast.textContent = msg;
-        document.body.appendChild(toast);
-
-        setTimeout(() => toast.remove(), 2800);
-      }
-    }
-
-    window.addEventListener('DOMContentLoaded', () => {
-      window.app = new AppController();
-    });
   </script>
 </body>
 </html>
