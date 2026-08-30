@@ -206,10 +206,9 @@
       color: var(--text-secondary);
       cursor: pointer;
       transition: var(--transition-smooth);
+      white-space: nowrap;
+      flex-shrink: 0;
     }
-
-    .chip:hover { border-color: var(--border-focus); color: var(--text-primary); }
-    .chip.active { background: var(--accent-primary); color: #fff; border-color: var(--accent-primary); }
 
     .card-fav-btn {
       position: absolute;
@@ -487,9 +486,22 @@
 
     .cards-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
       gap: 16px;
     }
+
+    /* Backdrop Overlay pour le Sidebar Mobile */
+    #sidebar-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(4px);
+      z-index: 28;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    #sidebar-backdrop.open { display: block; opacity: 1; }
 
     .station-card {
       background: var(--bg-surface);
@@ -738,18 +750,40 @@
     @keyframes spin { to { transform: rotate(360deg); } }
 
     @media (max-width: 920px) {
-      #sidebar { position: absolute; top: 0; bottom: 0; left: 0; transform: translateX(-100%); }
+      #sidebar { position: fixed; top: 0; bottom: 0; left: 0; transform: translateX(-100%); width: 280px; max-width: 82vw; }
       #sidebar.open { transform: translateX(0); }
       .mobile-menu-btn { display: block; }
       .volume-group { display: none; }
-      #content-stage { padding: 16px 16px calc(var(--player-height) + 16px) 16px; }
-      .player-left, .player-right { width: auto; min-width: 0; }
+      #content-stage { padding: 12px 12px calc(var(--player-height) + 16px) 12px; }
+      .player-left { width: 150px; min-width: 0; }
+      .player-right { width: auto; min-width: 0; }
+      .player-controls { gap: 6px; }
+      .jump-btn { display: none; }
+    }
+
+    @media (max-width: 640px) {
+      :root { --player-height: 108px; }
+      .cards-grid { grid-template-columns: repeat(auto-fill, minmax(135px, 1fr)); gap: 10px; }
+      .station-card { padding: 8px; gap: 8px; }
+      .top-header { padding: 0 12px; gap: 10px; height: 60px; }
+      .search-box { max-width: 100%; }
+      .search-input { padding: 8px 12px 8px 36px; font-size: 0.82rem; }
+      .filter-chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
+      .filter-chips::-webkit-scrollbar { height: 2px; }
+      .video-viewport { max-height: 35vh; }
+      .podcast-header-detail { flex-direction: column; align-items: center; text-align: center; gap: 12px; }
+      .podcast-detail-cover { width: 90px; height: 90px; }
+      .btn-subscribe { align-self: center; }
+      #queue-drawer { width: 100%; right: -100%; top: 60px; }
+      .episode-item { padding: 10px; flex-direction: column; align-items: flex-start; gap: 8px; }
+      .episode-actions { width: 100%; justify-content: flex-end; }
     }
   </style>
 </head>
 <body>
 
   <div id="app-container">
+    <div id="sidebar-backdrop"></div>
     <aside id="sidebar">
       <div class="brand-section">
         <div class="brand-icon">
@@ -2152,14 +2186,30 @@
       }
 
       bindEvents() {
-        document.getElementById('mobile-toggle').onclick = () => this.sidebar.classList.toggle('open');
-        document.getElementById('tab-radio').onclick = () => this.switchTab('radio');
-        document.getElementById('tab-radio-fav').onclick = () => this.switchTab('radio-fav');
-        document.getElementById('tab-tv').onclick = () => this.switchTab('tv');
-        document.getElementById('tab-pluto').onclick = () => this.switchTab('pluto');
-        document.getElementById('tab-tv-fav').onclick = () => this.switchTab('tv-fav');
-        document.getElementById('tab-podcasts').onclick = () => this.switchTab('podcasts');
-        document.getElementById('tab-podcast-subs').onclick = () => this.switchTab('podcast-subs');
+        const backdrop = document.getElementById('sidebar-backdrop');
+        const closeSidebarMobile = () => {
+          this.sidebar.classList.remove('open');
+          if (backdrop) backdrop.classList.remove('open');
+        };
+
+        const toggleSidebarMobile = () => {
+          const isOpen = this.sidebar.classList.toggle('open');
+          if (backdrop) backdrop.classList.toggle('open', isOpen);
+        };
+
+        document.getElementById('mobile-toggle').onclick = toggleSidebarMobile;
+        if (backdrop) backdrop.onclick = closeSidebarMobile;
+
+        // Auto-fermeture du menu sur mobile lors de la sélection d'un onglet
+        ['radio', 'radio-fav', 'tv', 'pluto', 'tv-fav', 'podcasts', 'podcast-subs'].forEach(tabId => {
+          const el = document.getElementById(`tab-${tabId}`);
+          if (el) {
+            el.addEventListener('click', () => {
+              this.switchTab(tabId);
+              if (window.innerWidth <= 920) closeSidebarMobile();
+            });
+          }
+        });
 
         const animSelect = document.getElementById('anim-preset-select');
         if (animSelect) {
