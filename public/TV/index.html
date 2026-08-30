@@ -2595,70 +2595,69 @@
           class CustomHlsLoader extends Hls.DefaultConfig.loader {
             constructor(config) {
               super(config);
-              const originalLoad = this.load.bind(this);
+            }
 
-              this.load = function(context, config, callbacks) {
-                let targetUrl = context.url;
+            load(context, config, callbacks) {
+              let targetUrl = context.url;
 
-                // 1. Extract target URL cleanly if already in Netlify proxy format
-                if (targetUrl.includes('/.netlify/functions/')) {
-                  try {
-                    const uObj = new URL(targetUrl, window.location.origin);
-                    const extracted = uObj.searchParams.get('url');
-                    if (extracted) targetUrl = extracted;
-                  } catch(e) {}
-                }
+              // 1. Nettoyage si déjà encapsulé dans le proxy Netlify
+              if (targetUrl.includes('/.netlify/functions/IPTV')) {
+                try {
+                  const uObj = new URL(targetUrl, window.location.origin);
+                  const extracted = uObj.searchParams.get('url');
+                  if (extracted) targetUrl = extracted;
+                } catch(e) {}
+              }
 
-                // 2. If URL was resolved by Hls.js to local origin erroneously
-                if (targetUrl.startsWith(window.location.origin)) {
-                  try {
-                    const uObj = new URL(targetUrl);
-                    let relativePath = uObj.pathname + uObj.search;
-                    relativePath = relativePath.replace(/^\/\.netlify\/functions\/(IPTV)?/i, '');
-                    if (currentRealBaseUrl) {
-                      targetUrl = new URL(relativePath, currentRealBaseUrl).href;
-                    }
-                  } catch(e) {}
-                }
-
-                // 3. If targetUrl is relative
-                if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+              // 2. Si l'URL a été résolue par erreur sur l'origine locale
+              if (targetUrl.startsWith(window.location.origin)) {
+                try {
+                  const uObj = new URL(targetUrl);
+                  let relativePath = uObj.pathname + uObj.search;
+                  relativePath = relativePath.replace(/^\/\.netlify\/functions\/(IPTV)?/i, '');
                   if (currentRealBaseUrl) {
-                    try {
-                      targetUrl = new URL(targetUrl, currentRealBaseUrl).href;
-                    } catch(e) {}
+                    targetUrl = new URL(relativePath, currentRealBaseUrl).href;
                   }
+                } catch(e) {}
+              }
+
+              // 3. Traitement des URLs relatives
+              if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+                if (currentRealBaseUrl) {
+                  try {
+                    targetUrl = new URL(targetUrl, currentRealBaseUrl).href;
+                  } catch(e) {}
                 }
+              }
 
-                // 4. Update real base URL tracker
-                if (targetUrl.startsWith('http://') || targetUrl.startsWith('https://')) {
-                  if (!targetUrl.startsWith(window.location.origin)) {
-                    currentRealBaseUrl = targetUrl;
-                  }
+              // 4. Mémorisation de l'URL d'origine distante réelle
+              if (targetUrl.startsWith('http://') || targetUrl.startsWith('https://')) {
+                if (!targetUrl.startsWith(window.location.origin)) {
+                  currentRealBaseUrl = targetUrl;
                 }
+              }
 
-                // 5. Wrap in Netlify proxy for CORS bypass
-                if (targetUrl.startsWith('http://') || targetUrl.startsWith('https://')) {
-                  if (!targetUrl.startsWith(window.location.origin)) {
-                    context.url = `/.netlify/functions/IPTV?url=${encodeURIComponent(targetUrl)}`;
-                  } else {
-                    context.url = targetUrl;
-                  }
+              // 5. Encapsulation dans le proxy Netlify
+              if (targetUrl.startsWith('http://') || targetUrl.startsWith('https://')) {
+                if (!targetUrl.startsWith(window.location.origin)) {
+                  context.url = `/.netlify/functions/IPTV?url=${encodeURIComponent(targetUrl)}`;
+                } else {
+                  context.url = targetUrl;
                 }
+              }
 
-                // 6. Set response.url in onSuccess so Hls.js resolves sub-playlists correctly
-                const originalOnSuccess = callbacks.onSuccess;
-                callbacks.onSuccess = function(response, stats, context, networkDetails) {
-                  if (response) {
-                    response.url = targetUrl;
-                  }
-                  if (originalOnSuccess) {
-                    originalOnSuccess(response, stats, context, networkDetails);
-                  }
-                };
-
-                originalLoad(context, config, callbacks);
+              // 6. Injection de l'URL cible d'origine dans la réponse HLS
+              const originalOnSuccess = callbacks.onSuccess;
+              callbacks.onSuccess = (response, stats, contextFunc, networkDetails) => {
+                if (response) {
+                  response.url = targetUrl;
+                }
+                if (originalOnSuccess) {
+                  originalOnSuccess(response, stats, contextFunc, networkDetails);
+                }
               };
+
+              super.load(context, config, callbacks);
             }
           }
 
@@ -2673,22 +2672,41 @@
           this.hlsPlayer.attachMedia(this.media);
 
           this.hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
+            this.hlsRetryCount = 0;
             this.media.play().catch(() => {});
           });
 
+          // Compteur et temporisateur anti-crash (évite la récursion infinie synchrone)
+          this.hlsRetryCount = 0;
           this.hlsPlayer.on(Hls.Events.ERROR, (event, data) => {
             if (data.fatal) {
-              switch (data.type) {
-                case Hls.ErrorTypes.NETWORK_ERROR:
-                  this.hlsPlayer.startLoad();
-                  break;
-                case Hls.ErrorTypes.MEDIA_ERROR:
-                  this.hlsPlayer.recoverMediaError();
-                  break;
-                default:
+              this.hlsRetryCount = (this.hlsRetryCount || 0) + 1;
+              
+              if (this.hlsRetryCount > 3) {
+                console.warn('Nombre maximal de tentatives HLS atteint pour ce flux.');
+                if (this.hlsPlayer) {
                   this.hlsPlayer.destroy();
-                  break;
+                  this.hlsPlayer = null;
+                }
+                this.showToast('⚠️ Impossible de charger ce flux (Signal Indisponible)');
+                return;
               }
+
+              setTimeout(() => {
+                if (!this.hlsPlayer) return;
+                switch (data.type) {
+                  case Hls.ErrorTypes.NETWORK_ERROR:
+                    this.hlsPlayer.startLoad();
+                    break;
+                  case Hls.ErrorTypes.MEDIA_ERROR:
+                    this.hlsPlayer.recoverMediaError();
+                    break;
+                  default:
+                    this.hlsPlayer.destroy();
+                    this.hlsPlayer = null;
+                    break;
+                }
+              }, 1000);
             }
           });
         } else {
