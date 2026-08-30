@@ -2692,7 +2692,9 @@
                 if (!context.isDirectRetry && targetUrl && (targetUrl.startsWith('http://') || targetUrl.startsWith('https://'))) {
                   context.isDirectRetry = true;
                   context.url = targetUrl;
-                  super.load(context, config, callbacks);
+                  // Instanciation d'un nouveau loader propre pour éviter "Loader can only be used once"
+                  const retryLoader = new Hls.DefaultConfig.loader(config);
+                  retryLoader.load(context, config, callbacks);
                   return;
                 }
                 if (originalOnError) {
@@ -2705,127 +2707,4 @@
           }
 
           this.hlsPlayer = new Hls({
-            enableWorker: true,
-            lowLatencyMode: true,
-            backBufferLength: 90,
-            loader: CustomHlsLoader
-          });
-
-          this.hlsPlayer.loadSource(url);
-          this.hlsPlayer.attachMedia(this.media);
-
-          this.hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
-            this.hlsRetryCount = 0;
-            this.media.play().catch(() => {});
-          });
-
-          this.hlsRetryCount = 0;
-          this.hlsPlayer.on(Hls.Events.ERROR, (event, data) => {
-            if (data.fatal) {
-              this.hlsRetryCount = (this.hlsRetryCount || 0) + 1;
-              
-              if (this.hlsRetryCount > 3) {
-                console.warn('Nombre maximal de tentatives HLS atteint pour ce flux.');
-                if (this.hlsPlayer) {
-                  this.hlsPlayer.destroy();
-                  this.hlsPlayer = null;
-                }
-                this.showToast('⚠️ Impossible de charger ce flux (Signal Indisponible)');
-                return;
-              }
-
-              setTimeout(() => {
-                if (!this.hlsPlayer) return;
-                switch (data.type) {
-                  case Hls.ErrorTypes.NETWORK_ERROR:
-                    this.hlsPlayer.startLoad();
-                    break;
-                  case Hls.ErrorTypes.MEDIA_ERROR:
-                    this.hlsPlayer.recoverMediaError();
-                    break;
-                  default:
-                    this.hlsPlayer.destroy();
-                    this.hlsPlayer = null;
-                    break;
-                }
-              }, 1000);
-            }
-          });
-        } else {
-          this.media.src = url;
-          this.media.play().catch(() => {});
-        }
-      }
-
-      toggleFavByCard(index) {
-        const s = this.stations[index];
-        if (s) this.toggleFav(s);
-      }
-
-      toggleFav(station) {
-        if (!station) return;
-        const added = this.favStore.toggle(station);
-        this.showToast(added ? `❤️ Ajouté aux favoris` : `Retiré des favoris`);
-        this.updateBadgesUI();
-        if (this.currentTab === 'radio-fav' || this.currentTab === 'tv-fav') {
-          this.loadCatalog();
-        } else {
-          this.renderGrid();
-        }
-      }
-
-      updateBadgesUI() {
-        const radioFavCount = document.getElementById('fav-radio-badge');
-        if (radioFavCount) radioFavCount.textContent = this.favStore.getRadioFavs().length;
-
-        const tvFavCount = document.getElementById('fav-tv-badge');
-        if (tvFavCount) tvFavCount.textContent = this.favStore.getTvFavs().length;
-
-        const subCount = document.getElementById('sub-podcast-badge');
-        if (subCount) subCount.textContent = this.subStore.getSubs().length;
-
-        const queueCount = document.getElementById('queue-badge');
-        if (queueCount) queueCount.textContent = this.queue.queue.length;
-      }
-
-      showToast(message) {
-        const existing = document.querySelector('.toast-notification');
-        if (existing) existing.remove();
-
-        const toast = document.createElement('div');
-        toast.className = 'toast-notification';
-        toast.innerHTML = `<span>${message}</span>`;
-        document.body.appendChild(toast);
-
-        setTimeout(() => {
-          toast.style.opacity = '0';
-          toast.style.transition = 'opacity 0.3s ease';
-          setTimeout(() => toast.remove(), 300);
-        }, 2500);
-      }
-
-      renderQueueUI() {
-        const queueContainer = document.getElementById('queue-items-list');
-        if (!queueContainer) return;
-
-        if (!this.queue.queue.length) {
-          queueContainer.innerHTML = `<p style="color:var(--text-secondary); font-size:0.85rem;">Aucun épisode dans la file d'attente.</p>`;
-          return;
-        }
-
-        queueContainer.innerHTML = this.queue.queue.map((item, idx) => `
-          <div class="queue-item">
-            <div style="flex:1; overflow:hidden;">
-              <div style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${item.episode.title}</div>
-              <div style="font-size:0.75rem; color:var(--text-secondary);">${item.podcast ? item.podcast.name : ''}</div>
-            </div>
-            <button class="btn-action-sm" onclick="app.queue.remove(${idx})">❌</button>
-          </div>
-        `).join('');
-      }
-    }
-
-    window.app = new AppController();
-  </script>
-</body>
-</html>
+<!-- ... existing code -->
