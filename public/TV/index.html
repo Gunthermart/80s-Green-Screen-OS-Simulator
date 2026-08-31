@@ -3,13 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OmniStream — Live Radio, TV, Pluto TV & Podcasts Pro</title>
+  <title>OmniStream — Live Radio, TV & Podcasts Pro</title>
   
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Hls.js CDN for HLS M3U8 video streaming -->
+  <!-- Hls.js pour la lecture des flux video et audio HLS M3U8 -->
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.8/dist/hls.min.js"></script>
-  <!-- Three.js CDN for WebGL 3D animations -->
+  <!-- Three.js pour le rendu des animations WebGL 3D -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
   <style>
@@ -31,7 +29,6 @@
       --accent-podcast: #a855f7;
       --accent-live: #ef4444;
       --accent-green: #10b981;
-      --pluto-yellow: #fff000;
 
       --sidebar-width: 280px;
       --player-height: 104px;
@@ -60,6 +57,8 @@
       display: flex;
       overflow: hidden;
     }
+
+    body.hide-cursor { cursor: none !important; }
 
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
@@ -115,7 +114,7 @@
     }
 
     .brand-section {
-      padding: 18px 20px;
+      padding: 20px;
       display: flex;
       align-items: center;
       gap: 12px;
@@ -210,9 +209,10 @@
       color: #fff;
     }
 
-    .card-fav-btn, .card-fs-btn {
+    .card-fav-btn {
       position: absolute;
       top: 8px;
+      right: 8px;
       z-index: 6;
       width: 30px;
       height: 30px;
@@ -227,14 +227,71 @@
       cursor: pointer;
       transition: var(--transition-smooth);
     }
-    .card-fav-btn { right: 8px; }
-    .card-fs-btn { left: 8px; }
 
-    .card-fav-btn:hover { transform: scale(1.12); color: #ef4444; background: rgba(16, 19, 30, 0.95); }
-    .card-fav-btn.is-fav { color: #ef4444; background: rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.5); }
+    .card-fav-btn:hover {
+      transform: scale(1.12);
+      color: #ef4444;
+      background: rgba(16, 19, 30, 0.95);
+    }
+
+    .card-fav-btn.is-fav {
+      color: #ef4444;
+      background: rgba(239, 68, 68, 0.2);
+      border-color: rgba(239, 68, 68, 0.5);
+    }
     .card-fav-btn.is-fav svg { fill: #ef4444; stroke: #ef4444; }
 
-    .card-fs-btn:hover { transform: scale(1.12); color: var(--accent-cyan); background: rgba(16, 19, 30, 0.95); border-color: var(--accent-cyan); }
+    .card-fs-btn {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      z-index: 6;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: rgba(16, 19, 30, 0.8);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border-glass);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: var(--transition-smooth);
+      opacity: 0.85;
+    }
+
+    .card-fs-btn:hover {
+      transform: scale(1.12);
+      color: var(--accent-cyan);
+      background: rgba(16, 19, 30, 0.95);
+      border-color: var(--accent-cyan);
+      opacity: 1;
+    }
+
+    .toast-notification {
+      position: fixed;
+      bottom: calc(var(--player-height) + 16px);
+      right: 24px;
+      background: rgba(17, 20, 32, 0.95);
+      border: 1px solid var(--border-glass);
+      color: var(--text-primary);
+      padding: 10px 18px;
+      border-radius: var(--radius-full);
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.85rem;
+      z-index: 100;
+      backdrop-filter: blur(12px);
+      animation: toastIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateY(12px) scale(0.95); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
 
     #main-wrapper {
       flex: 1;
@@ -319,6 +376,7 @@
       top: 0;
       z-index: 25;
       box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.8), var(--shadow-glow);
+      backdrop-filter: blur(16px);
     }
 
     #theater-stage.active { display: block; }
@@ -328,6 +386,9 @@
       border-radius: 0 !important;
       border: none !important;
     }
+
+    .hud-element { transition: opacity 0.5s ease, transform 0.5s ease; }
+    body.hide-hud .hud-element { opacity: 0 !important; pointer-events: none !important; }
 
     .stage-hud-top {
       position: absolute;
@@ -384,7 +445,6 @@
       height: 100vh !important;
     }
 
-    /* Video element is positioned to remain present in DOM */
     video#unified-media {
       width: 100%;
       height: 100%;
@@ -825,15 +885,6 @@
         </div>
 
         <div class="header-actions">
-          <!-- Sleep timer -->
-          <select id="sleep-timer-select" class="btn-header-action" style="outline:none; cursor:pointer;" title="Minuteur de veille">
-            <option value="0">⏱️ Veille: Off</option>
-            <option value="15">⏱️ 15 min</option>
-            <option value="30">⏱️ 30 min</option>
-            <option value="45">⏱️ 45 min</option>
-            <option value="60">⏱️ 60 min</option>
-          </select>
-
           <button class="btn-header-action" id="btn-toggle-queue" title="Ouvrir la file d'attente">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
             <span>File d'Attente</span>
@@ -881,7 +932,6 @@
           <div class="video-viewport" id="video-viewport-wrapper">
             <canvas id="visualizer-canvas-3d" class="canvas-layer"></canvas>
             <canvas id="visualizer-canvas-2d" class="canvas-layer"></canvas>
-            <!-- Unified video tag kept active in DOM -->
             <video id="unified-media" playsinline></video>
 
             <div id="audio-overlay" class="audio-visualizer-overlay hud-element">
@@ -1075,8 +1125,8 @@
         this.queue = [];
         this.onQueueChange = onQueueChange;
       }
-      add(item) {
-        this.queue.push(item);
+      add(episode, podcast) {
+        this.queue.push({ episode, podcast });
         if (this.onQueueChange) this.onQueueChange();
       }
       remove(index) {
@@ -1094,135 +1144,90 @@
 
     class PlutoTVService {
       constructor() {
-        this.CLIENT_ID = '66203479-e7ce-4aae-a529-1a29f76e5b9e';
-        this.APP_NAME = 'web';
-        this.APP_VERSION = '8.0.0-3b1029147d33d8a1';
-        this.BOOT_URL = 'https://boot.pluto.tv/v4/start';
-        this.CHANNELS_URL = 'https://api.pluto.tv/v2/channels';
-        this.STITCHER_BASE = 'https://cfd-v4-service-channel-stitcher-use1-1.prd.pluto.tv/v2/stitch/hls/channel';
-        this.sessionToken = null;
-        this.initBootSession();
+        this.deviceId = this.getDeviceId();
       }
 
-      async initBootSession() {
-        const bootParams = new URLSearchParams({
-          appName: this.APP_NAME,
-          appVersion: this.APP_VERSION,
-          deviceVersion: '124.0.0',
-          deviceModel: 'web',
-          deviceMake: 'Chrome',
-          deviceType: 'web',
-          clientID: this.CLIENT_ID,
-          deviceLat: '0',
-          deviceLon: '0',
-          deviceDNT: '0',
-          sid: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : '66203479-e7ce-4aae-a529-1a29f76e5b9e'
+      getDeviceId() {
+        let id = localStorage.getItem('omni_pluto_device_id');
+        if (!id) {
+          id = this.getUUID();
+          localStorage.setItem('omni_pluto_device_id', id);
+        }
+        return id;
+      }
+
+      getUUID() {
+        if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+          return crypto.randomUUID();
+        }
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+          let r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+          return v.toString(16);
         });
-
-        let targetUrl = `${this.BOOT_URL}?${bootParams.toString()}`;
-        if (window.location.hostname !== 'localhost') {
-          targetUrl = `/.netlify/functions/IPTV?url=${encodeURIComponent(targetUrl)}`;
-        }
-
-        try {
-          const res = await fetch(targetUrl);
-          if (res.ok) {
-            const data = await res.json();
-            this.sessionToken = data.sessionToken || data.sessionTokenJWT || null;
-          }
-        } catch (e) {
-          console.warn('Pluto TV Boot Session fallback actif');
-        }
       }
 
-      buildPlutoStreamUrl(rawStreamUrl, channelId) {
-        if (channelId) {
-          const params = new URLSearchParams({
-            deviceMake: 'Chrome',
-            deviceModel: 'web',
-            deviceType: 'web',
-            deviceVersion: 'unknown',
-            embedPartner: 'web',
-            appName: 'web',
-            appVersion: 'unknown',
-            clientID: this.CLIENT_ID,
-            clientModelNumber: 'unknown',
-            serverSideAds: 'true'
-          });
-
-          if (this.sessionToken) {
-            params.append('jwt', this.sessionToken);
-            params.append('masterJWTPassthrough', 'true');
-          }
-
-          return `${this.STITCHER_BASE}/${channelId}/master.m3u8?${params.toString()}`;
-        }
-
+      buildPlutoStreamUrl(rawStreamUrl) {
         if (!rawStreamUrl) return '';
-        const sid = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : '66203479-e7ce-4aae-a529-1a29f76e5b9e';
+        const sid = this.getUUID();
         const separator = rawStreamUrl.includes('?') ? '&' : '?';
-        let full = `${rawStreamUrl}${separator}sid=${sid}&clientID=${this.CLIENT_ID}&deviceType=web&deviceMake=Chrome&deviceModel=web&deviceVersion=1.0.0`;
-        if (this.sessionToken) full += `&jwt=${this.sessionToken}`;
-        return full;
+        return `${rawStreamUrl}${separator}sid=${sid}&deviceType=web&deviceMake=Chrome&deviceModel=web&deviceVersion=1.0.0`;
       }
 
       async getPlutoChannels(search = '', genre = 'all') {
         try {
-          let apiUrl = 'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/fr_pluto.m3u';
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 4000);
+          
+          let apiUrl = 'https://api.pluto.tv/v0/channels?clientModelNumber=0.0.0&serverSideAds=true';
           if (window.location.hostname !== 'localhost') {
             apiUrl = `/.netlify/functions/IPTV?url=${encodeURIComponent(apiUrl)}`;
           }
 
-          const res = await fetch(apiUrl);
+          const res = await fetch(apiUrl, { signal: controller.signal });
+          clearTimeout(timer);
+
           if (res.ok) {
-            const text = await res.text();
-            const channels = this.parseM3UPluto(text);
-            if (channels.length > 0) {
-              return channels.filter(ch => {
+            const data = await res.json();
+            if (Array.isArray(data) && data.length > 0) {
+              const parsed = [];
+              data.forEach(ch => {
+                if (ch.isLive !== false) {
+                  let rawStreamUrl = '';
+                  if (ch.stitched && ch.stitched.urls && ch.stitched.urls[0] && ch.stitched.urls[0].url) {
+                    rawStreamUrl = ch.stitched.urls[0].url;
+                  }
+
+                  const logo = ch.colorLogoPNG?.path || ch.featuredImage?.path || `https://images.pluto.tv/channels/${ch._id}/colorLogoPNG.png`;
+
+                  parsed.push({
+                    id: `pluto_${ch._id}`,
+                    rawId: ch._id,
+                    rawStreamUrl: rawStreamUrl,
+                    name: ch.name,
+                    url: rawStreamUrl,
+                    logo: logo,
+                    country: 'FR',
+                    tags: ch.category || 'Pluto TV 24/7',
+                    type: 'video',
+                    category: ch.category ? ch.category.toLowerCase() : 'all'
+                  });
+                }
+              });
+
+              const filtered = parsed.filter(ch => {
                 const matchSearch = !search || ch.name.toLowerCase().includes(search.toLowerCase()) || ch.tags.toLowerCase().includes(search.toLowerCase());
                 const matchGenre = genre === 'all' || ch.category.includes(genre.toLowerCase()) || ch.tags.toLowerCase().includes(genre.toLowerCase());
                 return matchSearch && matchGenre;
               });
+
+              if (filtered.length > 0) return filtered;
             }
           }
         } catch (e) {
-          console.warn("Pluto TV M3U fallback actif", e);
+          console.warn("Pluto TV API v0 fallback actif", e);
         }
 
         return this.getBackupPlutoChannels(search, genre);
-      }
-
-      parseM3UPluto(content) {
-        const lines = content.split('\n');
-        const list = [];
-        let item = null;
-        for (let rawLine of lines) {
-          const line = rawLine.trim();
-          if (line.startsWith('#EXTINF:')) {
-            const name = (line.match(/,(.+)$/) || [])[1] || 'Pluto TV';
-            const logo = (line.match(/tvg-logo="([^"]*)"/) || [])[1] || '';
-            const group = (line.match(/group-title="([^"]*)"/) || [])[1] || 'Pluto TV 24/7';
-            const idMatch = line.match(/tvg-id="([^"]*)"/);
-            const rawId = idMatch ? idMatch[1] : name.toLowerCase().replace(/[^a-z0-9]/g, '');
-
-            item = {
-              id: `pluto_${rawId}`,
-              rawId: rawId,
-              name: name,
-              logo: logo,
-              country: 'FR',
-              tags: group,
-              type: 'video',
-              category: group.toLowerCase()
-            };
-          } else if (line && !line.startsWith('#') && item) {
-            item.url = line;
-            item.rawStreamUrl = line;
-            list.push(item);
-            item = null;
-          }
-        }
-        return list;
       }
 
       getBackupPlutoChannels(search = '', genre = 'all') {
@@ -1233,7 +1238,9 @@
           { id: 'pluto_southpark', rawId: '5fa016c68e37600007cdbf83', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5fa016c68e37600007cdbf83/master.m3u8', name: 'South Park 24/7', logo: 'https://images.pluto.tv/channels/5fa016c68e37600007cdbf83/colorLogoPNG.png', country: 'FR', tags: 'Séries, Humour', type: 'video', category: 'humor' },
           { id: 'pluto_anime', rawId: '5fa0165c8e37600007cdbf6e', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5fa0165c8e37600007cdbf6e/master.m3u8', name: 'Pluto TV Anime', logo: 'https://images.pluto.tv/channels/5fa0165c8e37600007cdbf6e/colorLogoPNG.png', country: 'FR', tags: 'Animation, Manga', type: 'video', category: 'culture' },
           { id: 'pluto_crime', rawId: '5d8b89cfc4e3d300096967be', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5d8b89cfc4e3d300096967be/master.m3u8', name: 'Pluto TV Crime', logo: 'https://images.pluto.tv/channels/5d8b89cfc4e3d300096967be/colorLogoPNG.png', country: 'FR', tags: 'True Crime, Investigation', type: 'video', category: 'crime' },
-          { id: 'pluto_scifi', rawId: '5fa0168b8e37600007cdbf78', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5fa0168b8e37600007cdbf78/master.m3u8', name: 'Pluto TV Sci-Fi', logo: 'https://images.pluto.tv/channels/5fa0168b8e37600007cdbf78/colorLogoPNG.png', country: 'FR', tags: 'Science-Fiction, Tech', type: 'video', category: 'science' }
+          { id: 'pluto_scifi', rawId: '5fa0168b8e37600007cdbf78', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5fa0168b8e37600007cdbf78/master.m3u8', name: 'Pluto TV Sci-Fi', logo: 'https://images.pluto.tv/channels/5fa0168b8e37600007cdbf78/colorLogoPNG.png', country: 'FR', tags: 'Science-Fiction, Tech', type: 'video', category: 'science' },
+          { id: 'pluto_docs', rawId: '5e34360a8274020009a2caed', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5e34360a8274020009a2caed/master.m3u8', name: 'Pluto TV Documentaires', logo: 'https://images.pluto.tv/channels/5e34360a8274020009a2caed/colorLogoPNG.png', country: 'FR', tags: 'Histoire, Science, Culture', type: 'video', category: 'science' },
+          { id: 'pluto_comedy', rawId: '5fa015fb8e37600007cdbf5c', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5fa015fb8e37600007cdbf5c/master.m3u8', name: 'Pluto TV Comédie', logo: 'https://images.pluto.tv/channels/5fa015fb8e37600007cdbf5c/colorLogoPNG.png', country: 'FR', tags: 'Humour, Comédie', type: 'video', category: 'humor' }
         ];
         return backupPluto.filter(ch => {
           const matchSearch = !search || ch.name.toLowerCase().includes(search.toLowerCase()) || ch.tags.toLowerCase().includes(search.toLowerCase());
@@ -1249,6 +1256,7 @@
         this.badgeText = badgeTextEl;
         this.badgeContainer = badgeContainerEl;
         this.lastTime = 0;
+        this.lastDecodedFrames = 0;
         this.stuckCounter = 0;
         this.timer = null;
         this.initListeners();
@@ -1283,6 +1291,17 @@
           const isStuck = (currTime === this.lastTime && currTime > 0);
           this.lastTime = currTime;
 
+          let fpsStr = '';
+          if (typeof this.media.getVideoPlaybackQuality === 'function') {
+            const q = this.media.getVideoPlaybackQuality();
+            const decoded = q.totalVideoFrames || 0;
+            const diff = decoded - this.lastDecodedFrames;
+            this.lastDecodedFrames = decoded;
+            if (diff > 0) {
+              fpsStr = ` (${diff} FPS)`;
+            }
+          }
+
           if (isStuck) {
             this.stuckCounter++;
             if (this.stuckCounter >= 3) {
@@ -1292,7 +1311,7 @@
             }
           } else {
             this.stuckCounter = 0;
-            this.setStatus('active', 'FLUX ACTIF 🟢');
+            this.setStatus('active', `FLUX ACTIF 🟢${fpsStr}`);
           }
         }, 1000);
       }
@@ -1343,7 +1362,8 @@
         { id: 'tv_lci', name: 'LCI Info Direct', url: 'https://lci-hls-live.tf1.fr/live/hls/lci/index.m3u8', logo: 'https://upload.wikimedia.org/wikipedia/commons/0/04/LCI_logo_2017.svg', country: 'FR', tags: 'News, Info', type: 'video' },
         { id: 'tv_tv5monde', name: 'TV5Monde Info', url: 'https://ott.tv5monde.com/Content/HLS/Live/channel(info)/stream.m3u8', logo: 'https://upload.wikimedia.org/wikipedia/commons/4/4b/TV5Monde_logo.svg', country: 'FR', tags: 'Culture, News, Francophonie', type: 'video' },
         { id: 'tv_euronews', name: 'Euronews Français', url: 'https://euronews-euronews-french-1-fr.samsung.wurl.tv/playlist.m3u8', logo: 'https://upload.wikimedia.org/wikipedia/commons/0/02/Euronews_2016_logo.svg', country: 'FR', tags: 'News, Europe, Info', type: 'video' },
-        { id: 'tv_kto', name: 'KTO TV Direct', url: 'https://ktotv.akamaized.net/hls/live/2033507/ktotv/index.m3u8', logo: 'https://upload.wikimedia.org/wikipedia/commons/b/b5/Logo_KTO.svg', country: 'FR', tags: 'Culture, Histoire', type: 'video' }
+        { id: 'tv_kto', name: 'KTO TV Direct', url: 'https://ktotv.akamaized.net/hls/live/2033507/ktotv/index.m3u8', logo: 'https://upload.wikimedia.org/wikipedia/commons/b/b5/Logo_KTO.svg', country: 'FR', tags: 'Culture, Histoire', type: 'video' },
+        { id: 'tv_cgtn', name: 'CGTN Français', url: 'https://news.cgtn.com/resource/live/french/cgtn-french.m3u8', logo: 'https://upload.wikimedia.org/wikipedia/commons/a/a2/CGTN_logo.svg', country: 'FR', tags: 'News, Culture', type: 'video' }
       ]
     };
 
@@ -1422,20 +1442,32 @@
       }
 
       async getTV(country = 'FR', genre = 'all', search = '') {
+        const genreKeywords = {
+          news: ['news', 'info', 'actualité', 'journal', 'information', 'débat'],
+          science: ['science', 'tech', 'documentaire', 'savoir', 'nature'],
+          crime: ['crime', 'investigation', 'polar', 'police'],
+          culture: ['culture', 'art', 'musique', 'histoire', 'cinema', 'film'],
+          humor: ['humour', 'comedy', 'séries', 'divertissement']
+        };
+
+        const targetUrl = country === 'GLOBAL' 
+          ? `https://iptv-org.github.io/iptv/index.m3u`
+          : `https://iptv-org.github.io/iptv/countries/${country.toLowerCase()}.m3u`;
+
         const backups = BACKUP_STATIONS.FR_TV || [];
         let fetchedList = [];
 
         try {
-          let bfmUrl = 'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/fr_bfm.m3u';
-          if (window.location.hostname !== 'localhost') {
-            bfmUrl = `/.netlify/functions/IPTV?url=${encodeURIComponent(bfmUrl)}`;
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 4000);
+          const res = await fetch(targetUrl, { signal: controller.signal });
+          clearTimeout(timer);
+
+          if (res.ok) {
+            const text = await res.text();
+            fetchedList = this.parseM3U(text, search, country);
           }
-          const resBfm = await fetch(bfmUrl);
-          if (resBfm.ok) {
-            const text = await resBfm.text();
-            fetchedList = [...fetchedList, ...this.parseM3U(text, search, country)];
-          }
-        } catch (e) {}
+        } catch (e) { console.warn('IPTV M3U fallback actif', e); }
 
         const combined = [...backups, ...fetchedList];
         const uniqueMap = new Map();
@@ -1446,7 +1478,14 @@
         });
 
         return Array.from(uniqueMap.values()).filter(st => {
-          return !search || st.name.toLowerCase().includes(search.toLowerCase()) || st.tags.toLowerCase().includes(search.toLowerCase());
+          const matchSearch = !search || st.name.toLowerCase().includes(search.toLowerCase()) || st.tags.toLowerCase().includes(search.toLowerCase());
+          let matchGenre = (genre === 'all');
+          if (!matchGenre && genreKeywords[genre]) {
+            const tagLower = st.tags.toLowerCase();
+            const nameLower = st.name.toLowerCase();
+            matchGenre = genreKeywords[genre].some(k => tagLower.includes(k) || nameLower.includes(k));
+          }
+          return matchSearch && matchGenre;
         });
       }
 
@@ -1486,6 +1525,18 @@
         }
 
         try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 3500);
+          const res = await fetch(cleanFeedUrl, { signal: controller.signal });
+          clearTimeout(timer);
+          if (res.ok) {
+            const text = await res.text();
+            const episodes = this.parseRSSFeed(text);
+            if (episodes && episodes.length > 0) return episodes;
+          }
+        } catch(e) {}
+
+        try {
           const rss2jsonUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(cleanFeedUrl)}&count=30`;
           const res = await fetch(rss2jsonUrl);
           if (res.ok) {
@@ -1494,6 +1545,10 @@
               const episodes = [];
               data.items.forEach((item, idx) => {
                 let audioUrl = item.enclosure?.link || item.enclosure?.url;
+                if (!audioUrl && typeof item.description === 'string') {
+                  const m = item.description.match(/https?:\/\/[^\s"'<>]+\.(?:mp3|m4a|aac|ogg|wav)(\?[^\s"'<>]*)?/i);
+                  if (m) audioUrl = m[0];
+                }
                 if (audioUrl) {
                   episodes.push({
                     id: `ep_${idx}_${(item.title || '').replace(/[^a-z0-9]/gi, '')}`,
@@ -1512,6 +1567,41 @@
         return [];
       }
 
+      parseRSSFeed(xmlText) {
+        if (!xmlText) return [];
+        const episodes = [];
+        const itemMatches = xmlText.match(/<(?:item|entry)[\s\S]*?<\/(?:item|entry)>/gi) || [];
+        
+        itemMatches.slice(0, 30).forEach((itemXml, idx) => {
+          let title = `Épisode ${idx + 1}`;
+          const titleMatch = itemXml.match(/<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i);
+          if (titleMatch && titleMatch[1]) {
+            title = titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim();
+          }
+
+          let audioUrl = null;
+          const encMatch = itemXml.match(/<enclosure[^>]*url=["']([^"']+)["']/i);
+          if (encMatch) audioUrl = encMatch[1];
+
+          if (!audioUrl) {
+            const mediaMatch = itemXml.match(/<media:content[^>]*url=["']([^"']+)["']/i);
+            if (mediaMatch) audioUrl = mediaMatch[1];
+          }
+
+          if (audioUrl) {
+            episodes.push({
+              id: `ep_${idx}_${title.replace(/[^a-z0-9]/gi, '')}`,
+              title,
+              url: audioUrl,
+              pubDate: '',
+              type: 'audio'
+            });
+          }
+        });
+
+        return episodes;
+      }
+
       parseM3U(content, search = '', country = 'FR') {
         const lines = content.split('\n');
         const list = [];
@@ -1524,6 +1614,8 @@
             const group = (line.match(/group-title="([^"]*)"/) || [])[1] || 'TV Direct';
             const cleanId = `tv_${name.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
             item = { id: cleanId, name, logo, country, tags: group, type: 'video' };
+          } else if (line.startsWith('#EXTGRP:')) {
+            if (item) item.tags = line.replace('#EXTGRP:', '').trim();
           } else if (line && !line.startsWith('#') && item) {
             item.url = line;
             if (!search || item.name.toLowerCase().includes(search.toLowerCase())) {
@@ -1531,6 +1623,7 @@
             }
             item = null;
           }
+          if (list.length >= 100) break;
         }
         return list;
       }
@@ -1546,10 +1639,15 @@
         this.isRunning = false;
         this.animFrameId = null;
 
+        this.initAudioAnalyzer();
         this.initThreeJS();
         this.resize();
         window.addEventListener('resize', () => this.resize());
         this.start();
+      }
+
+      initAudioAnalyzer() {
+        this.analyser = null;
       }
 
       getFrequencyData() {
@@ -1594,23 +1692,20 @@
 
           this.meshGroups = {};
 
-          // Helper builder to instantiate all 15 3D WebGL preset scenes
-          const createGroup = (name) => {
-            const g = new THREE.Group();
-            this.meshGroups[name] = g;
-            this.scene.add(g);
-            return g;
-          };
-
           // 1. Sphere
-          const gSphere = createGroup('sphere');
+          const sphereGroup = new THREE.Group();
           const sphereGeo = new THREE.IcosahedronGeometry(14, 2);
           const sphereMat = new THREE.MeshBasicMaterial({ color: 0x6366f1, wireframe: true, transparent: true, opacity: 0.85 });
           this.sphereMesh = new THREE.Mesh(sphereGeo, sphereMat);
-          gSphere.add(this.sphereMesh);
+          sphereGroup.add(this.sphereMesh);
+          const coreGeo = new THREE.SphereGeometry(6, 16, 16);
+          const coreMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4, wireframe: true });
+          this.coreMesh = new THREE.Mesh(coreGeo, coreMat);
+          sphereGroup.add(this.coreMesh);
+          this.meshGroups['sphere'] = sphereGroup;
 
           // 2. Hyperdrive
-          const gHyper = createGroup('hyperdrive');
+          const hyperGroup = new THREE.Group();
           const starGeo = new THREE.BufferGeometry();
           const starCount = 800;
           const starPos = new Float32Array(starCount * 3);
@@ -1622,125 +1717,199 @@
           starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
           const starMat = new THREE.PointsMaterial({ color: 0xa855f7, size: 2.2, transparent: true, opacity: 0.9 });
           this.starPoints = new THREE.Points(starGeo, starMat);
-          gHyper.add(this.starPoints);
+          hyperGroup.add(this.starPoints);
+          this.meshGroups['hyperdrive'] = hyperGroup;
 
           // 3. Synthwave
-          const gSynth = createGroup('synthwave');
+          const synthGroup = new THREE.Group();
           const gridHelper = new THREE.GridHelper(200, 40, 0x06b6d4, 0x6366f1);
           gridHelper.position.y = -20;
-          gSynth.add(gridHelper);
+          synthGroup.add(gridHelper);
+          const sunGeo = new THREE.CircleGeometry(16, 32);
+          const sunMat = new THREE.MeshBasicMaterial({ color: 0xef4444, wireframe: true });
+          const sunMesh = new THREE.Mesh(sunGeo, sunMat);
+          sunMesh.position.set(0, 5, -80);
+          synthGroup.add(sunMesh);
+          this.meshGroups['synthwave'] = synthGroup;
 
           // 4. Vortex
-          const gVortex = createGroup('vortex');
-          const vortexGeo = new THREE.TorusGeometry(18, 5, 16, 100);
-          const vortexMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4, wireframe: true });
-          this.vortexMesh = new THREE.Mesh(vortexGeo, vortexMat);
-          gVortex.add(this.vortexMesh);
+          const vortexGroup = new THREE.Group();
+          const vortexGeo = new THREE.BufferGeometry();
+          const vortexCount = 600;
+          const vortexPos = new Float32Array(vortexCount * 3);
+          for (let i = 0; i < vortexCount; i++) {
+            const angle = i * 0.1;
+            const r = i * 0.15;
+            vortexPos[i * 3] = Math.cos(angle) * r;
+            vortexPos[i * 3 + 1] = (Math.random() - 0.5) * 40;
+            vortexPos[i * 3 + 2] = Math.sin(angle) * r - 50;
+          }
+          vortexGeo.setAttribute('position', new THREE.BufferAttribute(vortexPos, 3));
+          const vortexMat = new THREE.PointsMaterial({ color: 0x06b6d4, size: 2.5, transparent: true, opacity: 0.8 });
+          this.vortexPoints = new THREE.Points(vortexGeo, vortexMat);
+          vortexGroup.add(this.vortexPoints);
+          this.meshGroups['vortex'] = vortexGroup;
 
           // 5. Matrix
-          const gMatrix = createGroup('matrix');
-          const matrixGeo = new THREE.BoxGeometry(2, 2, 2);
-          const matrixMat = new THREE.MeshBasicMaterial({ color: 0x10b981, wireframe: true });
+          const matrixGroup = new THREE.Group();
           this.matrixCubes = [];
-          for (let i = 0; i < 30; i++) {
-            const m = new THREE.Mesh(matrixGeo, matrixMat);
-            m.position.set((Math.random() - 0.5) * 60, (Math.random() - 0.5) * 60, (Math.random() - 0.5) * 60);
-            gMatrix.add(m);
-            this.matrixCubes.push(m);
+          for (let x = -3; x <= 3; x++) {
+            for (let y = -2; y <= 2; y++) {
+              const cubeGeo = new THREE.BoxGeometry(3, 3, 3);
+              const cubeMat = new THREE.MeshBasicMaterial({ color: 0x10b981, wireframe: true });
+              const cube = new THREE.Mesh(cubeGeo, cubeMat);
+              cube.position.set(x * 8, y * 8, 0);
+              matrixGroup.add(cube);
+              this.matrixCubes.push(cube);
+            }
           }
+          this.meshGroups['matrix'] = matrixGroup;
 
           // 6. Neon Tunnel
-          const gTunnel = createGroup('neon_tunnel');
+          const tunnelGroup = new THREE.Group();
           this.tunnelRings = [];
-          for (let i = 0; i < 12; i++) {
-            const rGeo = new THREE.TorusGeometry(12, 0.4, 8, 40);
-            const rMat = new THREE.MeshBasicMaterial({ color: (i % 2 === 0) ? 0x6366f1 : 0xa855f7 });
-            const r = new THREE.Mesh(rGeo, rMat);
-            r.position.z = -i * 12;
-            gTunnel.add(r);
-            this.tunnelRings.push(r);
+          for (let i = 0; i < 15; i++) {
+            const ringGeo = new THREE.TorusGeometry(12, 0.4, 8, 24);
+            const ringMat = new THREE.MeshBasicMaterial({ color: i % 2 === 0 ? 0x6366f1 : 0xa855f7, wireframe: true });
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            ring.position.z = -i * 15;
+            tunnelGroup.add(ring);
+            this.tunnelRings.push(ring);
           }
+          this.meshGroups['neon_tunnel'] = tunnelGroup;
 
-          // 7. Blackhole
-          const gBlackhole = createGroup('blackhole');
-          const bhCenter = new THREE.Mesh(new THREE.SphereGeometry(8, 32, 32), new THREE.MeshBasicMaterial({ color: 0x000000 }));
-          const bhDisk = new THREE.Mesh(new THREE.TorusGeometry(16, 3, 2, 60), new THREE.MeshBasicMaterial({ color: 0xf59e0b, wireframe: true }));
-          gBlackhole.add(bhCenter);
-          gBlackhole.add(bhDisk);
-          this.bhDisk = bhDisk;
+          // 7. Black Hole
+          const bhGroup = new THREE.Group();
+          const bhCenterGeo = new THREE.SphereGeometry(8, 32, 32);
+          const bhCenterMat = new THREE.MeshBasicMaterial({ color: 0x050505 });
+          const bhCenter = new THREE.Mesh(bhCenterGeo, bhCenterMat);
+          bhGroup.add(bhCenter);
+          const diskGeo = new THREE.RingGeometry(10, 24, 32);
+          const diskMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b, side: THREE.DoubleSide, wireframe: true });
+          this.bhDisk = new THREE.Mesh(diskGeo, diskMat);
+          this.bhDisk.rotation.x = Math.PI / 3;
+          bhGroup.add(this.bhDisk);
+          this.meshGroups['blackhole'] = bhGroup;
 
-          // 8. DNA Double Helix
-          const gDna = createGroup('dna');
-          this.dnaSpheres = [];
-          for (let i = 0; i < 40; i++) {
-            const y = (i - 20) * 1.5;
-            const a = i * 0.3;
-            const s1 = new THREE.Mesh(new THREE.SphereGeometry(0.8, 8, 8), new THREE.MeshBasicMaterial({ color: 0x06b6d4 }));
-            const s2 = new THREE.Mesh(new THREE.SphereGeometry(0.8, 8, 8), new THREE.MeshBasicMaterial({ color: 0xa855f7 }));
-            s1.position.set(Math.sin(a) * 8, y, Math.cos(a) * 8);
-            s2.position.set(Math.sin(a + Math.PI) * 8, y, Math.cos(a + Math.PI) * 8);
-            gDna.add(s1); gDna.add(s2);
-            this.dnaSpheres.push({ s1, s2, a, y });
+          // 8. DNA
+          const dnaGroup = new THREE.Group();
+          this.dnaNodes = [];
+          for (let i = -15; i <= 15; i++) {
+            const y = i * 2;
+            const a1 = i * 0.3;
+            const a2 = a1 + Math.PI;
+
+            const n1 = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 8), new THREE.MeshBasicMaterial({ color: 0x06b6d4 }));
+            n1.position.set(Math.cos(a1) * 8, y, Math.sin(a1) * 8);
+            dnaGroup.add(n1);
+
+            const n2 = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 8), new THREE.MeshBasicMaterial({ color: 0xef4444 }));
+            n2.position.set(Math.cos(a2) * 8, y, Math.sin(a2) * 8);
+            dnaGroup.add(n2);
+
+            this.dnaNodes.push({ n1, n2, baseAngle: a1, y });
           }
+          this.meshGroups['dna'] = dnaGroup;
 
           // 9. Fireworks
-          const gFireworks = createGroup('fireworks');
+          const fwGroup = new THREE.Group();
+          const fwCount = 400;
+          const fwPos = new Float32Array(fwCount * 3);
+          this.fwVel = [];
+          for (let i = 0; i < fwCount; i++) {
+            fwPos[i * 3] = 0;
+            fwPos[i * 3 + 1] = 0;
+            fwPos[i * 3 + 2] = 0;
+            const theta = Math.random() * Math.PI * 2;
+            const phi = Math.random() * Math.PI;
+            const speed = 0.5 + Math.random() * 1.5;
+            this.fwVel.push({
+              x: Math.sin(phi) * Math.cos(theta) * speed,
+              y: Math.sin(phi) * Math.sin(theta) * speed,
+              z: Math.cos(phi) * speed
+            });
+          }
           const fwGeo = new THREE.BufferGeometry();
-          const fwPos = new Float32Array(500 * 3);
-          for (let i = 0; i < 500 * 3; i++) fwPos[i] = (Math.random() - 0.5) * 40;
           fwGeo.setAttribute('position', new THREE.BufferAttribute(fwPos, 3));
-          this.fwPoints = new THREE.Points(fwGeo, new THREE.PointsMaterial({ color: 0xef4444, size: 1.8 }));
-          gFireworks.add(this.fwPoints);
+          const fwMat = new THREE.PointsMaterial({ color: 0xfde047, size: 2 });
+          this.fwPoints = new THREE.Points(fwGeo, fwMat);
+          fwGroup.add(this.fwPoints);
+          this.meshGroups['fireworks'] = fwGroup;
 
-          // 10. Ocean Digital
-          const gOcean = createGroup('ocean');
-          const oceanGeo = new THREE.PlaneGeometry(100, 100, 20, 20);
+          // 10. Ocean
+          const oceanGroup = new THREE.Group();
+          const oceanGeo = new THREE.PlaneGeometry(120, 120, 24, 24);
           const oceanMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4, wireframe: true });
           this.oceanMesh = new THREE.Mesh(oceanGeo, oceanMat);
           this.oceanMesh.rotation.x = -Math.PI / 3;
-          gOcean.add(this.oceanMesh);
+          oceanGroup.add(this.oceanMesh);
+          this.meshGroups['ocean'] = oceanGroup;
 
           // 11. Cybercity
-          const gCity = createGroup('cybercity');
+          const cityGroup = new THREE.Group();
           for (let i = 0; i < 25; i++) {
-            const h = Math.random() * 25 + 5;
-            const b = new THREE.Mesh(new THREE.BoxGeometry(4, h, 4), new THREE.MeshBasicMaterial({ color: 0x6366f1, wireframe: true }));
-            b.position.set((Math.random() - 0.5) * 60, h / 2 - 20, (Math.random() - 0.5) * 60);
-            gCity.add(b);
+            const h = 10 + Math.random() * 40;
+            const bGeo = new THREE.BoxGeometry(6, h, 6);
+            const bMat = new THREE.MeshBasicMaterial({ color: 0x6366f1, wireframe: true });
+            const building = new THREE.Mesh(bGeo, bMat);
+            building.position.set((Math.random() - 0.5) * 120, h / 2 - 25, (Math.random() - 0.5) * 100);
+            cityGroup.add(building);
           }
+          this.meshGroups['cybercity'] = cityGroup;
 
           // 12. Stargate
-          const gStargate = createGroup('stargate');
-          const sgOuter = new THREE.Mesh(new THREE.TorusGeometry(16, 2, 16, 50), new THREE.MeshBasicMaterial({ color: 0x6366f1, wireframe: true }));
-          const sgInner = new THREE.Mesh(new THREE.TorusGeometry(12, 0.5, 16, 50), new THREE.MeshBasicMaterial({ color: 0x06b6d4 }));
-          gStargate.add(sgOuter); gStargate.add(sgInner);
-          this.sgInner = sgInner;
+          const sgGroup = new THREE.Group();
+          const gateGeo = new THREE.TorusGeometry(18, 1.5, 12, 32);
+          const gateMat = new THREE.MeshBasicMaterial({ color: 0xa855f7, wireframe: true });
+          this.sgMesh = new THREE.Mesh(gateGeo, gateMat);
+          sgGroup.add(this.sgMesh);
+          const eventGeo = new THREE.CircleGeometry(16, 32);
+          const eventMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4, transparent: true, opacity: 0.4, side: THREE.DoubleSide });
+          sgGroup.add(new THREE.Mesh(eventGeo, eventMat));
+          this.meshGroups['stargate'] = sgGroup;
 
           // 13. Eclipse
-          const gEclipse = createGroup('eclipse');
-          const ecMoon = new THREE.Mesh(new THREE.SphereGeometry(12, 32, 32), new THREE.MeshBasicMaterial({ color: 0x090a0f }));
-          const ecRing = new THREE.Mesh(new THREE.TorusGeometry(12.5, 1, 16, 50), new THREE.MeshBasicMaterial({ color: 0xf59e0b }));
-          gEclipse.add(ecMoon); gEclipse.add(ecRing);
+          const eclGroup = new THREE.Group();
+          const moonGeo = new THREE.SphereGeometry(12, 32, 32);
+          const moonMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+          eclGroup.add(new THREE.Mesh(moonGeo, moonMat));
+          const coronaGeo = new THREE.RingGeometry(12.2, 18, 32);
+          const coronaMat = new THREE.MeshBasicMaterial({ color: 0xfde047, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
+          this.coronaMesh = new THREE.Mesh(coronaGeo, coronaMat);
+          eclGroup.add(this.coronaMesh);
+          this.meshGroups['eclipse'] = eclGroup;
 
-          // 14. Tesseract 4D
-          const gTesseract = createGroup('tesseract');
-          const tess1 = new THREE.Mesh(new THREE.BoxGeometry(16, 16, 16), new THREE.MeshBasicMaterial({ color: 0x6366f1, wireframe: true }));
-          const tess2 = new THREE.Mesh(new THREE.BoxGeometry(8, 8, 8), new THREE.MeshBasicMaterial({ color: 0x06b6d4, wireframe: true }));
-          gTesseract.add(tess1); gTesseract.add(tess2);
-          this.tess1 = tess1; this.tess2 = tess2;
+          // 14. Tesseract
+          const tessGroup = new THREE.Group();
+          const outerCube = new THREE.Mesh(new THREE.BoxGeometry(16, 16, 16), new THREE.MeshBasicMaterial({ color: 0x6366f1, wireframe: true }));
+          const innerCube = new THREE.Mesh(new THREE.BoxGeometry(8, 8, 8), new THREE.MeshBasicMaterial({ color: 0x06b6d4, wireframe: true }));
+          tessGroup.add(outerCube);
+          tessGroup.add(innerCube);
+          this.tessOuter = outerCube;
+          this.tessInner = innerCube;
+          this.meshGroups['tesseract'] = tessGroup;
 
-          // 15. Nebula & Pulsar
-          const gNebula = createGroup('nebula');
-          const pulsar = new THREE.Mesh(new THREE.OctahedronGeometry(8, 0), new THREE.MeshBasicMaterial({ color: 0xa855f7, wireframe: true }));
-          gNebula.add(pulsar);
-          this.pulsar = pulsar;
+          // 15. Nebula
+          const nebGroup = new THREE.Group();
+          const nebCount = 500;
+          const nebPos = new Float32Array(nebCount * 3);
+          for (let i = 0; i < nebCount * 3; i++) {
+            nebPos[i] = (Math.random() - 0.5) * 150;
+          }
+          const nebGeo = new THREE.BufferGeometry();
+          nebGeo.setAttribute('position', new THREE.BufferAttribute(nebPos, 3));
+          const nebMat = new THREE.PointsMaterial({ color: 0xa855f7, size: 3, transparent: true, opacity: 0.7 });
+          this.nebPoints = new THREE.Points(nebGeo, nebMat);
+          nebGroup.add(this.nebPoints);
+          this.meshGroups['nebula'] = nebGroup;
 
-          // Hide all groups initially
-          Object.keys(this.meshGroups).forEach(k => {
-            this.meshGroups[k].visible = false;
+          Object.values(this.meshGroups).forEach(g => {
+            g.visible = false;
+            this.scene.add(g);
           });
+          this.update3DVisibility();
         } catch (e) {
-          console.warn('WebGL initialization warning', e);
+          console.warn('WebGL Context Warning', e);
         }
       }
 
@@ -1749,13 +1918,15 @@
         const is3D = ['hyperdrive', 'sphere', 'synthwave', 'vortex', 'matrix', 'neon_tunnel', 'blackhole', 'dna', 'fireworks', 'ocean', 'cybercity', 'stargate', 'eclipse', 'tesseract', 'nebula'].includes(preset);
         if (this.c2d) this.c2d.style.display = is3D ? 'none' : 'block';
         if (this.c3d) this.c3d.style.display = is3D ? 'block' : 'none';
-        
-        if (this.meshGroups) {
-          Object.keys(this.meshGroups).forEach(k => {
-            this.meshGroups[k].visible = (k === preset);
-          });
-        }
+        this.update3DVisibility();
         this.resize();
+      }
+
+      update3DVisibility() {
+        if (!this.meshGroups) return;
+        Object.keys(this.meshGroups).forEach(k => {
+          this.meshGroups[k].visible = (k === this.preset);
+        });
       }
 
       start() {
@@ -1781,45 +1952,138 @@
 
           const freqs = this.getFrequencyData();
           const bass = (freqs[0] + freqs[1] + freqs[2] + freqs[3]) / 4;
-          const time = Date.now() * 0.002;
           const w = this.c2d ? this.c2d.width : 0;
           const h = this.c2d ? this.c2d.height : 0;
 
           if (this.c2d && this.c2d.style.display !== 'none' && w && h) {
             this.ctx2d.clearRect(0, 0, w, h);
-            const bars = 28;
-            const barW = (w / bars) - 4;
-            for (let i = 0; i < bars; i++) {
-              const fVal = freqs[i % freqs.length] / 255;
-              const bh = fVal * (h * 0.55) + 12;
-              const x = i * (barW + 4) + 2;
-              const y = h - bh;
 
-              const grad = this.ctx2d.createLinearGradient(0, y, 0, h);
-              grad.addColorStop(0, '#a855f7');
-              grad.addColorStop(0.5, '#6366f1');
-              grad.addColorStop(1, '#06b6d4');
+            if (this.preset === 'cyber') {
+              const bars = 28;
+              const barW = (w / bars) - 4;
+              for (let i = 0; i < bars; i++) {
+                const fVal = freqs[i % freqs.length] / 255;
+                const bh = fVal * (h * 0.55) + 12;
+                const x = i * (barW + 4) + 2;
+                const y = h - bh;
 
-              this.ctx2d.fillStyle = grad;
-              this.ctx2d.beginPath();
-              this.ctx2d.roundRect(x, y, barW, bh, [6, 6, 0, 0]);
-              this.ctx2d.fill();
+                const grad = this.ctx2d.createLinearGradient(0, y, 0, h);
+                grad.addColorStop(0, '#a855f7');
+                grad.addColorStop(0.5, '#6366f1');
+                grad.addColorStop(1, '#06b6d4');
+
+                this.ctx2d.fillStyle = grad;
+                this.ctx2d.beginPath();
+                this.ctx2d.roundRect(x, y, barW, bh, [6, 6, 0, 0]);
+                this.ctx2d.fill();
+
+                this.ctx2d.fillStyle = '#67e8f9';
+                this.ctx2d.fillRect(x, y - 6, barW, 3);
+              }
+            } else if (this.preset === 'particles') {
+              const cx = w / 2;
+              const cy = h / 2;
+              const pCount = 24;
+              for (let i = 0; i < pCount; i++) {
+                const angle = (i / pCount) * Math.PI * 2 + (Date.now() * 0.001);
+                const r = 90 + (freqs[i % freqs.length] / 255) * 80;
+                const px = cx + Math.cos(angle) * r;
+                const py = cy + Math.sin(angle) * r;
+
+                this.ctx2d.fillStyle = i % 2 === 0 ? '#06b6d4' : '#a855f7';
+                this.ctx2d.beginPath();
+                this.ctx2d.arc(px, py, 4 + (freqs[i % freqs.length] / 255) * 6, 0, Math.PI * 2);
+                this.ctx2d.fill();
+              }
+            } else if (this.preset === 'aurora') {
+              const time = Date.now() * 0.002;
+              this.ctx2d.lineWidth = 4;
+              for (let j = 0; j < 3; j++) {
+                this.ctx2d.beginPath();
+                this.ctx2d.strokeStyle = j === 0 ? '#6366f1' : (j === 1 ? '#06b6d4' : '#a855f7');
+                for (let x = 0; x < w; x += 15) {
+                  const y = h / 2 + Math.sin(x * 0.01 + time + j) * 40 + Math.cos(x * 0.02 - time) * (bass * 0.3);
+                  if (x === 0) this.ctx2d.moveTo(x, y);
+                  else this.ctx2d.lineTo(x, y);
+                }
+                this.ctx2d.stroke();
+              }
             }
           }
 
           if (this.scene && this.c3d && this.c3d.style.display !== 'none') {
-            if (this.sphereMesh) {
+            const time = Date.now() * 0.001;
+
+            if (this.preset === 'sphere' && this.sphereMesh) {
               this.sphereMesh.rotation.y += 0.01;
+              this.sphereMesh.rotation.x += 0.005;
               const scale = 1 + (bass / 255) * 0.4;
               this.sphereMesh.scale.set(scale, scale, scale);
+              if (this.coreMesh) this.coreMesh.rotation.y -= 0.02;
+            } else if (this.preset === 'hyperdrive' && this.starPoints) {
+              const positions = this.starPoints.geometry.attributes.position.array;
+              const speed = 2 + (bass / 255) * 6;
+              for (let i = 2; i < positions.length; i += 3) {
+                positions[i] += speed;
+                if (positions[i] > 100) positions[i] = -500;
+              }
+              this.starPoints.geometry.attributes.position.needsUpdate = true;
+            } else if (this.preset === 'vortex' && this.vortexPoints) {
+              this.vortexPoints.rotation.z += 0.02;
+            } else if (this.preset === 'matrix' && this.matrixCubes) {
+              this.matrixCubes.forEach((c, idx) => {
+                c.rotation.x += 0.01;
+                c.rotation.y += 0.02;
+                c.position.z = Math.sin(time * 2 + idx) * (10 + (bass / 255) * 15);
+              });
+            } else if (this.preset === 'neon_tunnel' && this.tunnelRings) {
+              this.tunnelRings.forEach((r, idx) => {
+                r.position.z += 1 + (bass / 255) * 2;
+                if (r.position.z > 20) r.position.z = -200;
+                r.rotation.z += 0.01;
+              });
+            } else if (this.preset === 'blackhole' && this.bhDisk) {
+              this.bhDisk.rotation.z += 0.03;
+            } else if (this.preset === 'dna' && this.dnaNodes) {
+              this.dnaNodes.forEach(item => {
+                const a1 = item.baseAngle + time * 2;
+                const a2 = a1 + Math.PI;
+                item.n1.position.x = Math.cos(a1) * 10;
+                item.n1.position.z = Math.sin(a1) * 10;
+                item.n2.position.x = Math.cos(a2) * 10;
+                item.n2.position.z = Math.sin(a2) * 10;
+              });
+            } else if (this.preset === 'fireworks' && this.fwPoints) {
+              const pos = this.fwPoints.geometry.attributes.position.array;
+              for (let i = 0; i < this.fwVel.length; i++) {
+                pos[i * 3] += this.fwVel[i].x;
+                pos[i * 3 + 1] += this.fwVel[i].y;
+                pos[i * 3 + 2] += this.fwVel[i].z;
+                if (Math.abs(pos[i * 3]) > 80) {
+                  pos[i * 3] = 0; pos[i * 3 + 1] = 0; pos[i * 3 + 2] = 0;
+                }
+              }
+              this.fwPoints.geometry.attributes.position.needsUpdate = true;
+            } else if (this.preset === 'ocean' && this.oceanMesh) {
+              const pos = this.oceanMesh.geometry.attributes.position.array;
+              for (let i = 0; i < pos.length; i += 3) {
+                pos[i + 2] = Math.sin(pos[i] * 0.1 + time * 3) * 4 + Math.cos(pos[i + 1] * 0.1 + time * 2) * (bass / 255 * 8);
+              }
+              this.oceanMesh.geometry.attributes.position.needsUpdate = true;
+            } else if (this.preset === 'stargate' && this.sgMesh) {
+              this.sgMesh.rotation.z += 0.02;
+            } else if (this.preset === 'eclipse' && this.coronaMesh) {
+              const s = 1 + (bass / 255) * 0.3;
+              this.coronaMesh.scale.set(s, s, s);
+            } else if (this.preset === 'tesseract' && this.tessOuter) {
+              this.tessOuter.rotation.x += 0.01;
+              this.tessOuter.rotation.y += 0.01;
+              this.tessInner.rotation.x -= 0.02;
+              this.tessInner.rotation.y -= 0.02;
+            } else if (this.preset === 'nebula' && this.nebPoints) {
+              this.nebPoints.rotation.y += 0.005;
             }
-            if (this.vortexMesh) this.vortexMesh.rotation.z += 0.02;
-            if (this.bhDisk) this.bhDisk.rotation.z += 0.015;
-            if (this.pulsar) { this.pulsar.rotation.x += 0.02; this.pulsar.rotation.y += 0.02; }
-            if (this.tess1 && this.tess2) {
-              this.tess1.rotation.x += 0.01; this.tess1.rotation.y += 0.01;
-              this.tess2.rotation.x -= 0.015; this.tess2.rotation.y -= 0.015;
-            }
+
             this.renderer.render(this.scene, this.camera);
           }
         };
@@ -1835,6 +2099,10 @@
         this.currentGenre = 'all';
         this.stations = [];
         this.activeStationIndex = -1;
+        this.currentPlayingEpisode = null;
+
+        this.speeds = [0.75, 1.0, 1.25, 1.5, 2.0];
+        this.currentSpeedIdx = 1;
 
         this.favStore = new FavoritesStore(() => this.updateBadgesUI());
         this.subStore = new SubscriptionsStore(() => this.updateBadgesUI());
@@ -1844,6 +2112,7 @@
         this.initDOM();
         this.visualizer = new VisualizerEngine(this.canvas2D, this.canvas3D, this.media);
         this.bindEvents();
+        this.initFullscreenAndHUD();
         this.updateBadgesUI();
         this.loadCatalog();
       }
@@ -1857,6 +2126,7 @@
         this.audioOverlay = document.getElementById('audio-overlay');
         this.canvas2D = document.getElementById('visualizer-canvas-2d');
         this.canvas3D = document.getElementById('visualizer-canvas-3d');
+        this.videoViewport = document.getElementById('video-viewport-wrapper');
 
         this.scrubSlider = document.getElementById('scrub-range');
         this.timeCurrent = document.getElementById('time-current');
@@ -1872,32 +2142,56 @@
       }
 
       bindEvents() {
+        const backdrop = document.getElementById('sidebar-backdrop');
+        const closeSidebarMobile = () => {
+          this.sidebar.classList.remove('open');
+          if (backdrop) backdrop.classList.remove('open');
+        };
+
+        const toggleSidebarMobile = () => {
+          const isOpen = this.sidebar.classList.toggle('open');
+          if (backdrop) backdrop.classList.toggle('open', isOpen);
+        };
+
+        document.getElementById('mobile-toggle').onclick = toggleSidebarMobile;
+        if (backdrop) backdrop.onclick = closeSidebarMobile;
+
         ['radio', 'radio-fav', 'tv', 'pluto', 'tv-fav', 'podcasts', 'podcast-subs'].forEach(tabId => {
           const el = document.getElementById(`tab-${tabId}`);
-          if (el) el.addEventListener('click', () => this.switchTab(tabId));
+          if (el) {
+            el.addEventListener('click', () => {
+              this.switchTab(tabId);
+              if (window.innerWidth <= 920) closeSidebarMobile();
+            });
+          }
         });
 
-        // Filter chips binding
-        document.querySelectorAll('#country-filters .chip').forEach(btn => {
-          btn.addEventListener('click', (e) => {
-            document.querySelectorAll('#country-filters .chip').forEach(c => c.classList.remove('active'));
-            e.target.classList.add('active');
-            this.currentCountry = e.target.getAttribute('data-filter') || 'FR';
-            this.loadCatalog();
-          });
-        });
+        const animSelect = document.getElementById('anim-preset-select');
+        if (animSelect) {
+          animSelect.onchange = (e) => {
+            this.visualizer.setPreset(e.target.value);
+          };
+        }
 
-        document.querySelectorAll('#genre-filters .chip').forEach(btn => {
-          btn.addEventListener('click', (e) => {
-            document.querySelectorAll('#genre-filters .chip').forEach(c => c.classList.remove('active'));
-            e.target.classList.add('active');
-            this.currentGenre = e.target.getAttribute('data-genre') || 'all';
-            this.loadCatalog();
-          });
-        });
+        document.getElementById('country-filters').onclick = (e) => {
+          if (!e.target.classList.contains('chip')) return;
+          document.querySelectorAll('#country-filters .chip').forEach(c => c.classList.remove('active'));
+          e.target.classList.add('active');
+          this.currentCountry = e.target.dataset.filter;
+          this.loadCatalog();
+        };
 
-        document.getElementById('anim-preset-select').onchange = (e) => {
-          this.visualizer.setPreset(e.target.value);
+        document.getElementById('genre-filters').onclick = (e) => {
+          if (!e.target.classList.contains('chip')) return;
+          document.querySelectorAll('#genre-filters .chip').forEach(c => c.classList.remove('active'));
+          e.target.classList.add('active');
+          this.currentGenre = e.target.dataset.genre;
+          this.loadCatalog();
+        };
+
+        document.getElementById('global-search').oninput = (e) => {
+          clearTimeout(this.searchTimer);
+          this.searchTimer = setTimeout(() => this.loadCatalog(e.target.value), 300);
         };
 
         document.getElementById('btn-play-pause').onclick = () => {
@@ -1905,32 +2199,175 @@
           else this.media.pause();
         };
 
-        document.getElementById('btn-stage-fullscreen').onclick = () => {
-          if (this.theater.requestFullscreen) this.theater.requestFullscreen();
-          else if (this.theater.webkitRequestFullscreen) this.theater.webkitRequestFullscreen();
+        document.getElementById('btn-skip-back').onclick = () => { this.media.currentTime = Math.max(0, this.media.currentTime - 10); };
+        document.getElementById('btn-skip-forward').onclick = () => { this.media.currentTime = Math.min(this.media.duration || 0, this.media.currentTime + 30); };
+
+        this.speedBtn.onclick = () => {
+          this.currentSpeedIdx = (this.currentSpeedIdx + 1) % this.speeds.length;
+          const speed = this.speeds[this.currentSpeedIdx];
+          this.media.playbackRate = speed;
+          this.speedBtn.textContent = `${speed}×`;
+          this.showToast(`Vitesse : ${speed}×`);
         };
 
-        document.getElementById('btn-fullscreen').onclick = () => {
-          if (this.theater.requestFullscreen) this.theater.requestFullscreen();
-          else if (this.theater.webkitRequestFullscreen) this.theater.webkitRequestFullscreen();
+        this.scrubSlider.oninput = (e) => {
+          if (this.media.duration) {
+            const targetTime = (parseFloat(e.target.value) / 100) * this.media.duration;
+            this.media.currentTime = targetTime;
+          }
+        };
+
+        document.getElementById('volume-range').oninput = (e) => { this.media.volume = parseFloat(e.target.value); };
+        document.getElementById('btn-volume-toggle').onclick = () => {
+          this.media.muted = !this.media.muted;
+          document.getElementById('icon-vol-high').style.display = this.media.muted ? 'none' : 'block';
+          document.getElementById('icon-vol-mute').style.display = this.media.muted ? 'block' : 'none';
         };
 
         document.getElementById('btn-toggle-queue').onclick = () => this.queueDrawer.classList.toggle('open');
         document.getElementById('btn-clear-queue').onclick = () => this.queue.clear();
 
-        // Search input
-        const searchInput = document.getElementById('global-search');
-        let searchTimer = null;
-        searchInput.oninput = (e) => {
-          clearTimeout(searchTimer);
-          searchTimer = setTimeout(() => this.loadCatalog(e.target.value), 300);
+        const stageFavBtn = document.getElementById('btn-stage-fav');
+        if (stageFavBtn) {
+          stageFavBtn.onclick = () => {
+            const currentItem = this.currentPlayingEpisode || this.stations[this.activeStationIndex];
+            if (currentItem) this.toggleFav(currentItem);
+          };
+        }
+
+        const playerFavBtn = document.getElementById('btn-player-fav');
+        if (playerFavBtn) {
+          playerFavBtn.onclick = () => {
+            const currentItem = this.currentPlayingEpisode || this.stations[this.activeStationIndex];
+            if (currentItem) this.toggleFav(currentItem);
+          };
+        }
+
+        this.media.ontimeupdate = () => {
+          if (this.media.duration) {
+            const pct = (this.media.currentTime / this.media.duration) * 100;
+            this.scrubSlider.value = pct;
+            this.timeCurrent.textContent = this.formatTime(this.media.currentTime);
+            this.timeDuration.textContent = this.formatTime(this.media.duration);
+
+            if (this.currentPlayingEpisode) {
+              this.resumeStore.save(this.currentPlayingEpisode.id, this.media.currentTime, this.media.duration, this.currentPlayingEpisode.title, this.selectedPodcast?.name);
+            }
+          }
         };
+
+        this.media.onended = () => {
+          const nextItem = this.queue.next();
+          if (nextItem) {
+            this.showToast(`▶ Suivant : ${nextItem.episode.title}`);
+            this.playPodcastEpisodeObj(nextItem.episode, nextItem.podcast);
+          }
+        };
+
+        this.media.onplay = () => {
+          document.getElementById('icon-play').style.display = 'none';
+          document.getElementById('icon-pause').style.display = 'block';
+        };
+
+        this.media.onpause = () => {
+          document.getElementById('icon-play').style.display = 'block';
+          document.getElementById('icon-pause').style.display = 'none';
+        };
+      }
+
+      updateMetadata(title, subtitle, logo) {
+        document.getElementById('player-title').textContent = title || 'Sans titre';
+        document.getElementById('player-subtitle').textContent = subtitle || 'Direct Stream';
+        document.getElementById('stage-title').textContent = title || 'OmniStream';
+
+        const stageImg = document.getElementById('stage-cover-img');
+        const stageFallback = document.getElementById('stage-cover-fallback');
+        const playerImg = document.getElementById('player-thumb-img');
+        const playerFallback = document.getElementById('player-thumb-fallback');
+
+        if (logo) {
+          stageImg.src = logo;
+          stageImg.style.display = 'block';
+          if (stageFallback) stageFallback.style.display = 'none';
+
+          playerImg.src = logo;
+          playerImg.style.display = 'block';
+          if (playerFallback) playerFallback.style.display = 'none';
+        } else {
+          stageImg.style.display = 'none';
+          if (stageFallback) stageFallback.style.display = 'block';
+
+          playerImg.style.display = 'none';
+          if (playerFallback) playerFallback.style.display = 'block';
+        }
+
+        stageImg.onerror = () => {
+          stageImg.style.display = 'none';
+          if (stageFallback) stageFallback.style.display = 'block';
+        };
+        playerImg.onerror = () => {
+          playerImg.style.display = 'none';
+          if (playerFallback) playerFallback.style.display = 'block';
+        };
+      }
+
+      formatTime(seconds) {
+        if (isNaN(seconds)) return '00:00';
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = Math.floor(seconds % 60);
+        if (h > 0) return `${h}:${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+        return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+      }
+
+      initFullscreenAndHUD() {
+        const toggleFullscreen = () => {
+          if (!document.fullscreenElement) {
+            if (this.theater.requestFullscreen) this.theater.requestFullscreen();
+          } else {
+            if (document.exitFullscreen) document.exitFullscreen();
+          }
+        };
+
+        document.getElementById('btn-stage-fullscreen').onclick = toggleFullscreen;
+        document.getElementById('btn-fullscreen').onclick = toggleFullscreen;
+
+        window.addEventListener('keydown', (e) => {
+          if (e.key === 'f' || e.key === 'F') {
+            if (document.activeElement.tagName !== 'INPUT') {
+              toggleFullscreen();
+            }
+          }
+        });
+
+        let hudTimeout;
+        const resetHUDTimer = () => {
+          document.body.classList.remove('hide-hud', 'hide-cursor');
+          clearTimeout(hudTimeout);
+          hudTimeout = setTimeout(() => {
+            if (document.fullscreenElement || this.theater.classList.contains('active')) {
+              document.body.classList.add('hide-hud', 'hide-cursor');
+            }
+          }, 3000);
+        };
+        window.addEventListener('mousemove', resetHUDTimer);
+        window.addEventListener('touchstart', resetHUDTimer);
       }
 
       switchTab(tab) {
         this.currentTab = tab;
         document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
         document.getElementById(`tab-${tab}`).classList.add('active');
+
+        const heading = document.getElementById('catalog-heading');
+        if (tab === 'radio') heading.textContent = 'Radios Populaires';
+        else if (tab === 'radio-fav') heading.textContent = 'Mes Radios Favorites';
+        else if (tab === 'tv') heading.textContent = 'Télévision TV (Direct TNT)';
+        else if (tab === 'pluto') heading.textContent = 'Pluto TV — Chaînes Gratuitement en Direct 24/7';
+        else if (tab === 'tv-fav') heading.textContent = 'Mes Chaînes TV Favorites';
+        else if (tab === 'podcasts') heading.textContent = 'Podcasts & Replays';
+        else if (tab === 'podcast-subs') heading.textContent = 'Mes Podcasts Suivis';
+
         this.loadCatalog();
       }
 
@@ -1956,68 +2393,414 @@
           return;
         }
 
-        this.grid.innerHTML = this.stations.map((s, i) => `
-          <div class="station-card" onclick="app.playStation(${i})">
-            <div class="card-thumb-wrapper">
-              ${s.logo ? `<img src="${s.logo}" alt="" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">` : ''}
-              <div class="card-thumb-fallback-box" style="${s.logo ? 'display:none;' : 'display:flex;'}">
-                <span>${(s.name || 'MEDIA').substring(0, 3).toUpperCase()}</span>
+        this.grid.innerHTML = this.stations.map((s, i) => {
+          const isFav = this.favStore.isFav(s.id, s.type);
+          const safeName = (s.name || 'Média').replace(/"/g, '&quot;');
+          const initials = (s.name || 'TV').substring(0, 3).toUpperCase();
+
+          return `
+            <div class="station-card" onclick="app.handleCardClick(${i})">
+              <button class="card-fav-btn ${isFav ? 'is-fav' : ''}" onclick="event.stopPropagation(); app.toggleFavByCard(${i})" title="Favori">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="${isFav ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l8.72-8.72 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+              </button>
+              <button class="card-fs-btn" onclick="event.stopPropagation(); app.playStationInFullscreen(${i})" title="Lire en Plein Écran Total">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+              </button>
+              <div class="card-thumb-wrapper">
+                ${s.logo ? `<img src="${s.logo}" alt="${safeName}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">` : ''}
+                <div class="card-thumb-fallback-box" style="${s.logo ? 'display:none;' : 'display:flex;'}">
+                  <span style="font-size:1.1rem; letter-spacing:0.05em;">${initials}</span>
+                </div>
+              </div>
+              <div>
+                <div style="font-weight:600; font-size:0.88rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${s.name}</div>
+                <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${s.artist || s.tags || s.country}</div>
               </div>
             </div>
-            <div>
-              <div style="font-weight:600; font-size:0.88rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${s.name}</div>
-              <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:2px;">${s.tags || s.country}</div>
-            </div>
-          </div>
-        `).join('');
+          `;
+        }).join('');
       }
 
-      playStation(index) {
+      handleCardClick(index) {
+        const item = this.stations[index];
+        if (!item) return;
+
+        if (item.type === 'podcast') {
+          this.loadPodcastEpisodes(item);
+        } else {
+          this.playStation(index);
+        }
+      }
+
+      playStationInFullscreen(index) {
+        this.playStation(index);
+        if (this.theater.requestFullscreen) this.theater.requestFullscreen();
+      }
+
+      async loadPodcastEpisodes(podcast) {
+        this.selectedPodcast = podcast;
+        this.grid.style.display = 'none';
+        this.episodesContainer.innerHTML = '<div class="loader-container"><div class="spinner"></div><p>Extraction des épisodes...</p></div>';
+
+        const episodes = await this.fetcher.getPodcastEpisodes(podcast.feedUrl);
+        const isSubbed = this.subStore.isSubbed(podcast.id);
+
+        if (!episodes || episodes.length === 0) {
+          this.episodesContainer.innerHTML = `
+            <div class="episodes-panel">
+              <div class="podcast-header-detail">
+                <img src="${podcast.logo}" class="podcast-detail-cover" onerror="this.style.display='none'">
+                <div class="podcast-header-info">
+                  <button class="stage-btn" onclick="app.closeEpisodes()" style="width:fit-content;">← Retour</button>
+                  <h3 style="font-size:1.15rem; font-weight:700;">${podcast.name}</h3>
+                  <p style="font-size:0.82rem; color:var(--text-secondary);">${podcast.artist || 'Podcast'}</p>
+                </div>
+              </div>
+              <div class="loader-container">
+                <p style="color:var(--text-secondary);">Impossible de charger les épisodes de ce flux pour le moment.</p>
+                <button class="stage-btn" onclick="app.loadPodcastEpisodes(app.selectedPodcast)" style="margin-top:10px;">Réessayer 🔄</button>
+              </div>
+            </div>
+          `;
+          return;
+        }
+
+        this.episodesContainer.innerHTML = `
+          <div class="episodes-panel">
+            <div class="podcast-header-detail">
+              <img src="${podcast.logo}" class="podcast-detail-cover" onerror="this.style.display='none'">
+              <div class="podcast-header-info">
+                <button class="stage-btn" onclick="app.closeEpisodes()" style="width:fit-content;">← Retour</button>
+                <h3 style="font-size:1.15rem; font-weight:700;">${podcast.name}</h3>
+                <p style="font-size:0.82rem; color:var(--text-secondary);">${podcast.artist} • ${episodes.length} épisodes récents</p>
+                <button class="btn-subscribe ${isSubbed ? 'is-subbed' : ''}" onclick="app.toggleSub()">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                  <span>${isSubbed ? 'Abonné ⭐' : "S'abonner +"}</span>
+                </button>
+              </div>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:10px;">
+              ${episodes.map((ep, idx) => {
+                const prog = this.resumeStore.get(ep.id);
+                const pct = prog ? Math.min(100, Math.round((prog.currentTime / prog.duration) * 100)) : 0;
+                return `
+                  <div class="episode-item" onclick="app.playPodcastEpisode(${idx})">
+                    ${pct > 0 ? `<div class="episode-progress-bar" style="width:${pct}%;"></div>` : ''}
+                    <div style="flex:1;">
+                      <div style="font-weight:600; font-size:0.88rem;">${ep.title}</div>
+                      <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:2px;">
+                        ${ep.pubDate} ${pct > 0 ? `• <span style="color:var(--accent-cyan); font-weight:700;">${pct}% écouté</span>` : ''}
+                      </div>
+                    </div>
+                    <div class="episode-actions" onclick="event.stopPropagation();">
+                      <button class="btn-action-sm" onclick="app.addToQueue(${idx})">+ File</button>
+                      <button class="ctrl-btn play-main" style="width:34px; height:34px;" onclick="app.playPodcastEpisode(${idx})">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                      </button>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `;
+        this.currentEpisodes = episodes;
+      }
+
+      toggleSub() {
+        if (!this.selectedPodcast) return;
+        const subbed = this.subStore.toggle(this.selectedPodcast);
+        this.showToast(subbed ? `⭐ Abonné à "${this.selectedPodcast.name}"` : `Abonnement retiré`);
+        this.loadPodcastEpisodes(this.selectedPodcast);
+      }
+
+      addToQueue(idx) {
+        const ep = this.currentEpisodes[idx];
+        if (ep) {
+          this.queue.add(ep, this.selectedPodcast);
+          this.showToast(`Ajouté à la file : "${ep.title}"`);
+        }
+      }
+
+      closeEpisodes() {
+        this.episodesContainer.innerHTML = '';
+        this.grid.style.display = 'grid';
+      }
+
+      playPodcastEpisode(idx) {
+        const ep = this.currentEpisodes[idx];
+        if (ep) this.playPodcastEpisodeObj(ep, this.selectedPodcast);
+      }
+
+      playPodcastEpisodeObj(ep, podcast) {
+        this.currentPlayingEpisode = ep;
+        this.theater.classList.add('active');
+
+        const logoUrl = podcast ? podcast.logo : '';
+        this.updateMetadata(ep.title, podcast ? podcast.name : 'Podcast', logoUrl);
+
+        this.media.style.display = 'none';
+        this.audioOverlay.style.display = 'flex';
+        this.visualizer.start();
+        this.visualizer.setPreset(document.getElementById('anim-preset-select').value || 'cyber');
+
+        this.playMediaStream(ep.url, false);
+        
+        const prog = this.resumeStore.get(ep.id);
+        if (prog && prog.currentTime > 5 && prog.currentTime < (prog.duration - 10)) {
+          this.media.currentTime = prog.currentTime;
+          this.showToast(`Reprise de la lecture à ${this.formatTime(prog.currentTime)}`);
+        }
+      }
+
+      async playStation(index) {
         const s = this.stations[index];
         if (!s) return;
+        this.currentPlayingEpisode = null;
         this.activeStationIndex = index;
         this.theater.classList.add('active');
         this.theater.scrollIntoView({ behavior: 'smooth' });
 
-        document.getElementById('player-title').textContent = s.name;
-        document.getElementById('stage-title').textContent = s.name;
+        let streamUrl = s.url;
+        if (s.id && s.id.startsWith('pluto_')) {
+          const rawUrl = s.rawStreamUrl || s.url || `https://stitcher.pluto.tv/stitch/hls/channel/${s.rawId}/master.m3u8`;
+          streamUrl = this.fetcher.pluto.buildPlutoStreamUrl(rawUrl);
+        }
+
+        this.updateMetadata(s.name, s.tags || s.country, s.logo);
 
         const isVideo = s.type === 'video' || s.type === 'tv';
         if (isVideo) {
           this.audioOverlay.style.display = 'none';
           this.media.style.display = 'block';
           this.visualizer.stop();
+          this.playMediaStream(streamUrl, true);
         } else {
           this.media.style.display = 'none';
           this.audioOverlay.style.display = 'flex';
           this.visualizer.start();
+          this.visualizer.setPreset(document.getElementById('anim-preset-select').value || 'cyber');
+          this.playMediaStream(streamUrl, false);
+        }
+      }
+
+      playMediaStream(url, isVideo) {
+        if (!url) {
+          this.showToast('⚠️ URL de flux non disponible');
+          return;
         }
 
-        let streamUrl = s.url;
-        if (s.id && s.id.startsWith('pluto_')) {
-          streamUrl = this.fetcher.pluto.buildPlutoStreamUrl(s.rawStreamUrl, s.rawId);
+        if (this.hlsPlayer) {
+          this.hlsPlayer.destroy();
+          this.hlsPlayer = null;
         }
 
-        if (streamUrl.includes('.m3u8') && typeof Hls !== 'undefined' && Hls.isSupported()) {
-          if (this.hlsPlayer) this.hlsPlayer.destroy();
-          this.hlsPlayer = new Hls();
-          this.hlsPlayer.loadSource(streamUrl);
+        this.media.muted = false;
+        if (!this.media.volume || this.media.volume === 0) this.media.volume = 0.8;
+
+        const isHls = url.includes('.m3u8') || isVideo || url.includes('pluto.tv') || url.includes('stitch');
+
+        if (isHls && typeof Hls !== 'undefined' && Hls.isSupported()) {
+          let currentRealBaseUrl = url;
+
+          class CustomHlsLoader extends Hls.DefaultConfig.loader {
+            constructor(config) {
+              super(config);
+            }
+
+            load(context, config, callbacks) {
+              let targetUrl = context.url;
+
+              if (targetUrl.includes('/.netlify/functions/IPTV')) {
+                try {
+                  const uObj = new URL(targetUrl, window.location.origin);
+                  const extracted = uObj.searchParams.get('url');
+                  if (extracted) targetUrl = extracted;
+                } catch(e) {}
+              }
+
+              if (targetUrl.startsWith(window.location.origin)) {
+                try {
+                  const uObj = new URL(targetUrl);
+                  let relativePath = uObj.pathname + uObj.search;
+                  relativePath = relativePath.replace(/^\/\.netlify\/functions\/(IPTV)?/i, '');
+                  if (currentRealBaseUrl) {
+                    targetUrl = new URL(relativePath, currentRealBaseUrl).href;
+                  }
+                } catch(e) {}
+              }
+
+              if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+                if (currentRealBaseUrl) {
+                  try {
+                    targetUrl = new URL(targetUrl, currentRealBaseUrl).href;
+                  } catch(e) {}
+                }
+              }
+
+              if (targetUrl.startsWith('http://') || targetUrl.startsWith('https://')) {
+                if (!targetUrl.startsWith(window.location.origin)) {
+                  currentRealBaseUrl = targetUrl;
+                }
+              }
+
+              const shouldUseProxy = window.location.hostname !== 'localhost' && !context.isDirectRetry && (targetUrl.startsWith('http://') || targetUrl.includes('pluto.tv') || targetUrl.includes('bfm'));
+              if (shouldUseProxy && (targetUrl.startsWith('http://') || targetUrl.startsWith('https://'))) {
+                if (!targetUrl.startsWith(window.location.origin)) {
+                  context.url = `/.netlify/functions/IPTV?url=${encodeURIComponent(targetUrl)}`;
+                } else {
+                  context.url = targetUrl;
+                }
+              } else {
+                context.url = targetUrl;
+              }
+
+              const originalOnSuccess = callbacks.onSuccess;
+              callbacks.onSuccess = (response, stats, contextFunc, networkDetails) => {
+                if (response) {
+                  response.url = targetUrl;
+                }
+                if (originalOnSuccess) {
+                  originalOnSuccess(response, stats, contextFunc, networkDetails);
+                }
+              };
+
+              const originalOnError = callbacks.onError;
+              callbacks.onError = (error, contextFunc, networkDetails) => {
+                if (!context.isDirectRetry && targetUrl && (targetUrl.startsWith('http://') || targetUrl.startsWith('https://'))) {
+                  context.isDirectRetry = true;
+                  context.url = targetUrl;
+                  super.load(context, config, callbacks);
+                  return;
+                }
+                if (originalOnError) {
+                  originalOnError(error, contextFunc, networkDetails);
+                }
+              };
+
+              super.load(context, config, callbacks);
+            }
+          }
+
+          this.hlsPlayer = new Hls({
+            enableWorker: true,
+            lowLatencyMode: true,
+            backBufferLength: 90,
+            loader: CustomHlsLoader
+          });
+
+          this.hlsPlayer.loadSource(url);
           this.hlsPlayer.attachMedia(this.media);
-          this.hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => this.media.play().catch(() => {}));
+
+          this.hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
+            this.hlsRetryCount = 0;
+            this.media.play().catch(() => {});
+          });
+
+          this.hlsRetryCount = 0;
+          this.hlsPlayer.on(Hls.Events.ERROR, (event, data) => {
+            if (data.fatal) {
+              this.hlsRetryCount = (this.hlsRetryCount || 0) + 1;
+              
+              if (this.hlsRetryCount > 3) {
+                console.warn('Nombre maximal de tentatives HLS atteint pour ce flux.');
+                if (this.hlsPlayer) {
+                  this.hlsPlayer.destroy();
+                  this.hlsPlayer = null;
+                }
+                this.showToast('⚠️ Impossible de charger ce flux (Signal Indisponible)');
+                return;
+              }
+
+              setTimeout(() => {
+                if (!this.hlsPlayer) return;
+                switch (data.type) {
+                  case Hls.ErrorTypes.NETWORK_ERROR:
+                    this.hlsPlayer.startLoad();
+                    break;
+                  case Hls.ErrorTypes.MEDIA_ERROR:
+                    this.hlsPlayer.recoverMediaError();
+                    break;
+                  default:
+                    this.hlsPlayer.destroy();
+                    this.hlsPlayer = null;
+                    break;
+                }
+              }, 1000);
+            }
+          });
         } else {
-          this.media.src = streamUrl;
+          this.media.src = url;
           this.media.play().catch(() => {});
+        }
+      }
+
+      toggleFavByCard(index) {
+        const s = this.stations[index];
+        if (s) this.toggleFav(s);
+      }
+
+      toggleFav(station) {
+        if (!station) return;
+        const added = this.favStore.toggle(station);
+        this.showToast(added ? `❤️ Ajouté aux favoris` : `Retiré des favoris`);
+        this.updateBadgesUI();
+        if (this.currentTab === 'radio-fav' || this.currentTab === 'tv-fav') {
+          this.loadCatalog();
+        } else {
+          this.renderGrid();
         }
       }
 
       updateBadgesUI() {
         const radioFavCount = document.getElementById('fav-radio-badge');
         if (radioFavCount) radioFavCount.textContent = this.favStore.getRadioFavs().length;
+
         const tvFavCount = document.getElementById('fav-tv-badge');
         if (tvFavCount) tvFavCount.textContent = this.favStore.getTvFavs().length;
+
+        const subCount = document.getElementById('sub-podcast-badge');
+        if (subCount) subCount.textContent = this.subStore.getSubs().length;
+
+        const queueCount = document.getElementById('queue-badge');
+        if (queueCount) queueCount.textContent = this.queue.queue.length;
       }
 
-      renderQueueUI() {}
+      showToast(message) {
+        const existing = document.querySelector('.toast-notification');
+        if (existing) existing.remove();
+
+        const toast = document.createElement('div');
+        toast.className = 'toast-notification';
+        toast.innerHTML = `<span>${message}</span>`;
+        document.body.appendChild(toast);
+
+        setTimeout(() => {
+          toast.style.opacity = '0';
+          toast.style.transition = 'opacity 0.3s ease';
+          setTimeout(() => toast.remove(), 300);
+        }, 2500);
+      }
+
+      renderQueueUI() {
+        const queueContainer = document.getElementById('queue-items-list');
+        if (!queueContainer) return;
+
+        if (!this.queue.queue.length) {
+          queueContainer.innerHTML = `<p style="color:var(--text-secondary); font-size:0.85rem;">Aucun épisode dans la file d'attente.</p>`;
+          return;
+        }
+
+        queueContainer.innerHTML = this.queue.queue.map((item, idx) => `
+          <div class="queue-item">
+            <div style="flex:1; overflow:hidden;">
+              <div style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${item.episode.title}</div>
+              <div style="font-size:0.75rem; color:var(--text-secondary);">${item.podcast ? item.podcast.name : ''}</div>
+            </div>
+            <button class="btn-action-sm" onclick="app.queue.remove(${idx})">❌</button>
+          </div>
+        `).join('');
+      }
     }
 
     window.app = new AppController();
