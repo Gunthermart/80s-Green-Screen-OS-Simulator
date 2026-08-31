@@ -1176,58 +1176,62 @@
       async getPlutoChannels(search = '', genre = 'all') {
         try {
           const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 4000);
+          const timer = setTimeout(() => controller.abort(), 5000);
           
-          let apiUrl = 'https://api.pluto.tv/v0/channels?clientModelNumber=0.0.0&serverSideAds=true';
+          let m3uUrl = 'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/fr_pluto.m3u';
           if (window.location.hostname !== 'localhost') {
-            apiUrl = `/.netlify/functions/IPTV?url=${encodeURIComponent(apiUrl)}`;
+            m3uUrl = `/.netlify/functions/IPTV?url=${encodeURIComponent(m3uUrl)}`;
           }
 
-          const res = await fetch(apiUrl, { signal: controller.signal });
+          const res = await fetch(m3uUrl, { signal: controller.signal });
           clearTimeout(timer);
 
           if (res.ok) {
-            const data = await res.json();
-            if (Array.isArray(data) && data.length > 0) {
-              const parsed = [];
-              data.forEach(ch => {
-                if (ch.isLive !== false) {
-                  let rawStreamUrl = '';
-                  if (ch.stitched && ch.stitched.urls && ch.stitched.urls[0] && ch.stitched.urls[0].url) {
-                    rawStreamUrl = ch.stitched.urls[0].url;
-                  }
-
-                  const logo = ch.colorLogoPNG?.path || ch.featuredImage?.path || `https://images.pluto.tv/channels/${ch._id}/colorLogoPNG.png`;
-
-                  parsed.push({
-                    id: `pluto_${ch._id}`,
-                    rawId: ch._id,
-                    rawStreamUrl: rawStreamUrl,
-                    name: ch.name,
-                    url: rawStreamUrl,
-                    logo: logo,
-                    country: 'FR',
-                    tags: ch.category || 'Pluto TV 24/7',
-                    type: 'video',
-                    category: ch.category ? ch.category.toLowerCase() : 'all'
-                  });
-                }
-              });
-
-              const filtered = parsed.filter(ch => {
+            const text = await res.text();
+            const parsed = this.parsePlutoM3U(text);
+            if (parsed && parsed.length > 0) {
+              return parsed.filter(ch => {
                 const matchSearch = !search || ch.name.toLowerCase().includes(search.toLowerCase()) || ch.tags.toLowerCase().includes(search.toLowerCase());
                 const matchGenre = genre === 'all' || ch.category.includes(genre.toLowerCase()) || ch.tags.toLowerCase().includes(genre.toLowerCase());
                 return matchSearch && matchGenre;
               });
-
-              if (filtered.length > 0) return filtered;
             }
           }
         } catch (e) {
-          console.warn("Pluto TV API v0 fallback actif", e);
+          console.warn("Pluto TV M3U fetch fallback actif", e);
         }
 
         return this.getBackupPlutoChannels(search, genre);
+      }
+
+      parsePlutoM3U(content) {
+        const lines = content.split('\n');
+        const list = [];
+        let item = null;
+        for (let rawLine of lines) {
+          const line = rawLine.trim();
+          if (line.startsWith('#EXTINF:')) {
+            const name = (line.match(/,(.+)$/) || [])[1] || 'Pluto TV';
+            const logo = (line.match(/tvg-logo="([^"]*)"/) || [])[1] || '';
+            const group = (line.match(/group-title="([^"]*)"/) || [])[1] || 'Pluto TV 24/7';
+            const cleanId = `pluto_${name.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+            item = {
+              id: cleanId,
+              name: name.trim(),
+              logo: logo,
+              country: 'FR',
+              tags: group,
+              type: 'video',
+              category: group.toLowerCase()
+            };
+          } else if (line && !line.startsWith('#') && item) {
+            item.url = line;
+            item.rawStreamUrl = line;
+            list.push(item);
+            item = null;
+          }
+        }
+        return list;
       }
 
       getBackupPlutoChannels(search = '', genre = 'all') {
