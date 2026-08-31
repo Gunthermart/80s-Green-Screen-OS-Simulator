@@ -7,7 +7,7 @@
   
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Hls.js CDN for HLS M3U8 streaming -->
+  <!-- Hls.js CDN for HLS M3U8 video streaming -->
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.8/dist/hls.min.js"></script>
   <!-- Three.js CDN for WebGL 3D animations -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -60,8 +60,6 @@
       display: flex;
       overflow: hidden;
     }
-
-    body.hide-cursor { cursor: none !important; }
 
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
@@ -238,30 +236,6 @@
 
     .card-fs-btn:hover { transform: scale(1.12); color: var(--accent-cyan); background: rgba(16, 19, 30, 0.95); border-color: var(--accent-cyan); }
 
-    .toast-notification {
-      position: fixed;
-      bottom: calc(var(--player-height) + 16px);
-      right: 24px;
-      background: rgba(17, 20, 32, 0.95);
-      border: 1px solid var(--border-glass);
-      color: var(--text-primary);
-      padding: 10px 18px;
-      border-radius: var(--radius-full);
-      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: 0.85rem;
-      z-index: 100;
-      backdrop-filter: blur(12px);
-      animation: toastIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    }
-
-    @keyframes toastIn {
-      from { opacity: 0; transform: translateY(12px) scale(0.95); }
-      to { opacity: 1; transform: translateY(0) scale(1); }
-    }
-
     #main-wrapper {
       flex: 1;
       display: flex;
@@ -345,7 +319,6 @@
       top: 0;
       z-index: 25;
       box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.8), var(--shadow-glow);
-      backdrop-filter: blur(16px);
     }
 
     #theater-stage.active { display: block; }
@@ -355,9 +328,6 @@
       border-radius: 0 !important;
       border: none !important;
     }
-
-    .hud-element { transition: opacity 0.5s ease, transform 0.5s ease; }
-    body.hide-hud .hud-element { opacity: 0 !important; pointer-events: none !important; }
 
     .stage-hud-top {
       position: absolute;
@@ -414,6 +384,7 @@
       height: 100vh !important;
     }
 
+    /* Video element is positioned to remain present in DOM */
     video#unified-media {
       width: 100%;
       height: 100%;
@@ -854,6 +825,15 @@
         </div>
 
         <div class="header-actions">
+          <!-- Sleep timer -->
+          <select id="sleep-timer-select" class="btn-header-action" style="outline:none; cursor:pointer;" title="Minuteur de veille">
+            <option value="0">⏱️ Veille: Off</option>
+            <option value="15">⏱️ 15 min</option>
+            <option value="30">⏱️ 30 min</option>
+            <option value="45">⏱️ 45 min</option>
+            <option value="60">⏱️ 60 min</option>
+          </select>
+
           <button class="btn-header-action" id="btn-toggle-queue" title="Ouvrir la file d'attente">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
             <span>File d'Attente</span>
@@ -901,6 +881,7 @@
           <div class="video-viewport" id="video-viewport-wrapper">
             <canvas id="visualizer-canvas-3d" class="canvas-layer"></canvas>
             <canvas id="visualizer-canvas-2d" class="canvas-layer"></canvas>
+            <!-- Unified video tag kept active in DOM -->
             <video id="unified-media" playsinline></video>
 
             <div id="audio-overlay" class="audio-visualizer-overlay hud-element">
@@ -1094,8 +1075,8 @@
         this.queue = [];
         this.onQueueChange = onQueueChange;
       }
-      add(episode, podcast) {
-        this.queue.push({ episode, podcast });
+      add(item) {
+        this.queue.push(item);
         if (this.onQueueChange) this.onQueueChange();
       }
       remove(index) {
@@ -1613,16 +1594,23 @@
 
           this.meshGroups = {};
 
+          // Helper builder to instantiate all 15 3D WebGL preset scenes
+          const createGroup = (name) => {
+            const g = new THREE.Group();
+            this.meshGroups[name] = g;
+            this.scene.add(g);
+            return g;
+          };
+
           // 1. Sphere
-          const sphereGroup = new THREE.Group();
+          const gSphere = createGroup('sphere');
           const sphereGeo = new THREE.IcosahedronGeometry(14, 2);
           const sphereMat = new THREE.MeshBasicMaterial({ color: 0x6366f1, wireframe: true, transparent: true, opacity: 0.85 });
           this.sphereMesh = new THREE.Mesh(sphereGeo, sphereMat);
-          sphereGroup.add(this.sphereMesh);
-          this.meshGroups['sphere'] = sphereGroup;
+          gSphere.add(this.sphereMesh);
 
           // 2. Hyperdrive
-          const hyperGroup = new THREE.Group();
+          const gHyper = createGroup('hyperdrive');
           const starGeo = new THREE.BufferGeometry();
           const starCount = 800;
           const starPos = new Float32Array(starCount * 3);
@@ -1634,19 +1622,122 @@
           starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
           const starMat = new THREE.PointsMaterial({ color: 0xa855f7, size: 2.2, transparent: true, opacity: 0.9 });
           this.starPoints = new THREE.Points(starGeo, starMat);
-          hyperGroup.add(this.starPoints);
-          this.meshGroups['hyperdrive'] = hyperGroup;
+          gHyper.add(this.starPoints);
 
           // 3. Synthwave
-          const synthGroup = new THREE.Group();
+          const gSynth = createGroup('synthwave');
           const gridHelper = new THREE.GridHelper(200, 40, 0x06b6d4, 0x6366f1);
           gridHelper.position.y = -20;
-          synthGroup.add(gridHelper);
-          this.meshGroups['synthwave'] = synthGroup;
+          gSynth.add(gridHelper);
 
+          // 4. Vortex
+          const gVortex = createGroup('vortex');
+          const vortexGeo = new THREE.TorusGeometry(18, 5, 16, 100);
+          const vortexMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4, wireframe: true });
+          this.vortexMesh = new THREE.Mesh(vortexGeo, vortexMat);
+          gVortex.add(this.vortexMesh);
+
+          // 5. Matrix
+          const gMatrix = createGroup('matrix');
+          const matrixGeo = new THREE.BoxGeometry(2, 2, 2);
+          const matrixMat = new THREE.MeshBasicMaterial({ color: 0x10b981, wireframe: true });
+          this.matrixCubes = [];
+          for (let i = 0; i < 30; i++) {
+            const m = new THREE.Mesh(matrixGeo, matrixMat);
+            m.position.set((Math.random() - 0.5) * 60, (Math.random() - 0.5) * 60, (Math.random() - 0.5) * 60);
+            gMatrix.add(m);
+            this.matrixCubes.push(m);
+          }
+
+          // 6. Neon Tunnel
+          const gTunnel = createGroup('neon_tunnel');
+          this.tunnelRings = [];
+          for (let i = 0; i < 12; i++) {
+            const rGeo = new THREE.TorusGeometry(12, 0.4, 8, 40);
+            const rMat = new THREE.MeshBasicMaterial({ color: (i % 2 === 0) ? 0x6366f1 : 0xa855f7 });
+            const r = new THREE.Mesh(rGeo, rMat);
+            r.position.z = -i * 12;
+            gTunnel.add(r);
+            this.tunnelRings.push(r);
+          }
+
+          // 7. Blackhole
+          const gBlackhole = createGroup('blackhole');
+          const bhCenter = new THREE.Mesh(new THREE.SphereGeometry(8, 32, 32), new THREE.MeshBasicMaterial({ color: 0x000000 }));
+          const bhDisk = new THREE.Mesh(new THREE.TorusGeometry(16, 3, 2, 60), new THREE.MeshBasicMaterial({ color: 0xf59e0b, wireframe: true }));
+          gBlackhole.add(bhCenter);
+          gBlackhole.add(bhDisk);
+          this.bhDisk = bhDisk;
+
+          // 8. DNA Double Helix
+          const gDna = createGroup('dna');
+          this.dnaSpheres = [];
+          for (let i = 0; i < 40; i++) {
+            const y = (i - 20) * 1.5;
+            const a = i * 0.3;
+            const s1 = new THREE.Mesh(new THREE.SphereGeometry(0.8, 8, 8), new THREE.MeshBasicMaterial({ color: 0x06b6d4 }));
+            const s2 = new THREE.Mesh(new THREE.SphereGeometry(0.8, 8, 8), new THREE.MeshBasicMaterial({ color: 0xa855f7 }));
+            s1.position.set(Math.sin(a) * 8, y, Math.cos(a) * 8);
+            s2.position.set(Math.sin(a + Math.PI) * 8, y, Math.cos(a + Math.PI) * 8);
+            gDna.add(s1); gDna.add(s2);
+            this.dnaSpheres.push({ s1, s2, a, y });
+          }
+
+          // 9. Fireworks
+          const gFireworks = createGroup('fireworks');
+          const fwGeo = new THREE.BufferGeometry();
+          const fwPos = new Float32Array(500 * 3);
+          for (let i = 0; i < 500 * 3; i++) fwPos[i] = (Math.random() - 0.5) * 40;
+          fwGeo.setAttribute('position', new THREE.BufferAttribute(fwPos, 3));
+          this.fwPoints = new THREE.Points(fwGeo, new THREE.PointsMaterial({ color: 0xef4444, size: 1.8 }));
+          gFireworks.add(this.fwPoints);
+
+          // 10. Ocean Digital
+          const gOcean = createGroup('ocean');
+          const oceanGeo = new THREE.PlaneGeometry(100, 100, 20, 20);
+          const oceanMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4, wireframe: true });
+          this.oceanMesh = new THREE.Mesh(oceanGeo, oceanMat);
+          this.oceanMesh.rotation.x = -Math.PI / 3;
+          gOcean.add(this.oceanMesh);
+
+          // 11. Cybercity
+          const gCity = createGroup('cybercity');
+          for (let i = 0; i < 25; i++) {
+            const h = Math.random() * 25 + 5;
+            const b = new THREE.Mesh(new THREE.BoxGeometry(4, h, 4), new THREE.MeshBasicMaterial({ color: 0x6366f1, wireframe: true }));
+            b.position.set((Math.random() - 0.5) * 60, h / 2 - 20, (Math.random() - 0.5) * 60);
+            gCity.add(b);
+          }
+
+          // 12. Stargate
+          const gStargate = createGroup('stargate');
+          const sgOuter = new THREE.Mesh(new THREE.TorusGeometry(16, 2, 16, 50), new THREE.MeshBasicMaterial({ color: 0x6366f1, wireframe: true }));
+          const sgInner = new THREE.Mesh(new THREE.TorusGeometry(12, 0.5, 16, 50), new THREE.MeshBasicMaterial({ color: 0x06b6d4 }));
+          gStargate.add(sgOuter); gStargate.add(sgInner);
+          this.sgInner = sgInner;
+
+          // 13. Eclipse
+          const gEclipse = createGroup('eclipse');
+          const ecMoon = new THREE.Mesh(new THREE.SphereGeometry(12, 32, 32), new THREE.MeshBasicMaterial({ color: 0x090a0f }));
+          const ecRing = new THREE.Mesh(new THREE.TorusGeometry(12.5, 1, 16, 50), new THREE.MeshBasicMaterial({ color: 0xf59e0b }));
+          gEclipse.add(ecMoon); gEclipse.add(ecRing);
+
+          // 14. Tesseract 4D
+          const gTesseract = createGroup('tesseract');
+          const tess1 = new THREE.Mesh(new THREE.BoxGeometry(16, 16, 16), new THREE.MeshBasicMaterial({ color: 0x6366f1, wireframe: true }));
+          const tess2 = new THREE.Mesh(new THREE.BoxGeometry(8, 8, 8), new THREE.MeshBasicMaterial({ color: 0x06b6d4, wireframe: true }));
+          gTesseract.add(tess1); gTesseract.add(tess2);
+          this.tess1 = tess1; this.tess2 = tess2;
+
+          // 15. Nebula & Pulsar
+          const gNebula = createGroup('nebula');
+          const pulsar = new THREE.Mesh(new THREE.OctahedronGeometry(8, 0), new THREE.MeshBasicMaterial({ color: 0xa855f7, wireframe: true }));
+          gNebula.add(pulsar);
+          this.pulsar = pulsar;
+
+          // Hide all groups initially
           Object.keys(this.meshGroups).forEach(k => {
             this.meshGroups[k].visible = false;
-            this.scene.add(this.meshGroups[k]);
           });
         } catch (e) {
           console.warn('WebGL initialization warning', e);
@@ -1690,6 +1781,7 @@
 
           const freqs = this.getFrequencyData();
           const bass = (freqs[0] + freqs[1] + freqs[2] + freqs[3]) / 4;
+          const time = Date.now() * 0.002;
           const w = this.c2d ? this.c2d.width : 0;
           const h = this.c2d ? this.c2d.height : 0;
 
@@ -1720,6 +1812,13 @@
               this.sphereMesh.rotation.y += 0.01;
               const scale = 1 + (bass / 255) * 0.4;
               this.sphereMesh.scale.set(scale, scale, scale);
+            }
+            if (this.vortexMesh) this.vortexMesh.rotation.z += 0.02;
+            if (this.bhDisk) this.bhDisk.rotation.z += 0.015;
+            if (this.pulsar) { this.pulsar.rotation.x += 0.02; this.pulsar.rotation.y += 0.02; }
+            if (this.tess1 && this.tess2) {
+              this.tess1.rotation.x += 0.01; this.tess1.rotation.y += 0.01;
+              this.tess2.rotation.x -= 0.015; this.tess2.rotation.y -= 0.015;
             }
             this.renderer.render(this.scene, this.camera);
           }
@@ -1778,6 +1877,25 @@
           if (el) el.addEventListener('click', () => this.switchTab(tabId));
         });
 
+        // Filter chips binding
+        document.querySelectorAll('#country-filters .chip').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            document.querySelectorAll('#country-filters .chip').forEach(c => c.classList.remove('active'));
+            e.target.classList.add('active');
+            this.currentCountry = e.target.getAttribute('data-filter') || 'FR';
+            this.loadCatalog();
+          });
+        });
+
+        document.querySelectorAll('#genre-filters .chip').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            document.querySelectorAll('#genre-filters .chip').forEach(c => c.classList.remove('active'));
+            e.target.classList.add('active');
+            this.currentGenre = e.target.getAttribute('data-genre') || 'all';
+            this.loadCatalog();
+          });
+        });
+
         document.getElementById('anim-preset-select').onchange = (e) => {
           this.visualizer.setPreset(e.target.value);
         };
@@ -1789,14 +1907,24 @@
 
         document.getElementById('btn-stage-fullscreen').onclick = () => {
           if (this.theater.requestFullscreen) this.theater.requestFullscreen();
+          else if (this.theater.webkitRequestFullscreen) this.theater.webkitRequestFullscreen();
         };
 
         document.getElementById('btn-fullscreen').onclick = () => {
           if (this.theater.requestFullscreen) this.theater.requestFullscreen();
+          else if (this.theater.webkitRequestFullscreen) this.theater.webkitRequestFullscreen();
         };
 
         document.getElementById('btn-toggle-queue').onclick = () => this.queueDrawer.classList.toggle('open');
         document.getElementById('btn-clear-queue').onclick = () => this.queue.clear();
+
+        // Search input
+        const searchInput = document.getElementById('global-search');
+        let searchTimer = null;
+        searchInput.oninput = (e) => {
+          clearTimeout(searchTimer);
+          searchTimer = setTimeout(() => this.loadCatalog(e.target.value), 300);
+        };
       }
 
       switchTab(tab) {
@@ -1833,7 +1961,7 @@
             <div class="card-thumb-wrapper">
               ${s.logo ? `<img src="${s.logo}" alt="" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">` : ''}
               <div class="card-thumb-fallback-box" style="${s.logo ? 'display:none;' : 'display:flex;'}">
-                <span>${(s.name || 'TV').substring(0, 3).toUpperCase()}</span>
+                <span>${(s.name || 'MEDIA').substring(0, 3).toUpperCase()}</span>
               </div>
             </div>
             <div>
