@@ -65,7 +65,6 @@
     }
     .live-badge.is-active { color: #10b981; }
     .live-badge.is-buffering { color: #f59e0b; }
-    .live-badge.is-dead { color: #ef4444; }
 
     .live-dot {
       width: 7px; height: 7px; background: currentColor;
@@ -234,7 +233,7 @@
 
     .episodes-panel {
       background: var(--bg-surface); border: 1px solid var(--border-glass); border-radius: var(--radius-lg);
-      padding: 20px; display: flex; flex-direction: column; gap: 16px; animation: fadeIn 0.3s ease;
+      padding: 20px; display: flex; flex-direction: column; gap: 16px; animation: fadeIn 0.3s ease; display: none;
     }
 
     .podcast-header-detail { display: flex; gap: 20px; align-items: flex-start; border-bottom: 1px solid var(--border-glass); padding-bottom: 16px; }
@@ -470,7 +469,7 @@
         </section>
 
         <h2 id="catalog-heading" style="font-size:1.15rem; font-weight:700;">Radios Populaires</h2>
-        <div id="episodes-container"></div>
+        <div id="episodes-container" class="episodes-panel"></div>
         <div id="stations-grid" class="cards-grid"></div>
       </main>
 
@@ -565,17 +564,25 @@
     };
 
     class FavoritesStore {
-      constructor(onChange) { this.onChange = onChange; this.radioFavs = new Map(); this.tvFavs = new Map(); this.loadLocal(); }
+      constructor(onChange) {
+        this.onChange = onChange;
+        this.radioFavs = new Map();
+        this.tvFavs = new Map();
+        this.podcastSubs = new Map();
+        this.loadLocal();
+      }
       loadLocal() {
         try {
           const storedRadio = localStorage.getItem('omni_favs_radio'); if (storedRadio) JSON.parse(storedRadio).forEach(i => this.radioFavs.set(i.id, i));
           const storedTv = localStorage.getItem('omni_favs_tv'); if (storedTv) JSON.parse(storedTv).forEach(i => this.tvFavs.set(i.id, i));
+          const storedSubs = localStorage.getItem('omni_podcasts_subs'); if (storedSubs) JSON.parse(storedSubs).forEach(i => this.podcastSubs.set(i.id, i));
         } catch (e) {}
       }
       saveLocal() {
         try {
           localStorage.setItem('omni_favs_radio', JSON.stringify(Array.from(this.radioFavs.values())));
           localStorage.setItem('omni_favs_tv', JSON.stringify(Array.from(this.tvFavs.values())));
+          localStorage.setItem('omni_podcasts_subs', JSON.stringify(Array.from(this.podcastSubs.values())));
         } catch (e) {}
       }
       toggle(station) {
@@ -587,23 +594,21 @@
         this.saveLocal(); if (this.onChange) this.onChange();
         return !exists;
       }
+      toggleSub(podcast) {
+        if (!podcast || !podcast.id) return false;
+        const exists = this.podcastSubs.has(podcast.id);
+        if (exists) this.podcastSubs.delete(podcast.id); else this.podcastSubs.set(podcast.id, podcast);
+        this.saveLocal(); if (this.onChange) this.onChange();
+        return !exists;
+      }
       isFav(id, type) { return (type === 'video' || type === 'tv') ? this.tvFavs.has(id) : this.radioFavs.has(id); }
+      isSubbed(id) { return this.podcastSubs.has(id); }
       getRadioFavs() { return Array.from(this.radioFavs.values()); }
       getTvFavs() { return Array.from(this.tvFavs.values()); }
+      getPodcastSubs() { return Array.from(this.podcastSubs.values()); }
     }
 
     class PlutoTVService {
-      constructor() { this.deviceId = this.getDeviceId(); }
-      getDeviceId() {
-        let id = localStorage.getItem('omni_pluto_device_id');
-        if (!id) {
-          id = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-            let r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8); return v.toString(16);
-          });
-          localStorage.setItem('omni_pluto_device_id', id);
-        }
-        return id;
-      }
       buildPlutoStreamUrl(rawStreamUrl) {
         if (!rawStreamUrl) return '';
         const sid = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'sid_' + Math.random().toString(36).substring(2);
@@ -654,11 +659,11 @@
       }
       getBackupPlutoChannels(search = '', genre = 'all') {
         const backupPluto = [
-          { id: 'pluto_daria', rawId: '5f9b177d8e37600007cdb3c8', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5f9b177d8e37600007cdb3c8/master.m3u8', name: 'Daria 24/7', logo: 'https://images.pluto.tv/channels/5f9b177d8e37600007cdb3c8/colorLogoPNG.png', country: 'FR', tags: 'Animation, Séries', type: 'video', category: 'humor' },
-          { id: 'pluto_cine', rawId: '5d8b894ec4e3d3000969678c', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5d8b894ec4e3d3000969678c/master.m3u8', name: 'Pluto TV Ciné', logo: 'https://images.pluto.tv/channels/5d8b894ec4e3d3000969678c/colorLogoPNG.png', country: 'FR', tags: 'Films 24/7, Cinema', type: 'video', category: 'culture' },
-          { id: 'pluto_southpark', rawId: '5fa016c68e37600007cdbf83', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5fa016c68e37600007cdbf83/master.m3u8', name: 'South Park 24/7', logo: 'https://images.pluto.tv/channels/5fa016c68e37600007cdbf83/colorLogoPNG.png', country: 'FR', tags: 'Séries, Humour', type: 'video', category: 'humor' },
-          { id: 'pluto_anime', rawId: '5fa0165c8e37600007cdbf6e', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5fa0165c8e37600007cdbf6e/master.m3u8', name: 'Pluto TV Anime', logo: 'https://images.pluto.tv/channels/5fa0165c8e37600007cdbf6e/colorLogoPNG.png', country: 'FR', tags: 'Animation, Manga', type: 'video', category: 'culture' },
-          { id: 'pluto_crime', rawId: '5d8b89cfc4e3d300096967be', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5d8b89cfc4e3d300096967be/master.m3u8', name: 'Pluto TV Crime', logo: 'https://images.pluto.tv/channels/5d8b89cfc4e3d300096967be/colorLogoPNG.png', country: 'FR', tags: 'True Crime, Investigation', type: 'video', category: 'crime' }
+          { id: 'pluto_daria', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5f9b177d8e37600007cdb3c8/master.m3u8', name: 'Daria 24/7', logo: 'https://images.pluto.tv/channels/5f9b177d8e37600007cdb3c8/colorLogoPNG.png', country: 'FR', tags: 'Animation, Séries', type: 'video', category: 'humor' },
+          { id: 'pluto_cine', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5d8b894ec4e3d3000969678c/master.m3u8', name: 'Pluto TV Ciné', logo: 'https://images.pluto.tv/channels/5d8b894ec4e3d3000969678c/colorLogoPNG.png', country: 'FR', tags: 'Films 24/7, Cinema', type: 'video', category: 'culture' },
+          { id: 'pluto_southpark', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5fa016c68e37600007cdbf83/master.m3u8', name: 'South Park 24/7', logo: 'https://images.pluto.tv/channels/5fa016c68e37600007cdbf83/colorLogoPNG.png', country: 'FR', tags: 'Séries, Humour', type: 'video', category: 'humor' },
+          { id: 'pluto_anime', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5fa0165c8e37600007cdbf6e/master.m3u8', name: 'Pluto TV Anime', logo: 'https://images.pluto.tv/channels/5fa0165c8e37600007cdbf6e/colorLogoPNG.png', country: 'FR', tags: 'Animation, Manga', type: 'video', category: 'culture' },
+          { id: 'pluto_crime', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5d8b89cfc4e3d300096967be/master.m3u8', name: 'Pluto TV Crime', logo: 'https://images.pluto.tv/channels/5d8b89cfc4e3d300096967be/colorLogoPNG.png', country: 'FR', tags: 'True Crime, Investigation', type: 'video', category: 'crime' }
         ];
         return backupPluto.filter(ch => {
           const matchSearch = !search || ch.name.toLowerCase().includes(search.toLowerCase()) || ch.tags.toLowerCase().includes(search.toLowerCase());
@@ -671,6 +676,77 @@
     class MediaFetcher {
       constructor() { this.pluto = new PlutoTVService(); }
       async getPlutoTV(search = '', genre = 'all') { return await this.pluto.getPlutoChannels(search, genre); }
+
+      async getPodcasts(search = 'actualité france', genre = 'all') {
+        try {
+          const query = search || (genre !== 'all' ? genre : 'france culture info');
+          const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&media=podcast&country=FR&limit=36`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.results) {
+              return data.results.map(p => ({
+                id: `pod_${p.collectionId}`,
+                name: p.collectionName || p.trackName,
+                author: p.artistName || 'Podcast',
+                logo: p.artworkUrl600 || p.artworkUrl100,
+                feedUrl: p.feedUrl,
+                tags: p.primaryGenreName || 'Podcast',
+                type: 'podcast',
+                country: 'FR'
+              }));
+            }
+          }
+        } catch (e) {}
+        return [];
+      }
+
+      async getPodcastEpisodes(feedUrl) {
+        if (!feedUrl) return [];
+        const proxies = [
+          `/.netlify/functions/IPTV?url=${encodeURIComponent(feedUrl)}`,
+          `https://api.allorigins.win/raw?url=${encodeURIComponent(feedUrl)}`,
+          feedUrl
+        ];
+
+        for (let url of proxies) {
+          try {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 4500);
+            const res = await fetch(url, { signal: controller.signal });
+            clearTimeout(timer);
+            if (res.ok) {
+              const xmlText = await res.text();
+              const parser = new DOMParser();
+              const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
+              const items = xmlDoc.querySelectorAll('item');
+              const episodes = [];
+              items.forEach((item, idx) => {
+                if (idx > 40) return;
+                const title = item.querySelector('title')?.textContent || 'Épisode';
+                const enc = item.querySelector('enclosure');
+                const audioUrl = enc?.getAttribute('url');
+                const pubDate = item.querySelector('pubDate')?.textContent || '';
+                const duration = item.querySelector('duration')?.textContent || '';
+                const desc = item.querySelector('description')?.textContent || '';
+                if (audioUrl) {
+                  episodes.push({
+                    id: `ep_${Math.random().toString(36).substring(2)}`,
+                    title: title.trim(),
+                    url: audioUrl,
+                    pubDate: pubDate ? new Date(pubDate).toLocaleDateString('fr-FR') : '',
+                    duration: duration || '30 min',
+                    description: desc.replace(/<[^>]*>/g, '').substring(0, 180) + '...',
+                    type: 'audio'
+                  });
+                }
+              });
+              if (episodes.length > 0) return episodes;
+            }
+          } catch(e) {}
+        }
+        return [];
+      }
+
       async getRadios(country = 'FR', genre = 'all', search = '') {
         const backups = BACKUP_STATIONS.FR_RADIO || [];
         let fetchedList = [];
@@ -795,11 +871,11 @@
 
       getFrequencyData() {
         const isPlaying = this.audioEl && !this.audioEl.paused && !this.audioEl.ended;
-        const fakeData = new Uint8Array(32);
+        const fakeData = new Uint8Array(64);
         const time = Date.now() * 0.003;
         const mult = isPlaying ? 1.0 : 0.45;
-        for (let i = 0; i < 32; i++) {
-          const val = Math.sin(time * 2.5 + i * 0.35) * 0.5 + 0.5;
+        for (let i = 0; i < 64; i++) {
+          const val = Math.sin(time * 2.5 + i * 0.2) * 0.5 + 0.5;
           const beat = Math.pow(Math.sin(time * 1.8), 4) * 0.5;
           fakeData[i] = Math.min(255, Math.floor((val * 0.5 + beat) * 220 * mult + (isPlaying ? 35 : 15)));
         }
@@ -832,14 +908,14 @@
 
           this.meshGroups = {};
 
-          const sphereGroup = new THREE.Group();
-          const sphereGeo = new THREE.IcosahedronGeometry(14, 2);
-          const sphereMat = new THREE.MeshBasicMaterial({ color: 0x6366f1, wireframe: true, transparent: true, opacity: 0.85 });
-          this.sphereMesh = new THREE.Mesh(sphereGeo, sphereMat);
-          sphereGroup.add(this.sphereMesh);
-          this.meshGroups['sphere'] = sphereGroup;
+          // 1. Sphere
+          const sphereG = new THREE.Group();
+          this.sphereMesh = new THREE.Mesh(new THREE.IcosahedronGeometry(14, 2), new THREE.MeshBasicMaterial({ color: 0x6366f1, wireframe: true, transparent: true, opacity: 0.85 }));
+          sphereG.add(this.sphereMesh);
+          this.meshGroups['sphere'] = sphereG;
 
-          const hyperGroup = new THREE.Group();
+          // 2. Hyperdrive
+          const hyperG = new THREE.Group();
           const starGeo = new THREE.BufferGeometry();
           const starCount = 800;
           const starPos = new Float32Array(starCount * 3);
@@ -849,10 +925,44 @@
             starPos[i + 2] = (Math.random() - 0.5) * 600;
           }
           starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
-          const starMat = new THREE.PointsMaterial({ color: 0xa855f7, size: 2.2, transparent: true });
-          this.starPoints = new THREE.Points(starGeo, starMat);
-          hyperGroup.add(this.starPoints);
-          this.meshGroups['hyperdrive'] = hyperGroup;
+          this.starPoints = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xa855f7, size: 2.2, transparent: true }));
+          hyperG.add(this.starPoints);
+          this.meshGroups['hyperdrive'] = hyperG;
+
+          // 3. Synthwave Grid
+          const synthG = new THREE.Group();
+          const gridGeo = new THREE.PlaneGeometry(120, 120, 24, 24);
+          const gridMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4, wireframe: true, transparent: true, opacity: 0.7 });
+          this.synthGrid = new THREE.Mesh(gridGeo, gridMat);
+          this.synthGrid.rotation.x = -Math.PI / 2.5;
+          this.synthGrid.position.y = -20;
+          synthG.add(this.synthGrid);
+          this.meshGroups['synthwave'] = synthG;
+
+          // 4. Vortex
+          const vortexG = new THREE.Group();
+          const vCount = 600;
+          const vPos = new Float32Array(vCount * 3);
+          for (let i = 0; i < vCount; i++) {
+            const angle = i * 0.1;
+            const r = 5 + i * 0.08;
+            vPos[i * 3] = Math.cos(angle) * r;
+            vPos[i * 3 + 1] = Math.sin(angle) * r;
+            vPos[i * 3 + 2] = (Math.random() - 0.5) * 40;
+          }
+          const vGeo = new THREE.BufferGeometry();
+          vGeo.setAttribute('position', new THREE.BufferAttribute(vPos, 3));
+          this.vortexPoints = new THREE.Points(vGeo, new THREE.PointsMaterial({ color: 0x10b981, size: 2.5, transparent: true }));
+          vortexG.add(this.vortexPoints);
+          this.meshGroups['vortex'] = vortexG;
+
+          // Generic 3D Fallback Group for remaining presets
+          const generic3DG = new THREE.Group();
+          this.genericMesh = new THREE.Mesh(new THREE.TorusKnotGeometry(12, 3, 100, 16), new THREE.MeshBasicMaterial({ color: 0xef4444, wireframe: true, transparent: true, opacity: 0.8 }));
+          generic3DG.add(this.genericMesh);
+          ['matrix', 'neon_tunnel', 'blackhole', 'dna', 'fireworks', 'ocean', 'cybercity', 'stargate', 'eclipse', 'tesseract', 'nebula'].forEach(p => {
+            this.meshGroups[p] = generic3DG;
+          });
 
           Object.values(this.meshGroups).forEach(g => { g.visible = false; this.scene.add(g); });
           this.update3DVisibility();
@@ -861,7 +971,7 @@
 
       setPreset(preset) {
         this.preset = preset;
-        const is3D = ['hyperdrive', 'sphere'].includes(preset);
+        const is3D = ['hyperdrive', 'sphere', 'synthwave', 'vortex', 'matrix', 'neon_tunnel', 'blackhole', 'dna', 'fireworks', 'ocean', 'cybercity', 'stargate', 'eclipse', 'tesseract', 'nebula'].includes(preset);
         if (this.c2d) this.c2d.style.display = is3D ? 'none' : 'block';
         if (this.c3d) this.c3d.style.display = is3D ? 'block' : 'none';
         this.update3DVisibility();
@@ -870,7 +980,7 @@
 
       update3DVisibility() {
         if (!this.meshGroups) return;
-        Object.keys(this.meshGroups).forEach(k => { this.meshGroups[k].visible = (k === this.preset); });
+        Object.keys(this.meshGroups).forEach(k => { if (this.meshGroups[k]) this.meshGroups[k].visible = (k === this.preset); });
       }
 
       start() {
@@ -882,10 +992,7 @@
 
       stop() {
         this.isRunning = false;
-        if (this.animFrameId) {
-          cancelAnimationFrame(this.animFrameId);
-          this.animFrameId = null;
-        }
+        if (this.animFrameId) { cancelAnimationFrame(this.animFrameId); this.animFrameId = null; }
       }
 
       startLoop() {
@@ -902,15 +1009,39 @@
 
           if (this.c2d && this.c2d.style.display !== 'none' && w && h) {
             this.ctx2d.clearRect(0, 0, w, h);
-            const bars = 28;
-            const barW = (w / bars) - 4;
-            for (let i = 0; i < bars; i++) {
-              const fVal = freqs[i % freqs.length] / 255;
-              const bh = fVal * (h * 0.55) + 12;
-              const x = i * (barW + 4) + 2;
-              const y = h - bh;
-              this.ctx2d.fillStyle = '#6366f1';
-              this.ctx2d.fillRect(x, y, barW, bh);
+            if (this.preset === 'cyber') {
+              const bars = 32;
+              const barW = (w / bars) - 4;
+              for (let i = 0; i < bars; i++) {
+                const fVal = freqs[i % freqs.length] / 255;
+                const bh = fVal * (h * 0.55) + 12;
+                const x = i * (barW + 4) + 2;
+                const y = h - bh;
+                this.ctx2d.fillStyle = '#6366f1';
+                this.ctx2d.fillRect(x, y, barW, bh);
+              }
+            } else if (this.preset === 'particles') {
+              const time = Date.now() * 0.002;
+              for (let i = 0; i < 20; i++) {
+                const r = (freqs[i % 10] / 255) * 80 + 20;
+                const cx = w / 2 + Math.cos(time + i) * (w * 0.2);
+                const cy = h / 2 + Math.sin(time + i) * (h * 0.2);
+                this.ctx2d.beginPath();
+                this.ctx2d.arc(cx, cy, r, 0, Math.PI * 2);
+                this.ctx2d.fillStyle = `rgba(168, 85, 247, ${0.15 + (i % 5) * 0.05})`;
+                this.ctx2d.fill();
+              }
+            } else { // Aurora
+              this.ctx2d.beginPath();
+              this.ctx2d.moveTo(0, h / 2);
+              const time = Date.now() * 0.003;
+              for (let x = 0; x < w; x += 20) {
+                const y = h / 2 + Math.sin(x * 0.01 + time) * 40 + (freqs[Math.floor(x / 30) % 32] / 255) * 30;
+                this.ctx2d.lineTo(x, y);
+              }
+              this.ctx2d.strokeStyle = '#06b6d4';
+              this.ctx2d.lineWidth = 4;
+              this.ctx2d.stroke();
             }
           }
 
@@ -920,6 +1051,10 @@
               const scale = 1 + (bass / 255) * 0.4;
               this.sphereMesh.scale.set(scale, scale, scale);
             }
+            if (this.starPoints) { this.starPoints.rotation.z += 0.002; }
+            if (this.synthGrid) { this.synthGrid.rotation.z += 0.005; }
+            if (this.vortexPoints) { this.vortexPoints.rotation.z += 0.02; }
+            if (this.genericMesh) { this.genericMesh.rotation.x += 0.01; this.genericMesh.rotation.y += 0.015; }
             this.renderer.render(this.scene, this.camera);
           }
         };
@@ -935,6 +1070,7 @@
         this.currentGenre = 'all';
         this.stations = [];
         this.activeStationIndex = -1;
+        this.currentPodcast = null;
 
         this.favStore = new FavoritesStore(() => this.updateBadgesUI());
 
@@ -948,6 +1084,7 @@
 
       initDOM() {
         this.grid = document.getElementById('stations-grid');
+        this.episodesContainer = document.getElementById('episodes-container');
         this.theater = document.getElementById('theater-stage');
         this.media = document.getElementById('unified-media');
         this.sidebar = document.getElementById('sidebar');
@@ -975,7 +1112,7 @@
         };
         if (backdrop) backdrop.onclick = closeSidebarMobile;
 
-        ['radio', 'radio-fav', 'tv', 'pluto', 'tv-fav'].forEach(tabId => {
+        ['radio', 'radio-fav', 'tv', 'pluto', 'tv-fav', 'podcasts', 'podcast-subs'].forEach(tabId => {
           const el = document.getElementById(`tab-${tabId}`);
           if (el) {
             el.addEventListener('click', () => {
@@ -984,6 +1121,22 @@
             });
           }
         });
+
+        // Animation Preset Change Listener
+        const animSelect = document.getElementById('anim-preset-select');
+        if (animSelect) {
+          animSelect.addEventListener('change', (e) => {
+            if (this.visualizer) this.visualizer.setPreset(e.target.value);
+          });
+        }
+
+        // Global Search Input
+        const searchInput = document.getElementById('global-search');
+        if (searchInput) {
+          searchInput.addEventListener('input', (e) => {
+            this.loadCatalog(e.target.value.trim());
+          });
+        }
 
         document.getElementById('btn-play-pause').onclick = () => {
           this.unlockAudio();
@@ -997,6 +1150,37 @@
           document.getElementById('icon-vol-mute').style.display = this.media.muted ? 'block' : 'none';
         };
 
+        // Jump Controls
+        document.getElementById('btn-skip-back').onclick = () => { if (this.media) this.media.currentTime = Math.max(0, this.media.currentTime - 10); };
+        document.getElementById('btn-skip-forward').onclick = () => { if (this.media) this.media.currentTime = Math.min(this.media.duration || 0, this.media.currentTime + 30); };
+
+        // Speed Toggle
+        const speedBtn = document.getElementById('btn-speed-toggle');
+        const speeds = [1, 1.25, 1.5, 2, 0.75];
+        let speedIdx = 0;
+        speedBtn.onclick = () => {
+          speedIdx = (speedIdx + 1) % speeds.length;
+          const s = speeds[speedIdx];
+          this.media.playbackRate = s;
+          speedBtn.textContent = `${s}×`;
+        };
+
+        // Scrubbing Range
+        const scrubRange = document.getElementById('scrub-range');
+        scrubRange.oninput = (e) => {
+          if (this.media.duration) {
+            this.media.currentTime = (e.target.value / 100) * this.media.duration;
+          }
+        };
+
+        this.media.ontimeupdate = () => {
+          if (this.media.duration) {
+            scrubRange.value = (this.media.currentTime / this.media.duration) * 100;
+            document.getElementById('time-current').textContent = this.formatTime(this.media.currentTime);
+            document.getElementById('time-duration').textContent = this.formatTime(this.media.duration);
+          }
+        };
+
         this.media.onplay = () => {
           document.getElementById('icon-play').style.display = 'none';
           document.getElementById('icon-pause').style.display = 'block';
@@ -1005,6 +1189,13 @@
           document.getElementById('icon-play').style.display = 'block';
           document.getElementById('icon-pause').style.display = 'none';
         };
+      }
+
+      formatTime(sec) {
+        if (!sec || isNaN(sec)) return '00:00';
+        const m = Math.floor(sec / 60);
+        const s = Math.floor(sec % 60);
+        return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
       }
 
       updateMetadata(title, subtitle, logo) {
@@ -1037,17 +1228,22 @@
         if (tab === 'radio') heading.textContent = 'Radios Populaires';
         else if (tab === 'tv') heading.textContent = 'Télévision TV Direct (TNT)';
         else if (tab === 'pluto') heading.textContent = 'Pluto TV 24/7';
+        else if (tab === 'podcasts') heading.textContent = 'Podcasts & Replays';
+        else if (tab === 'podcast-subs') heading.textContent = 'Mes Podcasts Suivis';
 
         this.loadCatalog();
       }
 
       async loadCatalog(search = '') {
+        this.episodesContainer.style.display = 'none';
         this.grid.style.display = 'grid';
         this.grid.innerHTML = '<div class="loader-container"><div class="spinner"></div><p>Chargement en cours...</p></div>';
 
         if (this.currentTab === 'radio') this.stations = await this.fetcher.getRadios(this.currentCountry, this.currentGenre, search);
         else if (this.currentTab === 'tv') this.stations = await this.fetcher.getTV(this.currentCountry, this.currentGenre, search);
         else if (this.currentTab === 'pluto') this.stations = await this.fetcher.getPlutoTV(search, this.currentGenre);
+        else if (this.currentTab === 'podcasts') this.stations = await this.fetcher.getPodcasts(search, this.currentGenre);
+        else if (this.currentTab === 'podcast-subs') this.stations = this.favStore.getPodcastSubs();
         else if (this.currentTab === 'radio-fav') this.stations = this.favStore.getRadioFavs();
         else if (this.currentTab === 'tv-fav') this.stations = this.favStore.getTvFavs();
 
@@ -1062,15 +1258,22 @@
 
         this.grid.innerHTML = this.stations.map((s, i) => {
           const isFav = this.favStore.isFav(s.id, s.type);
+          const isSubbed = this.favStore.isSubbed(s.id);
           const safeName = (s.name || 'Média').replace(/"/g, '&quot;');
-          const initials = (s.name || 'TV').substring(0, 3).toUpperCase();
+          const initials = (s.name || 'OM').substring(0, 3).toUpperCase();
 
           return `
             <div class="station-card ${this.activeStationIndex === i ? 'is-playing' : ''}" onclick="app.handleCardClick(${i})">
-              <button class="card-fav-btn ${isFav ? 'is-fav' : ''}" onclick="event.stopPropagation(); app.toggleFavByCard(${i})" title="Favori">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="${isFav ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l8.72-8.72 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-              </button>
-              <button class="card-fs-btn" onclick="event.stopPropagation(); app.playStationInFullscreen(${i})" title="Plein Écran Direct">
+              ${s.type === 'podcast' ? `
+                <button class="card-fav-btn ${isSubbed ? 'is-fav' : ''}" onclick="event.stopPropagation(); app.toggleSubByCard(${i})" title="S'abonner">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="${isSubbed ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                </button>
+              ` : `
+                <button class="card-fav-btn ${isFav ? 'is-fav' : ''}" onclick="event.stopPropagation(); app.toggleFavByCard(${i})" title="Favori">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="${isFav ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l8.72-8.72 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                </button>
+              `}
+              <button class="card-fs-btn" onclick="event.stopPropagation(); app.playStationInFullscreen(${i})" title="Lecture / Plein Écran">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
               </button>
               <div class="card-thumb-wrapper">
@@ -1082,18 +1285,86 @@
               </div>
               <div>
                 <div style="font-weight:600; font-size:0.88rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${s.name}</div>
-                <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${s.tags || s.country}</div>
+                <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${s.author || s.tags || s.country}</div>
               </div>
             </div>
           `;
         }).join('');
       }
 
-      handleCardClick(index) {
+      async handleCardClick(index) {
         this.unlockAudio();
         const item = this.stations[index];
         if (!item) return;
-        this.playStation(index);
+
+        if (item.type === 'podcast') {
+          await this.showPodcastDetail(item);
+        } else {
+          this.playStation(index);
+        }
+      }
+
+      async showPodcastDetail(podcast) {
+        this.currentPodcast = podcast;
+        this.grid.style.display = 'none';
+        this.episodesContainer.style.display = 'flex';
+        this.episodesContainer.innerHTML = '<div class="loader-container"><div class="spinner"></div><p>Chargement des épisodes...</p></div>';
+
+        const isSubbed = this.favStore.isSubbed(podcast.id);
+        const episodes = await this.fetcher.getPodcastEpisodes(podcast.feedUrl);
+
+        this.episodesContainer.innerHTML = `
+          <div class="podcast-header-detail">
+            <img class="podcast-detail-cover" src="${podcast.logo || ''}" alt="${podcast.name}">
+            <div class="podcast-header-info">
+              <h3 style="font-size:1.2rem; font-weight:700;">${podcast.name}</h3>
+              <p style="color:var(--text-secondary); font-size:0.85rem;">Par ${podcast.author || 'Inconnu'}</p>
+              <button class="btn-subscribe ${isSubbed ? 'is-subbed' : ''}" onclick="app.toggleSubCurrentPodcast()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                <span>${isSubbed ? 'Abonné' : "S'abonner"}</span>
+              </button>
+            </div>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <h4 style="font-size:0.95rem; font-weight:700; margin-bottom:6px;">Derniers Épisodes (${episodes.length})</h4>
+            ${episodes.length ? episodes.map((ep, idx) => `
+              <div class="episode-item" onclick="app.playEpisode(${idx})">
+                <div style="flex:1; overflow:hidden;">
+                  <div style="font-weight:600; font-size:0.88rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${ep.title}</div>
+                  <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:2px;">${ep.pubDate} • ${ep.duration}</div>
+                  <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;">${ep.description}</div>
+                </div>
+                <div class="episode-actions">
+                  <button class="btn-action-sm">Écouter</button>
+                </div>
+              </div>
+            `).join('') : '<p style="color:var(--text-secondary);">Aucun épisode trouvé.</p>'}
+          </div>
+        `;
+        this.currentEpisodes = episodes;
+      }
+
+      playEpisode(index) {
+        const ep = this.currentEpisodes[index];
+        if (!ep) return;
+        this.theater.classList.add('active');
+        this.updateMetadata(ep.title, this.currentPodcast ? this.currentPodcast.name : 'Podcast', this.currentPodcast ? this.currentPodcast.logo : '');
+
+        this.audioOverlay.style.display = 'flex';
+        this.media.style.display = 'block';
+        this.media.style.opacity = '0';
+        this.media.style.pointerEvents = 'none';
+
+        this.visualizer.start();
+        this.media.src = ep.url;
+        this.media.play().catch(() => {});
+      }
+
+      toggleSubCurrentPodcast() {
+        if (!this.currentPodcast) return;
+        this.favStore.toggleSub(this.currentPodcast);
+        this.updateBadgesUI();
+        this.showPodcastDetail(this.currentPodcast);
       }
 
       playStationInFullscreen(index) {
@@ -1217,9 +1488,19 @@
         }
       }
 
+      toggleSubByCard(index) {
+        const s = this.stations[index];
+        if (s) {
+          this.favStore.toggleSub(s);
+          this.updateBadgesUI();
+          this.renderGrid();
+        }
+      }
+
       updateBadgesUI() {
         document.getElementById('fav-radio-badge').textContent = this.favStore.getRadioFavs().length;
         document.getElementById('fav-tv-badge').textContent = this.favStore.getTvFavs().length;
+        document.getElementById('sub-podcast-badge').textContent = this.favStore.getPodcastSubs().length;
       }
 
       initFullscreenAndHUD() {
