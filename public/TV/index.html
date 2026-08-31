@@ -1176,62 +1176,58 @@
       async getPlutoChannels(search = '', genre = 'all') {
         try {
           const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 5000);
+          const timer = setTimeout(() => controller.abort(), 4000);
           
-          let m3uUrl = 'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/fr_pluto.m3u';
+          let apiUrl = 'https://api.pluto.tv/v0/channels?clientModelNumber=0.0.0&serverSideAds=true';
           if (window.location.hostname !== 'localhost') {
-            m3uUrl = `/.netlify/functions/IPTV?url=${encodeURIComponent(m3uUrl)}`;
+            apiUrl = `/.netlify/functions/IPTV?url=${encodeURIComponent(apiUrl)}`;
           }
 
-          const res = await fetch(m3uUrl, { signal: controller.signal });
+          const res = await fetch(apiUrl, { signal: controller.signal });
           clearTimeout(timer);
 
           if (res.ok) {
-            const text = await res.text();
-            const parsed = this.parsePlutoM3U(text);
-            if (parsed && parsed.length > 0) {
-              return parsed.filter(ch => {
+            const data = await res.json();
+            if (Array.isArray(data) && data.length > 0) {
+              const parsed = [];
+              data.forEach(ch => {
+                if (ch.isLive !== false) {
+                  let rawStreamUrl = '';
+                  if (ch.stitched && ch.stitched.urls && ch.stitched.urls[0] && ch.stitched.urls[0].url) {
+                    rawStreamUrl = ch.stitched.urls[0].url;
+                  }
+
+                  const logo = ch.colorLogoPNG?.path || ch.featuredImage?.path || `https://images.pluto.tv/channels/${ch._id}/colorLogoPNG.png`;
+
+                  parsed.push({
+                    id: `pluto_${ch._id}`,
+                    rawId: ch._id,
+                    rawStreamUrl: rawStreamUrl,
+                    name: ch.name,
+                    url: rawStreamUrl,
+                    logo: logo,
+                    country: 'FR',
+                    tags: ch.category || 'Pluto TV 24/7',
+                    type: 'video',
+                    category: ch.category ? ch.category.toLowerCase() : 'all'
+                  });
+                }
+              });
+
+              const filtered = parsed.filter(ch => {
                 const matchSearch = !search || ch.name.toLowerCase().includes(search.toLowerCase()) || ch.tags.toLowerCase().includes(search.toLowerCase());
                 const matchGenre = genre === 'all' || ch.category.includes(genre.toLowerCase()) || ch.tags.toLowerCase().includes(genre.toLowerCase());
                 return matchSearch && matchGenre;
               });
+
+              if (filtered.length > 0) return filtered;
             }
           }
         } catch (e) {
-          console.warn("Pluto TV M3U fetch fallback actif", e);
+          console.warn("Pluto TV API v0 fallback actif", e);
         }
 
         return this.getBackupPlutoChannels(search, genre);
-      }
-
-      parsePlutoM3U(content) {
-        const lines = content.split('\n');
-        const list = [];
-        let item = null;
-        for (let rawLine of lines) {
-          const line = rawLine.trim();
-          if (line.startsWith('#EXTINF:')) {
-            const name = (line.match(/,(.+)$/) || [])[1] || 'Pluto TV';
-            const logo = (line.match(/tvg-logo="([^"]*)"/) || [])[1] || '';
-            const group = (line.match(/group-title="([^"]*)"/) || [])[1] || 'Pluto TV 24/7';
-            const cleanId = `pluto_${name.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
-            item = {
-              id: cleanId,
-              name: name.trim(),
-              logo: logo,
-              country: 'FR',
-              tags: group,
-              type: 'video',
-              category: group.toLowerCase()
-            };
-          } else if (line && !line.startsWith('#') && item) {
-            item.url = line;
-            item.rawStreamUrl = line;
-            list.push(item);
-            item = null;
-          }
-        }
-        return list;
       }
 
       getBackupPlutoChannels(search = '', genre = 'all') {
@@ -1693,7 +1689,6 @@
 
           this.meshGroups = {};
 
-          // 1. Sphere
           const sphereGroup = new THREE.Group();
           const sphereGeo = new THREE.IcosahedronGeometry(14, 2);
           const sphereMat = new THREE.MeshBasicMaterial({ color: 0x6366f1, wireframe: true, transparent: true, opacity: 0.85 });
@@ -1705,7 +1700,6 @@
           sphereGroup.add(this.coreMesh);
           this.meshGroups['sphere'] = sphereGroup;
 
-          // 2. Hyperdrive
           const hyperGroup = new THREE.Group();
           const starGeo = new THREE.BufferGeometry();
           const starCount = 800;
@@ -1721,7 +1715,6 @@
           hyperGroup.add(this.starPoints);
           this.meshGroups['hyperdrive'] = hyperGroup;
 
-          // 3. Synthwave
           const synthGroup = new THREE.Group();
           const gridHelper = new THREE.GridHelper(200, 40, 0x06b6d4, 0x6366f1);
           gridHelper.position.y = -20;
@@ -1732,216 +1725,6 @@
           sunMesh.position.set(0, 5, -80);
           synthGroup.add(sunMesh);
           this.meshGroups['synthwave'] = synthGroup;
-
-          // 4. Vortex
-          const vortexGroup = new THREE.Group();
-          const vortexGeo = new THREE.BufferGeometry();
-          const vortexCount = 1000;
-          const vPos = new Float32Array(vortexCount * 3);
-          for (let i = 0; i < vortexCount; i++) {
-            const angle = i * 0.1;
-            const r = 2 + i * 0.08;
-            vPos[i * 3] = Math.cos(angle) * r;
-            vPos[i * 3 + 1] = (Math.random() - 0.5) * 20;
-            vPos[i * 3 + 2] = Math.sin(angle) * r - 40;
-          }
-          vortexGeo.setAttribute('position', new THREE.BufferAttribute(vPos, 3));
-          const vortexMat = new THREE.PointsMaterial({ color: 0xec4899, size: 1.8, transparent: true });
-          this.vortexPoints = new THREE.Points(vortexGeo, vortexMat);
-          vortexGroup.add(this.vortexPoints);
-          this.meshGroups['vortex'] = vortexGroup;
-
-          // 5. Matrix
-          const matrixGroup = new THREE.Group();
-          this.matrixCubes = [];
-          const cubeGeo = new THREE.BoxGeometry(2.5, 2.5, 2.5);
-          for (let x = -4; x <= 4; x++) {
-            for (let z = -2; z <= 2; z++) {
-              const cubeMat = new THREE.MeshBasicMaterial({ color: 0x10b981, wireframe: true });
-              const cube = new THREE.Mesh(cubeGeo, cubeMat);
-              cube.position.set(x * 4, -10, z * 4 - 20);
-              matrixGroup.add(cube);
-              this.matrixCubes.push(cube);
-            }
-          }
-          this.meshGroups['matrix'] = matrixGroup;
-
-          // 6. Neon Tunnel
-          const tunnelGroup = new THREE.Group();
-          for (let i = 0; i < 25; i++) {
-              const ringGeo = new THREE.TorusGeometry(12, 0.15, 8, 64);
-              const ringMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4, wireframe: true });
-              const ring = new THREE.Mesh(ringGeo, ringMat);
-              ring.position.z = -i * 8;
-              tunnelGroup.add(ring);
-          }
-          this.meshGroups['neon_tunnel'] = tunnelGroup;
-
-          // 7. Blackhole
-          const bhGroup = new THREE.Group();
-          const bhCoreGeo = new THREE.SphereGeometry(6, 32, 32);
-          const bhCoreMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
-          const bhCore = new THREE.Mesh(bhCoreGeo, bhCoreMat);
-          bhGroup.add(bhCore);
-          const diskGeo = new THREE.BufferGeometry();
-          const diskCount = 2500;
-          const dPos = new Float32Array(diskCount * 3);
-          for(let i=0; i<diskCount; i++) {
-              const r = 7 + Math.random() * 20;
-              const theta = Math.random() * Math.PI * 2;
-              dPos[i*3] = r * Math.cos(theta);
-              dPos[i*3+1] = (Math.random()-0.5) * 0.8;
-              dPos[i*3+2] = r * Math.sin(theta);
-          }
-          diskGeo.setAttribute('position', new THREE.BufferAttribute(dPos, 3));
-          const diskMat = new THREE.PointsMaterial({ color: 0xf59e0b, size: 0.6, transparent: true, opacity: 0.8 });
-          this.bhDisk = new THREE.Points(diskGeo, diskMat);
-          bhGroup.add(this.bhDisk);
-          this.meshGroups['blackhole'] = bhGroup;
-
-          // 8. DNA
-          const dnaGroup = new THREE.Group();
-          const dnaGeo = new THREE.BufferGeometry();
-          const dnaCount = 200;
-          const dnaPos = new Float32Array(dnaCount * 3);
-          for(let i=0; i<dnaCount; i+=2) {
-              const y = (i - dnaCount/2) * 0.5;
-              const angle = i * 0.2;
-              dnaPos[i*3] = Math.cos(angle) * 6;
-              dnaPos[i*3+1] = y;
-              dnaPos[i*3+2] = Math.sin(angle) * 6;
-              dnaPos[(i+1)*3] = Math.cos(angle + Math.PI) * 6;
-              dnaPos[(i+1)*3+1] = y;
-              dnaPos[(i+1)*3+2] = Math.sin(angle + Math.PI) * 6;
-          }
-          dnaGeo.setAttribute('position', new THREE.BufferAttribute(dnaPos, 3));
-          const dnaMat = new THREE.PointsMaterial({ color: 0x10b981, size: 1.2 });
-          this.dnaPoints = new THREE.Points(dnaGeo, dnaMat);
-          dnaGroup.add(this.dnaPoints);
-          this.meshGroups['dna'] = dnaGroup;
-
-          // 9. Fireworks
-          const fwGroup = new THREE.Group();
-          const fwGeo = new THREE.BufferGeometry();
-          const fwCount = 1200;
-          const fwPos = new Float32Array(fwCount * 3);
-          this.fwVels = new Float32Array(fwCount * 3);
-          for(let i=0; i<fwCount; i++) {
-              const theta = Math.random() * Math.PI * 2;
-              const phi = Math.acos((Math.random() * 2) - 1);
-              const speed = Math.random() * 1.5;
-              this.fwVels[i*3] = Math.sin(phi) * Math.cos(theta) * speed;
-              this.fwVels[i*3+1] = Math.sin(phi) * Math.sin(theta) * speed;
-              this.fwVels[i*3+2] = Math.cos(phi) * speed;
-          }
-          fwGeo.setAttribute('position', new THREE.BufferAttribute(fwPos, 3));
-          const fwMat = new THREE.PointsMaterial({ color: 0xec4899, size: 1.2, transparent: true, opacity: 0.9 });
-          this.fwPoints = new THREE.Points(fwGeo, fwMat);
-          fwGroup.add(this.fwPoints);
-          this.meshGroups['fireworks'] = fwGroup;
-
-          // 10. Ocean
-          const oceanGroup = new THREE.Group();
-          const oceanGeo = new THREE.PlaneGeometry(120, 80, 50, 40);
-          oceanGeo.rotateX(-Math.PI / 2);
-          const oceanMat = new THREE.MeshBasicMaterial({ color: 0x3b82f6, wireframe: true });
-          this.oceanMesh = new THREE.Mesh(oceanGeo, oceanMat);
-          this.oceanMesh.position.y = -12;
-          oceanGroup.add(this.oceanMesh);
-          this.meshGroups['ocean'] = oceanGroup;
-
-          // 11. Cybercity
-          const cityGroup = new THREE.Group();
-          this.cityBuildings = [];
-          for (let x = -6; x <= 6; x++) {
-            for (let z = -4; z <= 2; z++) {
-              if (Math.random() > 0.25) {
-                const h = 6 + Math.random() * 20;
-                const bGeo = new THREE.BoxGeometry(3.2, h, 3.2);
-                const color = (x + z) % 2 === 0 ? 0x6366f1 : 0x06b6d4;
-                const bMat = new THREE.MeshBasicMaterial({ color, wireframe: true });
-                const building = new THREE.Mesh(bGeo, bMat);
-                building.position.set(x * 6, h / 2 - 18, z * 7 - 12);
-                cityGroup.add(building);
-                this.cityBuildings.push({ mesh: building, baseHeight: h });
-              }
-            }
-          }
-          this.meshGroups['cybercity'] = cityGroup;
-
-          // 12. Stargate
-          const sgGroup = new THREE.Group();
-          this.sgRings = [];
-          for (let r = 0; r < 5; r++) {
-            const rGeo = new THREE.TorusGeometry(8 + r * 3.5, 0.2, 16, 64);
-            const rMat = new THREE.MeshBasicMaterial({ color: r % 2 === 0 ? 0xa855f7 : 0x06b6d4, wireframe: true });
-            const ring = new THREE.Mesh(rGeo, rMat);
-            sgGroup.add(ring);
-            this.sgRings.push(ring);
-          }
-          const sgCoreGeo = new THREE.SphereGeometry(6, 32, 32);
-          const sgCoreMat = new THREE.MeshBasicMaterial({ color: 0x6366f1, wireframe: true });
-          this.sgCore = new THREE.Mesh(sgCoreGeo, sgCoreMat);
-          sgGroup.add(this.sgCore);
-          this.meshGroups['stargate'] = sgGroup;
-
-          // 13. Eclipse
-          const eclGroup = new THREE.Group();
-          const eclSunGeo = new THREE.SphereGeometry(10, 32, 32);
-          const eclSunMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
-          const eclSun = new THREE.Mesh(eclSunGeo, eclSunMat);
-          eclGroup.add(eclSun);
-          const coronaGeo = new THREE.BufferGeometry();
-          const cCount = 2000;
-          const cPos = new Float32Array(cCount * 3);
-          for (let i = 0; i < cCount; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const rad = 10.2 + Math.random() * 14;
-            cPos[i * 3] = Math.cos(angle) * rad;
-            cPos[i * 3 + 1] = Math.sin(angle) * rad;
-            cPos[i * 3 + 2] = (Math.random() - 0.5) * 4;
-          }
-          coronaGeo.setAttribute('position', new THREE.BufferAttribute(cPos, 3));
-          const coronaMat = new THREE.PointsMaterial({ color: 0xf59e0b, size: 1.1, transparent: true, opacity: 0.85 });
-          this.coronaPoints = new THREE.Points(coronaGeo, coronaMat);
-          eclGroup.add(this.coronaPoints);
-          this.meshGroups['eclipse'] = eclGroup;
-
-          // 14. Tesseract
-          const tessGroup = new THREE.Group();
-          const outerGeo = new THREE.BoxGeometry(16, 16, 16);
-          const outerMat = new THREE.MeshBasicMaterial({ color: 0xec4899, wireframe: true });
-          this.tessOuter = new THREE.Mesh(outerGeo, outerMat);
-          const innerGeo = new THREE.BoxGeometry(8, 8, 8);
-          const innerMat = new THREE.MeshBasicMaterial({ color: 0x10b981, wireframe: true });
-          this.tessInner = new THREE.Mesh(innerGeo, innerMat);
-          tessGroup.add(this.tessOuter);
-          tessGroup.add(this.tessInner);
-          this.meshGroups['tesseract'] = tessGroup;
-
-          // 15. Nebula & Pulsar
-          const nebGroup = new THREE.Group();
-          const nebGeo = new THREE.BufferGeometry();
-          const nCount = 3000;
-          const nPos = new Float32Array(nCount * 3);
-          for (let i = 0; i < nCount; i++) {
-            const u = Math.random();
-            const theta = Math.random() * Math.PI * 2;
-            const phi = Math.acos(2 * u - 1);
-            const r = 4 + Math.random() * 26;
-            nPos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-            nPos[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
-            nPos[i * 3 + 2] = r * Math.cos(phi);
-          }
-          nebGeo.setAttribute('position', new THREE.BufferAttribute(nPos, 3));
-          const nebMat = new THREE.PointsMaterial({ color: 0xa855f7, size: 0.8, transparent: true, opacity: 0.75 });
-          this.nebPoints = new THREE.Points(nebGeo, nebMat);
-          nebGroup.add(this.nebPoints);
-          const pulsarGeo = new THREE.OctahedronGeometry(4, 2);
-          const pulsarMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4, wireframe: true });
-          this.pulsarMesh = new THREE.Mesh(pulsarGeo, pulsarMat);
-          nebGroup.add(this.pulsarMesh);
-          this.meshGroups['nebula'] = nebGroup;
 
           Object.values(this.meshGroups).forEach(g => {
             g.visible = false;
