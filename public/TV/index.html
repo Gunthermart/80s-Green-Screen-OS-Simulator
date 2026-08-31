@@ -677,14 +677,31 @@
       constructor() { this.pluto = new PlutoTVService(); }
       async getPlutoTV(search = '', genre = 'all') { return await this.pluto.getPlutoChannels(search, genre); }
 
-      async getPodcasts(search = 'actualité france', genre = 'all') {
+      getCuratedPodcasts() {
+        return [
+          { id: 'pod_affaires_sensibles', name: 'Affaires Sensibles', author: 'France Inter', logo: 'https://www.radiofrance.fr/assets/images/brands/franceinter.svg', feedUrl: 'https://radiofrance-podcast.net/podcast09/rss_13939.xml', tags: 'Histoire, Crime, Culture', type: 'podcast', category: 'news', country: 'FR' },
+          { id: 'pod_lheure_du_crime', name: "L'Heure du Crime", author: 'RTL', logo: 'https://upload.wikimedia.org/wikipedia/commons/e/e1/RTL_logo_2021.svg', feedUrl: 'https://www.rtl.fr/podcast/l-heure-du-crime.xml', tags: 'True Crime, Enquête', type: 'podcast', category: 'crime', country: 'FR' },
+          { id: 'pod_transfert', name: 'Transfert', author: 'Slate.fr', logo: 'https://placehold.co/300x300/a855f7/ffffff?text=Transfert', feedUrl: 'https://feeds.acast.com/public/shows/5b1129b0a6fb694a1d4bc4cd', tags: 'Société, Culture, Témoignages', type: 'podcast', category: 'culture', country: 'FR' },
+          { id: 'pod_choses_a_savoir', name: 'Choses à Savoir Culture', author: 'Choses à Savoir', logo: 'https://placehold.co/300x300/06b6d4/ffffff?text=Choses+A+Savoir', feedUrl: 'https://feeds.acast.com/public/shows/chosesasavoir', tags: 'Science, Culture, Histoire', type: 'podcast', category: 'science', country: 'FR' },
+          { id: 'pod_hugo_decrypte', name: 'Les Actus du Jour - HugoDécrypte', author: 'HugoDécrypte', logo: 'https://placehold.co/300x300/6366f1/ffffff?text=Hugo+Decrypte', feedUrl: 'https://feeds.acast.com/public/shows/6082c1dfbbfaef22c1b48b67', tags: 'Info, Actualité, Décryptage', type: 'podcast', category: 'news', country: 'FR' },
+          { id: 'pod_floodcast', name: 'Floodcast', author: 'Florent Bernard', logo: 'https://placehold.co/300x300/ef4444/ffffff?text=Floodcast', feedUrl: 'https://feeds.acast.com/public/shows/floodcast', tags: 'Humour, Comédie, Talk', type: 'podcast', category: 'humor', country: 'FR' },
+          { id: 'pod_science_vie', name: 'Science & Vie - L\'Esprit Sorcier', author: 'Science & Vie', logo: 'https://placehold.co/300x300/10b981/ffffff?text=Science+Vie', feedUrl: 'https://feeds.acast.com/public/shows/science-et-vie', tags: 'Science, Tech, Espace', type: 'podcast', category: 'science', country: 'FR' },
+          { id: 'pod_bbc_global_news', name: 'Global News Podcast', author: 'BBC World Service', logo: 'https://placehold.co/300x300/3b82f6/ffffff?text=BBC+News', feedUrl: 'https://podcasts.files.bbci.co.uk/p02nq0gn.rss', tags: 'News, Global, English', type: 'podcast', category: 'news', country: 'GB' }
+        ];
+      }
+
+      async getPodcasts(search = '', genre = 'all', country = 'FR') {
+        const curated = this.getCuratedPodcasts();
+        let apiResults = [];
+
         try {
-          const query = search || (genre !== 'all' ? genre : 'france culture info');
-          const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&media=podcast&country=FR&limit=36`);
+          const query = search || (genre !== 'all' ? genre : 'france culture podcast');
+          const countryCode = country === 'GLOBAL' ? 'US' : country;
+          const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&media=podcast&country=${countryCode}&limit=36`);
           if (res.ok) {
             const data = await res.json();
             if (data.results) {
-              return data.results.map(p => ({
+              apiResults = data.results.map(p => ({
                 id: `pod_${p.collectionId}`,
                 name: p.collectionName || p.trackName,
                 author: p.artistName || 'Podcast',
@@ -692,12 +709,23 @@
                 feedUrl: p.feedUrl,
                 tags: p.primaryGenreName || 'Podcast',
                 type: 'podcast',
-                country: 'FR'
+                category: (p.primaryGenreName || '').toLowerCase(),
+                country: country
               }));
             }
           }
         } catch (e) {}
-        return [];
+
+        const combined = [...curated, ...apiResults];
+        const uniqueMap = new Map();
+        combined.forEach(p => { if (p && p.id && !uniqueMap.has(p.id)) uniqueMap.set(p.id, p); });
+
+        return Array.from(uniqueMap.values()).filter(p => {
+          const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase()) || (p.author && p.author.toLowerCase().includes(search.toLowerCase())) || (p.tags && p.tags.toLowerCase().includes(search.toLowerCase()));
+          const matchGenre = genre === 'all' || (p.category && p.category.includes(genre.toLowerCase())) || (p.tags && p.tags.toLowerCase().includes(genre.toLowerCase()));
+          const matchCountry = country === 'GLOBAL' || p.country === country || p.country === 'FR';
+          return matchSearch && matchGenre && matchCountry;
+        });
       }
 
       async getPodcastEpisodes(feedUrl) {
@@ -864,12 +892,38 @@
         this.preset = 'cyber';
         this.isRunning = false;
         this.animFrameId = null;
+        this.audioCtx = null;
+        this.analyser = null;
+        this.dataArray = null;
         this.initThreeJS();
         this.resize();
         window.addEventListener('resize', () => this.resize());
       }
 
+      setupWebAudio() {
+        if (this.audioCtx || !this.audioEl) return;
+        try {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          if (!AudioContextClass) return;
+          this.audioCtx = new AudioContextClass();
+          this.analyser = this.audioCtx.createAnalyser();
+          this.analyser.fftSize = 128;
+          const source = this.audioCtx.createMediaElementSource(this.audioEl);
+          source.connect(this.analyser);
+          this.analyser.connect(this.audioCtx.destination);
+          this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+        } catch (e) {}
+      }
+
       getFrequencyData() {
+        if (this.audioCtx && this.audioCtx.state === 'suspended') {
+          this.audioCtx.resume().catch(() => {});
+        }
+        if (this.analyser && this.dataArray) {
+          this.analyser.getByteFrequencyData(this.dataArray);
+          if (this.dataArray[0] > 0 || this.dataArray[5] > 0) return this.dataArray;
+        }
+
         const isPlaying = this.audioEl && !this.audioEl.paused && !this.audioEl.ended;
         const fakeData = new Uint8Array(64);
         const time = Date.now() * 0.003;
@@ -886,7 +940,7 @@
         const parent = this.c3d ? this.c3d.parentElement : null;
         let w = (parent && parent.offsetWidth) || window.innerWidth || 800;
         let h = (parent && parent.offsetHeight) || 450;
-        if (w <= 0) w = 800;
+        if (w <= 0) w = window.innerWidth || 800;
         if (h <= 0) h = 450;
 
         if (this.c2d) { this.c2d.width = w; this.c2d.height = h; }
@@ -956,7 +1010,7 @@
           vortexG.add(this.vortexPoints);
           this.meshGroups['vortex'] = vortexG;
 
-          // Generic 3D Fallback Group for remaining presets
+          // Generic 3D Mesh
           const generic3DG = new THREE.Group();
           this.genericMesh = new THREE.Mesh(new THREE.TorusKnotGeometry(12, 3, 100, 16), new THREE.MeshBasicMaterial({ color: 0xef4444, wireframe: true, transparent: true, opacity: 0.8 }));
           generic3DG.add(this.genericMesh);
@@ -985,6 +1039,7 @@
 
       start() {
         this.isRunning = true;
+        this.setupWebAudio();
         this.setPreset(this.preset);
         this.resize();
         this.startLoop();
@@ -1122,6 +1177,31 @@
           }
         });
 
+        // Filter Chips Event Binding (Pays / Régions & Thématiques / Genres)
+        const countryContainer = document.getElementById('country-filters');
+        if (countryContainer) {
+          countryContainer.addEventListener('click', (e) => {
+            const btn = e.target.closest('.chip');
+            if (!btn) return;
+            countryContainer.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+            btn.classList.add('active');
+            this.currentCountry = btn.getAttribute('data-filter') || 'FR';
+            this.loadCatalog();
+          });
+        }
+
+        const genreContainer = document.getElementById('genre-filters');
+        if (genreContainer) {
+          genreContainer.addEventListener('click', (e) => {
+            const btn = e.target.closest('.chip');
+            if (!btn) return;
+            genreContainer.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+            btn.classList.add('active');
+            this.currentGenre = btn.getAttribute('data-genre') || 'all';
+            this.loadCatalog();
+          });
+        }
+
         // Animation Preset Change Listener
         const animSelect = document.getElementById('anim-preset-select');
         if (animSelect) {
@@ -1242,7 +1322,7 @@
         if (this.currentTab === 'radio') this.stations = await this.fetcher.getRadios(this.currentCountry, this.currentGenre, search);
         else if (this.currentTab === 'tv') this.stations = await this.fetcher.getTV(this.currentCountry, this.currentGenre, search);
         else if (this.currentTab === 'pluto') this.stations = await this.fetcher.getPlutoTV(search, this.currentGenre);
-        else if (this.currentTab === 'podcasts') this.stations = await this.fetcher.getPodcasts(search, this.currentGenre);
+        else if (this.currentTab === 'podcasts') this.stations = await this.fetcher.getPodcasts(search, this.currentGenre, this.currentCountry);
         else if (this.currentTab === 'podcast-subs') this.stations = this.favStore.getPodcastSubs();
         else if (this.currentTab === 'radio-fav') this.stations = this.favStore.getRadioFavs();
         else if (this.currentTab === 'tv-fav') this.stations = this.favStore.getTvFavs();
@@ -1378,6 +1458,10 @@
         this.activeStationIndex = index;
         this.renderGrid();
         this.theater.classList.add('active');
+
+        if (this.visualizer) {
+          setTimeout(() => this.visualizer.resize(), 100);
+        }
 
         if (this.theater.scrollIntoView) {
           this.theater.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
