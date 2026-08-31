@@ -1460,6 +1460,26 @@
 
         const backups = BACKUP_STATIONS.FR_TV || [];
         let fetchedList = [];
+        let bfmList = [];
+
+        // Récupération du flux spécifique BFM si FR ou GLOBAL
+        if (country === 'FR' || country === 'GLOBAL') {
+          try {
+            let bfmM3uUrl = 'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/fr_bfm.m3u';
+            if (window.location.hostname !== 'localhost') {
+              bfmM3uUrl = `/.netlify/functions/IPTV?url=${encodeURIComponent(bfmM3uUrl)}`;
+            }
+            const bfmController = new AbortController();
+            const bfmTimer = setTimeout(() => bfmController.abort(), 3500);
+            const bfmRes = await fetch(bfmM3uUrl, { signal: bfmController.signal });
+            clearTimeout(bfmTimer);
+
+            if (bfmRes.ok) {
+              const bfmText = await bfmRes.text();
+              bfmList = this.parseM3U(bfmText, search, country);
+            }
+          } catch (e) { console.warn('Erreur chargement M3U BFM', e); }
+        }
 
         try {
           const controller = new AbortController();
@@ -1473,7 +1493,7 @@
           }
         } catch (e) { console.warn('IPTV M3U fallback actif', e); }
 
-        const combined = [...backups, ...fetchedList];
+        const combined = [...bfmList, ...backups, ...fetchedList];
         const uniqueMap = new Map();
         combined.forEach(item => {
           if (!uniqueMap.has(item.name.toLowerCase())) {
@@ -1651,31 +1671,61 @@
 
       initAudioAnalyzer() {
         this.analyser = null;
+        try {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (AudioContext && this.audioEl && !this.audioSource) {
+            this.audioCtx = new AudioContext();
+            this.analyser = this.audioCtx.createAnalyser();
+            this.analyser.fftSize = 64;
+            this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+            this.audioSource = this.audioCtx.createMediaElementSource(this.audioEl);
+            this.audioSource.connect(this.analyser);
+            this.analyser.connect(this.audioCtx.destination);
+          }
+        } catch(e) {
+          this.analyser = null;
+        }
       }
 
       getFrequencyData() {
         const isPlaying = this.audioEl && !this.audioEl.paused && !this.audioEl.ended;
-        const fakeData = new Uint8Array(32);
-        if (!isPlaying) return fakeData;
+        
+        if (isPlaying && this.analyser && this.dataArray) {
+          try {
+            this.analyser.getByteFrequencyData(this.dataArray);
+            if (this.dataArray[0] > 0 || this.dataArray[5] > 0) {
+              return this.dataArray;
+            }
+          } catch(e) {}
+        }
 
-        const time = Date.now() * 0.004;
+        // Fallback dynamic procedural frequency generator
+        const fakeData = new Uint8Array(32);
+        const time = Date.now() * 0.003;
+        const mult = isPlaying ? 1.0 : 0.4;
+        
         for (let i = 0; i < 32; i++) {
           const val = Math.sin(time * 2.5 + i * 0.35) * 0.5 + 0.5;
-          const beat = Math.pow(Math.sin(time * 1.8), 4) * 0.4;
-          const noise = Math.cos(time * 5.2 - i * 0.15) * 0.25 + 0.25;
-          fakeData[i] = Math.min(255, Math.floor((val * 0.5 + beat + noise * 0.25) * 210 + 45));
+          const beat = Math.pow(Math.sin(time * 1.8), 4) * 0.5;
+          const noise = Math.cos(time * 4.2 - i * 0.2) * 0.25 + 0.25;
+          fakeData[i] = Math.min(255, Math.floor((val * 0.4 + beat + noise * 0.3) * 220 * mult + (isPlaying ? 35 : 15)));
         }
         return fakeData;
       }
 
       resize() {
+        const parent = this.c3d ? this.c3d.parentElement : null;
+        let w = (this.c3d && this.c3d.offsetWidth) || (parent && parent.offsetWidth) || window.innerWidth || 800;
+        let h = (this.c3d && this.c3d.offsetHeight) || (parent && parent.offsetHeight) || 450;
+        
+        if (w <= 0) w = 800;
+        if (h <= 0) h = 450;
+
         if (this.c2d) {
-          this.c2d.width = this.c2d.offsetWidth || 800;
-          this.c2d.height = this.c2d.offsetHeight || 450;
+          this.c2d.width = w;
+          this.c2d.height = h;
         }
         if (this.renderer && this.c3d) {
-          const w = this.c3d.offsetWidth || 800;
-          const h = this.c3d.offsetHeight || 450;
           this.renderer.setSize(w, h, false);
           this.camera.aspect = w / h;
           this.camera.updateProjectionMatrix();
@@ -1723,14 +1773,14 @@
 
           // 3. Synthwave
           const synthGroup = new THREE.Group();
-          const gridHelper = new THREE.GridHelper(200, 40, 0x06b6d4, 0x6366f1);
-          gridHelper.position.y = -20;
-          synthGroup.add(gridHelper);
+          this.gridHelper = new THREE.GridHelper(200, 40, 0x06b6d4, 0x6366f1);
+          this.gridHelper.position.y = -20;
+          synthGroup.add(this.gridHelper);
           const sunGeo = new THREE.CircleGeometry(16, 32);
           const sunMat = new THREE.MeshBasicMaterial({ color: 0xef4444, wireframe: true });
-          const sunMesh = new THREE.Mesh(sunGeo, sunMat);
-          sunMesh.position.set(0, 5, -80);
-          synthGroup.add(sunMesh);
+          this.sunMesh = new THREE.Mesh(sunGeo, sunMat);
+          this.sunMesh.position.set(0, 5, -80);
+          synthGroup.add(this.sunMesh);
           this.meshGroups['synthwave'] = synthGroup;
 
           // 4. Vortex
@@ -1768,12 +1818,14 @@
 
           // 6. Neon Tunnel
           const tunnelGroup = new THREE.Group();
+          this.tunnelRings = [];
           for (let i = 0; i < 25; i++) {
               const ringGeo = new THREE.TorusGeometry(12, 0.15, 8, 64);
               const ringMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4, wireframe: true });
               const ring = new THREE.Mesh(ringGeo, ringMat);
               ring.position.z = -i * 8;
               tunnelGroup.add(ring);
+              this.tunnelRings.push(ring);
           }
           this.meshGroups['neon_tunnel'] = tunnelGroup;
 
@@ -1962,36 +2014,21 @@
         this.resize();
       }
 
-      update3DVisibility() {
-        if (!this.meshGroups) return;
-        Object.keys(this.meshGroups).forEach(k => {
-          this.meshGroups[k].visible = (k === this.preset);
-        });
-      }
-
-      start() {
-        if (!this.isRunning) {
-          this.isRunning = true;
-          this.startLoop();
-        }
-        this.setPreset(this.preset);
-      }
-
-      stop() {
-        this.isRunning = false;
-        if (this.c2d) this.c2d.style.display = 'none';
-        if (this.c3d) this.c3d.style.display = 'none';
-      }
-
       startLoop() {
         const animate = () => {
           if (!this.isRunning) return;
           requestAnimationFrame(animate);
 
+          // Auto-resize if camera aspect ratio is invalid
+          if (this.camera && isNaN(this.camera.aspect)) {
+            this.resize();
+          }
+
           const freqs = this.getFrequencyData();
           const bass = (freqs[0] + freqs[1] + freqs[2] + freqs[3]) / 4;
           const w = this.c2d ? this.c2d.width : 0;
           const h = this.c2d ? this.c2d.height : 0;
+          const timeSec = Date.now() * 0.002;
 
           if (this.c2d && this.c2d.style.display !== 'none' && w && h) {
             this.ctx2d.clearRect(0, 0, w, h);
@@ -2021,26 +2058,25 @@
             } else if (this.preset === 'particles') {
               const cx = w / 2;
               const cy = h / 2;
-              const pCount = 24;
+              const pCount = 28;
               for (let i = 0; i < pCount; i++) {
-                const angle = (i / pCount) * Math.PI * 2 + (Date.now() * 0.001);
-                const r = 90 + (freqs[i % freqs.length] / 255) * 80;
+                const angle = (i / pCount) * Math.PI * 2 + timeSec * 0.8;
+                const r = 80 + (freqs[i % freqs.length] / 255) * 90;
                 const px = cx + Math.cos(angle) * r;
                 const py = cy + Math.sin(angle) * r;
 
                 this.ctx2d.fillStyle = i % 2 === 0 ? '#06b6d4' : '#a855f7';
                 this.ctx2d.beginPath();
-                this.ctx2d.arc(px, py, 4 + (freqs[i % freqs.length] / 255) * 6, 0, Math.PI * 2);
+                this.ctx2d.arc(px, py, 4 + (freqs[i % freqs.length] / 255) * 8, 0, Math.PI * 2);
                 this.ctx2d.fill();
               }
             } else if (this.preset === 'aurora') {
-              const time = Date.now() * 0.002;
               this.ctx2d.lineWidth = 4;
               for (let j = 0; j < 3; j++) {
                 this.ctx2d.beginPath();
                 this.ctx2d.strokeStyle = j === 0 ? '#6366f1' : (j === 1 ? '#06b6d4' : '#a855f7');
                 for (let x = 0; x < w; x += 15) {
-                  const y = h / 2 + Math.sin(x * 0.01 + time + j) * 40 + Math.cos(x * 0.02 - time) * (bass * 0.3);
+                  const y = h / 2 + Math.sin(x * 0.01 + timeSec + j) * 40 + Math.cos(x * 0.02 - timeSec) * (bass * 0.3);
                   if (x === 0) this.ctx2d.moveTo(x, y);
                   else this.ctx2d.lineTo(x, y);
                 }
@@ -2053,17 +2089,101 @@
             if (this.preset === 'sphere' && this.sphereMesh) {
               this.sphereMesh.rotation.y += 0.01;
               this.sphereMesh.rotation.x += 0.005;
-              const scale = 1 + (bass / 255) * 0.4;
+              const scale = 1 + (bass / 255) * 0.45;
               this.sphereMesh.scale.set(scale, scale, scale);
-              if (this.coreMesh) this.coreMesh.rotation.y -= 0.02;
+              if (this.coreMesh) {
+                this.coreMesh.rotation.y -= 0.02;
+                this.coreMesh.rotation.x += 0.01;
+              }
             } else if (this.preset === 'hyperdrive' && this.starPoints) {
               const positions = this.starPoints.geometry.attributes.position.array;
-              const speed = 2 + (bass / 255) * 6;
+              const speed = 2 + (bass / 255) * 8;
               for (let i = 2; i < positions.length; i += 3) {
                 positions[i] += speed;
                 if (positions[i] > 100) positions[i] = -500;
               }
               this.starPoints.geometry.attributes.position.needsUpdate = true;
+            } else if (this.preset === 'synthwave' && this.gridHelper) {
+              this.gridHelper.position.z = (timeSec * 25) % 10;
+              if (this.sunMesh) {
+                const sunScale = 1 + (bass / 255) * 0.3;
+                this.sunMesh.scale.set(sunScale, sunScale, sunScale);
+                this.sunMesh.rotation.z += 0.005;
+              }
+            } else if (this.preset === 'vortex' && this.vortexPoints) {
+              this.vortexPoints.rotation.z += 0.015 + (bass / 255) * 0.03;
+            } else if (this.preset === 'matrix' && this.matrixCubes) {
+              this.matrixCubes.forEach((cube, idx) => {
+                const fVal = freqs[idx % freqs.length] / 255;
+                cube.scale.y = 1 + fVal * 7 + Math.sin(timeSec * 3 + idx) * 0.5;
+              });
+            } else if (this.preset === 'neon_tunnel' && this.tunnelRings) {
+              const speed = 0.6 + (bass / 255) * 1.8;
+              this.tunnelRings.forEach(ring => {
+                ring.position.z += speed;
+                if (ring.position.z > 10) ring.position.z -= 200;
+                ring.rotation.z += 0.005;
+              });
+            } else if (this.preset === 'blackhole' && this.bhDisk) {
+              this.meshGroups['blackhole'].rotation.y += 0.015 + (bass / 255) * 0.04;
+              this.meshGroups['blackhole'].rotation.x = 0.2;
+            } else if (this.preset === 'dna' && this.meshGroups['dna']) {
+              this.meshGroups['dna'].rotation.y += 0.015 + (bass / 255) * 0.025;
+            } else if (this.preset === 'fireworks' && this.fwPoints) {
+              const positions = this.fwPoints.geometry.attributes.position.array;
+              const speedMult = 0.3 + (bass / 255) * 1.5;
+              for (let i = 0; i < positions.length; i += 3) {
+                positions[i] += this.fwVels[i] * speedMult;
+                positions[i + 1] += this.fwVels[i + 1] * speedMult;
+                positions[i + 2] += this.fwVels[i + 2] * speedMult;
+                if (Math.abs(positions[i]) > 70 || Math.abs(positions[i + 1]) > 70 || Math.abs(positions[i + 2]) > 70) {
+                  positions[i] = 0; positions[i + 1] = 0; positions[i + 2] = 0;
+                }
+              }
+              this.fwPoints.geometry.attributes.position.needsUpdate = true;
+              this.meshGroups['fireworks'].rotation.y += 0.005;
+            } else if (this.preset === 'ocean' && this.oceanMesh) {
+              const pos = this.oceanMesh.geometry.attributes.position;
+              for (let i = 0; i < pos.count; i++) {
+                const u = i % 51;
+                const v = Math.floor(i / 51);
+                const wave = Math.sin(u * 0.4 + timeSec * 2) * Math.cos(v * 0.4 + timeSec * 2) * 2;
+                pos.setZ(i, wave * (1 + (bass / 255) * 2));
+              }
+              pos.needsUpdate = true;
+            } else if (this.preset === 'cybercity' && this.cityBuildings) {
+              this.cityBuildings.forEach((b, idx) => {
+                const fVal = freqs[idx % freqs.length] / 255;
+                b.mesh.scale.y = 1 + fVal * 3;
+              });
+              this.meshGroups['cybercity'].rotation.y += 0.003;
+            } else if (this.preset === 'stargate' && this.sgRings) {
+              this.sgRings.forEach((ring, idx) => {
+                const dir = idx % 2 === 0 ? 1 : -1;
+                ring.rotation.z += dir * (0.008 + (bass / 255) * 0.02);
+              });
+              if (this.sgCore) {
+                const scale = 1 + (bass / 255) * 0.5;
+                this.sgCore.scale.set(scale, scale, scale);
+                this.sgCore.rotation.y += 0.02;
+              }
+            } else if (this.preset === 'eclipse' && this.coronaPoints) {
+              this.meshGroups['eclipse'].rotation.z += 0.005;
+              const scale = 1 + (bass / 255) * 0.35;
+              this.coronaPoints.scale.set(scale, scale, scale);
+            } else if (this.preset === 'tesseract' && this.tessOuter && this.tessInner) {
+              this.tessOuter.rotation.x += 0.01 + (bass / 255) * 0.02;
+              this.tessOuter.rotation.y += 0.012;
+              this.tessInner.rotation.x -= 0.015;
+              this.tessInner.rotation.z += 0.02 + (bass / 255) * 0.03;
+              const scaleInner = 1 + (bass / 255) * 0.4;
+              this.tessInner.scale.setScalar(scaleInner);
+            } else if (this.preset === 'nebula' && this.nebPoints && this.pulsarMesh) {
+              this.nebPoints.rotation.y += 0.004 + (bass / 255) * 0.01;
+              this.pulsarMesh.rotation.x += 0.02;
+              this.pulsarMesh.rotation.y += 0.03;
+              const scale = 1 + (bass / 255) * 0.6;
+              this.pulsarMesh.scale.setScalar(scale);
             }
 
             this.renderer.render(this.scene, this.camera);
@@ -2525,6 +2645,7 @@
         this.audioOverlay.style.display = 'flex';
         this.visualizer.start();
         this.visualizer.setPreset(document.getElementById('anim-preset-select').value || 'cyber');
+        setTimeout(() => this.visualizer.resize(), 50);
 
         this.playMediaStream(ep.url, false);
         
@@ -2541,7 +2662,6 @@
         this.currentPlayingEpisode = null;
         this.activeStationIndex = index;
         this.theater.classList.add('active');
-        this.theater.scrollIntoView({ behavior: 'smooth' });
 
         let streamUrl = s.url;
         if (s.id && s.id.startsWith('pluto_')) {
@@ -2562,6 +2682,7 @@
           this.audioOverlay.style.display = 'flex';
           this.visualizer.start();
           this.visualizer.setPreset(document.getElementById('anim-preset-select').value || 'cyber');
+          setTimeout(() => this.visualizer.resize(), 50);
           this.playMediaStream(streamUrl, false);
         }
       }
