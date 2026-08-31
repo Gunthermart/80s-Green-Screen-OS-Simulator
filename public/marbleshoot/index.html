@@ -1,0 +1,1202 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Marble Shoot - Roller Coaster Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&display=swap');
+
+        * {
+            user-select: none;
+            -webkit-user-select: none;
+            box-sizing: border-box;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        body {
+            background-color: #0b0c10;
+            color: #ffffff;
+            margin: 0;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .glow-title {
+            text-shadow: 0 0 20px #ff007f, 0 0 40px #ff007f;
+        }
+
+        .glow-box {
+            box-shadow: 0 0 30px rgba(255, 0, 127, 0.25), inset 0 0 15px rgba(0, 212, 255, 0.15);
+        }
+
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        canvas {
+            display: block;
+            touch-action: none;
+        }
+
+        /* Custom Scrollbar for Goodies Modal */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #ff007f;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-white flex justify-center items-center h-screen overflow-hidden">
+
+    <div id="gameContainer" class="relative w-[850px] h-[650px] rounded-3xl overflow-hidden glass-panel border-2 border-pink-500/30 glow-box shadow-2xl flex flex-col">
+        
+        <!-- HUD Header -->
+        <div id="hud" class="w-full h-16 bg-slate-900/90 border-b border-slate-700/50 px-6 flex items-center justify-between z-10">
+            <div class="flex items-center gap-6 text-sm font-bold tracking-wide">
+                <div class="flex items-center gap-2">
+                    <span class="text-slate-400">SCORE</span>
+                    <span id="scoreText" class="text-xl text-yellow-400 font-extrabold">0</span>
+                </div>
+                <div id="levelDisplay" class="flex items-center gap-2 cursor-pointer bg-slate-800 hover:bg-slate-700/80 border border-slate-600/50 px-3 py-1 rounded-xl transition-all hover:scale-105 active:scale-95">
+                    <span class="text-slate-300">NIVEAU</span>
+                    <span id="levelText" class="text-xl text-cyan-400 font-extrabold">1</span>
+                    <span class="text-xs text-slate-400">🎯</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-slate-400">COMBO</span>
+                    <span id="comboText" class="text-xl text-pink-500 font-extrabold">1x</span>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-4">
+                <div class="text-xs font-semibold px-3 py-1 bg-slate-800/80 border border-slate-700 rounded-lg text-slate-300">
+                    BILLES: <span id="remainingText" class="text-white font-bold">0</span>
+                </div>
+                <button id="goodiesButton" class="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white px-4 py-1.5 rounded-xl font-bold text-sm transition-all hover:scale-105 shadow-lg shadow-pink-500/20 active:scale-95">
+                    🎁 GOODIES
+                </button>
+            </div>
+        </div>
+
+        <!-- Canvas Area -->
+        <div class="relative flex-1 w-full h-full bg-slate-950 overflow-hidden">
+            <canvas id="gameCanvas" width="850" height="584" class="w-full h-full"></canvas>
+
+            <!-- Splash Screen -->
+            <div id="splashScreen" class="absolute inset-0 z-30 bg-slate-950/95 flex flex-col items-center justify-center p-8 text-center">
+                <div class="w-24 h-24 mb-6 rounded-full bg-gradient-to-tr from-pink-600 to-cyan-400 p-1 shadow-2xl shadow-pink-500/40 animate-pulse flex items-center justify-center">
+                    <div class="w-full h-full bg-slate-950 rounded-full flex items-center justify-center text-4xl">🔮</div>
+                </div>
+                <h1 class="text-5xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-purple-400 to-cyan-400 mb-3 glow-title">
+                    MARBLE SHOOT
+                </h1>
+                <p class="text-cyan-300 font-medium text-lg mb-8 max-w-md">
+                    Roller Coaster Edition • 10 Niveaux Géants • 7 Goodies Épiques
+                </p>
+                <button id="startGameButton" class="bg-gradient-to-r from-pink-600 via-purple-600 to-cyan-500 hover:scale-105 active:scale-95 text-white font-black text-xl px-10 py-4 rounded-2xl shadow-2xl shadow-pink-500/50 transition-all duration-200 tracking-wider">
+                    COMMENCER LE JEU
+                </button>
+            </div>
+
+            <!-- Level Selector Modal -->
+            <div id="mainMenu" class="absolute inset-0 z-20 bg-slate-950/95 flex flex-col items-center justify-center p-6 hidden">
+                <h2 class="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-pink-500 mb-2">
+                    SÉLECTIONNEZ UN NIVEAU
+                </h2>
+                <p class="text-slate-400 text-sm mb-6">Tous les 10 niveaux sont déverrouillés pour vos tests !</p>
+                
+                <div id="levelGrid" class="grid grid-cols-5 gap-4 w-full max-w-lg mb-6">
+                    <!-- Dynamic Level Buttons inserted by JS -->
+                </div>
+
+                <button id="closeMenuButton" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-6 py-2 rounded-xl text-sm font-bold border border-slate-700 transition">
+                    Fermer
+                </button>
+            </div>
+
+            <!-- Goodies Guide Modal -->
+            <div id="goodiesGuide" class="absolute inset-0 z-20 bg-slate-950/95 flex flex-col items-center p-6 hidden overflow-y-auto">
+                <h2 class="text-3xl font-black text-pink-500 mb-1">LES 7 GOODIES SPÉCIAUX</h2>
+                <p class="text-slate-400 text-sm mb-6">Faites un Match-3 avec ces billes spéciales pour déclencher leur pouvoir !</p>
+                
+                <div id="goodiesList" class="w-full max-w-md space-y-3 mb-6">
+                    <!-- Dynamic Goodies List inserted by JS -->
+                </div>
+
+                <button id="closeGoodiesButton" class="bg-pink-600 hover:bg-pink-500 text-white font-bold px-8 py-2.5 rounded-xl transition">
+                    JOUER MAINTENANT
+                </button>
+            </div>
+
+            <!-- Game Over / Victory Screen -->
+            <div id="gameOverScreen" class="absolute inset-0 z-30 bg-slate-950/90 flex flex-col items-center justify-center p-6 hidden">
+                <h1 id="gameOverTitle" class="text-5xl font-black text-pink-500 mb-2 tracking-wide glow-title">
+                    GAME OVER
+                </h1>
+                <p class="text-slate-300 text-lg mb-4">
+                    Score Final: <span id="finalScoreText" class="text-yellow-400 font-extrabold">0</span>
+                </p>
+                <p class="text-slate-400 text-sm mb-6">
+                    Niveau atteint: <span id="finalLevelText" class="text-cyan-400 font-bold">1</span>
+                </p>
+                <div class="flex gap-4">
+                    <button id="restartButton" class="bg-gradient-to-r from-pink-600 to-purple-600 hover:scale-105 active:scale-95 text-white font-bold px-8 py-3 rounded-xl shadow-lg transition">
+                        REJOUER
+                    </button>
+                    <button id="changeLevelButton" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold px-6 py-3 rounded-xl border border-slate-700 transition">
+                        CHOISIR NIVEAU
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        /* WEB AUDIO SYNTHESIZER FOR SOUND EFFECTS */
+        class SoundSystem {
+            constructor() {
+                this.ctx = null;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            }
+
+            playShoot() {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(400, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(120, this.ctx.currentTime + 0.12);
+                gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.12);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.12);
+            }
+
+            playExplode() {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(180, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(40, this.ctx.currentTime + 0.25);
+                gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.25);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.25);
+            }
+
+            playPowerup() {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(300, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(800, this.ctx.currentTime + 0.3);
+                gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.3);
+            }
+        }
+
+        const soundSystem = new SoundSystem();
+
+        /* UTILS & CONSTANTS */
+        const COLOR_PALETTE = ['#ff007f', '#00d4ff', '#00ff7f', '#ffea00', '#a855f7'];
+
+        const GOODIE_TYPES = {
+            NONE: { id: 0, name: 'Bille Normale', icon: '', color: null },
+            BOMB: { id: 1, name: 'Bille Bombe', icon: '💣', color: '#ef4444', desc: 'Explose et détruit toutes les billes dans un large rayon.' },
+            FREEZE: { id: 2, name: 'Bille Gel', icon: '❄️', color: '#38bdf8', desc: 'Immobilise toute la chaîne pendant 5 secondes.' },
+            REWIND: { id: 3, name: 'Bille Recul', icon: '⏪', color: '#4ade80', desc: 'Fait reculer toute la chaîne de billes vers le début.' },
+            LIGHTNING: { id: 4, name: 'Bille Éclair', icon: '⚡', color: '#facc15', desc: 'Wildcard : s\'associe et détruit 3 billes aléatoires.' },
+            MAGNET: { id: 5, name: 'Bille Aimant', icon: '🧲', color: '#e879f9', desc: 'Aspirateur : détruit toutes les billes de cette couleur.' },
+            FIREBALL: { id: 6, name: 'Bille Feu', icon: '🔥', color: '#fb923c', desc: 'Projectile perforant brûlant les billes sur son passage.' },
+            DIAMOND: { id: 7, name: 'Bille Diamant', icon: '💎', color: '#ffffff', desc: 'Offre un bonus massif de +1500 points !' }
+        };
+
+        class PathCurve {
+            constructor(width, height, level = 1) {
+                this.points = [];
+                this.totalLength = 0;
+                this.generatePath(width, height, level);
+            }
+
+            generatePath(width, height, level) {
+                const rawControlPoints = [];
+                const cx = width / 2;
+                const cy = height / 2;
+
+                switch(level) {
+                    case 1:
+                        // Grand parcours étalé sur tous les bords avec double boucle
+                        rawControlPoints.push(
+                            { x: -30, y: 70 },
+                            { x: width * 0.35, y: 50 },
+                            { x: width * 0.94, y: 50 },
+                            { x: width * 0.95, y: height * 0.50 },
+                            { x: width * 0.94, y: height * 0.92 },
+                            { x: width * 0.06, y: height * 0.92 },
+                            { x: width * 0.06, y: height * 0.28 },
+                            { x: width * 0.85, y: height * 0.28 },
+                            { x: width * 0.85, y: height * 0.74 },
+                            { x: width * 0.20, y: height * 0.74 },
+                            { x: width * 0.20, y: height * 0.48 },
+                            { x: cx - 20, y: cy + 30 }
+                        );
+                        break;
+                    case 2:
+                        // Double serpentin géant sur toute la largeur
+                        rawControlPoints.push(
+                            { x: width + 30, y: 55 },
+                            { x: width * 0.50, y: 50 },
+                            { x: width * 0.05, y: 55 },
+                            { x: width * 0.05, y: height * 0.46 },
+                            { x: width * 0.50, y: height * 0.46 },
+                            { x: width * 0.95, y: height * 0.46 },
+                            { x: width * 0.95, y: height * 0.92 },
+                            { x: width * 0.05, y: height * 0.92 },
+                            { x: width * 0.05, y: height * 0.70 },
+                            { x: width * 0.82, y: height * 0.70 },
+                            { x: cx + 10, y: cy + 40 }
+                        );
+                        break;
+                    case 3:
+                        // Spirale extérieure géante
+                        rawControlPoints.push(
+                            { x: -30, y: height * 0.92 },
+                            { x: width * 0.95, y: height * 0.92 },
+                            { x: width * 0.95, y: 55 },
+                            { x: width * 0.05, y: 55 },
+                            { x: width * 0.05, y: height * 0.80 },
+                            { x: width * 0.86, y: height * 0.80 },
+                            { x: width * 0.86, y: height * 0.22 },
+                            { x: width * 0.16, y: height * 0.22 },
+                            { x: width * 0.16, y: height * 0.64 },
+                            { x: width * 0.74, y: height * 0.64 },
+                            { x: cx, y: cy + 20 }
+                        );
+                        break;
+                    case 4:
+                        // Grand-huit étalé
+                        rawControlPoints.push(
+                            { x: cx, y: -30 },
+                            { x: width * 0.96, y: 55 },
+                            { x: width * 0.96, y: height * 0.92 },
+                            { x: width * 0.04, y: height * 0.92 },
+                            { x: width * 0.04, y: 55 },
+                            { x: width * 0.84, y: height * 0.20 },
+                            { x: width * 0.84, y: height * 0.82 },
+                            { x: width * 0.16, y: height * 0.82 },
+                            { x: width * 0.16, y: height * 0.38 },
+                            { x: cx, y: cy + 30 }
+                        );
+                        break;
+                    case 5:
+                        // Zig-zag XXL
+                        rawControlPoints.push(
+                            { x: -30, y: 55 },
+                            { x: width * 0.95, y: 55 },
+                            { x: width * 0.95, y: height * 0.28 },
+                            { x: width * 0.05, y: height * 0.28 },
+                            { x: width * 0.05, y: height * 0.52 },
+                            { x: width * 0.95, y: height * 0.52 },
+                            { x: width * 0.95, y: height * 0.78 },
+                            { x: width * 0.05, y: height * 0.78 },
+                            { x: width * 0.05, y: height * 0.93 },
+                            { x: width * 0.78, y: height * 0.93 },
+                            { x: cx, y: cy + 30 }
+                        );
+                        break;
+                    case 6:
+                        // Labyrinthe rectangulaire
+                        rawControlPoints.push(
+                            { x: -30, y: 50 },
+                            { x: width * 0.96, y: 50 },
+                            { x: width * 0.96, y: height * 0.38 },
+                            { x: width * 0.04, y: height * 0.38 },
+                            { x: width * 0.04, y: height * 0.72 },
+                            { x: width * 0.96, y: height * 0.72 },
+                            { x: width * 0.96, y: height * 0.94 },
+                            { x: width * 0.18, y: height * 0.94 },
+                            { x: width * 0.18, y: height * 0.20 },
+                            { x: width * 0.82, y: height * 0.20 },
+                            { x: cx, y: cy + 25 }
+                        );
+                        break;
+                    case 7:
+                        // Triple grand virage en "S"
+                        rawControlPoints.push(
+                            { x: width + 30, y: height * 0.94 },
+                            { x: -25, y: height * 0.94 },
+                            { x: -25, y: 50 },
+                            { x: width * 0.96, y: 50 },
+                            { x: width * 0.96, y: height * 0.80 },
+                            { x: width * 0.08, y: height * 0.80 },
+                            { x: width * 0.08, y: height * 0.22 },
+                            { x: width * 0.88, y: height * 0.22 },
+                            { x: width * 0.88, y: height * 0.62 },
+                            { x: width * 0.26, y: height * 0.62 },
+                            { x: cx, y: cy + 20 }
+                        );
+                        break;
+                    case 8:
+                        // Figure en nœud papillon
+                        rawControlPoints.push(
+                            { x: cx, y: -30 },
+                            { x: width * 0.96, y: 55 },
+                            { x: width * 0.96, y: height * 0.48 },
+                            { x: width * 0.04, y: height * 0.48 },
+                            { x: width * 0.04, y: height * 0.94 },
+                            { x: width * 0.96, y: height * 0.94 },
+                            { x: width * 0.85, y: height * 0.22 },
+                            { x: width * 0.15, y: height * 0.22 },
+                            { x: width * 0.15, y: height * 0.78 },
+                            { x: cx, y: cy + 30 }
+                        );
+                        break;
+                    case 9:
+                        // Double diagonale croisée
+                        rawControlPoints.push(
+                            { x: -30, y: -30 },
+                            { x: width + 30, y: height + 30 },
+                            { x: width + 30, y: -30 },
+                            { x: -30, y: height + 30 },
+                            { x: width * 0.04, y: height * 0.04 },
+                            { x: width * 0.96, y: height * 0.04 },
+                            { x: width * 0.96, y: height * 0.92 },
+                            { x: width * 0.04, y: height * 0.92 },
+                            { x: width * 0.18, y: height * 0.28 },
+                            { x: cx, y: cy + 25 }
+                        );
+                        break;
+                    case 10:
+                    default:
+                        // Le roller-coaster ultime : 5 boucles concentriques
+                        rawControlPoints.push(
+                            { x: -30, y: 50 },
+                            { x: width * 0.97, y: 50 },
+                            { x: width * 0.97, y: height * 0.94 },
+                            { x: width * 0.03, y: height * 0.94 },
+                            { x: width * 0.03, y: height * 0.16 },
+                            { x: width * 0.92, y: height * 0.16 },
+                            { x: width * 0.92, y: height * 0.84 },
+                            { x: width * 0.10, y: height * 0.84 },
+                            { x: width * 0.10, y: height * 0.28 },
+                            { x: width * 0.85, y: height * 0.28 },
+                            { x: width * 0.85, y: height * 0.70 },
+                            { x: width * 0.25, y: height * 0.70 },
+                            { x: cx, y: cy + 20 }
+                        );
+                        break;
+                }
+
+                let samples = [];
+                const steps = 2200;
+                for (let i = 0; i <= steps; i++) {
+                    const t = i / steps;
+                    samples.push(this.getSplinePoint(rawControlPoints, t));
+                }
+
+                this.points = [{ x: samples[0].x, y: samples[0].y, dist: 0 }];
+                let currentDist = 0;
+
+                for (let i = 1; i < samples.length; i++) {
+                    const prev = samples[i - 1];
+                    const curr = samples[i];
+                    const segLen = Math.hypot(curr.x - prev.x, curr.y - prev.y);
+
+                    if (segLen > 0) {
+                        currentDist += segLen;
+                        this.points.push({ x: curr.x, y: curr.y, dist: currentDist });
+                    }
+                }
+                this.totalLength = currentDist;
+            }
+
+            getSplinePoint(pts, t) {
+                const n = pts.length - 1;
+                const p = t * n;
+                const i = Math.floor(p);
+                const u = p - i;
+
+                const p0 = pts[Math.max(0, i - 1)];
+                const p1 = pts[i];
+                const p2 = pts[Math.min(n, i + 1)];
+                const p3 = pts[Math.min(n, i + 2)];
+
+                return {
+                    x: 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * u + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * u * u + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * u * u * u),
+                    y: 0.5 * ((2 * p1.y) + (-p0.y + p2.y) * u + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * u * u + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * u * u * u)
+                };
+            }
+
+            getPointAtDistance(d) {
+                if (d <= 0) return this.points[0];
+                if (d >= this.totalLength) return this.points[this.points.length - 1];
+
+                let low = 0, high = this.points.length - 1;
+                while (low <= high) {
+                    let mid = (low + high) >> 1;
+                    if (this.points[mid].dist < d) low = mid + 1;
+                    else high = mid - 1;
+                }
+
+                let p1 = this.points[Math.max(0, low - 1)];
+                let p2 = this.points[Math.min(this.points.length - 1, low)];
+                let span = p2.dist - p1.dist;
+                let factor = span > 0 ? (d - p1.dist) / span : 0;
+
+                return {
+                    x: p1.x + (p2.x - p1.x) * factor,
+                    y: p1.y + (p2.y - p1.y) * factor
+                };
+            }
+        }
+
+        class Game {
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.width = this.canvas.width;
+                this.height = this.canvas.height;
+
+                this.level = 1;
+                this.selectedLevel = 1;
+                this.maxLevel = 10;
+                this.score = 0;
+                this.combo = 1;
+                this.screenShake = 0;
+
+                this.mousePos = { x: this.width / 2, y: this.height / 2 };
+                this.launcherPos = { x: this.width / 2, y: this.height / 2 };
+                this.launcherAngle = 0;
+
+                this.curve = null;
+                this.chain = [];
+                this.spawnQueue = [];
+                this.projectiles = [];
+                this.particles = [];
+                this.floatingTexts = [];
+
+                this.currentMarble = null;
+                this.nextMarble = null;
+
+                this.isFreezeActive = false;
+                this.freezeTimer = 0;
+                this.isGameOver = false;
+                this.isVictory = false;
+
+                this.initUI();
+                this.initLevel(1);
+                this.setupEventListeners();
+
+                this.lastTime = performance.now();
+                requestAnimationFrame((t) => this.loop(t));
+            }
+
+            initUI() {
+                this.renderLevelSelectorGrids();
+                this.renderGoodiesList();
+            }
+
+            renderLevelSelectorGrids() {
+                const grid = document.getElementById('levelGrid');
+                grid.innerHTML = '';
+                for (let i = 1; i <= this.maxLevel; i++) {
+                    const btn = document.createElement('button');
+                    btn.className = `p-4 rounded-2xl font-black text-xl flex flex-col items-center justify-center transition border-2 ${
+                        i === this.selectedLevel
+                            ? 'bg-gradient-to-tr from-pink-600 to-purple-600 text-white border-pink-400 shadow-lg shadow-pink-500/30'
+                            : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                    }`;
+                    btn.innerHTML = `<span>${i}</span><span class="text-[10px] text-slate-400 font-normal">Niveau ${i}</span>`;
+                    btn.onclick = () => {
+                        this.initLevel(i);
+                        document.getElementById('mainMenu').classList.add('hidden');
+                    };
+                    grid.appendChild(btn);
+                }
+            }
+
+            renderGoodiesList() {
+                const list = document.getElementById('goodiesList');
+                list.innerHTML = '';
+                Object.values(GOODIE_TYPES).forEach(g => {
+                    if (g.id === 0) return;
+                    const item = document.createElement('div');
+                    item.className = 'p-3 bg-slate-900 border border-slate-800 rounded-xl flex items-center gap-3';
+                    item.innerHTML = `
+                        <div class="w-10 h-10 rounded-full flex items-center justify-center text-xl shadow-md" style="background-color: ${g.color}22; border: 2px solid ${g.color}">
+                            ${g.icon}
+                        </div>
+                        <div class="flex-1 text-left">
+                            <div class="text-sm font-bold text-white">${g.name}</div>
+                            <div class="text-xs text-slate-400">${g.desc}</div>
+                        </div>
+                    `;
+                    list.appendChild(item);
+                });
+            }
+
+            initLevel(lvl) {
+                this.level = Math.min(Math.max(lvl, 1), this.maxLevel);
+                this.selectedLevel = this.level;
+                this.combo = 1;
+                this.freezeTimer = 0;
+                this.isFreezeActive = false;
+                this.isGameOver = false;
+                this.isVictory = false;
+                this.projectiles = [];
+                this.particles = [];
+                this.floatingTexts = [];
+                this.chain = [];
+
+                const colorCount = Math.min(3 + Math.floor((this.level - 1) / 3), COLOR_PALETTE.length);
+                this.activePalette = COLOR_PALETTE.slice(0, colorCount);
+
+                this.curve = new PathCurve(this.width, this.height, this.level);
+
+                // Reserve de billes adaptée
+                const totalMarbles = 30 + (this.level * 6);
+                this.spawnQueue = [];
+                for (let i = 0; i < totalMarbles; i++) {
+                    const rndColor = this.activePalette[Math.floor(Math.random() * this.activePalette.length)];
+                    let goodie = GOODIE_TYPES.NONE;
+                    if (Math.random() < 0.16) {
+                        const goodiesList = Object.values(GOODIE_TYPES).filter(g => g !== GOODIE_TYPES.NONE);
+                        goodie = goodiesList[Math.floor(Math.random() * goodiesList.length)];
+                    }
+                    this.spawnQueue.push({ color: rndColor, goodie });
+                }
+
+                this.currentMarble = this.generateLauncherMarble();
+                this.nextMarble = this.generateLauncherMarble();
+
+                this.renderLevelSelectorGrids();
+                this.updateHUD();
+                document.getElementById('gameOverScreen').classList.add('hidden');
+            }
+
+            generateLauncherMarble() {
+                const color = this.activePalette[Math.floor(Math.random() * this.activePalette.length)];
+                let goodie = GOODIE_TYPES.NONE;
+                if (Math.random() < 0.08) {
+                    const goodiesList = Object.values(GOODIE_TYPES).filter(g => g !== GOODIE_TYPES.NONE);
+                    goodie = goodiesList[Math.floor(Math.random() * goodiesList.length)];
+                }
+                return { color, goodie };
+            }
+
+            setupEventListeners() {
+                // Pointer interactions
+                this.canvas.addEventListener('pointermove', (e) => {
+                    const rect = this.canvas.getBoundingClientRect();
+                    this.mousePos.x = (e.clientX - rect.left) * (this.width / rect.width);
+                    this.mousePos.y = (e.clientY - rect.top) * (this.height / rect.height);
+                    this.launcherAngle = Math.atan2(this.mousePos.y - this.launcherPos.y, this.mousePos.x - this.launcherPos.x);
+                });
+
+                this.canvas.addEventListener('pointerdown', (e) => {
+                    soundSystem.init();
+                    if (e.button === 2) {
+                        // Switch marbles on right click
+                        e.preventDefault();
+                        const temp = this.currentMarble;
+                        this.currentMarble = this.nextMarble;
+                        this.nextMarble = temp;
+                        soundSystem.playPowerup();
+                    } else if (e.button === 0) {
+                        // Shoot on left click
+                        this.shootProjectile();
+                    }
+                });
+
+                this.canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+                // Buttons
+                document.getElementById('startGameButton').onclick = () => {
+                    soundSystem.init();
+                    document.getElementById('splashScreen').classList.add('hidden');
+                };
+
+                document.getElementById('goodiesButton').onclick = () => {
+                    document.getElementById('goodiesGuide').classList.remove('hidden');
+                };
+
+                document.getElementById('closeGoodiesButton').onclick = () => {
+                    document.getElementById('goodiesGuide').classList.add('hidden');
+                };
+
+                document.getElementById('levelDisplay').onclick = () => {
+                    document.getElementById('mainMenu').classList.remove('hidden');
+                };
+
+                document.getElementById('closeMenuButton').onclick = () => {
+                    document.getElementById('mainMenu').classList.add('hidden');
+                };
+
+                document.getElementById('restartButton').onclick = () => {
+                    this.initLevel(this.level);
+                };
+
+                document.getElementById('changeLevelButton').onclick = () => {
+                    document.getElementById('gameOverScreen').classList.add('hidden');
+                    document.getElementById('mainMenu').classList.remove('hidden');
+                };
+            }
+
+            shootProjectile() {
+                if (this.isGameOver || this.isVictory) return;
+
+                const speed = 16;
+                this.projectiles.push({
+                    x: this.launcherPos.x + Math.cos(this.launcherAngle) * 25,
+                    y: this.launcherPos.y + Math.sin(this.launcherAngle) * 25,
+                    vx: Math.cos(this.launcherAngle) * speed,
+                    vy: Math.sin(this.launcherAngle) * speed,
+                    color: this.currentMarble.color,
+                    goodie: this.currentMarble.goodie,
+                    radius: 14
+                });
+
+                soundSystem.playShoot();
+
+                this.currentMarble = this.nextMarble;
+                this.nextMarble = this.generateLauncherMarble();
+            }
+
+            triggerScreenShake(intensity = 10) {
+                this.screenShake = intensity;
+            }
+
+            update(dt) {
+                if (this.isGameOver || this.isVictory) return;
+
+                if (this.screenShake > 0) this.screenShake *= 0.88;
+
+                // Freeze timer update
+                if (this.isFreezeActive) {
+                    this.freezeTimer -= dt;
+                    if (this.freezeTimer <= 0) {
+                        this.isFreezeActive = false;
+                    }
+                }
+
+                // 1. Spawn Marbles into Chain
+                if (this.spawnQueue.length > 0) {
+                    const minGap = 28;
+                    const canSpawn = this.chain.length === 0 || (this.chain[this.chain.length - 1].dist >= minGap);
+                    if (canSpawn) {
+                        const item = this.spawnQueue.shift();
+                        this.chain.push({
+                            dist: 0,
+                            color: item.color,
+                            goodie: item.goodie,
+                            radius: 14
+                        });
+                    }
+                }
+
+                // 2. Chain Movement
+                const baseSpeed = (1.2 + (this.level * 0.15)) * (this.isFreezeActive ? 0 : 1);
+                if (this.chain.length > 0) {
+                    this.chain[0].dist += baseSpeed;
+                    
+                    // Pull trailing marbles
+                    for (let i = 1; i < this.chain.length; i++) {
+                        const targetDist = this.chain[i - 1].dist - 28;
+                        if (this.chain[i].dist < targetDist) {
+                            this.chain[i].dist += (targetDist - this.chain[i].dist) * 0.35;
+                        } else if (this.chain[i].dist > targetDist) {
+                            this.chain[i].dist = targetDist;
+                        }
+                    }
+                }
+
+                // Check Game Over (first marble reached hole)
+                if (this.chain.length > 0 && this.chain[0].dist >= this.curve.totalLength) {
+                    this.triggerGameOver();
+                    return;
+                }
+
+                // Check Victory
+                if (this.chain.length === 0 && this.spawnQueue.length === 0) {
+                    this.triggerVictory();
+                    return;
+                }
+
+                // 3. Projectiles Update & Collisions
+                for (let pIdx = this.projectiles.length - 1; pIdx >= 0; pIdx--) {
+                    const p = this.projectiles[pIdx];
+                    p.x += p.vx;
+                    p.y += p.vy;
+
+                    // Particle trail
+                    if (Math.random() < 0.6) {
+                        this.particles.push({
+                            x: p.x, y: p.y,
+                            vx: (Math.random() - 0.5) * 2, vy: (Math.random() - 0.5) * 2,
+                            life: 1, color: p.color, size: 4
+                        });
+                    }
+
+                    // Collision with Chain
+                    let hit = false;
+                    for (let cIdx = 0; cIdx < this.chain.length; cIdx++) {
+                        const marble = this.chain[cIdx];
+                        const mPos = this.curve.getPointAtDistance(marble.dist);
+                        const distSq = Math.hypot(p.x - mPos.x, p.y - mPos.y);
+
+                        if (distSq < p.radius + marble.radius) {
+                            hit = true;
+                            this.handleProjectileImpact(p, cIdx);
+                            this.projectiles.splice(pIdx, 1);
+                            break;
+                        }
+                    }
+
+                    // Out of bounds
+                    if (!hit && (p.x < -20 || p.x > this.width + 20 || p.y < -20 || p.y > this.height + 20)) {
+                        this.projectiles.splice(pIdx, 1);
+                    }
+                }
+
+                // 4. Particles Update
+                for (let i = this.particles.length - 1; i >= 0; i--) {
+                    const part = this.particles[i];
+                    part.x += part.vx;
+                    part.y += part.vy;
+                    part.life -= 0.03;
+                    if (part.life <= 0) this.particles.splice(i, 1);
+                }
+
+                // 5. Floating Texts
+                for (let i = this.floatingTexts.length - 1; i >= 0; i--) {
+                    const ft = this.floatingTexts[i];
+                    ft.y -= 1;
+                    ft.life -= 0.02;
+                    if (ft.life <= 0) this.floatingTexts.splice(i, 1);
+                }
+
+                this.updateHUD();
+            }
+
+            handleProjectileImpact(projectile, targetIndex) {
+                // If special Fireball: pierces without inserting
+                if (projectile.goodie && projectile.goodie.id === GOODIE_TYPES.FIREBALL.id) {
+                    this.explodeRadius(targetIndex, 80);
+                    soundSystem.playExplode();
+                    this.triggerScreenShake(12);
+                    return;
+                }
+
+                // Insert into chain
+                const targetMarble = this.chain[targetIndex];
+                const newMarble = {
+                    dist: targetMarble.dist - 14,
+                    color: projectile.color,
+                    goodie: projectile.goodie,
+                    radius: 14
+                };
+
+                this.chain.splice(targetIndex + 1, 0, newMarble);
+
+                // Handle goodie activation
+                if (projectile.goodie && projectile.goodie.id !== GOODIE_TYPES.NONE.id) {
+                    this.activateGoodieEffect(projectile.goodie, targetIndex + 1);
+                }
+
+                // Check Match-3
+                this.checkAndProcessMatches(targetIndex + 1);
+            }
+
+            activateGoodieEffect(goodie, index) {
+                soundSystem.playPowerup();
+                this.createFloatingText(goodie.name.toUpperCase() + " !", this.curve.getPointAtDistance(this.chain[index].dist));
+
+                switch(goodie.id) {
+                    case GOODIE_TYPES.BOMB.id:
+                        this.explodeRadius(index, 90);
+                        this.triggerScreenShake(15);
+                        break;
+                    case GOODIE_TYPES.FREEZE.id:
+                        this.isFreezeActive = true;
+                        this.freezeTimer = 5000;
+                        break;
+                    case GOODIE_TYPES.REWIND.id:
+                        this.chain.forEach(m => m.dist = Math.max(0, m.dist - 220));
+                        break;
+                    case GOODIE_TYPES.LIGHTNING.id:
+                        // Destroy target and 3 randoms
+                        const color = this.chain[index].color;
+                        let destroyed = 0;
+                        for (let i = this.chain.length - 1; i >= 0; i--) {
+                            if (this.chain[i].color === color && destroyed < 3) {
+                                this.createParticles(this.curve.getPointAtDistance(this.chain[i].dist), '#facc15', 12);
+                                this.chain.splice(i, 1);
+                                destroyed++;
+                            }
+                        }
+                        this.score += 300 * this.combo;
+                        break;
+                    case GOODIE_TYPES.MAGNET.id:
+                        // Pull and destroy all same color
+                        const targetColor = this.chain[index].color;
+                        this.chain = this.chain.filter(m => {
+                            if (m.color === targetColor) {
+                                this.createParticles(this.curve.getPointAtDistance(m.dist), '#e879f9', 10);
+                                return false;
+                            }
+                            return true;
+                        });
+                        this.score += 500 * this.combo;
+                        break;
+                    case GOODIE_TYPES.DIAMOND.id:
+                        this.score += 1500 * this.combo;
+                        this.createParticles(this.curve.getPointAtDistance(this.chain[index].dist), '#ffffff', 25);
+                        break;
+                }
+            }
+
+            explodeRadius(index, radius) {
+                if (index < 0 || index >= this.chain.length) return;
+                const centerPos = this.curve.getPointAtDistance(this.chain[index].dist);
+                this.createParticles(centerPos, '#ef4444', 35);
+
+                this.chain = this.chain.filter(m => {
+                    const p = this.curve.getPointAtDistance(m.dist);
+                    return Math.hypot(p.x - centerPos.x, p.y - centerPos.y) > radius;
+                });
+
+                this.score += 400 * this.combo;
+            }
+
+            checkAndProcessMatches(index) {
+                if (index < 0 || index >= this.chain.length) return;
+
+                const matchColor = this.chain[index].color;
+                let left = index;
+                let right = index;
+
+                while (left > 0 && this.chain[left - 1].color === matchColor) left--;
+                while (right < this.chain.length - 1 && this.chain[right + 1].color === matchColor) right++;
+
+                const count = right - left + 1;
+
+                if (count >= 3) {
+                    soundSystem.playExplode();
+                    this.triggerScreenShake(6 + count * 2);
+
+                    const points = count * 100 * this.combo;
+                    this.score += points;
+
+                    const matchCenterPos = this.curve.getPointAtDistance(this.chain[index].dist);
+                    this.createFloatingText(`+${points}`, matchCenterPos);
+
+                    // Create explosion particles
+                    for (let i = left; i <= right; i++) {
+                        const pos = this.curve.getPointAtDistance(this.chain[i].dist);
+                        this.createParticles(pos, matchColor, 10);
+                    }
+
+                    // Remove matched marbles
+                    this.chain.splice(left, count);
+                    this.combo++;
+
+                    // Recursive combo check on re-joining gap
+                    if (left > 0 && left < this.chain.length) {
+                        if (this.chain[left - 1].color === this.chain[left].color) {
+                            setTimeout(() => this.checkAndProcessMatches(left), 200);
+                        }
+                    }
+                } else {
+                    this.combo = 1;
+                }
+            }
+
+            createParticles(pos, color, count = 10) {
+                for (let i = 0; i < count; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const speed = 2 + Math.random() * 6;
+                    this.particles.push({
+                        x: pos.x, y: pos.y,
+                        vx: Math.cos(angle) * speed,
+                        vy: Math.sin(angle) * speed,
+                        life: 1,
+                        color: color,
+                        size: 3 + Math.random() * 5
+                    });
+                }
+            }
+
+            createFloatingText(text, pos) {
+                this.floatingTexts.push({
+                    text: text,
+                    x: pos.x,
+                    y: pos.y,
+                    life: 1
+                });
+            }
+
+            triggerGameOver() {
+                this.isGameOver = true;
+                document.getElementById('gameOverTitle').innerText = "GAME OVER";
+                document.getElementById('gameOverTitle').className = "text-5xl font-black text-pink-500 mb-2 tracking-wide glow-title";
+                document.getElementById('gameOverScreen').classList.remove('hidden');
+            }
+
+            triggerVictory() {
+                this.isVictory = true;
+                soundSystem.playPowerup();
+                document.getElementById('gameOverTitle').innerText = "VICTOIRE !";
+                document.getElementById('gameOverTitle').className = "text-5xl font-black text-cyan-400 mb-2 tracking-wide glow-title";
+                document.getElementById('gameOverScreen').classList.remove('hidden');
+            }
+
+            updateHUD() {
+                document.getElementById('scoreText').innerText = this.score;
+                document.getElementById('levelText').innerText = this.level;
+                document.getElementById('comboText').innerText = `${this.combo}x`;
+                document.getElementById('remainingText').innerText = this.chain.length + this.spawnQueue.length;
+                document.getElementById('finalScoreText').innerText = this.score;
+                document.getElementById('finalLevelText').innerText = this.level;
+            }
+
+            draw() {
+                this.ctx.save();
+
+                // Apply Screen Shake
+                if (this.screenShake > 0.5) {
+                    const dx = (Math.random() - 0.5) * this.screenShake;
+                    const dy = (Math.random() - 0.5) * this.screenShake;
+                    this.ctx.translate(dx, dy);
+                }
+
+                this.ctx.clearRect(0, 0, this.width, this.height);
+
+                // 1. Draw Coaster Rail Track
+                this.drawTrack();
+
+                // 2. Draw Hole / End Hole
+                this.drawHole();
+
+                // 3. Draw Chain Marbles
+                this.drawChainMarbles();
+
+                // 4. Draw Projectiles
+                this.drawProjectiles();
+
+                // 5. Draw Particles & FX
+                this.drawParticles();
+
+                // 6. Draw Launcher
+                this.drawLauncher();
+
+                // 7. Draw Freeze Frame FX
+                if (this.isFreezeActive) {
+                    this.ctx.fillStyle = 'rgba(56, 189, 248, 0.12)';
+                    this.ctx.fillRect(0, 0, this.width, this.height);
+                }
+
+                this.ctx.restore();
+            }
+
+            drawTrack() {
+                if (!this.curve || this.curve.points.length === 0) return;
+
+                // Outer Glow Track
+                this.ctx.beginPath();
+                for (let i = 0; i < this.curve.points.length; i++) {
+                    const p = this.curve.points[i];
+                    if (i === 0) this.ctx.moveTo(p.x, p.y);
+                    else this.ctx.lineTo(p.x, p.y);
+                }
+                this.ctx.strokeStyle = 'rgba(255, 0, 127, 0.2)';
+                this.ctx.lineWidth = 36;
+                this.ctx.lineCap = 'round';
+                this.ctx.lineJoin = 'round';
+                this.ctx.stroke();
+
+                // Main Rail Base
+                this.ctx.strokeStyle = '#1e293b';
+                this.ctx.lineWidth = 26;
+                this.ctx.stroke();
+
+                // Dual Glowing Steel Rails
+                this.ctx.strokeStyle = '#00d4ff';
+                this.ctx.lineWidth = 3;
+                this.ctx.stroke();
+            }
+
+            drawHole() {
+                if (!this.curve || this.curve.points.length === 0) return;
+                const endPos = this.curve.points[this.curve.points.length - 1];
+
+                // Hole Vortex Glow
+                const grad = this.ctx.createRadialGradient(endPos.x, endPos.y, 5, endPos.x, endPos.y, 28);
+                grad.addColorStop(0, '#000000');
+                grad.addColorStop(0.7, '#ff007f');
+                grad.addColorStop(1, 'transparent');
+
+                this.ctx.beginPath();
+                this.ctx.arc(endPos.x, endPos.y, 28, 0, Math.PI * 2);
+                this.ctx.fillStyle = grad;
+                this.ctx.fill();
+            }
+
+            drawChainMarbles() {
+                for (let i = 0; i < this.chain.length; i++) {
+                    const m = this.chain[i];
+                    const pos = this.curve.getPointAtDistance(m.dist);
+                    this.drawGlossyMarble(pos.x, pos.y, m.radius, m.color, m.goodie);
+                }
+            }
+
+            drawProjectiles() {
+                for (const p of this.projectiles) {
+                    this.drawGlossyMarble(p.x, p.y, p.radius, p.color, p.goodie);
+                }
+            }
+
+            drawGlossyMarble(x, y, radius, color, goodie) {
+                this.ctx.save();
+                this.ctx.translate(x, y);
+
+                // Drop Shadow
+                this.ctx.beginPath();
+                this.ctx.arc(2, 4, radius, 0, Math.PI * 2);
+                this.ctx.fillStyle = 'rgba(0,0,0,0.4)';
+                this.ctx.fill();
+
+                // 3D Gradient Sphere
+                const grad = this.ctx.createRadialGradient(-radius * 0.3, -radius * 0.3, radius * 0.1, 0, 0, radius);
+                grad.addColorStop(0, '#ffffff');
+                grad.addColorStop(0.4, color);
+                grad.addColorStop(1, '#000000');
+
+                this.ctx.beginPath();
+                this.ctx.arc(0, 0, radius, 0, Math.PI * 2);
+                this.ctx.fillStyle = grad;
+                this.ctx.fill();
+
+                // Goodie Icon Badge
+                if (goodie && goodie.icon) {
+                    this.ctx.font = '12px sans-serif';
+                    this.ctx.textAlign = 'center';
+                    this.ctx.textBaseline = 'middle';
+                    this.ctx.fillText(goodie.icon, 0, 0);
+                }
+
+                this.ctx.restore();
+            }
+
+            drawLauncher() {
+                this.ctx.save();
+                this.ctx.translate(this.launcherPos.x, this.launcherPos.y);
+
+                // Base Ring
+                this.ctx.beginPath();
+                this.ctx.arc(0, 0, 32, 0, Math.PI * 2);
+                this.ctx.fillStyle = '#0f172a';
+                this.ctx.strokeStyle = '#38bdf8';
+                this.ctx.lineWidth = 3;
+                this.ctx.fill();
+                this.ctx.stroke();
+
+                // Rotating Cannon Barrel
+                this.ctx.rotate(this.launcherAngle);
+                this.ctx.fillStyle = '#1e293b';
+                this.ctx.strokeStyle = '#ff007f';
+                this.ctx.lineWidth = 2;
+                this.ctx.fillRect(0, -10, 36, 20);
+                this.ctx.strokeRect(0, -10, 36, 20);
+
+                this.ctx.restore();
+
+                // Active Ready Marble inside Canon
+                if (this.currentMarble) {
+                    this.drawGlossyMarble(this.launcherPos.x, this.launcherPos.y, 14, this.currentMarble.color, this.currentMarble.goodie);
+                }
+
+                // Next Marble Queue Indicator
+                if (this.nextMarble) {
+                    this.ctx.save();
+                    this.ctx.translate(this.launcherPos.x + 45, this.launcherPos.y + 45);
+                    this.ctx.beginPath();
+                    this.ctx.arc(0, 0, 16, 0, Math.PI * 2);
+                    this.ctx.fillStyle = '#0f172a';
+                    this.ctx.strokeStyle = '#475569';
+                    this.ctx.lineWidth = 2;
+                    this.ctx.fill();
+                    this.ctx.stroke();
+                    this.drawGlossyMarble(0, 0, 10, this.nextMarble.color, this.nextMarble.goodie);
+                    this.ctx.restore();
+                }
+            }
+
+            drawParticles() {
+                // Sparks
+                for (const p of this.particles) {
+                    this.ctx.beginPath();
+                    this.ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+                    this.ctx.fillStyle = p.color;
+                    this.ctx.globalAlpha = p.life;
+                    this.ctx.fill();
+                }
+                this.ctx.globalAlpha = 1.0;
+
+                // Floating Score Text
+                for (const ft of this.floatingTexts) {
+                    this.ctx.font = '900 18px Outfit, sans-serif';
+                    this.ctx.fillStyle = '#facc15';
+                    this.ctx.shadowColor = '#000000';
+                    this.ctx.shadowBlur = 6;
+                    this.ctx.globalAlpha = ft.life;
+                    this.ctx.fillText(ft.text, ft.x, ft.y);
+                }
+                this.ctx.globalAlpha = 1.0;
+                this.ctx.shadowBlur = 0;
+            }
+
+            loop(timestamp) {
+                const dt = timestamp - this.lastTime;
+                this.lastTime = timestamp;
+
+                this.update(dt);
+                this.draw();
+
+                requestAnimationFrame((t) => this.loop(t));
+            }
+        }
+
+        window.onload = () => {
+            window.gameInstance = new Game();
+        };
+    </script>
+</body>
+</html>
