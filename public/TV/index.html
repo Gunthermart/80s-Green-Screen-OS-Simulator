@@ -454,8 +454,8 @@
     }
 
     .canvas-layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-    #visualizer-canvas-2d { z-index: 2; }
-    #visualizer-canvas-3d { z-index: 1; }
+    #visualizer-canvas-2d { z-index: 10; display: block; }
+    #visualizer-canvas-3d { z-index: 12; display: block; }
 
     .audio-visualizer-overlay {
       position: absolute;
@@ -466,7 +466,7 @@
       align-items: center;
       justify-content: center;
       gap: 14px;
-      z-index: 5;
+      z-index: 3;
       pointer-events: none;
     }
 
@@ -481,6 +481,8 @@
       align-items: center;
       justify-content: center;
       box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+      z-index: 15;
+      pointer-events: auto;
     }
     .audio-cover img { width: 100%; height: 100%; object-fit: cover; }
 
@@ -539,13 +541,12 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(6, 182, 212, 0.2));
-      color: var(--text-primary);
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(6, 182, 212, 0.1));
+      color: var(--text-secondary);
       font-weight: 700;
-      font-size: 0.85rem;
-      padding: 10px;
+      font-size: 0.8rem;
+      padding: 6px;
       text-align: center;
-      gap: 6px;
     }
 
     .episodes-panel {
@@ -1033,14 +1034,14 @@
           if (storedRadio) JSON.parse(storedRadio).forEach(i => this.radioFavs.set(i.id, i));
           const storedTv = localStorage.getItem('omni_favs_tv');
           if (storedTv) JSON.parse(storedTv).forEach(i => this.tvFavs.set(i.id, i));
-        } catch (e) {}
+        } catch (e) { console.warn('Erreur lecture favoris:', e); }
       }
 
       saveLocal() {
         try {
           localStorage.setItem('omni_favs_radio', JSON.stringify(Array.from(this.radioFavs.values())));
           localStorage.setItem('omni_favs_tv', JSON.stringify(Array.from(this.tvFavs.values())));
-        } catch (e) {}
+        } catch (e) { console.warn('Erreur sauvegarde favoris:', e); }
       }
 
       toggle(station) {
@@ -1147,11 +1148,10 @@
       }
 
       getDeviceId() {
-        let id = null;
-        try { id = localStorage.getItem('omni_pluto_device_id'); } catch(e) {}
+        let id = localStorage.getItem('omni_pluto_device_id');
         if (!id) {
           id = this.getUUID();
-          try { localStorage.setItem('omni_pluto_device_id', id); } catch(e) {}
+          localStorage.setItem('omni_pluto_device_id', id);
         }
         return id;
       }
@@ -1170,156 +1170,83 @@
         if (!rawStreamUrl) return '';
         const sid = this.getUUID();
         const separator = rawStreamUrl.includes('?') ? '&' : '?';
-        let url = rawStreamUrl;
-        if (!url.includes('sid=')) {
-          url += `${separator}sid=${sid}&deviceType=web&deviceMake=Chrome&deviceModel=web&deviceVersion=1.0.0`;
-        }
-        return url;
+        return `${rawStreamUrl}${separator}sid=${sid}&deviceType=web&deviceMake=Chrome&deviceModel=web&deviceVersion=1.0.0`;
       }
 
       async getPlutoChannels(search = '', genre = 'all') {
-        let channels = [];
-
-        // Source 1 : Listes M3U Pluto TV auto-mises à jour (France & Global)
-        const m3uSources = [
-          'https://raw.githubusercontent.com/BuddyChewChew/pluto/main/pluto_fr.m3u',
-          'https://raw.githubusercontent.com/BuddyChewChew/pluto/main/pluto_all.m3u'
-        ];
-
-        for (const m3uUrl of m3uSources) {
-          try {
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), 4000);
-            const res = await fetch(m3uUrl, { signal: controller.signal }).catch(() => null);
-            clearTimeout(timer);
-            if (res && res.ok) {
-              const text = await res.text();
-              const parsed = this.parsePlutoM3U(text);
-              if (parsed && parsed.length > 0) {
-                channels = parsed;
-                break;
-              }
-            }
-          } catch(e) {}
-        }
-
-        // Source 2 : API Pluto TV Direct v0/v4
-        if (!channels || channels.length === 0) {
-          const directUrl = 'https://api.pluto.tv/v0/channels?clientModelNumber=0.0.0&serverSideAds=true';
-          const proxiedUrl = `/.netlify/functions/IPTV?url=${encodeURIComponent(directUrl)}`;
-
-          let data = null;
-          try {
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), 3500);
-            const res = await fetch(directUrl, { signal: controller.signal }).catch(() => null);
-            clearTimeout(timer);
-            if (res && res.ok) data = await res.json();
-          } catch (e) {}
-
-          if (!data) {
-            try {
-              const controller = new AbortController();
-              const timer = setTimeout(() => controller.abort(), 4000);
-              const res = await fetch(proxiedUrl, { signal: controller.signal }).catch(() => null);
-              clearTimeout(timer);
-              if (res && res.ok) data = await res.json();
-            } catch(e) {}
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 4000);
+          
+          let apiUrl = 'https://api.pluto.tv/v0/channels?clientModelNumber=0.0.0&serverSideAds=true';
+          if (window.location.hostname !== 'localhost') {
+            apiUrl = `/.netlify/functions/IPTV?url=${encodeURIComponent(apiUrl)}`;
           }
 
-          if (Array.isArray(data) && data.length > 0) {
-            data.forEach(ch => {
-              if (ch.isLive !== false) {
-                let rawStreamUrl = '';
-                if (ch.stitched && ch.stitched.urls && ch.stitched.urls[0] && ch.stitched.urls[0].url) {
-                  rawStreamUrl = ch.stitched.urls[0].url;
-                } else {
-                  rawStreamUrl = `https://stitcher.pluto.tv/stitch/hls/channel/${ch._id}/master.m3u8`;
+          const res = await fetch(apiUrl, { signal: controller.signal });
+          clearTimeout(timer);
+
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data) && data.length > 0) {
+              const parsed = [];
+              data.forEach(ch => {
+                if (ch.isLive !== false) {
+                  let rawStreamUrl = '';
+                  if (ch.stitched && ch.stitched.urls && ch.stitched.urls[0] && ch.stitched.urls[0].url) {
+                    rawStreamUrl = ch.stitched.urls[0].url;
+                  }
+
+                  const logo = ch.colorLogoPNG?.path || ch.featuredImage?.path || `https://images.pluto.tv/channels/${ch._id}/colorLogoPNG.png`;
+
+                  parsed.push({
+                    id: `pluto_${ch._id}`,
+                    rawId: ch._id,
+                    rawStreamUrl: rawStreamUrl,
+                    name: ch.name,
+                    url: rawStreamUrl,
+                    logo: logo,
+                    country: 'FR',
+                    tags: ch.category || 'Pluto TV 24/7',
+                    type: 'video',
+                    category: ch.category ? ch.category.toLowerCase() : 'all'
+                  });
                 }
+              });
 
-                let logo = '';
-                if (ch.colorLogoPNG) logo = typeof ch.colorLogoPNG === 'string' ? ch.colorLogoPNG : (ch.colorLogoPNG.path || '');
-                if (!logo && ch.featuredImage) logo = typeof ch.featuredImage === 'string' ? ch.featuredImage : (ch.featuredImage.path || '');
-                if (!logo && ch.heroImage) logo = typeof ch.heroImage === 'string' ? ch.heroImage : (ch.heroImage.path || '');
-                if (!logo) logo = `https://images.pluto.tv/channels/${ch._id}/colorLogoPNG.png`;
+              const filtered = parsed.filter(ch => {
+                const matchSearch = !search || ch.name.toLowerCase().includes(search.toLowerCase()) || ch.tags.toLowerCase().includes(search.toLowerCase());
+                const matchGenre = genre === 'all' || ch.category.includes(genre.toLowerCase()) || ch.tags.toLowerCase().includes(genre.toLowerCase());
+                return matchSearch && matchGenre;
+              });
 
-                channels.push({
-                  id: `pluto_${ch._id}`,
-                  rawId: ch._id,
-                  rawStreamUrl: rawStreamUrl,
-                  name: ch.name || 'Pluto TV',
-                  url: this.buildPlutoStreamUrl(rawStreamUrl),
-                  logo: logo,
-                  country: 'FR',
-                  tags: ch.category || 'Pluto TV Direct',
-                  type: 'video',
-                  category: ch.category ? ch.category.toLowerCase() : 'all'
-                });
-              }
-            });
+              if (filtered.length > 0) return filtered;
+            }
           }
+        } catch (e) {
+          console.warn("Pluto TV API v0 fallback actif", e);
         }
 
-        // Source 3 : Backup local secours de chaînes populaires Pluto TV
-        if (!channels || channels.length === 0) {
-          channels = this.getBackupPlutoChannels();
-        }
-
-        return channels.filter(ch => {
-          const matchSearch = !search || ch.name.toLowerCase().includes(search.toLowerCase()) || ch.tags.toLowerCase().includes(search.toLowerCase());
-          const matchGenre = genre === 'all' || ch.category.includes(genre.toLowerCase()) || ch.tags.toLowerCase().includes(genre.toLowerCase());
-          return matchSearch && matchGenre;
-        });
-      }
-
-      parsePlutoM3U(content) {
-        const lines = content.split('\n');
-        const list = [];
-        let item = null;
-        for (let rawLine of lines) {
-          const line = rawLine.trim();
-          if (line.startsWith('#EXTINF:')) {
-            const name = (line.match(/,(.+)$/) || [])[1] || 'Pluto TV';
-            const logo = (line.match(/tvg-logo="([^"]*)"/) || [])[1] || '';
-            const group = (line.match(/group-title="([^"]*)"/) || [])[1] || 'Pluto TV Direct';
-            const tvgId = (line.match(/tvg-id="([^"]*)"/) || [])[1] || '';
-            const cleanId = `pluto_${tvgId || name.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
-            
-            item = {
-              id: cleanId,
-              name: name.trim(),
-              logo: logo,
-              country: 'FR',
-              tags: group,
-              type: 'video',
-              category: group.toLowerCase()
-            };
-          } else if (line && !line.startsWith('#') && item) {
-            item.url = this.buildPlutoStreamUrl(line);
-            item.rawStreamUrl = line;
-            list.push(item);
-            item = null;
-          }
-        }
-        return list;
+        return this.getBackupPlutoChannels(search, genre);
       }
 
       getBackupPlutoChannels(search = '', genre = 'all') {
         const backupPluto = [
-          { id: 'pluto_southpark', rawId: '5fa016c68e37600007cdbf83', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5fa016c68e37600007cdbf83/master.m3u8', name: 'South Park 24/7', logo: 'https://images.pluto.tv/channels/5fa016c68e37600007cdbf83/colorLogoPNG.png', country: 'FR', tags: 'Séries, Humour', type: 'video', category: 'humor' },
           { id: 'pluto_daria', rawId: '5f9b177d8e37600007cdb3c8', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5f9b177d8e37600007cdb3c8/master.m3u8', name: 'Daria 24/7', logo: 'https://images.pluto.tv/channels/5f9b177d8e37600007cdb3c8/colorLogoPNG.png', country: 'FR', tags: 'Animation, Séries', type: 'video', category: 'humor' },
           { id: 'pluto_cine', rawId: '5d8b894ec4e3d3000969678c', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5d8b894ec4e3d3000969678c/master.m3u8', name: 'Pluto TV Ciné', logo: 'https://images.pluto.tv/channels/5d8b894ec4e3d3000969678c/colorLogoPNG.png', country: 'FR', tags: 'Films 24/7, Cinema', type: 'video', category: 'culture' },
           { id: 'pluto_action', rawId: '5d8b8979c4e3d300096967a1', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5d8b8979c4e3d300096967a1/master.m3u8', name: 'Pluto TV Ciné Action', logo: 'https://images.pluto.tv/channels/5d8b8979c4e3d300096967a1/colorLogoPNG.png', country: 'FR', tags: 'Action, Thriller', type: 'video', category: 'culture' },
+          { id: 'pluto_southpark', rawId: '5fa016c68e37600007cdbf83', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5fa016c68e37600007cdbf83/master.m3u8', name: 'South Park 24/7', logo: 'https://images.pluto.tv/channels/5fa016c68e37600007cdbf83/colorLogoPNG.png', country: 'FR', tags: 'Séries, Humour', type: 'video', category: 'humor' },
           { id: 'pluto_anime', rawId: '5fa0165c8e37600007cdbf6e', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5fa0165c8e37600007cdbf6e/master.m3u8', name: 'Pluto TV Anime', logo: 'https://images.pluto.tv/channels/5fa0165c8e37600007cdbf6e/colorLogoPNG.png', country: 'FR', tags: 'Animation, Manga', type: 'video', category: 'culture' },
           { id: 'pluto_crime', rawId: '5d8b89cfc4e3d300096967be', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5d8b89cfc4e3d300096967be/master.m3u8', name: 'Pluto TV Crime', logo: 'https://images.pluto.tv/channels/5d8b89cfc4e3d300096967be/colorLogoPNG.png', country: 'FR', tags: 'True Crime, Investigation', type: 'video', category: 'crime' },
           { id: 'pluto_scifi', rawId: '5fa0168b8e37600007cdbf78', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5fa0168b8e37600007cdbf78/master.m3u8', name: 'Pluto TV Sci-Fi', logo: 'https://images.pluto.tv/channels/5fa0168b8e37600007cdbf78/colorLogoPNG.png', country: 'FR', tags: 'Science-Fiction, Tech', type: 'video', category: 'science' },
           { id: 'pluto_docs', rawId: '5e34360a8274020009a2caed', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5e34360a8274020009a2caed/master.m3u8', name: 'Pluto TV Documentaires', logo: 'https://images.pluto.tv/channels/5e34360a8274020009a2caed/colorLogoPNG.png', country: 'FR', tags: 'Histoire, Science, Culture', type: 'video', category: 'science' },
-          { id: 'pluto_comedy', rawId: '5fa015fb8e37600007cdbf5c', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5fa015fb8e37600007cdbf5c/master.m3u8', name: 'Pluto TV Comédie', logo: 'https://images.pluto.tv/channels/5fa015fb8e37600007cdbf5c/colorLogoPNG.png', country: 'FR', tags: 'Humour, Comédie', type: 'video', category: 'humor' },
-          { id: 'pluto_detectives', rawId: '5f9b17b58e37600007cdb3d3', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5f9b17b58e37600007cdb3d3/master.m3u8', name: 'Les Nouveaux Détectives', logo: 'https://images.pluto.tv/channels/5f9b17b58e37600007cdb3d3/colorLogoPNG.png', country: 'FR', tags: 'Investigation, True Crime', type: 'video', category: 'crime' },
-          { id: 'pluto_mtv', rawId: '5fa0163f8e37600007cdbf69', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5fa0163f8e37600007cdbf69/master.m3u8', name: 'MTV Classics 24/7', logo: 'https://images.pluto.tv/channels/5fa0163f8e37600007cdbf69/colorLogoPNG.png', country: 'FR', tags: 'Musique, MTV', type: 'video', category: 'culture' },
-          { id: 'pluto_kids', rawId: '5fa016ad8e37600007cdbf7e', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5fa016ad8e37600007cdbf7e/master.m3u8', name: 'Pluto TV Kids', logo: 'https://images.pluto.tv/channels/5fa016ad8e37600007cdbf7e/colorLogoPNG.png', country: 'FR', tags: 'Jeunesse, Dessins Animés', type: 'video', category: 'culture' }
+          { id: 'pluto_comedy', rawId: '5fa015fb8e37600007cdbf5c', rawStreamUrl: 'https://stitcher.pluto.tv/stitch/hls/channel/5fa015fb8e37600007cdbf5c/master.m3u8', name: 'Pluto TV Comédie', logo: 'https://images.pluto.tv/channels/5fa015fb8e37600007cdbf5c/colorLogoPNG.png', country: 'FR', tags: 'Humour, Comédie', type: 'video', category: 'humor' }
         ];
-        return backupPluto.map(ch => ({ ...ch, url: this.buildPlutoStreamUrl(ch.rawStreamUrl) }));
+        return backupPluto.filter(ch => {
+          const matchSearch = !search || ch.name.toLowerCase().includes(search.toLowerCase()) || ch.tags.toLowerCase().includes(search.toLowerCase());
+          const matchGenre = genre === 'all' || ch.category === genre || ch.tags.toLowerCase().includes(genre.toLowerCase());
+          return matchSearch && matchGenre;
+        });
       }
     }
 
@@ -1402,41 +1329,41 @@
 
     const BACKUP_STATIONS = {
       FR_RADIO: [
+        { id: 'vibration', name: 'Vibration', url: 'https://vibration.ice.infomaniak.ch/vibration-high.mp3', logo: 'https://upload.wikimedia.org/wikipedia/fr/4/4e/Vibration_logo_2020.png', country: 'FR', tags: 'Pop, Hits, Régionale, Centre', type: 'audio' },
+        { id: 'forum', name: 'Forum', url: 'https://forum.ice.infomaniak.ch/forum-high.mp3', logo: 'https://upload.wikimedia.org/wikipedia/fr/f/f6/Forum_logo_2020.png', country: 'FR', tags: 'Pop Rock, Gold, Régionale, Centre', type: 'audio' },
+        { id: 'alouette', name: 'Alouette', url: 'https://alouette.ice.infomaniak.ch/alouette-high.mp3', logo: 'https://upload.wikimedia.org/wikipedia/fr/0/01/Alouette_logo_2020.png', country: 'FR', tags: 'Pop, Hits, Régionale, Ouest', type: 'audio' },
+        { id: 'witfm', name: 'Wit FM', url: 'https://witfm.ice.infomaniak.ch/witfm-high.mp3', logo: 'https://upload.wikimedia.org/wikipedia/fr/4/43/Wit_FM_logo_2020.png', country: 'FR', tags: 'Hits, Pop, Aquitaine', type: 'audio' },
+        { id: 'sweetfm', name: 'Sweet FM', url: 'https://sweetfm.ice.infomaniak.ch/sweetfm-high.mp3', logo: 'https://upload.wikimedia.org/wikipedia/fr/2/20/Sweet_FM_logo.png', country: 'FR', tags: 'Hits, Pop, Normandie, Centre', type: 'audio' },
+        { id: 'hitwest', name: 'Hit West', url: 'https://hitwest.ice.infomaniak.ch/hitwest-high.mp3', logo: 'https://upload.wikimedia.org/wikipedia/fr/a/a2/Hit_West_logo_2020.png', country: 'FR', tags: 'Hits, Bretagne, Pays de la Loire', type: 'audio' },
+        { id: 'radioscoop', name: 'Radio Scoop', url: 'https://radioscoop.ice.infomaniak.ch/radioscoop-high.mp3', logo: 'https://upload.wikimedia.org/wikipedia/fr/e/eb/Radio_Scoop_logo.png', country: 'FR', tags: 'Hits, Lyon, Auvergne-Rhône-Alpes', type: 'audio' },
+        { id: 'voltage', name: 'Voltage', url: 'https://voltage.ice.infomaniak.ch/voltage-high.mp3', logo: 'https://upload.wikimedia.org/wikipedia/fr/d/d4/Voltage_logo_2020.png', country: 'FR', tags: 'Hits, Urban, Paris, Île-de-France', type: 'audio' },
+        { id: 'francebleu_orleans', name: 'France Bleu Orléans', url: 'https://stream.radiofrance.fr/fborleans/fborleans.m3u8?id=radiofrance', logo: 'https://www.radiofrance.fr/assets/images/brands/francebleu.svg', country: 'FR', tags: 'Régionale, News, Proximité, Orléans', type: 'audio' },
+        { id: 'francebleu_paris', name: 'France Bleu Paris', url: 'https://stream.radiofrance.fr/fb1071/fb1071.m3u8?id=radiofrance', logo: 'https://www.radiofrance.fr/assets/images/brands/francebleu.svg', country: 'FR', tags: 'Régionale, News, Paris', type: 'audio' },
         { id: 'franceinter', name: 'France Inter', url: 'https://stream.radiofrance.fr/franceinter/franceinter.m3u8?id=radiofrance', logo: 'https://www.radiofrance.fr/assets/images/brands/franceinter.svg', country: 'FR', tags: 'Généraliste, News, Talk', type: 'audio' },
         { id: 'franceinfo', name: 'France Info', url: 'https://stream.radiofrance.fr/franceinfo/franceinfo.m3u8?id=radiofrance', logo: 'https://www.radiofrance.fr/assets/images/brands/franceinfo.svg', country: 'FR', tags: 'News, Actualité, Info', type: 'audio' },
         { id: 'fip', name: 'FIP Radio', url: 'https://stream.radiofrance.fr/fip/fip.m3u8?id=radiofrance', logo: 'https://www.radiofrance.fr/assets/images/brands/fip.svg', country: 'FR', tags: 'Éclectique, Culture, Jazz', type: 'audio' },
         { id: 'franceculture', name: 'France Culture', url: 'https://stream.radiofrance.fr/franceculture/franceculture.m3u8?id=radiofrance', logo: 'https://www.radiofrance.fr/assets/images/brands/franceculture.svg', country: 'FR', tags: 'Culture, Débat, Histoire', type: 'audio' },
-        { id: 'francemusique', name: 'France Musique', url: 'https://stream.radiofrance.fr/francemusique/francemusique.m3u8?id=radiofrance', logo: 'https://www.radiofrance.fr/assets/images/brands/francemusique.svg', country: 'FR', tags: 'Classique, Jazz', type: 'audio' },
-        { id: 'mouv', name: "Mouv'", url: 'https://stream.radiofrance.fr/mouv/mouv.m3u8?id=radiofrance', logo: 'https://www.radiofrance.fr/assets/images/brands/mouv.svg', country: 'FR', tags: 'Hip-Hop, Rap, Urban', type: 'audio' },
-        { id: 'rtl', name: 'RTL France', url: 'https://icecast.rtl.fr/rtl-1-44-128?listen=webcMediaContainer', logo: '', country: 'FR', tags: 'Généraliste, Talk, News', type: 'audio' },
-        { id: 'europe1', name: 'Europe 1', url: 'https://stream.europe1.fr/europe1.mp3', logo: '', country: 'FR', tags: 'Info, Talk, Actualité', type: 'audio' },
-        { id: 'rmc', name: 'RMC Info Talk Sport', url: 'https://rmc.ice.infomaniak.ch/rmc-high.mp3', logo: '', country: 'FR', tags: 'Info, Sport, Talk', type: 'audio' },
-        { id: 'nrj', name: 'NRJ France', url: 'https://cdn.nrjaudio.fm/audio/nrj/fr/30001/mp3_128.mp3', logo: '', country: 'FR', tags: 'Pop, Hits, Musique', type: 'audio' },
-        { id: 'skyrock', name: 'Skyrock', url: 'https://icecast.skyrock.net/s/natio_mp3_128k', logo: '', country: 'FR', tags: 'Rap, Urban, Musique', type: 'audio' },
-        { id: 'funradio', name: 'Fun Radio', url: 'https://icecast.funradio.fr/fun-1-44-128?listen=webcMediaContainer', logo: '', country: 'FR', tags: 'Dance, Electro', type: 'audio' },
-        { id: 'tsfjazz', name: 'TSF Jazz', url: 'https://tsfjazz.ice.infomaniak.ch/tsfjazz-high.mp3', logo: '', country: 'FR', tags: 'Jazz, Blues, Culture', type: 'audio' },
-        { id: 'jazzradio', name: 'Jazz Radio', url: 'https://jazzradio.ice.infomaniak.ch/jazzradio-high.mp3', logo: '', country: 'FR', tags: 'Jazz, Soul, Funk', type: 'audio' },
-        { id: 'radionova', name: 'Radio Nova', url: 'https://novazz.ice.infomaniak.ch/novazz-128.mp3', logo: '', country: 'FR', tags: 'Groove, World, Underground', type: 'audio' },
-        { id: 'radioclassique', name: 'Radio Classique', url: 'https://radioclassique.ice.infomaniak.ch/radioclassique-high.mp3', logo: '', country: 'FR', tags: 'Classique, Info', type: 'audio' },
-        { id: 'rfi', name: 'RFI Monde', url: 'https://rfimonde.ice.infomaniak.ch/rfimonde-96k.mp3', logo: '', country: 'FR', tags: 'Actualités Internationales', type: 'audio' },
-        { id: 'bbc1', name: 'BBC Radio 1', url: 'https://stream.live.vc.bbcmedia.co.uk/bbc_radio_one', logo: '', country: 'GB', tags: 'Pop, Hits, UK', type: 'audio' }
+        { id: 'rtl', name: 'RTL France', url: 'https://icecast.rtl.fr/rtl-1-44-128?listen=webcMediaContainer', logo: 'https://upload.wikimedia.org/wikipedia/commons/e/e1/RTL_logo_2021.svg', country: 'FR', tags: 'Généraliste, Talk, News', type: 'audio' },
+        { id: 'europe1', name: 'Europe 1', url: 'https://stream.europe1.fr/europe1.mp3', logo: 'https://upload.wikimedia.org/wikipedia/commons/c/c9/Europe_1_logo_2010.svg', country: 'FR', tags: 'Info, Talk, Actualité', type: 'audio' },
+        { id: 'rmc', name: 'RMC Info Talk Sport', url: 'https://rmc.ice.infomaniak.ch/rmc-high.mp3', logo: 'https://upload.wikimedia.org/wikipedia/commons/2/23/RMC_logo_2022.svg', country: 'FR', tags: 'Info, Sport, Talk', type: 'audio' },
+        { id: 'nrj', name: 'NRJ France', url: 'https://cdn.nrjaudio.fm/audio/nrj/fr/30001/mp3_128.mp3', logo: 'https://upload.wikimedia.org/wikipedia/commons/e/e8/NRJ_logo.svg', country: 'FR', tags: 'Pop, Hits, Musique', type: 'audio' },
+        { id: 'skyrock', name: 'Skyrock', url: 'https://icecast.skyrock.net/s/natio_mp3_128k', logo: 'https://upload.wikimedia.org/wikipedia/fr/5/52/Skyrock_logo.svg', country: 'FR', tags: 'Rap, Urban, Musique', type: 'audio' },
+        { id: 'funradio', name: 'Fun Radio', url: 'https://icecast.funradio.fr/fun-1-44-128?listen=webcMediaContainer', logo: 'https://upload.wikimedia.org/wikipedia/commons/c/c3/Fun_Radio_logo_2020.svg', country: 'FR', tags: 'Dance, Electro, Humour', type: 'audio' },
+        { id: 'radiofg', name: 'Radio FG', url: 'https://radiofg.ice.infomaniak.ch/radiofg-high.mp3', logo: 'https://upload.wikimedia.org/wikipedia/commons/3/36/Radio_FG_logo_2018.svg', country: 'FR', tags: 'Electro, House, Club', type: 'audio' },
+        { id: 'tsfjazz', name: 'TSF Jazz', url: 'https://tsfjazz.ice.infomaniak.ch/tsfjazz-high.mp3', logo: 'https://upload.wikimedia.org/wikipedia/commons/c/c3/TSF_Jazz_logo.svg', country: 'FR', tags: 'Jazz, Blues, Culture', type: 'audio' },
+        { id: 'radionova', name: 'Radio Nova', url: 'https://novazz.ice.infomaniak.ch/novazz-128.mp3', logo: 'https://upload.wikimedia.org/wikipedia/fr/1/1b/Radio_Nova_logo.svg', country: 'FR', tags: 'Indie, World, Musique', type: 'audio' },
+        { id: 'ouifm', name: 'OUI FM', url: 'https://ouifm.ice.infomaniak.ch/ouifm-high.mp3', logo: 'https://upload.wikimedia.org/wikipedia/fr/6/6d/OU%C3%AF_FM_logo.png', country: 'FR', tags: 'Rock, Pop Rock, Classic', type: 'audio' }
       ],
       FR_TV: [
-        { id: 'tv_france24_fr', name: 'France 24 Direct (FR)', url: 'https://static.france24.com/live/F24_FR_LO_HLS/live_tv.m3u8', logo: '', country: 'FR', tags: 'News, Info, Actualité', type: 'video' },
-        { id: 'tv_france24_en', name: 'France 24 English', url: 'https://static.france24.com/live/F24_EN_LO_HLS/live_tv.m3u8', logo: '', country: 'FR', tags: 'News, World', type: 'video' },
-        { id: 'tv_arte_fr', name: 'ARTE Journal Live (FR)', url: 'https://artesimulcast.akamaized.net/hls/live/2031003/artelive_fr/index.m3u8', logo: '', country: 'FR', tags: 'Culture, Science, Documentaire', type: 'video' },
-        { id: 'tv_arte_de', name: 'ARTE Journal Live (DE)', url: 'https://artesimulcast.akamaized.net/hls/live/2031004/artelive_de/index.m3u8', logo: '', country: 'DE', tags: 'Culture, Deutsch', type: 'video' },
-        { id: 'tv_bfmtv', name: 'BFM TV Live', url: 'https://bfmtv-live.bfmtv.biz/hls/live/2033626/bfmtv/index.m3u8', logo: '', country: 'FR', tags: 'News, Info, Actualité', type: 'video' },
-        { id: 'tv_bfmbusiness', name: 'BFM Business', url: 'https://bfmbusiness-live.bfmtv.biz/hls/live/2033627/bfmbusiness/index.m3u8', logo: '', country: 'FR', tags: 'Économie, Bourse', type: 'video' },
-        { id: 'tv_cnews', name: 'CNEWS Direct', url: 'https://cnews-hls.live.canalplus.com/live/hls/cnews-app/index.m3u8', logo: '', country: 'FR', tags: 'News, Info, Débat', type: 'video' },
-        { id: 'tv_lci', name: 'LCI Info Direct', url: 'https://lci-hls-live.tf1.fr/live/hls/lci/index.m3u8', logo: '', country: 'FR', tags: 'News, Info', type: 'video' },
-        { id: 'tv_tv5monde', name: 'TV5Monde Info', url: 'https://ott.tv5monde.com/Content/HLS/Live/channel(info)/stream.m3u8', logo: '', country: 'FR', tags: 'Culture, News, Francophonie', type: 'video' },
-        { id: 'tv_euronews', name: 'Euronews Français', url: 'https://euronews-euronews-french-1-fr.samsung.wurl.tv/playlist.m3u8', logo: '', country: 'FR', tags: 'News, Europe, Info', type: 'video' },
-        { id: 'tv_kto', name: 'KTO TV Direct', url: 'https://ktotv.akamaized.net/hls/live/2033507/ktotv/index.m3u8', logo: '', country: 'FR', tags: 'Culture, Histoire', type: 'video' },
-        { id: 'tv_cgtn', name: 'CGTN Français', url: 'https://news.cgtn.com/resource/live/french/cgtn-french.m3u8', logo: '', country: 'FR', tags: 'News, Monde', type: 'video' },
-        { id: 'tv_rakuten_action', name: 'Rakuten TV Action', url: 'https://rakuten-actionmovies-1-fr.samsung.wurl.tv/playlist.m3u8', logo: '', country: 'FR', tags: 'Films, Cinema', type: 'video' },
-        { id: 'tv_rakuten_comedy', name: 'Rakuten TV Comédie', url: 'https://rakuten-comedy-1-fr.samsung.wurl.tv/playlist.m3u8', logo: '', country: 'FR', tags: 'Films, Humour', type: 'video' },
-        { id: 'tv_nasa', name: 'NASA TV Public', url: 'https://ntv1.akamaized.net/hls/live/2014075/NASA-NTV1-HLS/master.m3u8', logo: '', country: 'US', tags: 'Espace, Science', type: 'video' }
+        { id: 'tv_france24', name: 'France 24 Direct (FR)', url: 'https://static.france24.com/live/F24_FR_LO_HLS/live_tv.m3u8', logo: 'https://upload.wikimedia.org/wikipedia/fr/4/4e/France_24_logo_2013.svg', country: 'FR', tags: 'News, Info, Actualité', type: 'video' },
+        { id: 'tv_arte', name: 'ARTE Journal Live', url: 'https://artesimulcast.akamaized.net/hls/live/2031003/artelive_fr/index.m3u8', logo: 'https://upload.wikimedia.org/wikipedia/commons/0/07/Logo_Arte.svg', country: 'FR', tags: 'Culture, Science, Documentaire', type: 'video' },
+        { id: 'tv_bfmtv', name: 'BFM TV Live', url: 'https://bfmtv-live.bfmtv.biz/hls/live/2033626/bfmtv/index.m3u8', logo: 'https://upload.wikimedia.org/wikipedia/commons/6/69/BFMTV_logo_2019.svg', country: 'FR', tags: 'News, Info, Actualité', type: 'video' },
+        { id: 'tv_cnews', name: 'CNEWS Direct', url: 'https://cnews-hls.live.canalplus.com/live/hls/cnews-app/index.m3u8', logo: 'https://upload.wikimedia.org/wikipedia/commons/9/9b/CNews_logo.svg', country: 'FR', tags: 'News, Info, Débat', type: 'video' },
+        { id: 'tv_lci', name: 'LCI Info Direct', url: 'https://lci-hls-live.tf1.fr/live/hls/lci/index.m3u8', logo: 'https://upload.wikimedia.org/wikipedia/commons/0/04/LCI_logo_2017.svg', country: 'FR', tags: 'News, Info', type: 'video' },
+        { id: 'tv_tv5monde', name: 'TV5Monde Info', url: 'https://ott.tv5monde.com/Content/HLS/Live/channel(info)/stream.m3u8', logo: 'https://upload.wikimedia.org/wikipedia/commons/4/4b/TV5Monde_logo.svg', country: 'FR', tags: 'Culture, News, Francophonie', type: 'video' },
+        { id: 'tv_euronews', name: 'Euronews Français', url: 'https://euronews-euronews-french-1-fr.samsung.wurl.tv/playlist.m3u8', logo: 'https://upload.wikimedia.org/wikipedia/commons/0/02/Euronews_2016_logo.svg', country: 'FR', tags: 'News, Europe, Info', type: 'video' },
+        { id: 'tv_kto', name: 'KTO TV Direct', url: 'https://ktotv.akamaized.net/hls/live/2033507/ktotv/index.m3u8', logo: 'https://upload.wikimedia.org/wikipedia/commons/b/b5/Logo_KTO.svg', country: 'FR', tags: 'Culture, Histoire', type: 'video' },
+        { id: 'tv_cgtn', name: 'CGTN Français', url: 'https://news.cgtn.com/resource/live/french/cgtn-french.m3u8', logo: 'https://upload.wikimedia.org/wikipedia/commons/a/a2/CGTN_logo.svg', country: 'FR', tags: 'News, Culture', type: 'video' }
       ]
     };
 
@@ -1458,60 +1385,50 @@
           humor: ['humour', 'comedy', 'rire', 'fun']
         };
 
-        const radioBrowserMirrors = [
-          'de1.api.radio-browser.info',
-          'nl1.api.radio-browser.info',
-          'at1.api.radio-browser.info'
-        ];
-
-        for (const mirror of radioBrowserMirrors) {
-          try {
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), 3000);
-            const countryParam = country === 'GLOBAL' ? '' : `bycountrycodeexact/${country.toLowerCase()}`;
-            const apiUrl = `https://${mirror}/json/stations/${countryParam}?order=clickcount&reverse=true&limit=80`;
-            
-            let res = await fetch(apiUrl, { signal: controller.signal }).catch(() => null);
-            clearTimeout(timer);
-
-            if (!res || !res.ok) {
-              const proxiedUrl = `/.netlify/functions/IPTV?url=${encodeURIComponent(apiUrl)}`;
-              const pController = new AbortController();
-              const pTimer = setTimeout(() => pController.abort(), 3500);
-              res = await fetch(proxiedUrl, { signal: pController.signal }).catch(() => null);
-              clearTimeout(pTimer);
-            }
-
-            if (res && res.ok) {
-              const data = await res.json();
-              const list = data
-                .filter(st => st.url_resolved && (st.codec === 'MP3' || st.codec === 'AAC' || st.url_resolved.includes('.m3u8') || st.url_resolved.includes('.mp3')))
-                .map(st => ({
-                  id: `rb_${st.stationuuid}`,
-                  name: st.name ? st.name.trim() : 'Radio',
-                  url: st.url_resolved,
-                  logo: st.favicon || '',
-                  country: country,
-                  tags: st.tags ? st.tags.split(',').slice(0, 3).join(', ') : 'Radio Live',
-                  type: 'audio'
-                }))
-                .filter(st => {
-                  const matchSearch = !search || st.name.toLowerCase().includes(search.toLowerCase()) || st.tags.toLowerCase().includes(search.toLowerCase());
-                  let matchGenre = (genre === 'all');
-                  if (!matchGenre && genreKeywords[genre]) {
-                    const tagLower = st.tags.toLowerCase();
-                    const nameLower = st.name.toLowerCase();
-                    matchGenre = genreKeywords[genre].some(k => tagLower.includes(k) || nameLower.includes(k));
-                  }
-                  return matchSearch && matchGenre;
-                });
-
-              if (list.length > 0) return list;
-            }
-          } catch (e) {}
-        }
-
         const backups = BACKUP_STATIONS.FR_RADIO || [];
+
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 3500);
+          const countryParam = country === 'GLOBAL' ? '' : `bycountrycodeexact/${country.toLowerCase()}`;
+          const apiUrl = `https://de1.api.radio-browser.info/json/stations/${countryParam}?order=clickcount&reverse=true&limit=80`;
+          const res = await fetch(apiUrl, { signal: controller.signal });
+          clearTimeout(timer);
+
+          if (res.ok) {
+            const data = await res.json();
+            const fetchedList = data
+              .filter(st => st.url_resolved && (st.codec === 'MP3' || st.codec === 'AAC' || st.url_resolved.includes('.m3u8') || st.url_resolved.includes('.mp3')))
+              .map(st => ({
+                id: `rb_${st.stationuuid}`,
+                name: st.name ? st.name.trim() : 'Radio',
+                url: st.url_resolved,
+                logo: st.favicon || '',
+                country: country,
+                tags: st.tags ? st.tags.split(',').slice(0, 3).join(', ') : 'Radio Live',
+                type: 'audio'
+              }));
+
+            const combined = [...backups, ...fetchedList];
+            const uniqueMap = new Map();
+            combined.forEach(st => {
+              const key = st.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+              if (!uniqueMap.has(key)) uniqueMap.set(key, st);
+            });
+
+            return Array.from(uniqueMap.values()).filter(st => {
+              const matchSearch = !search || st.name.toLowerCase().includes(search.toLowerCase()) || st.tags.toLowerCase().includes(search.toLowerCase());
+              let matchGenre = (genre === 'all');
+              if (!matchGenre && genreKeywords[genre]) {
+                const tagLower = st.tags.toLowerCase();
+                const nameLower = st.name.toLowerCase();
+                matchGenre = genreKeywords[genre].some(k => tagLower.includes(k) || nameLower.includes(k));
+              }
+              return matchSearch && matchGenre;
+            });
+          }
+        } catch (e) { console.warn('Radio Browser fallback actif', e); }
+
         return backups.filter(st => {
           const matchSearch = !search || st.name.toLowerCase().includes(search.toLowerCase()) || st.tags.toLowerCase().includes(search.toLowerCase());
           let matchGenre = (genre === 'all');
@@ -1542,23 +1459,15 @@
 
         try {
           const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 3500);
-          let res = await fetch(targetUrl, { signal: controller.signal }).catch(() => null);
+          const timer = setTimeout(() => controller.abort(), 4000);
+          const res = await fetch(targetUrl, { signal: controller.signal });
           clearTimeout(timer);
 
-          if (!res || !res.ok) {
-            const proxiedUrl = `/.netlify/functions/IPTV?url=${encodeURIComponent(targetUrl)}`;
-            const pController = new AbortController();
-            const pTimer = setTimeout(() => pController.abort(), 4000);
-            res = await fetch(proxiedUrl, { signal: pController.signal }).catch(() => null);
-            clearTimeout(pTimer);
-          }
-
-          if (res && res.ok) {
+          if (res.ok) {
             const text = await res.text();
             fetchedList = this.parseM3U(text, search, country);
           }
-        } catch (e) {}
+        } catch (e) { console.warn('IPTV M3U fallback actif', e); }
 
         const combined = [...backups, ...fetchedList];
         const uniqueMap = new Map();
@@ -1589,8 +1498,8 @@
 
         const url = `https://itunes.apple.com/search?media=podcast&entity=podcast&term=${encodeURIComponent(term)}&limit=50&country=${country.toLowerCase()}`;
         try {
-          const res = await fetch(url).catch(() => null);
-          if (res && res.ok) {
+          const res = await fetch(url);
+          if (res.ok) {
             const data = await res.json();
             return data.results.map(p => ({
               id: `pod_${p.collectionId}`,
@@ -1618,9 +1527,9 @@
         try {
           const controller = new AbortController();
           const timer = setTimeout(() => controller.abort(), 3500);
-          const res = await fetch(cleanFeedUrl, { signal: controller.signal }).catch(() => null);
+          const res = await fetch(cleanFeedUrl, { signal: controller.signal });
           clearTimeout(timer);
-          if (res && res.ok) {
+          if (res.ok) {
             const text = await res.text();
             const episodes = this.parseRSSFeed(text);
             if (episodes && episodes.length > 0) return episodes;
@@ -1629,8 +1538,8 @@
 
         try {
           const rss2jsonUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(cleanFeedUrl)}&count=30`;
-          const res = await fetch(rss2jsonUrl).catch(() => null);
-          if (res && res.ok) {
+          const res = await fetch(rss2jsonUrl);
+          if (res.ok) {
             const data = await res.json();
             if (data.status === 'ok' && Array.isArray(data.items) && data.items.length > 0) {
               const episodes = [];
@@ -1730,9 +1639,7 @@
         this.isRunning = false;
 
         this.initAudioAnalyzer();
-        try {
-          this.initThreeJS();
-        } catch(e) {}
+        this.initThreeJS();
         this.resize();
         window.addEventListener('resize', () => this.resize());
         this.start();
@@ -1772,49 +1679,68 @@
       }
 
       initThreeJS() {
-        if (typeof THREE === 'undefined' || !this.c3d) return;
-        this.scene = new THREE.Scene();
-        this.camera = new THREE.PerspectiveCamera(60, 16 / 9, 0.1, 1000);
-        this.camera.position.z = 50;
-        this.renderer = new THREE.WebGLRenderer({ canvas: this.c3d, alpha: true, antialias: true });
-        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        try {
+          if (typeof THREE === 'undefined' || !this.c3d) return;
+          this.scene = new THREE.Scene();
+          this.camera = new THREE.PerspectiveCamera(60, 16 / 9, 0.1, 1000);
+          this.camera.position.z = 50;
+          this.renderer = new THREE.WebGLRenderer({ canvas: this.c3d, alpha: true, antialias: true });
+          this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
-        this.meshGroups = {};
+          this.meshGroups = {};
 
-        const sphereGroup = new THREE.Group();
-        const sphereGeo = new THREE.IcosahedronGeometry(14, 2);
-        const sphereMat = new THREE.MeshBasicMaterial({ color: 0x6366f1, wireframe: true, transparent: true, opacity: 0.85 });
-        this.sphereMesh = new THREE.Mesh(sphereGeo, sphereMat);
-        sphereGroup.add(this.sphereMesh);
-        this.meshGroups['sphere'] = sphereGroup;
+          const sphereGroup = new THREE.Group();
+          const sphereGeo = new THREE.IcosahedronGeometry(14, 2);
+          const sphereMat = new THREE.MeshBasicMaterial({ color: 0x6366f1, wireframe: true, transparent: true, opacity: 0.85 });
+          this.sphereMesh = new THREE.Mesh(sphereGeo, sphereMat);
+          sphereGroup.add(this.sphereMesh);
+          const coreGeo = new THREE.SphereGeometry(6, 16, 16);
+          const coreMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4, wireframe: true });
+          this.coreMesh = new THREE.Mesh(coreGeo, coreMat);
+          sphereGroup.add(this.coreMesh);
+          this.meshGroups['sphere'] = sphereGroup;
 
-        const hyperGroup = new THREE.Group();
-        const starGeo = new THREE.BufferGeometry();
-        const starCount = 800;
-        const starPos = new Float32Array(starCount * 3);
-        for (let i = 0; i < starCount * 3; i += 3) {
-          starPos[i] = (Math.random() - 0.5) * 300;
-          starPos[i + 1] = (Math.random() - 0.5) * 300;
-          starPos[i + 2] = (Math.random() - 0.5) * 600;
+          const hyperGroup = new THREE.Group();
+          const starGeo = new THREE.BufferGeometry();
+          const starCount = 800;
+          const starPos = new Float32Array(starCount * 3);
+          for (let i = 0; i < starCount * 3; i += 3) {
+            starPos[i] = (Math.random() - 0.5) * 300;
+            starPos[i + 1] = (Math.random() - 0.5) * 300;
+            starPos[i + 2] = (Math.random() - 0.5) * 600;
+          }
+          starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+          const starMat = new THREE.PointsMaterial({ color: 0xa855f7, size: 2.2, transparent: true, opacity: 0.9 });
+          this.starPoints = new THREE.Points(starGeo, starMat);
+          hyperGroup.add(this.starPoints);
+          this.meshGroups['hyperdrive'] = hyperGroup;
+
+          const synthGroup = new THREE.Group();
+          const gridHelper = new THREE.GridHelper(200, 40, 0x06b6d4, 0x6366f1);
+          gridHelper.position.y = -20;
+          synthGroup.add(gridHelper);
+          const sunGeo = new THREE.CircleGeometry(16, 32);
+          const sunMat = new THREE.MeshBasicMaterial({ color: 0xef4444, wireframe: true });
+          const sunMesh = new THREE.Mesh(sunGeo, sunMat);
+          sunMesh.position.set(0, 5, -80);
+          synthGroup.add(sunMesh);
+          this.meshGroups['synthwave'] = synthGroup;
+
+          Object.values(this.meshGroups).forEach(g => {
+            g.visible = false;
+            this.scene.add(g);
+          });
+          this.update3DVisibility();
+        } catch (e) {
+          console.warn('WebGL Context Warning', e);
         }
-        starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
-        const starMat = new THREE.PointsMaterial({ color: 0xa855f7, size: 2.2, transparent: true, opacity: 0.9 });
-        this.starPoints = new THREE.Points(starGeo, starMat);
-        hyperGroup.add(this.starPoints);
-        this.meshGroups['hyperdrive'] = hyperGroup;
-
-        Object.values(this.meshGroups).forEach(g => {
-          g.visible = false;
-          this.scene.add(g);
-        });
-        this.update3DVisibility();
       }
 
       setPreset(preset) {
         this.preset = preset;
-        const is3D = ['hyperdrive', 'sphere'].includes(preset);
-        if (this.c2d) this.c2d.style.display = (!this.isRunning || is3D) ? 'none' : 'block';
-        if (this.c3d) this.c3d.style.display = (!this.isRunning || !is3D) ? 'none' : 'block';
+        const is3D = ['hyperdrive', 'sphere', 'synthwave', 'vortex', 'matrix', 'neon_tunnel', 'blackhole', 'dna', 'fireworks', 'ocean', 'cybercity', 'stargate', 'eclipse', 'tesseract', 'nebula'].includes(preset);
+        if (this.c2d) this.c2d.style.display = is3D ? 'none' : 'block';
+        if (this.c3d) this.c3d.style.display = is3D ? 'block' : 'none';
         this.update3DVisibility();
         this.resize();
       }
@@ -1852,32 +1778,77 @@
 
           if (this.c2d && this.c2d.style.display !== 'none' && w && h) {
             this.ctx2d.clearRect(0, 0, w, h);
-            const bars = 28;
-            const barW = (w / bars) - 4;
-            for (let i = 0; i < bars; i++) {
-              const fVal = freqs[i % freqs.length] / 255;
-              const bh = fVal * (h * 0.55) + 12;
-              const x = i * (barW + 4) + 2;
-              const y = h - bh;
 
-              const grad = this.ctx2d.createLinearGradient(0, y, 0, h);
-              grad.addColorStop(0, '#a855f7');
-              grad.addColorStop(0.5, '#6366f1');
-              grad.addColorStop(1, '#06b6d4');
+            if (this.preset === 'cyber') {
+              const bars = 28;
+              const barW = (w / bars) - 4;
+              for (let i = 0; i < bars; i++) {
+                const fVal = freqs[i % freqs.length] / 255;
+                const bh = fVal * (h * 0.55) + 12;
+                const x = i * (barW + 4) + 2;
+                const y = h - bh;
 
-              this.ctx2d.fillStyle = grad;
-              this.ctx2d.beginPath();
-              this.ctx2d.roundRect(x, y, barW, bh, [6, 6, 0, 0]);
-              this.ctx2d.fill();
+                const grad = this.ctx2d.createLinearGradient(0, y, 0, h);
+                grad.addColorStop(0, '#a855f7');
+                grad.addColorStop(0.5, '#6366f1');
+                grad.addColorStop(1, '#06b6d4');
+
+                this.ctx2d.fillStyle = grad;
+                this.ctx2d.beginPath();
+                this.ctx2d.roundRect(x, y, barW, bh, [6, 6, 0, 0]);
+                this.ctx2d.fill();
+
+                this.ctx2d.fillStyle = '#67e8f9';
+                this.ctx2d.fillRect(x, y - 6, barW, 3);
+              }
+            } else if (this.preset === 'particles') {
+              const cx = w / 2;
+              const cy = h / 2;
+              const pCount = 24;
+              for (let i = 0; i < pCount; i++) {
+                const angle = (i / pCount) * Math.PI * 2 + (Date.now() * 0.001);
+                const r = 90 + (freqs[i % freqs.length] / 255) * 80;
+                const px = cx + Math.cos(angle) * r;
+                const py = cy + Math.sin(angle) * r;
+
+                this.ctx2d.fillStyle = i % 2 === 0 ? '#06b6d4' : '#a855f7';
+                this.ctx2d.beginPath();
+                this.ctx2d.arc(px, py, 4 + (freqs[i % freqs.length] / 255) * 6, 0, Math.PI * 2);
+                this.ctx2d.fill();
+              }
+            } else if (this.preset === 'aurora') {
+              const time = Date.now() * 0.002;
+              this.ctx2d.lineWidth = 4;
+              for (let j = 0; j < 3; j++) {
+                this.ctx2d.beginPath();
+                this.ctx2d.strokeStyle = j === 0 ? '#6366f1' : (j === 1 ? '#06b6d4' : '#a855f7');
+                for (let x = 0; x < w; x += 15) {
+                  const y = h / 2 + Math.sin(x * 0.01 + time + j) * 40 + Math.cos(x * 0.02 - time) * (bass * 0.3);
+                  if (x === 0) this.ctx2d.moveTo(x, y);
+                  else this.ctx2d.lineTo(x, y);
+                }
+                this.ctx2d.stroke();
+              }
             }
           }
 
           if (this.scene && this.c3d && this.c3d.style.display !== 'none') {
-            if (this.sphereMesh) {
+            if (this.preset === 'sphere' && this.sphereMesh) {
               this.sphereMesh.rotation.y += 0.01;
+              this.sphereMesh.rotation.x += 0.005;
               const scale = 1 + (bass / 255) * 0.4;
               this.sphereMesh.scale.set(scale, scale, scale);
+              if (this.coreMesh) this.coreMesh.rotation.y -= 0.02;
+            } else if (this.preset === 'hyperdrive' && this.starPoints) {
+              const positions = this.starPoints.geometry.attributes.position.array;
+              const speed = 2 + (bass / 255) * 6;
+              for (let i = 2; i < positions.length; i += 3) {
+                positions[i] += speed;
+                if (positions[i] > 100) positions[i] = -500;
+              }
+              this.starPoints.geometry.attributes.position.needsUpdate = true;
             }
+
             this.renderer.render(this.scene, this.camera);
           }
         };
@@ -2190,7 +2161,7 @@
         this.grid.innerHTML = this.stations.map((s, i) => {
           const isFav = this.favStore.isFav(s.id, s.type);
           const safeName = (s.name || 'Média').replace(/"/g, '&quot;');
-          const iconType = (s.type === 'video' || s.type === 'tv') ? '📺' : (s.type === 'podcast' ? '🎙️' : '📻');
+          const initials = (s.name || 'TV').substring(0, 3).toUpperCase();
 
           return `
             <div class="station-card" onclick="app.handleCardClick(${i})">
@@ -2201,10 +2172,9 @@
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
               </button>
               <div class="card-thumb-wrapper">
-                ${s.logo ? `<img src="${s.logo}" alt="${safeName}" loading="lazy" onerror="this.onerror=null; this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';">` : ''}
+                ${s.logo ? `<img src="${s.logo}" alt="${safeName}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">` : ''}
                 <div class="card-thumb-fallback-box" style="${s.logo ? 'display:none;' : 'display:flex;'}">
-                  <span style="font-size:1.6rem; margin-bottom:2px;">${iconType}</span>
-                  <span style="font-size:0.82rem; font-weight:700; max-width:90%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${s.name}</span>
+                  <span style="font-size:1.1rem; letter-spacing:0.05em;">${initials}</span>
                 </div>
               </div>
               <div>
@@ -2354,11 +2324,7 @@
         this.currentPlayingEpisode = null;
         this.activeStationIndex = index;
         this.theater.classList.add('active');
-
-        // Faire défiler l'écran vers le lecteur pour centrer le flux vidéo
-        if (this.theater) {
-          this.theater.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
+        this.theater.scrollIntoView({ behavior: 'smooth' });
 
         let streamUrl = s.url;
         if (s.id && s.id.startsWith('pluto_')) {
@@ -2400,6 +2366,8 @@
         const isHls = url.includes('.m3u8') || isVideo || url.includes('pluto.tv') || url.includes('stitch');
 
         if (isHls && typeof Hls !== 'undefined' && Hls.isSupported()) {
+          let currentRealBaseUrl = url;
+
           class CustomHlsLoader extends Hls.DefaultConfig.loader {
             constructor(config) {
               super(config);
@@ -2416,11 +2384,38 @@
                 } catch(e) {}
               }
 
-              // Les flux Pluto TV & CDN Akamai gèrent le CORS nativement. Chargement direct sans passer par le proxy serveur
-              const isPlutoStream = targetUrl.includes('pluto.tv') || targetUrl.includes('stitch') || targetUrl.includes('siloh.pluto');
+              if (targetUrl.startsWith(window.location.origin)) {
+                try {
+                  const uObj = new URL(targetUrl);
+                  let relativePath = uObj.pathname + uObj.search;
+                  relativePath = relativePath.replace(/^\/\.netlify\/functions\/(IPTV)?/i, '');
+                  if (currentRealBaseUrl) {
+                    targetUrl = new URL(relativePath, currentRealBaseUrl).href;
+                  }
+                } catch(e) {}
+              }
 
-              if (context.useProxy && !isPlutoStream) {
-                context.url = `/.netlify/functions/IPTV?url=${encodeURIComponent(targetUrl)}`;
+              if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+                if (currentRealBaseUrl) {
+                  try {
+                    targetUrl = new URL(targetUrl, currentRealBaseUrl).href;
+                  } catch(e) {}
+                }
+              }
+
+              if (targetUrl.startsWith('http://') || targetUrl.startsWith('https://')) {
+                if (!targetUrl.startsWith(window.location.origin)) {
+                  currentRealBaseUrl = targetUrl;
+                }
+              }
+
+              const shouldUseProxy = window.location.hostname !== 'localhost' && !context.isDirectRetry && (targetUrl.startsWith('http://') || targetUrl.includes('pluto.tv') || targetUrl.includes('bfm'));
+              if (shouldUseProxy && (targetUrl.startsWith('http://') || targetUrl.startsWith('https://'))) {
+                if (!targetUrl.startsWith(window.location.origin)) {
+                  context.url = `/.netlify/functions/IPTV?url=${encodeURIComponent(targetUrl)}`;
+                } else {
+                  context.url = targetUrl;
+                }
               } else {
                 context.url = targetUrl;
               }
@@ -2437,17 +2432,12 @@
 
               const originalOnError = callbacks.onError;
               callbacks.onError = (error, contextFunc, networkDetails) => {
-                if (!context.retryAttempted && targetUrl && (targetUrl.startsWith('http://') || targetUrl.startsWith('https://'))) {
-                  context.retryAttempted = true;
-                  if (!context.useProxy && !isPlutoStream) {
-                    context.useProxy = true;
-                    context.url = `/.netlify/functions/IPTV?url=${encodeURIComponent(targetUrl)}`;
-                  }
-                  const retryLoader = new Hls.DefaultConfig.loader(config);
-                  retryLoader.load(context, config, callbacks);
+                if (!context.isDirectRetry && targetUrl && (targetUrl.startsWith('http://') || targetUrl.startsWith('https://'))) {
+                  context.isDirectRetry = true;
+                  context.url = targetUrl;
+                  super.load(context, config, callbacks);
                   return;
                 }
-
                 if (originalOnError) {
                   originalOnError(error, contextFunc, networkDetails);
                 }
@@ -2476,7 +2466,9 @@
           this.hlsPlayer.on(Hls.Events.ERROR, (event, data) => {
             if (data.fatal) {
               this.hlsRetryCount = (this.hlsRetryCount || 0) + 1;
+              
               if (this.hlsRetryCount > 3) {
+                console.warn('Nombre maximal de tentatives HLS atteint pour ce flux.');
                 if (this.hlsPlayer) {
                   this.hlsPlayer.destroy();
                   this.hlsPlayer = null;
@@ -2576,13 +2568,7 @@
       }
     }
 
-    document.addEventListener('DOMContentLoaded', () => {
-      try {
-        window.app = new AppController();
-      } catch (err) {
-        console.error("Erreur d'initialisation OmniStream:", err);
-      }
-    });
+    window.app = new AppController();
   </script>
 </body>
 </html>
