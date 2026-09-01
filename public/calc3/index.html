@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Calculatrice Mathématique</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #0b0f19;
+      color: #f8fafc;
+      min-height: 100vh;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .glass-card {
+      background: rgba(17, 24, 39, 0.75);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .glass-display {
+      background: rgba(11, 15, 25, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .calc-btn {
+      transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .calc-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .calc-btn:active, .calc-btn.key-pressed {
+      transform: translateY(1px) scale(0.97);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    }
+
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.4);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(100, 116, 139, 0.4);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(148, 163, 184, 0.7);
+    }
+
+    .btn-num { background: rgba(30, 41, 59, 0.7); color: #f8fafc; }
+    .btn-num:hover { background: rgba(51, 65, 85, 0.9); }
+    
+    .btn-op { background: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.25); }
+    .btn-op:hover { background: rgba(99, 102, 241, 0.3); color: #a5b4fc; }
+
+    .btn-action { background: rgba(239, 68, 68, 0.15); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.25); }
+    .btn-action:hover { background: rgba(239, 68, 68, 0.3); color: #f87171; }
+
+    .btn-equals { background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: #ffffff; box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35); }
+    .btn-equals:hover { background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%); box-shadow: 0 6px 18px rgba(99, 102, 241, 0.5); }
+    
+    .btn-util { background: rgba(148, 163, 184, 0.12); color: #cbd5e1; }
+    .btn-util:hover { background: rgba(148, 163, 184, 0.22); color: #f1f5f9; }
+  </style>
+</head>
+<body class="p-3 sm:p-6">
+
+  <main class="w-full max-w-lg relative">
+    
+    <!-- Carte Principale de la Calculatrice -->
+    <section class="glass-card rounded-3xl p-5 sm:p-6 shadow-2xl relative overflow-hidden">
+      
+      <!-- Barre Supérieure avec Bouton Onglet Historique -->
+      <header class="flex items-center justify-between mb-4 pb-3 border-b border-slate-800/80">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold text-xs border border-indigo-500/30">
+            <span>fx</span>
+          </div>
+          <h1 class="text-base font-semibold tracking-wide text-slate-200">Calculatrice</h1>
+        </div>
+
+        <!-- Onglet / Bouton déclencheur d'historique -->
+        <button 
+          id="toggle-history-btn" 
+          class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 text-slate-300 hover:text-white transition text-xs font-medium"
+          title="Afficher l'historique"
+          aria-label="Afficher l'historique"
+        >
+          <i class="fa-solid fa-clock-rotate-left text-indigo-400"></i>
+          <span>Historique</span>
+          <span id="history-badge" class="hidden px-1.5 py-0.2 text-[10px] rounded-full bg-indigo-600 text-white font-semibold">0</span>
+        </button>
+      </header>
+
+      <!-- Écran d'affichage -->
+      <div class="glass-display rounded-2xl p-4 sm:p-5 mb-5 shadow-inner flex flex-col justify-between min-h-[130px] relative transition-all">
+        
+        <!-- Saisie et expression courante -->
+        <div class="w-full overflow-x-auto whitespace-nowrap scrollbar-none text-right mb-1">
+          <input 
+            type="text" 
+            id="expression-input" 
+            class="w-full bg-transparent text-right font-mono text-xl sm:text-2xl text-slate-300 focus:outline-none tracking-wide" 
+            placeholder="0"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </div>
+
+        <!-- Résultat évalué en direct -->
+        <div class="flex items-center justify-between mt-2 pt-2 border-t border-slate-800/60">
+          <div id="status-indicator" class="text-xs text-slate-500 font-medium flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            Prêt
+          </div>
+          <div id="result-display" class="font-mono text-2xl sm:text-3xl font-bold text-indigo-400 truncate tracking-tight">
+            0
+          </div>
+        </div>
+
+        <!-- Notification d'erreur -->
+        <div id="error-toast" class="hidden absolute inset-x-3 bottom-3 p-2.5 bg-red-950/90 border border-red-500/40 rounded-xl text-xs text-red-200 flex items-center justify-between backdrop-blur-md shadow-lg transition-all">
+          <span id="error-message" class="font-medium flex items-center gap-2">
+            <i class="fa-solid fa-triangle-exclamation text-red-400"></i>
+            Expression invalide
+          </span>
+          <button onclick="calculatorUI.hideError()" class="text-red-300 hover:text-white p-1">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Pavé de touches -->
+      <div class="grid grid-cols-4 gap-2.5 sm:gap-3">
+        <!-- Ligne 1 -->
+        <button class="calc-btn btn-action p-3.5 sm:p-4 rounded-2xl font-bold text-base" data-key="Clear">AC</button>
+        <button class="calc-btn btn-util p-3.5 sm:p-4 rounded-2xl font-semibold text-base" data-key="Backspace"><i class="fa-solid fa-delete-left"></i></button>
+        <button class="calc-btn btn-util p-3.5 sm:p-4 rounded-2xl font-semibold text-base" data-key="(">(</button>
+        <button class="calc-btn btn-util p-3.5 sm:p-4 rounded-2xl font-semibold text-base" data-key=")">)</button>
+
+        <!-- Ligne 2 -->
+        <button class="calc-btn btn-op p-3.5 sm:p-4 rounded-2xl font-bold text-base" data-key="%">%</button>
+        <button class="calc-btn btn-op p-3.5 sm:p-4 rounded-2xl font-bold text-base" data-key="/">÷</button>
+        <button class="calc-btn btn-op p-3.5 sm:p-4 rounded-2xl font-bold text-base" data-key="*">×</button>
+        <button class="calc-btn btn-op p-3.5 sm:p-4 rounded-2xl font-bold text-base" data-key="-">−</button>
+
+        <!-- Ligne 3 -->
+        <button class="calc-btn btn-num p-3.5 sm:p-4 rounded-2xl font-semibold text-lg" data-key="7">7</button>
+        <button class="calc-btn btn-num p-3.5 sm:p-4 rounded-2xl font-semibold text-lg" data-key="8">8</button>
+        <button class="calc-btn btn-num p-3.5 sm:p-4 rounded-2xl font-semibold text-lg" data-key="9">9</button>
+        <button class="calc-btn btn-op p-3.5 sm:p-4 rounded-2xl font-bold text-base row-span-2 flex items-center justify-center" data-key="+">+</button>
+
+        <!-- Ligne 4 -->
+        <button class="calc-btn btn-num p-3.5 sm:p-4 rounded-2xl font-semibold text-lg" data-key="4">4</button>
+        <button class="calc-btn btn-num p-3.5 sm:p-4 rounded-2xl font-semibold text-lg" data-key="5">5</button>
+        <button class="calc-btn btn-num p-3.5 sm:p-4 rounded-2xl font-semibold text-lg" data-key="6">6</button>
+
+        <!-- Ligne 5 -->
+        <button class="calc-btn btn-num p-3.5 sm:p-4 rounded-2xl font-semibold text-lg" data-key="1">1</button>
+        <button class="calc-btn btn-num p-3.5 sm:p-4 rounded-2xl font-semibold text-lg" data-key="2">2</button>
+        <button class="calc-btn btn-num p-3.5 sm:p-4 rounded-2xl font-semibold text-lg" data-key="3">3</button>
+        <button class="calc-btn btn-equals p-3.5 sm:p-4 rounded-2xl font-bold text-xl row-span-2 flex items-center justify-center" data-key="Enter">=</button>
+
+        <!-- Ligne 6 -->
+        <button class="calc-btn btn-num p-3.5 sm:p-4 rounded-2xl font-semibold text-lg col-span-2" data-key="0">0</button>
+        <button class="calc-btn btn-num p-3.5 sm:p-4 rounded-2xl font-semibold text-lg" data-key=",">,</button>
+      </div>
+
+      <!-- Volet Rétractable / Onglet Élégant de l'Historique -->
+      <aside 
+        id="history-drawer" 
+        class="absolute inset-0 bg-slate-900/95 backdrop-blur-xl z-20 rounded-3xl p-5 flex flex-col transition-all duration-300 ease-in-out translate-y-full opacity-0 pointer-events-none"
+        aria-hidden="true"
+      >
+        <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+          <div class="flex items-center gap-2">
+            <i class="fa-solid fa-clock-rotate-left text-indigo-400"></i>
+            <h2 class="font-semibold text-slate-200 text-sm">Historique des calculs</h2>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="clear-history-btn" class="text-xs text-slate-400 hover:text-red-400 transition flex items-center gap-1 px-2.5 py-1 rounded-lg hover:bg-slate-800">
+              <i class="fa-solid fa-trash-can"></i> Effacer
+            </button>
+            <button id="close-history-btn" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition">
+              <i class="fa-solid fa-xmark text-base"></i>
+            </button>
+          </div>
+        </div>
+
+        <div id="history-list" class="flex-1 overflow-y-auto space-y-2 py-3 pr-1">
+          <div id="empty-history" class="h-full flex flex-col items-center justify-center text-slate-500 text-xs gap-2">
+            <i class="fa-solid fa-box-open text-2xl opacity-40"></i>
+            <span>Aucun calcul récent</span>
+          </div>
+        </div>
+
+        <div class="pt-2 border-t border-slate-800/80 text-center">
+          <span class="text-[11px] text-slate-500">Cliquez sur une ligne pour charger l'expression</span>
+        </div>
+      </aside>
+
+    </section>
+
+  </main>
+
+  <!-- Moteur Mathématique et Logique d'Interface -->
+  <script>
+    /**
+     * TOKENIZER
+     */
+    class Tokenizer {
+      static TOKEN_TYPES = {
+        NUMBER: 'NUMBER',
+        PLUS: 'PLUS',
+        MINUS: 'MINUS',
+        MULTIPLY: 'MULTIPLY',
+        DIVIDE: 'DIVIDE',
+        PERCENT: 'PERCENT',
+        LPAREN: 'LPAREN',
+        RPAREN: 'RPAREN',
+        EOF: 'EOF'
+      };
+
+      constructor(input) {
+        this.input = input;
+      }
+
+      tokenize() {
+        const tokens = [];
+        let i = 0;
+        const str = this.input;
+
+        while (i < str.length) {
+          const ch = str[i];
+
+          if (/\s/.test(ch)) {
+            i++;
+            continue;
+          }
+
+          if (/[0-9.,]/.test(ch)) {
+            let numStr = '';
+            let decimalFound = false;
+
+            while (i < str.length && /[0-9.,]/.test(str[i])) {
+              let char = str[i];
+              if (char === ',' || char === '.') {
+                if (decimalFound) break;
+                decimalFound = true;
+                char = '.';
+              }
+              numStr += char;
+              i++;
+            }
+
+            tokens.push({ type: Tokenizer.TOKEN_TYPES.NUMBER, value: parseFloat(numStr), raw: numStr });
+            continue;
+          }
+
+          if (ch === '+') { tokens.push({ type: Tokenizer.TOKEN_TYPES.PLUS }); i++; continue; }
+          if (ch === '-' || ch === '−') { tokens.push({ type: Tokenizer.TOKEN_TYPES.MINUS }); i++; continue; }
+          if (ch === '*' || ch === '×' || ch === 'x' || ch === 'X') { tokens.push({ type: Tokenizer.TOKEN_TYPES.MULTIPLY }); i++; continue; }
+          if (ch === '/' || ch === '÷') { tokens.push({ type: Tokenizer.TOKEN_TYPES.DIVIDE }); i++; continue; }
+          if (ch === '%') { tokens.push({ type: Tokenizer.TOKEN_TYPES.PERCENT }); i++; continue; }
+          if (ch === '(') { tokens.push({ type: Tokenizer.TOKEN_TYPES.LPAREN }); i++; continue; }
+          if (ch === ')') { tokens.push({ type: Tokenizer.TOKEN_TYPES.RPAREN }); i++; continue; }
+
+          throw new Error(`Caractère non reconnu : "${ch}"`);
+        }
+
+        const processedTokens = [];
+        for (let idx = 0; idx < tokens.length; idx++) {
+          const curr = tokens[idx];
+          const next = tokens[idx + 1];
+
+          processedTokens.push(curr);
+
+          if (next) {
+            const isCurrValue = (curr.type === Tokenizer.TOKEN_TYPES.NUMBER || curr.type === Tokenizer.TOKEN_TYPES.RPAREN || curr.type === Tokenizer.TOKEN_TYPES.PERCENT);
+            const isNextValue = (next.type === Tokenizer.TOKEN_TYPES.NUMBER || next.type === Tokenizer.TOKEN_TYPES.LPAREN);
+
+            if (isCurrValue && isNextValue) {
+              processedTokens.push({ type: Tokenizer.TOKEN_TYPES.MULTIPLY, implicit: true });
+            }
+          }
+        }
+
+        processedTokens.push({ type: Tokenizer.TOKEN_TYPES.EOF });
+        return processedTokens;
+      }
+    }
+
+    /**
+     * PARSER RÉCURSIF DESCENDANT
+     */
+    class MathParser {
+      constructor(tokens) {
+        this.tokens = tokens;
+        this.pos = 0;
+      }
+
+      peek() {
+        return this.tokens[this.pos];
+      }
+
+      consume() {
+        return this.tokens[this.pos++];
+      }
+
+      match(type) {
+        if (this.peek().type === type) {
+          return this.consume();
+        }
+        return null;
+      }
+
+      expect(type, errorMessage) {
+        const token = this.peek();
+        if (token.type === type) {
+          return this.consume();
+        }
+        throw new Error(errorMessage || `Attendu : ${type}`);
+      }
+
+      parse() {
+        if (this.peek().type === Tokenizer.TOKEN_TYPES.EOF) {
+          throw new Error("Expression vide");
+        }
+
+        const result = this.parseAdditive();
+
+        if (this.peek().type !== Tokenizer.TOKEN_TYPES.EOF) {
+          if (this.peek().type === Tokenizer.TOKEN_TYPES.RPAREN) {
+            throw new Error("Parenthèse ouvrante '(' manquante");
+          }
+          throw new Error("Expression mal formée");
+        }
+
+        return result;
+      }
+
+      parseAdditive() {
+        let left = this.parseMultiplicative(false);
+
+        while (this.peek().type === Tokenizer.TOKEN_TYPES.PLUS || this.peek().type === Tokenizer.TOKEN_TYPES.MINUS) {
+          const op = this.consume();
+          const right = this.parseMultiplicative(true);
+
+          if (this.peek().type === Tokenizer.TOKEN_TYPES.PERCENT) {
+            this.consume();
+            const percentAmount = left * (right / 100);
+            if (op.type === Tokenizer.TOKEN_TYPES.PLUS) {
+              left = left + percentAmount;
+            } else {
+              left = left - percentAmount;
+            }
+          } else {
+            if (op.type === Tokenizer.TOKEN_TYPES.PLUS) {
+              left = left + right;
+            } else {
+              left = left - right;
+            }
+          }
+        }
+
+        return left;
+      }
+
+      parseMultiplicative(deferPercent = false) {
+        let left = this.parsePostfixPercent(deferPercent);
+
+        if (this.peek().type === Tokenizer.TOKEN_TYPES.PERCENT) {
+          const nextToken = this.tokens[this.pos + 1];
+          if (nextToken && (nextToken.type === Tokenizer.TOKEN_TYPES.MULTIPLY || nextToken.type === Tokenizer.TOKEN_TYPES.DIVIDE)) {
+            while (this.peek().type === Tokenizer.TOKEN_TYPES.PERCENT) {
+              this.consume();
+              left = left / 100;
+            }
+          }
+        }
+
+        while (this.peek().type === Tokenizer.TOKEN_TYPES.MULTIPLY || this.peek().type === Tokenizer.TOKEN_TYPES.DIVIDE) {
+          const op = this.consume();
+          const right = this.parsePostfixPercent(deferPercent);
+
+          if (op.type === Tokenizer.TOKEN_TYPES.MULTIPLY) {
+            left = left * right;
+          } else if (op.type === Tokenizer.TOKEN_TYPES.DIVIDE) {
+            if (right === 0) {
+              throw new Error("Division par zéro impossible");
+            }
+            left = left / right;
+          }
+        }
+
+        return left;
+      }
+
+      parsePostfixPercent(deferPercent = false) {
+        let val = this.parseUnary();
+
+        while (this.peek().type === Tokenizer.TOKEN_TYPES.PERCENT) {
+          if (deferPercent) {
+            break;
+          }
+          this.consume();
+          val = val / 100;
+        }
+
+        return val;
+      }
+
+      parseUnary() {
+        if (this.match(Tokenizer.TOKEN_TYPES.MINUS)) {
+          return -this.parseUnary();
+        }
+        if (this.match(Tokenizer.TOKEN_TYPES.PLUS)) {
+          return this.parseUnary();
+        }
+        return this.parsePrimary();
+      }
+
+      parsePrimary() {
+        const token = this.peek();
+
+        if (token.type === Tokenizer.TOKEN_TYPES.NUMBER) {
+          this.consume();
+          return token.value;
+        }
+
+        if (this.match(Tokenizer.TOKEN_TYPES.LPAREN)) {
+          const subExpr = this.parseAdditive();
+          this.expect(Tokenizer.TOKEN_TYPES.RPAREN, "Parenthèse fermante ')' manquante");
+          return subExpr;
+        }
+
+        if (token.type === Tokenizer.TOKEN_TYPES.EOF) {
+          throw new Error("Expression incomplète");
+        }
+
+        throw new Error(`Saisie inattendue`);
+      }
+    }
+
+    /**
+     * MOTEUR D'ÉVALUATION
+     */
+    class MathEngine {
+      static evaluate(expression) {
+        if (!expression || expression.trim() === '') {
+          throw new Error("Expression vide");
+        }
+
+        const cleaned = expression
+          .replace(/÷/g, '/')
+          .replace(/×/g, '*')
+          .replace(/−/g, '-');
+
+        const tokenizer = new Tokenizer(cleaned);
+        const tokens = tokenizer.tokenize();
+        const parser = new MathParser(tokens);
+        const rawResult = parser.parse();
+
+        if (typeof rawResult !== 'number' || isNaN(rawResult) || !isFinite(rawResult)) {
+          throw new Error("Résultat indéterminé");
+        }
+
+        return MathEngine.roundPrecision(rawResult);
+      }
+
+      static roundPrecision(num) {
+        return Math.round(num * 1e12) / 1e12;
+      }
+
+      static formatResult(num) {
+        return new Intl.NumberFormat('fr-FR', {
+          maximumFractionDigits: 10
+        }).format(num);
+      }
+    }
+
+    /**
+     * GESTION DE L'INTERFACE UTILISATEUR
+     */
+    class CalculatorUI {
+      constructor() {
+        this.inputEl = document.getElementById('expression-input');
+        this.resultEl = document.getElementById('result-display');
+        this.statusEl = document.getElementById('status-indicator');
+        this.errorToast = document.getElementById('error-toast');
+        this.errorMessage = document.getElementById('error-message');
+        
+        this.historyDrawer = document.getElementById('history-drawer');
+        this.historyList = document.getElementById('history-list');
+        this.emptyHistory = document.getElementById('empty-history');
+        this.historyBadge = document.getElementById('history-badge');
+        this.toggleHistoryBtn = document.getElementById('toggle-history-btn');
+        this.closeHistoryBtn = document.getElementById('close-history-btn');
+        this.clearHistoryBtn = document.getElementById('clear-history-btn');
+
+        this.history = [];
+        this.isHistoryOpen = false;
+
+        this.initEventListeners();
+      }
+
+      initEventListeners() {
+        document.querySelectorAll('.calc-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const key = btn.getAttribute('data-key');
+            this.handleKeyInput(key);
+            this.animateButton(btn);
+          });
+        });
+
+        this.inputEl.addEventListener('input', () => {
+          this.calculateLive();
+        });
+
+        document.addEventListener('keydown', (e) => {
+          this.handlePhysicalKey(e);
+        });
+
+        // Gestion de l'ouverture/fermeture du volet d'historique
+        this.toggleHistoryBtn.addEventListener('click', () => this.toggleHistory());
+        this.closeHistoryBtn.addEventListener('click', () => this.closeHistory());
+        this.clearHistoryBtn.addEventListener('click', () => this.clearHistory());
+      }
+
+      toggleHistory() {
+        if (this.isHistoryOpen) {
+          this.closeHistory();
+        } else {
+          this.openHistory();
+        }
+      }
+
+      openHistory() {
+        this.isHistoryOpen = true;
+        this.historyDrawer.classList.remove('translate-y-full', 'opacity-0', 'pointer-events-none');
+        this.historyDrawer.classList.add('translate-y-0', 'opacity-100');
+        this.historyDrawer.setAttribute('aria-hidden', 'false');
+      }
+
+      closeHistory() {
+        this.isHistoryOpen = false;
+        this.historyDrawer.classList.remove('translate-y-0', 'opacity-100');
+        this.historyDrawer.classList.add('translate-y-full', 'opacity-0', 'pointer-events-none');
+        this.historyDrawer.setAttribute('aria-hidden', 'true');
+      }
+
+      handleKeyInput(key) {
+        this.hideError();
+
+        if (key === 'Clear') {
+          this.inputEl.value = '';
+          this.resultEl.textContent = '0';
+          this.updateStatus(true);
+          return;
+        }
+
+        if (key === 'Backspace') {
+          this.inputEl.value = this.inputEl.value.slice(0, -1);
+          this.calculateLive();
+          return;
+        }
+
+        if (key === 'Enter') {
+          this.executeCalculation();
+          return;
+        }
+
+        this.inputEl.value += key;
+        this.calculateLive();
+      }
+
+      handlePhysicalKey(e) {
+        if (['Enter', 'Escape', 'Backspace'].includes(e.key)) {
+          e.preventDefault();
+        }
+
+        if (e.key === 'Escape') {
+          if (this.isHistoryOpen) {
+            this.closeHistory();
+            return;
+          }
+          this.handleKeyInput('Clear');
+          return;
+        }
+
+        let key = e.key;
+        if (key === 'x' || key === 'X' || key === '*') key = '*';
+        if (key === '÷') key = '/';
+        if (key === '−') key = '-';
+
+        const validKeys = ['0','1','2','3','4','5','6','7','8','9','+','-','*','/','%','(',')','.',',','Enter','Backspace','Clear'];
+
+        if (validKeys.includes(key)) {
+          this.handleKeyInput(key);
+
+          const targetBtn = document.querySelector(`.calc-btn[data-key="${key}"]`);
+          if (targetBtn) {
+            this.animateButton(targetBtn);
+          }
+        }
+      }
+
+      animateButton(btn) {
+        btn.classList.add('key-pressed');
+        setTimeout(() => btn.classList.remove('key-pressed'), 140);
+      }
+
+      calculateLive() {
+        const expr = this.inputEl.value.trim();
+        if (!expr) {
+          this.resultEl.textContent = '0';
+          this.updateStatus(true);
+          this.hideError();
+          return;
+        }
+
+        try {
+          const num = MathEngine.evaluate(expr);
+          this.resultEl.textContent = MathEngine.formatResult(num);
+          this.updateStatus(true);
+          this.hideError();
+        } catch {
+          this.updateStatus(false);
+        }
+      }
+
+      executeCalculation() {
+        const expr = this.inputEl.value.trim();
+        if (!expr) return;
+
+        try {
+          const num = MathEngine.evaluate(expr);
+          const formatted = MathEngine.formatResult(num);
+
+          this.resultEl.textContent = formatted;
+          this.addHistoryItem(expr, formatted);
+          this.inputEl.value = num.toString().replace('.', ',');
+          this.updateStatus(true);
+          this.hideError();
+        } catch (err) {
+          this.showError(err.message);
+        }
+      }
+
+      updateStatus(isValid) {
+        if (isValid) {
+          this.statusEl.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Prêt`;
+          this.statusEl.className = "text-xs text-emerald-400 font-medium flex items-center gap-1.5";
+        } else {
+          this.statusEl.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-500"></span> Saisie...`;
+          this.statusEl.className = "text-xs text-amber-400 font-medium flex items-center gap-1.5";
+        }
+      }
+
+      showError(msg) {
+        this.errorMessage.textContent = msg;
+        this.errorToast.classList.remove('hidden');
+        this.statusEl.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-500"></span> Erreur`;
+        this.statusEl.className = "text-xs text-red-400 font-medium flex items-center gap-1.5";
+      }
+
+      hideError() {
+        this.errorToast.classList.add('hidden');
+      }
+
+      addHistoryItem(expr, result) {
+        this.history.unshift({ expr, result });
+        if (this.history.length > 30) this.history.pop();
+        this.renderHistory();
+      }
+
+      renderHistory() {
+        const count = this.history.length;
+        if (count > 0) {
+          this.historyBadge.textContent = count;
+          this.historyBadge.classList.remove('hidden');
+        } else {
+          this.historyBadge.classList.add('hidden');
+        }
+
+        if (count === 0) {
+          this.emptyHistory.classList.remove('hidden');
+          this.historyList.innerHTML = '';
+          this.historyList.appendChild(this.emptyHistory);
+          return;
+        }
+
+        this.emptyHistory.classList.add('hidden');
+        this.historyList.innerHTML = '';
+
+        this.history.forEach(item => {
+          const div = document.createElement('div');
+          div.className = 'p-3 rounded-xl bg-slate-800/60 hover:bg-slate-800 border border-slate-750 transition cursor-pointer flex flex-col items-end group';
+          div.innerHTML = `
+            <span class="text-xs text-slate-400 font-mono group-hover:text-slate-300 transition">${item.expr} =</span>
+            <span class="text-sm font-bold text-indigo-400 font-mono">${item.result}</span>
+          `;
+          div.addEventListener('click', () => {
+            this.inputEl.value = item.expr;
+            this.calculateLive();
+            this.closeHistory();
+          });
+          this.historyList.appendChild(div);
+        });
+      }
+
+      clearHistory() {
+        this.history = [];
+        this.renderHistory();
+      }
+    }
+
+    let calculatorUI;
+    window.addEventListener('DOMContentLoaded', () => {
+      calculatorUI = new CalculatorUI();
+    });
+  </script>
+</body>
+</html>
