@@ -1708,48 +1708,48 @@ RÉPONDS EXCLUSIVEMENT PAR UN OBJET JSON STRICTEMENT VALIDE ET SANS AUCUN TEXTE 
   },
   "financialRatios": [
     { "ratioName": "PER (P/E NTM)", "value": "18.5x", "benchmark": "21.0x (Médiane)", "status": "positive", "analysis": "Décote relative." }
-  ],
-  "growthAnalysis": { "growthSummary": "Historique...", "growthDrivers": ["Moteur 1", "Moteur 2"], "growthOutlook": "Perspectives..." },
-  "governanceAndCapital": { "shareholders": ["Actionnaire 1 (50%)"], "governanceNotes": "Analyse gouvernance et transactions d'initiés AMF BDIF / OpenInsider..." },
-  "perspectivesAndGuidance": { "guidanceSummary": "Guidance officielle...", "strategicPillars": ["Pilier 1", "Pilier 2"] },
-  "consensusAndNews": { "recommendation": "Achat", "targetPrice": "780 €", "summary": "Synthèse consensus (ZoneBourse, Seeking Alpha...)" },
-  "documentedRisks": [ { "category": "Risque Macro", "description": "Description du risque..." } ],
-  "shortInterest": { "capitalPct": "0.2%", "squeezePotential": "Faible", "analysis": "Analyse VAD..." },
-  "portfolioFilters": { "grahamPass": true, "kellyAlloc": "3.5%", "kijunValid": true },
-  "leonceDiagnostic": { "overallScore": 84, "shortTermSignal": "Favorable 🟢", "shortTermAnalysis": "Analyse CT...", "mediumTermSignal": "Solide 🟢", "mediumTermAnalysis": "Analyse MT..." },
-  "tradingPlan": { "entryZone": "680 - 700 €", "stopLoss": "640 €", "tp1": "780 €", "tp2": "850 €" },
-  "ichimokuAnalysis": { "kumoStatus": "Bullish", "tkCrossStatus": "Achat Validé", "chikouSpanStatus": "Libre" },
-  "qvmIndicator": { "overallScore": 82, "qualityAnalysis": "Qualité...", "valuationAnalysis": "Valorisation...", "momentumAnalysis": "Momentum..." }
-}`;
+        function formatSubKpi(valStr, metricType) {
+            if (!valStr || valStr === '---') return '<span class="text-slate-400 font-bold">---</span>';
+            const clean = valStr.toString().trim();
+            const num = parseFloat(clean.replace(',', '.').replace(/[^0-9.-]/g, ''));
 
-            const payload = {
-                contents: [{ parts: [{ text: promptText }] }],
-                tools: [{ "google_search": {} }]
-            };
+            let colorClass = 'text-sky-400'; // Par défaut : Bleu pour Neutre
 
-            try {
-                const res = await fetchGeminiWithRetry(payload);
-                const text = res?.candidates?.[0]?.content?.parts?.[0]?.text;
-                const parsed = cleanAndParseJSON(text);
-
-                if (loadingContainer) loadingContainer.classList.add('hidden');
-
-                if (parsed) {
-                    currentReportData = parsed;
-                    renderReport(parsed);
+            if (metricType === 'interestCoverage') {
+                if (num >= 5 || clean.includes('> 5') || clean.includes('> 12') || clean.toLowerCase().includes('solide') || clean.toLowerCase().includes('robuste')) {
+                    colorClass = 'text-emerald-400'; // Positif -> Vert
+                } else if (num < 2.5 || clean.includes('< 2') || clean.toLowerCase().includes('faible') || clean.toLowerCase().includes('alerte')) {
+                    colorClass = 'text-rose-400'; // Négatif -> Rouge
                 } else {
-                    if (errorContainer) {
-                        errorContainer.classList.remove('hidden');
-                        if (document.getElementById('errorMessage')) document.getElementById('errorMessage').innerText = "Impossible de traiter la réponse JSON. Veuillez relancer l'analyse.";
-                    }
+                    colorClass = 'text-sky-400'; // Neutre -> Bleu
                 }
-            } catch (err) {
-                if (loadingContainer) loadingContainer.classList.add('hidden');
-                if (errorContainer) {
-                    errorContainer.classList.remove('hidden');
-                    if (document.getElementById('errorMessage')) document.getElementById('errorMessage').innerText = "Une erreur est survenue lors de l'analyse.";
+            } else if (metricType === 'debtEbitda') {
+                if (num <= 2.0 || clean.toLowerCase().includes('sain') || clean.toLowerCase().includes('maîtrisé')) {
+                    colorClass = 'text-emerald-400'; // Positif -> Vert
+                } else if (num > 3.5 || clean.toLowerCase().includes('élevé') || clean.toLowerCase().includes('tendu')) {
+                    colorClass = 'text-rose-400'; // Négatif -> Rouge
+                } else {
+                    colorClass = 'text-sky-400'; // Neutre -> Bleu
+                }
+            } else if (metricType === 'currentRatio') {
+                if (num >= 1.3 || clean.toLowerCase().includes('solvable') || clean.toLowerCase().includes('bon')) {
+                    colorClass = 'text-emerald-400'; // Positif -> Vert
+                } else if (num < 1.0 || clean.toLowerCase().includes('déficit')) {
+                    colorClass = 'text-rose-400'; // Négatif -> Rouge
+                } else {
+                    colorClass = 'text-sky-400'; // Neutre -> Bleu
+                }
+            } else if (metricType === 'roicWacc') {
+                if (clean.includes('+') || num > 0 || clean.toLowerCase().includes('création')) {
+                    colorClass = 'text-emerald-400'; // Positif -> Vert
+                } else if (clean.includes('-') || num < 0 || clean.toLowerCase().includes('destruction')) {
+                    colorClass = 'text-rose-400'; // Négatif -> Rouge
+                } else {
+                    colorClass = 'text-sky-400'; // Neutre -> Bleu
                 }
             }
+
+            return `<span class="text-sm font-bold ${colorClass}">${clean}</span>`;
         }
 
         function renderReport(data) {
@@ -1805,9 +1805,9 @@ RÉPONDS EXCLUSIVEMENT PAR UN OBJET JSON STRICTEMENT VALIDE ET SANS AUCUN TEXTE 
             const piotroskiBadge = document.getElementById('piotroskiBadge');
             const piotroskiBarContainer = document.getElementById('piotroskiBarContainer');
 
-            let pColorClass = 'bg-amber-500/20 text-amber-300 border-amber-500/30';
-            let pLabel = 'Modéré 🟡';
-            let barBg = 'bg-amber-500';
+            let pColorClass = 'bg-sky-500/20 text-sky-300 border-sky-500/30';
+            let pLabel = 'Neutre 🔵';
+            let barBg = 'bg-sky-500';
 
             if (clampedPiotroski <= 3) {
                 pColorClass = 'bg-rose-500/20 text-rose-300 border-rose-500/30';
@@ -1851,8 +1851,8 @@ RÉPONDS EXCLUSIVEMENT PAR UN OBJET JSON STRICTEMENT VALIDE ET SANS AUCUN TEXTE 
                     altmanBadge.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30';
                     altmanBadge.innerText = 'Détresse 🔴';
                 } else if (altmanVal <= 2.99) {
-                    altmanBadge.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30';
-                    altmanBadge.innerText = 'Zone Grise 🟡';
+                    altmanBadge.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30';
+                    altmanBadge.innerText = 'Zone Grise 🔵';
                 } else {
                     altmanBadge.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
                     altmanBadge.innerText = 'Zone Sûre 🟢';
@@ -1877,7 +1877,9 @@ RÉPONDS EXCLUSIVEMENT PAR UN OBJET JSON STRICTEMENT VALIDE ET SANS AUCUN TEXTE 
             }
 
             if (document.getElementById('fcfPayoutBar')) {
-                document.getElementById('fcfPayoutBar').style.width = divYieldNum > 0 ? `${Math.min(100, fcfPayoutNum)}%` : '0%';
+                const fcfBar = document.getElementById('fcfPayoutBar');
+                fcfBar.style.width = divYieldNum > 0 ? `${Math.min(100, fcfPayoutNum)}%` : '0%';
+                fcfBar.className = fcfPayoutNum > 85 ? 'bg-rose-500 h-full transition-all duration-300' : fcfPayoutNum > 65 ? 'bg-sky-400 h-full transition-all duration-300' : 'bg-emerald-400 h-full transition-all duration-300';
             }
 
             if (document.getElementById('dividendAnalysis')) {
@@ -1893,34 +1895,38 @@ RÉPONDS EXCLUSIVEMENT PAR UN OBJET JSON STRICTEMENT VALIDE ET SANS AUCUN TEXTE 
                     divSafetyBadge.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30';
                     divSafetyBadge.innerText = 'Risque de coupe 🔴';
                 } else if (fcfPayoutNum > 65) {
-                    divSafetyBadge.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30';
-                    divSafetyBadge.innerText = 'Sous surveillance 🟡';
+                    divSafetyBadge.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30';
+                    divSafetyBadge.innerText = 'Sous surveillance 🔵';
                 } else {
                     divSafetyBadge.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
                     divSafetyBadge.innerText = 'Sécurisé 🟢';
                 }
             }
 
-            // 4. Sub-KPI Solvency Metrics
-            if (document.getElementById('subInterestCoverage')) document.getElementById('subInterestCoverage').innerText = health.interestCoverage || '> 5x (Solide)';
-            if (document.getElementById('subDebtEbitda')) document.getElementById('subDebtEbitda').innerText = health.debtEbitda || '1.8x (Maîtrisé)';
-            if (document.getElementById('subCurrentRatio')) document.getElementById('subCurrentRatio').innerText = health.currentRatio || '1.35 (Solvable)';
-            if (document.getElementById('subRoicWacc')) document.getElementById('subRoicWacc').innerText = health.roicWaccSpread || 'ROIC > WACC';
+            // 4. Sub-KPI Solvency Metrics Rendering
+            if (document.getElementById('subInterestCoverage')) document.getElementById('subInterestCoverage').innerHTML = formatSubKpi(health.interestCoverage || '> 5x', 'interestCoverage');
+            if (document.getElementById('subDebtEbitda')) document.getElementById('subDebtEbitda').innerHTML = formatSubKpi(health.debtEbitda || '1.8x', 'debtEbitda');
+            if (document.getElementById('subCurrentRatio')) document.getElementById('subCurrentRatio').innerHTML = formatSubKpi(health.currentRatio || '1.35', 'currentRatio');
+            if (document.getElementById('subRoicWacc')) document.getElementById('subRoicWacc').innerHTML = formatSubKpi(health.roicWaccSpread || '+5.0%', 'roicWacc');
 
-            // Render ratios list if present
+            // Render ratios list with unified color standard
             if (document.getElementById('ratiosContainer') && Array.isArray(data.financialRatios)) {
                 document.getElementById('ratiosContainer').innerHTML = data.financialRatios.map(r => {
-                    const isPos = r.status === 'positive';
-                    const isWarn = r.status === 'warning';
-                    const cardBg = isPos ? 'bg-emerald-950/20 border-emerald-500/40' : isWarn ? 'bg-rose-950/20 border-rose-500/40' : 'bg-slate-900/60 border-slate-800';
-                    const badgeStyle = isPos ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : isWarn ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' : 'bg-slate-800 text-slate-300';
-                    const valColor = isPos ? 'text-emerald-400' : isWarn ? 'text-rose-400' : 'text-slate-100';
+                    const st = (r.status || 'neutral').toLowerCase();
+                    const isPos = st.includes('positive') || st.includes('positif');
+                    const isNeg = st.includes('warning') || st.includes('negative') || st.includes('négatif') || st.includes('negatif');
+
+                    // Positif = Vert (emerald), Négatif = Rouge (rose), Neutre = Bleu (sky)
+                    const cardBg = isPos ? 'bg-emerald-950/20 border-emerald-500/40' : isNeg ? 'bg-rose-950/20 border-rose-500/40' : 'bg-sky-950/20 border-sky-500/40';
+                    const badgeStyle = isPos ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : isNeg ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' : 'bg-sky-500/10 text-sky-400 border-sky-500/30';
+                    const valColor = isPos ? 'text-emerald-400' : isNeg ? 'text-rose-400' : 'text-sky-400';
+                    const labelText = isPos ? 'POSITIF' : isNeg ? 'NÉGATIF' : 'NEUTRE';
 
                     return `
                         <div class="p-4 rounded-xl border ${cardBg} space-y-2">
                             <div class="flex items-center justify-between">
                                 <span class="text-xs font-mono font-semibold text-slate-200">${r.ratioName}</span>
-                                <span class="text-[11px] font-mono px-2 py-0.5 rounded border ${badgeStyle}">${(r.status || 'neutral').toUpperCase()}</span>
+                                <span class="text-[11px] font-mono px-2 py-0.5 rounded border ${badgeStyle}">${labelText}</span>
                             </div>
                             <div class="text-xl font-black font-mono ${valColor}">${r.value}</div>
                             ${r.benchmark ? `<div class="text-[11px] text-slate-400 font-mono">Médiane secteur: <b class="text-slate-300">${r.benchmark}</b></div>` : ''}
@@ -2168,23 +2174,25 @@ RÉPONDS EXCLUSIVEMENT PAR UN OBJET JSON STRICTEMENT VALIDE (SANS AUCUN TEXTE EN
         }
 
         function renderDeepDiveJSON(data, topic, companyName) {
-            const verdictColor = data.verdictColor || 'amber';
+            const verdictColor = data.verdictColor || 'sky';
             const colorClasses = {
                 emerald: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30',
                 sky: 'bg-sky-500/10 text-sky-300 border-sky-500/30',
-                amber: 'bg-amber-500/10 text-amber-300 border-amber-500/30',
+                blue: 'bg-sky-500/10 text-sky-300 border-sky-500/30',
                 rose: 'bg-rose-500/10 text-rose-300 border-rose-500/30'
-            }[verdictColor] || 'bg-amber-500/10 text-amber-300 border-amber-500/30';
+            }[verdictColor] || 'bg-sky-500/10 text-sky-300 border-sky-500/30';
 
             const metricsHtml = (data.metrics && data.metrics.length > 0) ? `
                 <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                    ${data.metrics.map(m => `
+                    ${data.metrics.map(m => {
+                        const mColor = m.color === 'emerald' ? 'text-emerald-400' : m.color === 'rose' ? 'text-rose-400' : 'text-sky-400';
+                        return `
                         <div class="p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1">
                             <div class="text-[10px] font-mono uppercase text-slate-400">${m.label}</div>
-                            <div class="text-base font-extrabold text-white font-mono">${m.value}</div>
+                            <div class="text-base font-extrabold font-mono ${mColor}">${m.value}</div>
                             ${m.note ? `<div class="text-[11px] text-slate-400">${m.note}</div>` : ''}
                         </div>
-                    `).join('')}
+                    `}).join('')}
                 </div>
             ` : '';
 
@@ -2750,24 +2758,80 @@ plot(targetPrice, "TP1", color=color.green, linewidth=2)
             if (pointer) pointer.style.left = `${cnnFearGreedValue}%`;
 
             let label = 'Neutre';
-            let badgeClass = 'px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30';
+            // Positif/Cupidité = Vert, Négatif/Peur = Rouge, Neutre = Bleu
+            let badgeClass = 'px-2.5 py-0.5 rounded-full text-xs font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30';
 
-            if (cnnFearGreedValue < 25) {
-                label = 'Peur Extrême';
+            if (cnnFearGreedValue < 45) {
+                label = cnnFearGreedValue < 25 ? 'Peur Extrême' : 'Peur';
                 badgeClass = 'px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30';
-            } else if (cnnFearGreedValue < 45) {
-                label = 'Peur';
-                badgeClass = 'px-2.5 py-0.5 rounded-full text-xs font-bold bg-orange-500/20 text-orange-300 border border-orange-500/30';
             } else if (cnnFearGreedValue <= 55) {
                 label = 'Neutre';
-                badgeClass = 'px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30';
-            } else if (cnnFearGreedValue <= 75) {
-                label = 'Cupidité';
-                badgeClass = 'px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+                badgeClass = 'px-2.5 py-0.5 rounded-full text-xs font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30';
             } else {
-                label = 'Cupidité Extrême';
-                badgeClass = 'px-2.5 py-0.5 rounded-full text-xs font-bold bg-teal-500/20 text-teal-300 border border-teal-500/30';
+                label = cnnFearGreedValue > 75 ? 'Cupidité Extrême' : 'Cupidité';
+                badgeClass = 'px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
             }
+
+            if (labelBadge) {
+                labelBadge.innerText = `${label} (${cnnFearGreedValue})`;
+                labelBadge.className = badgeClass;
+            }
+
+            const sentimentCat = categories.find(c => c.id === 'sentiment');
+            if (sentimentCat) {
+                const fgSub = sentimentCat.subIndicators.find(s => s.id === 'fear_greed');
+                if (fgSub) {
+                    fgSub.val = cnnFearGreedValue;
+                    const subValDisplay = document.getElementById('val-sentiment-fear_greed');
+                    if (subValDisplay) subValDisplay.innerText = cnnFearGreedValue;
+                }
+            }
+
+            updateBarometerUI();
+        }
+
+        function updateBarometerUI() {
+            const overallScore = calculateOverallRiskScore();
+            
+            const scoreText = document.getElementById('overallScoreText');
+            if (scoreText) scoreText.innerText = overallScore;
+
+            const riskBadge = document.getElementById('riskBadge');
+            if (riskBadge) {
+                // Faible risque = Vert, Risque neutre/modéré = Bleu, Risque élevé = Rouge
+                if (overallScore < 35) {
+                    riskBadge.innerText = 'Faible (Favorable)';
+                    riskBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+                } else if (overallScore <= 65) {
+                    riskBadge.innerText = 'Modéré (Neutre)';
+                    riskBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30';
+                } else {
+                    riskBadge.innerText = overallScore >= 80 ? 'Extrême (Alerte)' : 'Élevé (Prudence)';
+                    riskBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30';
+                }
+            }
+
+            let pctActions = Math.max(10, Math.min(80, 100 - overallScore));
+            let pctOblig = Math.round((100 - pctActions) * 0.6);
+            let pctCash = 100 - pctActions - pctOblig;
+
+            if (document.getElementById('barActions')) document.getElementById('barActions').style.width = pctActions + '%';
+            if (document.getElementById('barOblig')) document.getElementById('barOblig').style.width = pctOblig + '%';
+            if (document.getElementById('barCash')) document.getElementById('barCash').style.width = pctCash + '%';
+
+            if (document.getElementById('pctActions')) document.getElementById('pctActions').innerText = pctActions + '%';
+            if (document.getElementById('pctOblig')) document.getElementById('pctOblig').innerText = pctOblig + '%';
+            if (document.getElementById('pctCash')) document.getElementById('pctCash').innerText = pctCash + '%';
+
+            if (document.getElementById('allocTag')) {
+                if (overallScore < 35) document.getElementById('allocTag').innerText = 'Offensive (Actions)';
+                else if (overallScore <= 65) document.getElementById('allocTag').innerText = 'Équilibrée (50/50)';
+                else document.getElementById('allocTag').innerText = 'Prudente (Cash/Gold)';
+            }
+
+            drawGauge(overallScore);
+            renderRadarChart();
+        }
 
             if (labelBadge) {
                 labelBadge.innerText = `${label} (${cnnFearGreedValue})`;
