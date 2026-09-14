@@ -421,6 +421,12 @@
                         <span>Analyser Marché Direct</span>
                     </button>
 
+                    <!-- New Button: Directives & Secteurs Euronext -->
+                    <button id="btnMarketSynthesis" onclick="openMarketSynthesisModal()" class="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg shadow-emerald-500/20 transition-all active:scale-95 whitespace-nowrap cursor-pointer">
+                        <i class="fa-solid fa-compass"></i>
+                        <span>Directives & Secteurs Euronext 🧭</span>
+                    </button>
+
                     <button onclick="resetToDefaults()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-all whitespace-nowrap cursor-pointer">
                         <i class="fa-solid fa-rotate-right"></i>
                         <span>RàZ</span>
@@ -1409,6 +1415,49 @@
                         Fermer
                     </button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Market Synthesis & Sector Directives Modal -->
+    <div id="marketSynthesisModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-4 no-print">
+        <div class="w-full max-w-4xl bg-slate-900 border border-emerald-500/40 rounded-2xl p-6 shadow-2xl space-y-5 max-h-[90vh] flex flex-col">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
+                <div class="flex items-center space-x-3">
+                    <div class="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+                        <i class="fa-solid fa-compass text-base"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center space-x-2">
+                            <h3 class="font-bold text-white text-base">Directives d'Investissement & Allocation Sectorielle Euronext</h3>
+                            <span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 font-mono text-xs font-bold border border-emerald-500/20">Senior Strategy</span>
+                        </div>
+                        <p class="text-xs text-slate-400">Recommandations macro, secteurs porteurs et zones de risques sur Euronext</p>
+                    </div>
+                </div>
+                <button onclick="closeMarketSynthesisModal()" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition cursor-pointer">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <div id="marketSynthesisContent" class="flex-1 overflow-y-auto space-y-5 pr-1">
+                <!-- Dynamically populated or rendered fallback -->
+            </div>
+
+            <div class="flex items-center justify-between border-t border-slate-800 pt-3 shrink-0">
+                <div class="flex items-center space-x-2">
+                    <button onclick="runMarketSynthesisAI()" id="btnGenerateMarketAI" class="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/20 transition flex items-center space-x-1.5 cursor-pointer">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i>
+                        <span>Actualiser via IA Direct</span>
+                    </button>
+                    <button onclick="copyMarketSynthesisToClipboard()" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 transition flex items-center space-x-1.5 cursor-pointer">
+                        <i class="fa-solid fa-copy"></i>
+                        <span>Copier Synthèse</span>
+                    </button>
+                </div>
+                <button onclick="closeMarketSynthesisModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition cursor-pointer">
+                    Fermer
+                </button>
             </div>
         </div>
     </div>
@@ -2687,6 +2736,7 @@ plot(targetPrice, "TP1", color=color.green, linewidth=2)
 
             drawGauge(overallScore);
             renderRadarChart();
+            renderDefaultMarketSynthesis();
         }
 
         function renderCategories() {
@@ -2857,7 +2907,6 @@ Réponds OBLIGATOIREMENT sous forme d'objet JSON avec ce schéma exact :
                             });
                         });
                     } else {
-                        // Fallback si l'IA renvoie uniquement les moyennes de piliers
                         categories.forEach(cat => {
                             if (parsed[cat.id] !== undefined) {
                                 const baseVal = Math.max(0, Math.min(100, parseInt(parsed[cat.id], 10)));
@@ -2907,6 +2956,337 @@ Réponds OBLIGATOIREMENT sous forme d'objet JSON avec ce schéma exact :
                     btn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> <span>Analyser Marché Direct</span>`;
                 }
             }
+        }
+
+        /* MARKET SYNTHESIS & SECTORS MODAL FUNCTIONS */
+        function openMarketSynthesisModal() {
+            const modal = document.getElementById('marketSynthesisModal');
+            if (modal) {
+                modal.classList.remove('hidden');
+                renderDefaultMarketSynthesis();
+            }
+        }
+
+        function closeMarketSynthesisModal() {
+            const modal = document.getElementById('marketSynthesisModal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        function renderDefaultMarketSynthesis(customData = null) {
+            const container = document.getElementById('marketSynthesisContent');
+            if (!container) return;
+
+            const score = calculateOverallRiskScore();
+            let riskLevelText = "Modéré";
+            let riskBadgeClass = "bg-sky-500/20 text-sky-300 border-sky-500/30";
+            let allocText = "50% Actions / 35% Oblig. / 15% Cash";
+
+            if (score < 35) {
+                riskLevelText = "Faible / Attractif";
+                riskBadgeClass = "bg-emerald-500/10 text-emerald-400 border-emerald-500/30";
+                allocText = "70% Actions / 20% Oblig. / 10% Cash";
+            } else if (score > 65) {
+                riskLevelText = "Élevé / Prudence";
+                riskBadgeClass = "bg-rose-500/20 text-rose-300 border-rose-500/30";
+                allocText = "30% Actions / 40% Oblig. / 30% Cash & Or";
+            }
+
+            if (customData) {
+                container.innerHTML = customData;
+                return;
+            }
+
+            container.innerHTML = `
+                <div class="space-y-5 text-xs">
+                    
+                    <!-- Header Banner -->
+                    <div class="p-4 rounded-xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-slate-950 border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div class="space-y-1 text-center sm:text-left">
+                            <span class="text-[10px] font-mono uppercase tracking-wider text-emerald-400 font-bold">Orientation Tactique Euronext</span>
+                            <h4 class="text-base font-black text-white">Directives d'Allocation & Arbitrage Sectoriel</h4>
+                            <p class="text-slate-300 leading-relaxed">Pondération actuelle du risque : <strong>${score}/100</strong> • Allocation recommandée : <strong>${allocText}</strong></p>
+                        </div>
+                        <div class="shrink-0 text-center">
+                            <span class="px-3 py-1.5 rounded-full text-xs font-bold border ${riskBadgeClass}">${riskLevelText}</span>
+                        </div>
+                    </div>
+
+                    <!-- Directives d'investissement principales -->
+                    <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-3">
+                        <div class="flex items-center space-x-2 text-sky-400 font-bold font-mono text-xs uppercase">
+                            <i class="fa-solid fa-compass"></i>
+                            <span>1. Directives d'Investissement & Règles Macro</span>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div class="p-3 rounded-lg bg-slate-950/80 border border-slate-800 space-y-1">
+                                <span class="font-bold text-slate-200">🎯 Sélection Ultra-Sélective (Stock-Picking Quality)</span>
+                                <p class="text-slate-400 leading-relaxed">Privilégier les bilans avec Piotroski $\\ge 7$ et Altman Z en zone sûre ($>2.99$). Éviter les sociétés trop endettées face au coût du capital maintenu élevé par la BCE.</p>
+                            </div>
+                            <div class="p-3 rounded-lg bg-slate-950/80 border border-slate-800 space-y-1">
+                                <span class="font-bold text-slate-200">🛡️ Discipline de Valuation & Rendement FCF</span>
+                                <p class="text-slate-400 leading-relaxed">Exiger un FCF Yield $>5\%$ et un dividende couvert (Payout $<70\%$). La sélectivité est essentielle dans le régime actuel de dispersion Cboe élevée (DSPX).</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Grid Secteurs Porteurs vs Secteurs à Eviter -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        
+                        <!-- Secteurs Porteurs -->
+                        <div class="p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/30 space-y-3">
+                            <div class="flex items-center justify-between border-b border-emerald-500/20 pb-2">
+                                <div class="flex items-center space-x-2 text-emerald-400 font-bold font-mono text-xs uppercase">
+                                    <i class="fa-solid fa-circle-arrow-up"></i>
+                                    <span>Secteurs Porteurs à Surpondérer 🟢</span>
+                                </div>
+                                <span class="px-2 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono font-bold">Surpondérer</span>
+                            </div>
+
+                            <div class="space-y-2.5">
+                                <div class="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 space-y-1">
+                                    <div class="flex justify-between font-bold text-slate-100">
+                                        <span>Defense & Aérospatiale</span>
+                                        <span class="text-emerald-400 font-mono text-[11px]">Dassault, Thales, Airbus</span>
+                                    </div>
+                                    <p class="text-slate-400 text-[11px]">Reconstitution pluriannuelle des budgets militaires européens et carnets d'ordres record offrant une visibilité à 5-10 ans.</p>
+                                </div>
+
+                                <div class="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 space-y-1">
+                                    <div class="flex justify-between font-bold text-slate-100">
+                                        <span>Santé & Pharma Défensive</span>
+                                        <span class="text-emerald-400 font-mono text-[11px]">Sanofi, UCB, Novo Nordisk</span>
+                                    </div>
+                                    <p class="text-slate-400 text-[11px]">Pouvoir de fixation des prix, résilience face aux ralentissements macroéconomiques et rendements FCF solides.</p>
+                                </div>
+
+                                <div class="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 space-y-1">
+                                    <div class="flex justify-between font-bold text-slate-100">
+                                        <span>Transition Énergétique & Équipements</span>
+                                        <span class="text-emerald-400 font-mono text-[11px]">Schneider Electric, STIF, Air Liquide</span>
+                                    </div>
+                                    <p class="text-slate-400 text-[11px]">Électrification des Data Centers / IA et protection industrielle bénéficiant de mégatendances séculaires.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Secteurs Fragiles à Éviter -->
+                        <div class="p-4 rounded-xl bg-rose-950/20 border border-rose-500/30 space-y-3">
+                            <div class="flex items-center justify-between border-b border-rose-500/20 pb-2">
+                                <div class="flex items-center space-x-2 text-rose-400 font-bold font-mono text-xs uppercase">
+                                    <i class="fa-solid fa-circle-arrow-down"></i>
+                                    <span>Secteurs Fragiles à Éviter / Sous-pondérer 🔴</span>
+                                </div>
+                                <span class="px-2 py-0.5 rounded text-[10px] bg-rose-500/20 text-rose-300 border border-rose-500/30 font-mono font-bold">Prudence</span>
+                            </div>
+
+                            <div class="space-y-2.5">
+                                <div class="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 space-y-1">
+                                    <div class="flex justify-between font-bold text-slate-100">
+                                        <span>Automobile & Équipementiers</span>
+                                        <span class="text-rose-400 font-mono text-[11px]">Stellantis, Renault, Valeo</span>
+                                    </div>
+                                    <p class="text-slate-400 text-[11px]">Guerre des prix sur l'électrique, concurrence chinoise accrue et pressions sur les marges opérationnelles.</p>
+                                </div>
+
+                                <div class="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 space-y-1">
+                                    <div class="flex justify-between font-bold text-slate-100">
+                                        <span>Immobilier Coté (SIIC / REITs)</span>
+                                        <span class="text-rose-400 font-mono text-[11px]">Unibail-Rodamco, Covivio</span>
+                                    </div>
+                                    <p class="text-slate-400 text-[11px]">Coût du refinancement de la dette nette élevé et dépréciation des actifs de bureaux/commerces.</p>
+                                </div>
+
+                                <div class="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 space-y-1">
+                                    <div class="flex justify-between font-bold text-slate-100">
+                                        <span>Luxe Exposition Asie / Chine</span>
+                                        <span class="text-rose-400 font-mono text-[11px]">Kering, LVMH (Selectif)</span>
+                                    </div>
+                                    <p class="text-slate-400 text-[11px]">Normalisation de la consommation chinoise exigeant un tri strict au profit des marques leaders à fort pricing power.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- Tactiques de Protections & Hedging -->
+                    <div class="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-2">
+                        <div class="flex items-center space-x-2 text-amber-400 font-bold font-mono text-xs uppercase">
+                            <i class="fa-solid fa-shield-cat"></i>
+                            <span>Recommandation Tactique & Protections 🛡️</span>
+                        </div>
+                        <p class="text-slate-200 leading-relaxed font-sans">
+                            Garder <strong>15% à 20% de trésorerie disponible</strong> pour profiter des retraits tactiques. Placer des Stop Loss systématiques sous la Kijun-sen quotidienne pour protéger les gains. Privilégier la régularité du FCF plutôt que la spéculation sur les valorisations excessives.
+                        </p>
+                    </div>
+
+                </div>
+            `;
+        }
+
+        async function runMarketSynthesisAI() {
+            const btn = document.getElementById('btnGenerateMarketAI');
+            const container = document.getElementById('marketSynthesisContent');
+            if (!container) return;
+
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> <span>Génération IA en cours...</span>`;
+            }
+
+            container.innerHTML = `
+                <div class="flex flex-col items-center justify-center py-12 space-y-4 text-center">
+                    <div class="relative w-12 h-12">
+                        <div class="absolute inset-0 rounded-full border-2 border-slate-800 border-t-emerald-400 animate-spin"></div>
+                        <div class="absolute inset-0 flex items-center justify-center text-emerald-400 text-sm">
+                            <i class="fa-solid fa-compass"></i>
+                        </div>
+                    </div>
+                    <div class="space-y-1">
+                        <h4 class="text-sm font-bold text-white">Analyse Sectorielle Euronext via Leonce IA</h4>
+                        <p class="text-xs text-slate-400 font-mono">Consolidation BCE, Euronext Live, ZoneBourse, Seeking Alpha & FRED</p>
+                    </div>
+                </div>
+            `;
+
+            const promptText = `Act en tant qu'Analyste financier senior et Stratège de marché Euronext. 
+Génère une synthèse exécutive structurée d'allocation sectorielle et de directives d'investissement directes pour le marché européen/Euronext à l'instant T.
+
+Consulte et croise les sources suivantes : BCE (Banque Centrale Européenne), Euronext Live, ZoneBourse, Seeking Alpha, FRED St. Louis, ShortSell.nl.
+
+Réponds obligatoirement par un objet JSON strictement valide avec ce format :
+{
+  "macroDirectives": [
+    "Directive 1...",
+    "Directive 2..."
+  ],
+  "bullishSectors": [
+    { "sector": "Défense & Aérospatiale", "tickers": "Thales, Dassault Aviation", "catalyst": "Raison et moteur..." },
+    { "sector": "Santé & Pharma", "tickers": "Sanofi, Novo Nordisk", "catalyst": "Raison et moteur..." }
+  ],
+  "bearishSectors": [
+    { "sector": "Automobile", "tickers": "Stellantis, Valeo", "risk": "Concurrence chinoise..." },
+    { "sector": "Immobilier SIIC", "tickers": "Unibail-Rodamco", "risk": "Taux d'intérêt élevés..." }
+  ],
+  "hedgingTactics": "Conseil de couverture et de gestion du cash..."
+}`;
+
+            const payload = {
+                contents: [{ parts: [{ text: promptText }] }],
+                tools: [{ "google_search": {} }]
+            };
+
+            try {
+                const res = await fetchGeminiWithRetry(payload, 35000);
+                const text = res?.candidates?.[0]?.content?.parts?.[0]?.text;
+                const parsed = cleanAndParseJSON(text);
+
+                if (parsed && parsed.bullishSectors) {
+                    const bullishHtml = parsed.bullishSectors.map(s => `
+                        <div class="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 space-y-1">
+                            <div class="flex justify-between font-bold text-slate-100">
+                                <span>${s.sector}</span>
+                                <span class="text-emerald-400 font-mono text-[11px]">${s.tickers}</span>
+                            </div>
+                            <p class="text-slate-400 text-[11px]">${s.catalyst}</p>
+                        </div>
+                    `).join('');
+
+                    const bearishHtml = parsed.bearishSectors.map(s => `
+                        <div class="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 space-y-1">
+                            <div class="flex justify-between font-bold text-slate-100">
+                                <span>${s.sector}</span>
+                                <span class="text-rose-400 font-mono text-[11px]">${s.tickers}</span>
+                            </div>
+                            <p class="text-slate-400 text-[11px]">${s.risk}</p>
+                        </div>
+                    `).join('');
+
+                    const directivesHtml = (parsed.macroDirectives || []).map(d => `
+                        <div class="p-3 rounded-lg bg-slate-950/80 border border-slate-800">
+                            <p class="text-slate-300 leading-relaxed font-sans text-xs"><strong>•</strong> ${d}</p>
+                        </div>
+                    `).join('');
+
+                    const renderedCustom = `
+                        <div class="space-y-5 text-xs">
+                            <div class="p-4 rounded-xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-slate-950 border border-slate-800 space-y-2">
+                                <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+                                    <span class="font-mono text-[11px] text-emerald-400 font-bold uppercase">Synthese IA Live Euronext</span>
+                                    <span class="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-bold text-[10px] border border-emerald-500/30">Mise à jour direct</span>
+                                </div>
+                                <p class="text-xs text-slate-200 leading-relaxed">Directives sectorielles générées avec croisement des données BCE et marché Euronext.</p>
+                            </div>
+
+                            <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-3">
+                                <div class="flex items-center space-x-2 text-sky-400 font-bold font-mono text-xs uppercase">
+                                    <i class="fa-solid fa-compass"></i>
+                                    <span>Directives Macro & Règles d'Investissement</span>
+                                </div>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    ${directivesHtml}
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div class="p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/30 space-y-3">
+                                    <div class="text-emerald-400 font-bold font-mono text-xs uppercase border-b border-emerald-500/20 pb-2">
+                                        Secteurs Porteurs 🟢
+                                    </div>
+                                    <div class="space-y-2 text-xs">${bullishHtml}</div>
+                                </div>
+
+                                <div class="p-4 rounded-xl bg-rose-950/20 border border-rose-500/30 space-y-3">
+                                    <div class="text-rose-400 font-bold font-mono text-xs uppercase border-b border-rose-500/20 pb-2">
+                                        Secteurs à Éviter 🔴
+                                    </div>
+                                    <div class="space-y-2 text-xs">${bearishHtml}</div>
+                                </div>
+                            </div>
+
+                            ${parsed.hedgingTactics ? `
+                                <div class="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-slate-200 text-xs space-y-1">
+                                    <div class="font-bold text-amber-400 font-mono uppercase">Recommandation de Protections & Hedging :</div>
+                                    <p class="leading-relaxed font-sans">${parsed.hedgingTactics}</p>
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+
+                    renderDefaultMarketSynthesis(renderedCustom);
+                    showToast("Synthèse sectorielle mise à jour par l'IA !", "success");
+                } else {
+                    renderDefaultMarketSynthesis();
+                }
+            } catch (e) {
+                showToast("Erreur lors de la mise à jour IA.", "amber");
+                renderDefaultMarketSynthesis();
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> <span>Actualiser via IA Direct</span>`;
+                }
+            }
+        }
+
+        function copyMarketSynthesisToClipboard() {
+            const score = calculateOverallRiskScore();
+            const textToCopy = `🧭 DIRECTIVES D'INVESTISSEMENT & SECTEURS EURONEXT - LEONCE IA
+--------------------------------------------------
+📊 Risk Score Global : ${score}/100
+🟢 Secteurs Porteurs à surpondérer : Défense (Thales, Dassault), Santé (Sanofi), Transition Électrique (Schneider, STIF).
+🔴 Secteurs Fragiles à éviter : Automobile (Stellantis, Valeo), Immobilier (Unibail), Luxe Asie non-sélectif.
+🛡️ Directives : Privilégier les bilans à Piotroski >=7, FCF Yield >5%, et conserver 15-20% de trésorerie disponible.
+--------------------------------------------------
+#Euronext #Bourse #Trading #LeonceIA`;
+
+            const tempTextArea = document.createElement('textarea');
+            tempTextArea.value = textToCopy;
+            document.body.appendChild(tempTextArea);
+            tempTextArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempTextArea);
+
+            showToast("Synthèse sectorielle copiée dans le presse-papier !", "success");
         }
 
         function resetToDefaults() {
@@ -3228,6 +3608,10 @@ Réponds sous forme d'objet JSON :
         window.runDeepDiveAnalysis = runDeepDiveAnalysis;
         window.openSummaryModal = openSummaryModal;
         window.closeSummaryModal = closeSummaryModal;
+        window.openMarketSynthesisModal = openMarketSynthesisModal;
+        window.closeMarketSynthesisModal = closeMarketSynthesisModal;
+        window.runMarketSynthesisAI = runMarketSynthesisAI;
+        window.copyMarketSynthesisToClipboard = copyMarketSynthesisToClipboard;
         window.copySummaryTextToClipboard = copySummaryTextToClipboard;
         window.jumpToSection = jumpToSection;
         window.selectPreset = selectPreset;
