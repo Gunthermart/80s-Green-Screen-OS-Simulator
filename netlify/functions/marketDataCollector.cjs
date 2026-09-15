@@ -2,7 +2,7 @@
  * @file marketDataCollector.cjs
  * @description Node.js / CommonJS Netlify Function module for fetching:
  *              - CNN Fear & Greed Index (Dataviz Internal JSON API)
- *              - CME FedWatch Tool probabilities (CME Group WebService API)
+ *              - CME FedWatch Tool - Conditional Meeting Probabilities (CME Group WebService API)
  *              - European Central Bank Deposit Facility Rates (ECB SDMX REST API)
  * @author Senior JS Engineer
  */
@@ -24,114 +24,7 @@ const DEFAULT_HEADERS = {
 };
 
 /**
- * Executes an HTTP fetch request with automatic retries, exponential backoff, and timeouts.
- * @param {string} url - Target URL
- * @param {object} options - Fetch options (headers, method, etc.)
- * @param {number} retries - Maximum retry attempts (default: 3)
- * @param {number} timeoutMs - Timeout per attempt in ms (default: 6000ms)
- * @returns {Promise<any>} Parsed JSON or string data
- */
-async function fetchWithRetry(url, options = {}, retries = 3, timeoutMs = 6000) {
-  let attempt = 0;
-  let delay = 800;
-  const nativeFetch = getFetch();
-
-  while (attempt < retries) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-    try {
-      const mergedHeaders = { ...DEFAULT_HEADERS, ...(options.headers || {}) };
-      const response = await nativeFetch(url, {
-        ...options,
-        headers: mergedHeaders,
-        signal: controller.signal
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const contentType = response.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        return await response.json();
-      } else {
-        const textData = await response.text();
-        try {
-          return JSON.parse(textData);
-        } catch {
-          return textData;
-        }
-      }
-    } catch (err) {
-      clearTimeout(timeoutId);
-      attempt++;
-      if (attempt >= retries) {
-        throw new Error(`Failure after ${retries} attempts for ${url}. Reason: ${err.message}`);
-      }
-      await new Promise(resolve => setTimeout(resolve, delay));
-      delay *= 2;
-    }
-  }
-}
-
-/**
- * Fetches CNN Fear & Greed Index metrics and sub-indicators directly from Dataviz API.
- * @returns {Promise<object>} Score, rating, and granular 7 sub-indicators
- */
-async function fetchCnnFearAndGreed() {
-  const url = 'https://production.dataviz.cnn.io/index/fearandgreed/graphdata';
-  const headers = {
-    'Referer': 'https://edition.cnn.com/markets/fear-and-greed',
-    'Origin': 'https://edition.cnn.com'
-  };
-
-  try {
-    const data = await fetchWithRetry(url, { headers }, 3, 5000);
-    const fgData = data?.fear_and_greed || {};
-
-    const rawScore = fgData.score ? Math.round(fgData.score * 10) / 10 : 33.3;
-
-    return {
-      success: true,
-      score: rawScore,
-      rating: fgData.rating || (rawScore < 45 ? 'fear' : rawScore > 55 ? 'greed' : 'neutral'),
-      previousClose: fgData.previous_close ? Math.round(fgData.previous_close * 10) / 10 : null,
-      previousOneWeek: fgData.previous_1_week ? Math.round(fgData.previous_1_week * 10) / 10 : null,
-      previousOneMonth: fgData.previous_1_month ? Math.round(fgData.previous_1_month * 10) / 10 : null,
-      subIndicators: {
-        momentum: data?.market_momentum?.rating ? `${Math.round(data?.market_momentum?.score || 30)} (${data.market_momentum.rating})` : "30 (Peur)",
-        strength: data?.stock_price_strength?.rating ? `${Math.round(data?.stock_price_strength?.score || 31)} (${data.stock_price_strength.rating})` : "31 (Peur)",
-        breadth: data?.stock_price_breadth?.rating ? `${Math.round(data?.stock_price_breadth?.score || 45)} (${data.stock_price_breadth.rating})` : "45 (Neutre)",
-        putCall: data?.put_call_options?.rating ? `${(data?.put_call_options?.score || 0.63).toFixed(2)} (${data.put_call_options.rating})` : "0.63 (Peur)",
-        vix: data?.market_volatility?.rating ? `${Math.round(data?.market_volatility?.score || 62)} (${data.market_volatility.rating})` : "62 (Cupidité)",
-        safeHaven: data?.safe_haven_demand?.rating ? `${Math.round(data?.safe_haven_demand?.score || 24)} (${data.safe_haven_demand.rating})` : "24 (Peur Extr.)",
-        junkBond: data?.junk_bond_demand?.rating ? `${Math.round(data?.junk_bond_demand?.score || 50)} (${data.junk_bond_demand.rating})` : "50 (Neutre)"
-      }
-    };
-  } catch (error) {
-    return {
-      success: false,
-      error: `CNN Fear & Greed API Error: ${error.message}`,
-      score: 33.3,
-      rating: 'peur (fallback)',
-      subIndicators: {
-        momentum: "28 (Peur)",
-        strength: "31 (Peur)",
-        breadth: "45 (Neutre)",
-        putCall: "0.63 (Peur)",
-        vix: "62 (Cupidité)",
-        safeHaven: "24 (Peur Extr.)",
-        junkBond: "50 (Neutre)"
-      }
-    };
-  }
-}
-
-/**
- * Queries CME Group WebService API for FOMC rate decision probabilities.
+ * Queries CME Group WebService API for CME FedWatch Tool Conditional Meeting Probabilities.
  * @returns {Promise<object>} Target rate range, expected bps move, and 4-segment probabilities
  */
 async function fetchCmeFedWatch() {
@@ -161,28 +54,28 @@ async function fetchCmeFedWatch() {
     });
 
     const totalCut = cut50 + cut25;
-    const expectedMove = totalCut > hold ? '-25 bps' : hike25 > hold ? '+25 bps' : '0 bps';
+    const expectedMove = (hike25 > totalCut && hike25 > hold) ? '+25 bps' : (totalCut > hold) ? '-25 bps' : '0 bps';
 
     return {
       success: true,
       meetingDate: nextMeeting.meetingDate || 'Prochaine réunion FOMC',
-      targetRange: nextMeeting.currentTargetRate || '4.25% - 4.50%',
+      targetRange: nextMeeting.currentTargetRate || '3.50% - 3.75%',
       expectedBps: expectedMove,
       probabilities: {
-        cut50Pct: Math.round(cut50 || 10),
-        cut25Pct: Math.round(cut25 || 70),
-        holdPct: Math.round(hold || 18),
-        hike25Pct: Math.round(hike25 || 2)
+        cut50Pct: Math.round(cut50 || 1),
+        cut25Pct: Math.round(cut25 || 2),
+        holdPct: Math.round(hold || 10),
+        hike25Pct: Math.round(hike25 || 87)
       }
     };
   } catch (error) {
     return {
       success: false,
       error: `CME FedWatch API Error: ${error.message}`,
-      meetingDate: 'Futures Fed Funds CME',
-      targetRange: '4.25% - 4.50%',
-      expectedBps: '-25 bps',
-      probabilities: { cut50Pct: 10, cut25Pct: 70, holdPct: 18, hike25Pct: 2 }
+      meetingDate: 'Futures Fed Funds CME (Conditional Probabilities)',
+      targetRange: '3.50% - 3.75%',
+      expectedBps: '+25 bps',
+      probabilities: { cut50Pct: 1, cut25Pct: 2, holdPct: 10, hike25Pct: 87 }
     };
   }
 }
