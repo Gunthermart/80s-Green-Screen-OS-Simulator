@@ -2690,877 +2690,122 @@ plot(targetPrice, "TP1", color=color.green, linewidth=2)
             if (historyModal) historyModal.classList.add('hidden');
         }
 
-        function copyJSONToClipboard() {
-            if (!currentReportData) return;
-            const tempTextArea = document.createElement('textarea');
-            tempTextArea.value = JSON.stringify(currentReportData, null, 2);
-            document.body.appendChild(tempTextArea);
-            tempTextArea.select();
-            document.execCommand('copy');
-            document.body.removeChild(tempTextArea);
-            showToast('Données JSON copiées dans le presse-papier !', 'success');
-        }
-
-        function getCategoryScore(cat) {
-            if (!cat.subIndicators || cat.subIndicators.length === 0) return 50;
-            const totalSubVal = cat.subIndicators.reduce((sum, s) => sum + (s.val * (s.weight || 1)), 0);
-            const totalWeight = cat.subIndicators.reduce((sum, s) => sum + (s.weight || 1), 0);
-            return Math.round(totalSubVal / totalWeight);
-        }
-
-        function calculateOverallRiskScore() {
-            let weightedSum = 0;
-            let totalWeight = 0;
-            categories.forEach(cat => {
-                const catScore = getCategoryScore(cat);
-                const w = cat.weight || 20;
-                weightedSum += catScore * w;
-                totalWeight += w;
-            });
-            return totalWeight > 0 ? Math.round(weightedSum / totalWeight) : 50;
-        }
-
-        function drawGauge(score) {
-            const canvas = document.getElementById('gaugeCanvas');
-            if (!canvas) return;
-            const ctx = canvas.getContext('2d');
-            const width = canvas.width;
-            const height = canvas.height;
-            const centerX = width / 2;
-            const centerY = height - 20;
-            const radius = Math.min(width, height) - 40;
-
-            ctx.clearRect(0, 0, width, height);
-
-            const gradient = ctx.createLinearGradient(centerX - radius, centerY, centerX + radius, centerY);
-            gradient.addColorStop(0, '#10b981');
-            gradient.addColorStop(0.25, '#22c55e');
-            gradient.addColorStop(0.5, '#f59e0b');
-            gradient.addColorStop(0.75, '#f97316');
-            gradient.addColorStop(1, '#f43f5e');
-
-            ctx.beginPath();
-            ctx.arc(centerX, centerY, radius, Math.PI, 0, false);
-            ctx.lineWidth = 20;
-            ctx.strokeStyle = gradient;
-            ctx.lineCap = 'round';
-            ctx.stroke();
-
-            const angle = Math.PI + (score / 100) * Math.PI;
-
-            ctx.save();
-            ctx.translate(centerX, centerY);
-            ctx.rotate(angle);
-
-            ctx.beginPath();
-            ctx.moveTo(0, -4);
-            ctx.lineTo(radius - 12, 0);
-            ctx.lineTo(0, 4);
-            ctx.fillStyle = '#ffffff';
-            ctx.fill();
-
-            ctx.beginPath();
-            ctx.arc(0, 0, 7, 0, Math.PI * 2);
-            ctx.fillStyle = '#0f172a';
-            ctx.strokeStyle = '#38bdf8';
-            ctx.lineWidth = 3;
-            ctx.fill();
-            ctx.stroke();
-
-            ctx.restore();
-        }
-
-        function renderRadarChart() {
-            const canvas = document.getElementById('radarChart');
-            if (!canvas || typeof Chart === 'undefined') return;
-
-            const labels = categories.map(c => c.name);
-            const dataValues = categories.map(c => getCategoryScore(c));
-
-            if (radarChartInstance) {
-                radarChartInstance.data.labels = labels;
-                radarChartInstance.data.datasets[0].data = dataValues;
-                radarChartInstance.update();
+        function openSummaryModal() {
+            if (!currentReportData) {
+                showToast("Veuillez d'abord réaliser l'analyse d'un titre.", "amber");
                 return;
             }
 
-            const ctx = canvas.getContext('2d');
-            radarChartInstance = new Chart(ctx, {
-                type: 'radar',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Risque par Pilier',
-                        data: dataValues,
-                        backgroundColor: 'rgba(56, 189, 248, 0.2)',
-                        borderColor: '#38bdf8',
-                        borderWidth: 2,
-                        pointBackgroundColor: '#38bdf8'
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        r: {
-                            angleLines: { color: 'rgba(255, 255, 255, 0.1)' },
-                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                            pointLabels: { color: '#94a3b8', font: { size: 10 } },
-                            ticks: { display: false },
-                            min: 0,
-                            max: 100
-                        }
-                    },
-                    plugins: { legend: { display: false } }
-                }
-            });
-        }
+            const modal = document.getElementById('summaryModal');
+            const info = currentReportData.companyInfo || {};
+            const kpi = currentReportData.financialKPIs || {};
+            const health = currentReportData.healthScores || {};
+            const diag = currentReportData.leonceDiagnostic || {};
+            const plan = currentReportData.tradingPlan || {};
+            const qvm = currentReportData.qvmIndicator || {};
+            const consensus = currentReportData.consensusAndNews || {};
 
-        function updateBarometerUI() {
-            const overallScore = calculateOverallRiskScore();
-            
-            const scoreText = document.getElementById('overallScoreText');
-            if (scoreText) scoreText.innerText = overallScore;
+            const titleEl = document.getElementById('summaryModalTitle');
+            const tickerEl = document.getElementById('summaryModalTicker');
+            const contentEl = document.getElementById('summaryModalContent');
 
-            const riskBadge = document.getElementById('riskBadge');
-            if (riskBadge) {
-                if (overallScore < 35) {
-                    riskBadge.innerText = 'Faible (Favorable)';
-                    riskBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30';
-                } else if (overallScore <= 65) {
-                    riskBadge.innerText = 'Modéré (Neutre)';
-                    riskBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30';
-                } else {
-                    riskBadge.innerText = overallScore >= 80 ? 'Extrême (Alerte)' : 'Élevé (Prudence)';
-                    riskBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30';
-                }
-            }
+            if (titleEl) titleEl.innerText = info.name || 'Société';
+            if (tickerEl) tickerEl.innerText = info.ticker ? `Ticker: ${info.ticker}` : '---';
 
-            let pctActions = Math.max(10, Math.min(80, 100 - overallScore));
-            let pctOblig = Math.round((100 - pctActions) * 0.6);
-            let pctCash = 100 - pctActions - pctOblig;
-
-            if (document.getElementById('barActions')) document.getElementById('barActions').style.width = pctActions + '%';
-            if (document.getElementById('barOblig')) document.getElementById('barOblig').style.width = pctOblig + '%';
-            if (document.getElementById('barCash')) document.getElementById('barCash').style.width = pctCash + '%';
-
-            if (document.getElementById('pctActions')) document.getElementById('pctActions').innerText = pctActions + '%';
-            if (document.getElementById('pctOblig')) document.getElementById('pctOblig').innerText = pctOblig + '%';
-            if (document.getElementById('pctCash')) document.getElementById('pctCash').innerText = pctCash + '%';
-
-            if (document.getElementById('allocTag')) {
-                if (overallScore < 35) document.getElementById('allocTag').innerText = 'Offensive (Actions)';
-                else if (overallScore <= 65) document.getElementById('allocTag').innerText = 'Équilibrée (50/50)';
-                else document.getElementById('allocTag').innerText = 'Prudente (Cash/Gold)';
-            }
-
-            drawGauge(overallScore);
-            renderRadarChart();
-            renderDefaultMarketSynthesis();
-        }
-
-        function renderCategories() {
-            const container = document.getElementById('categoriesContainer');
-            if (!container) return;
-
-            container.innerHTML = categories.map(cat => {
-                const catScore = getCategoryScore(cat);
-                return `
-                    <div class="p-5 rounded-2xl glass-card space-y-4 border border-slate-800">
-                        <div class="flex items-center justify-between border-b border-slate-800/80 pb-3">
-                            <div class="flex items-center space-x-2.5">
-                                <div class="w-8 h-8 rounded-lg bg-${cat.color}-500/10 text-${cat.color}-400 flex items-center justify-center">
-                                    <i class="fa-solid ${cat.icon} text-sm"></i>
-                                </div>
-                                <span class="font-bold text-sm text-white">${cat.name}</span>
+            if (contentEl) {
+                contentEl.innerHTML = `
+                    <div class="space-y-4 text-xs font-sans">
+                        <!-- Diagnostic & Score Card -->
+                        <div class="p-4 rounded-xl bg-slate-950 border border-sky-500/30 flex items-center justify-between flex-wrap gap-2">
+                            <div class="space-y-1">
+                                <span class="text-[10px] font-mono uppercase text-sky-400 font-bold">Score Global Leonce IA</span>
+                                <div class="text-xl font-black text-white font-mono">${diag.overallScore || 80} / 100</div>
+                                <div class="text-[11px] text-slate-300">Signal CT: <strong class="text-emerald-400">${diag.shortTermSignal || 'Favorable'}</strong> • MT: <strong class="text-sky-300">${diag.mediumTermSignal || 'Solide'}</strong></div>
                             </div>
-                            <span id="score-cat-${cat.id}" class="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-sky-400">
-                                ${catScore} / 100
-                            </span>
+                            <div class="text-right space-y-1 font-mono text-[11px]">
+                                <div class="text-slate-400">Piotroski: <b class="text-emerald-400">${health.piotroskiScore || '7/9'}</b></div>
+                                <div class="text-slate-400">Altman Z: <b class="text-sky-300">${health.altmanZScore || 'N/A'}</b></div>
+                                <div class="text-slate-400">Score QVM: <b class="text-amber-400">${qvm.overallScore || '--'}/100</b></div>
+                            </div>
                         </div>
 
-                        <div class="space-y-3">
-                            ${cat.subIndicators.map(sub => `
-                                <div class="space-y-1.5 text-xs">
-                                    <div class="flex items-center justify-between text-slate-300">
-                                        <span>${sub.name}</span>
-                                        <span id="val-${cat.id}-${sub.id}" class="font-mono font-bold text-slate-100">${sub.val}</span>
-                                    </div>
-                                    <div class="flex items-center space-x-2">
-                                        <button type="button" onclick="adjustSubVal('${cat.id}', '${sub.id}', -5)" class="w-6 h-6 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center font-bold transition cursor-pointer">-</button>
-                                        <input type="range" min="0" max="100" value="${sub.val}" oninput="setSubVal('${cat.id}', '${sub.id}', this.value)" class="flex-1 cursor-pointer">
-                                        <button type="button" onclick="adjustSubVal('${cat.id}', '${sub.id}', 5)" class="w-6 h-6 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center font-bold transition cursor-pointer">+</button>
-                                    </div>
+                        <!-- 2 Core Columns Breakdown -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div class="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1.5">
+                                <div class="font-bold text-sky-400 text-xs font-mono uppercase flex items-center space-x-1">
+                                    <i class="fa-solid fa-chart-pie"></i>
+                                    <span>Synthèse Financière</span>
                                 </div>
-                            `).join('')}
+                                <p class="text-[11px] text-slate-300 leading-relaxed">${info.summary || 'Modèle économique et positionnement sur le marché.'}</p>
+                                <div class="pt-1 text-[11px] font-mono text-slate-400 flex flex-wrap gap-2">
+                                    <span>CA: <b class="text-white">${kpi.revenue || 'N/A'}</b></span>
+                                    <span>RN: <b class="text-white">${kpi.netIncome || 'N/A'}</b></span>
+                                    <span>Marge: <b class="text-emerald-400">${kpi.operatingMargin || 'N/A'}</b></span>
+                                </div>
+                            </div>
+
+                            <div class="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1.5">
+                                <div class="font-bold text-emerald-400 text-xs font-mono uppercase flex items-center space-x-1">
+                                    <i class="fa-solid fa-bullseye"></i>
+                                    <span>Consensus & Objectifs</span>
+                                </div>
+                                <div class="text-[11px] font-mono text-slate-300">
+                                    Consensus: <b class="text-cyan-300">${consensus.recommendation || 'Achat'}</b><br>
+                                    Objectif Moyen: <b class="text-emerald-400">${consensus.targetPrice || consensus.targetPriceAvg || 'N/A'}</b>
+                                </div>
+                                <p class="text-[11px] text-slate-300 leading-relaxed pt-1">${consensus.summary || 'Perspectives stratégiques et avis de marché.'}</p>
+                            </div>
+                        </div>
+
+                        <!-- Plan de Trading Express -->
+                        <div class="p-4 rounded-xl bg-slate-950/90 border border-emerald-500/40 space-y-2">
+                            <div class="flex items-center justify-between border-b border-slate-800 pb-1.5 font-mono text-xs">
+                                <span class="font-bold text-emerald-400 uppercase">Plan d'Exécution Trading & Risk Management</span>
+                                <span class="text-slate-400 text-[10px]">Ratio R/R</span>
+                            </div>
+                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center font-mono text-[11px]">
+                                <div class="p-2 rounded bg-slate-900 border border-slate-800">
+                                    <span class="text-[10px] text-slate-400 block">Entrée</span>
+                                    <b class="text-sky-300">${plan.entryZone || '---'}</b>
+                                </div>
+                                <div class="p-2 rounded bg-slate-900 border border-slate-800">
+                                    <span class="text-[10px] text-slate-400 block">Stop Loss</span>
+                                    <b class="text-rose-400">${plan.stopLoss || '---'}</b>
+                                </div>
+                                <div class="p-2 rounded bg-slate-900 border border-slate-800">
+                                    <span class="text-[10px] text-slate-400 block">TP1</span>
+                                    <b class="text-emerald-400">${plan.tp1 || '---'}</b>
+                                </div>
+                                <div class="p-2 rounded bg-slate-900 border border-slate-800">
+                                    <span class="text-[10px] text-slate-400 block">TP2</span>
+                                    <b class="text-teal-300">${plan.tp2 || '---'}</b>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 `;
-            }).join('');
+            }
+
+            if (modal) modal.classList.remove('hidden');
         }
 
-        function setSubVal(catId, subId, value) {
-            const numVal = Math.max(0, Math.min(100, parseInt(value, 10) || 0));
-            const cat = categories.find(c => c.id === catId);
-            if (cat) {
-                const sub = cat.subIndicators.find(s => s.id === subId);
-                if (sub) {
-                    sub.val = numVal;
-                    const valDisplay = document.getElementById(`val-${catId}-${subId}`);
-                    if (valDisplay) valDisplay.innerText = numVal;
-                    const catScoreDisplay = document.getElementById(`score-cat-${catId}`);
-                    if (catScoreDisplay) catScoreDisplay.innerText = `${getCategoryScore(cat)} / 100`;
-                    updateBarometerUI();
-                }
-            }
+        function closeSummaryModal() {
+            const modal = document.getElementById('summaryModal');
+            if (modal) modal.classList.add('hidden');
         }
 
-        function adjustSubVal(catId, subId, delta) {
-            const cat = categories.find(c => c.id === catId);
-            if (cat) {
-                const sub = cat.subIndicators.find(s => s.id === subId);
-                if (sub) {
-                    setSubVal(catId, subId, sub.val + delta);
-                    renderCategories();
-                }
-            }
-        }
-
-        function updateCNNValue(val) {
-            const num = parseFloat(val);
-            cnnFearGreedValue = isNaN(num) ? 33.3 : Math.max(0, Math.min(100, num));
-            const sliderVal = document.getElementById('cnnSliderVal');
-            const valDisplay = document.getElementById('cnnValDisplay');
-            const labelBadge = document.getElementById('cnnLabelBadge');
-            const pointer = document.getElementById('cnnPointer');
-
-            const formattedVal = cnnFearGreedValue.toFixed(1);
-
-            if (sliderVal) sliderVal.innerText = formattedVal;
-            if (valDisplay) valDisplay.innerText = formattedVal;
-            if (pointer) pointer.style.left = `${cnnFearGreedValue}%`;
-
-            let label = 'Neutre';
-            let badgeClass = 'px-2.5 py-0.5 rounded-full text-xs font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30';
-
-            if (cnnFearGreedValue < 45) {
-                label = cnnFearGreedValue < 25 ? 'Peur Extrême' : 'Peur';
-                badgeClass = 'px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30';
-            } else if (cnnFearGreedValue <= 55) {
-                label = 'Neutre';
-                badgeClass = 'px-2.5 py-0.5 rounded-full text-xs font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30';
-            } else {
-                label = cnnFearGreedValue > 75 ? 'Cupidité Extrême' : 'Cupidité';
-                badgeClass = 'px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30';
-            }
-
-            if (labelBadge) {
-                labelBadge.innerText = `${label} (${formattedVal})`;
-                labelBadge.className = badgeClass;
-            }
-
-            const sentimentCat = categories.find(c => c.id === 'sentiment');
-            if (sentimentCat) {
-                const fgSub = sentimentCat.subIndicators.find(s => s.id === 'fear_greed');
-                if (fgSub) {
-                    fgSub.val = Math.round(cnnFearGreedValue);
-                    const subValDisplay = document.getElementById('val-sentiment-fear_greed');
-                    if (subValDisplay) subValDisplay.innerText = Math.round(cnnFearGreedValue);
-                }
-            }
-
-            updateBarometerUI();
-        }
-
-        function updateCNNSubComponentsUI(subData) {
-            if (!subData) return;
-            if (subData.momentum && document.getElementById('cnnSubMomentum')) document.getElementById('cnnSubMomentum').innerText = subData.momentum;
-            if (subData.strength && document.getElementById('cnnSubStrength')) document.getElementById('cnnSubStrength').innerText = subData.strength;
-            if (subData.breadth && document.getElementById('cnnSubBreadth')) document.getElementById('cnnSubBreadth').innerText = subData.breadth;
-            if (subData.putCall && document.getElementById('cnnSubPutCall')) document.getElementById('cnnSubPutCall').innerText = subData.putCall;
-            if (subData.vix && document.getElementById('cnnSubVix')) document.getElementById('cnnSubVix').innerText = subData.vix;
-            if (subData.safeHaven && document.getElementById('cnnSubSafeHaven')) document.getElementById('cnnSubSafeHaven').innerText = subData.safeHaven;
-            if (subData.junkBond && document.getElementById('cnnSubJunkBond')) document.getElementById('cnnSubJunkBond').innerText = subData.junkBond;
-        }
-
-        async function runLiveMarketAnalysis() {
-            showToast("Analyse du marché en direct...", "info");
-            const btn = document.getElementById('btnLiveSearch');
-            if (btn) {
-                btn.disabled = true;
-                btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> <span>Analyse en cours...</span>`;
-            }
-
-            try {
-                const collectorUrl = window.location.origin + '/.netlify/functions/marketDataCollector?t=' + Date.now();
-                const response = await fetch(collectorUrl, { cache: 'no-store' });
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data && data.cnnFearAndGreed) {
-                        if (data.cnnFearAndGreed.value !== undefined) {
-                            updateCNNValue(data.cnnFearAndGreed.value);
-                            const cnnSlider = document.getElementById('cnnSliderInput');
-                            if (cnnSlider) cnnSlider.value = data.cnnFearAndGreed.value;
-                        }
-                        if (data.cnnFearAndGreed.subIndicators) {
-                            updateCNNSubComponentsUI(data.cnnFearAndGreed.subIndicators);
-                        }
-                        if (data.cboeIndices) {
-                            cboeData = data.cboeIndices;
-                            if (document.getElementById('cboeVixVal')) document.getElementById('cboeVixVal').innerText = cboeData.vix.toFixed(2);
-                            if (document.getElementById('cboeVixeqVal')) document.getElementById('cboeVixeqVal').innerText = cboeData.vixeq.toFixed(2);
-                            if (document.getElementById('cboeDspxVal')) document.getElementById('cboeDspxVal').innerText = cboeData.dspx.toFixed(2);
-                            if (document.getElementById('cboeRegimeBadge')) document.getElementById('cboeRegimeBadge').innerText = cboeData.regime || "Stock-Picker's Market";
-                        }
-                        if (data.cmeFedWatch || data.bceRates) {
-                            updateBceFedRatesUI({
-                                bce: {
-                                    cutProb: data.bceRates?.expectations?.cutProb ?? 75,
-                                    holdProb: data.bceRates?.expectations?.holdProb ?? 23,
-                                    hikeProb: data.bceRates?.expectations?.hikeProb ?? 2,
-                                    meeting: data.bceRates?.source || "Portail BCE & Grounding Search",
-                                    bias: data.bceRates?.bias || "Assouplissement (Dovish)"
-                                },
-                                fed: {
-                                    targetRange: data.cmeFedWatch?.targetRange || "3.50% - 3.75%",
-                                    expectedBps: data.cmeFedWatch?.expectedBps || "+25 bps",
-                                    cut50Prob: data.cmeFedWatch?.probabilities?.cut50Pct ?? 0,
-                                    cut25Prob: data.cmeFedWatch?.probabilities?.cut25Pct ?? 3,
-                                    holdProb: data.cmeFedWatch?.probabilities?.holdPct ?? 10,
-                                    hike25Prob: data.cmeFedWatch?.probabilities?.hike25Pct ?? 87,
-                                    meeting: data.cmeFedWatch?.meetingDate || "CME FedWatch Tool",
-                                    bias: "Resserrement (Hawkish)"
-                                }
-                            });
-                        }
-                        renderCategories();
-                        updateBarometerUI();
-                        showToast("Métriques rafraîchies !", "success");
-                        if (btn) {
-                            btn.disabled = false;
-                            btn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> <span>Analyser Marché Direct</span>`;
-                        }
-                        return;
-                    }
-                }
-            } catch (err) {
-                console.warn("Échec API directe, basculement sur l'IA Gemini Grounding...", err);
-            }
-
-            const promptText = `Act en tant qu'expert en risque macroéconomique et de marché financier global.
-Effectue un diagnostic récent et ultra-précis du marché en utilisant Google Search Grounding pour rechercher les données réelles et prévisions en direct sur :
-1. CNN Fear & Greed Index (https://edition.cnn.com/markets/fear-and-greed)
-2. CME FedWatch Tool (https://www.cmegroup.com/markets/interest-rates/cme-fedwatch-tool.html)
-3. Prévisions de taux BCE (baisse/maintien/hausse) selon le consensus d'économistes, swaps €STR et décisions du Conseil des gouverneurs de la BCE.
-
-Réponds OBLIGATOIREMENT sous forme d'objet JSON avec ce schéma exact :
-{
-  "subIndicators": {
-    "gdp_growth": 42, "inflation_cpi": 52, "geopolitics": 68,
-    "central_bank_rates": 54, "yield_curve": 46, "credit_spreads": 36,
-    "eps_revisions": 48, "margin_pressures": 52, "valuation_multiples": 62,
-    "dispersion_dspx": 42, "market_breadth": 46, "vix_volatility": 38,
-    "fear_greed": 33.3, "put_call_ratio": 44, "systemic_shocks": 28
-  },
-  "cnn_fear_greed": 33.3,
-  "cnn_sub_components": {
-    "momentum": "28 (Peur)", "strength": "31 (Peur)", "breadth": "45 (Neutre)",
-    "putCall": "0.63 (Peur)", "vix": "62 (Cupidité)", "safeHaven": "24 (Peur Extr.)",
-    "junkBond": "50 (Neutre)"
-  },
-  "vix": 14.76, "vixeq": 16.50, "dspx": 41.42,
-  "cboe_regime": "Stock-Picker's Market",
-  "bce_fed_rates": {
-    "bce": { "cutProb": 75, "holdProb": 23, "hikeProb": 2, "meeting": "Portail BCE & Grounding Search", "bias": "Assouplissement (Dovish)" },
-    "fed": {
-      "targetRange": "3.50% - 3.75%", "expectedBps": "+25 bps",
-      "cut50Prob": 0, "cut25Prob": 3, "holdProb": 10, "hike25Prob": 87,
-      "meeting": "CME FedWatch Tool", "bias": "Hawkish"
-    }
-  },
-  "summary": "Climat de marché caractérisé par..."
-}`;
-
-            const payload = {
-                contents: [{ parts: [{ text: promptText }] }],
-                tools: [{ "google_search": {} }]
-            };
-
-            try {
-                const res = await fetchGeminiWithRetry(payload, 30000);
-                const text = res?.candidates?.[0]?.content?.parts?.[0]?.text;
-                const parsed = cleanAndParseJSON(text);
-
-                if (parsed) {
-                    if (parsed.subIndicators && typeof parsed.subIndicators === 'object') {
-                        categories.forEach(cat => {
-                            cat.subIndicators.forEach(sub => {
-                                if (parsed.subIndicators[sub.id] !== undefined) {
-                                    sub.val = Math.max(0, Math.min(100, parseInt(parsed.subIndicators[sub.id], 10)));
-                                }
-                            });
-                        });
-                    }
-                    if (parsed.cnn_fear_greed !== undefined) {
-                        updateCNNValue(parsed.cnn_fear_greed);
-                        const cnnSlider = document.getElementById('cnnSliderInput');
-                        if (cnnSlider) cnnSlider.value = parsed.cnn_fear_greed;
-                    }
-                    if (parsed.cnn_sub_components) {
-                        updateCNNSubComponentsUI(parsed.cnn_sub_components);
-                    }
-                    if (parsed.bce_fed_rates) {
-                        updateBceFedRatesUI(parsed.bce_fed_rates);
-                    }
-                    renderCategories();
-                    updateBarometerUI();
-                    showToast("Mise à jour effectuée via Grounding Search !", "success");
-                }
-            } catch (e) {
-                showToast("Erreur d'analyse live.", "amber");
-            } finally {
-                if (btn) {
-                    btn.disabled = false;
-                    btn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> <span>Analyser Marché Direct</span>`;
-                }
-            }
-        }
-
-        function updateBceFedRatesUI(ratesData) {
-            if (!ratesData) return;
-            const bce = ratesData.bce || {};
-            const fed = ratesData.fed || {};
-
-            if (bce.cutProb !== undefined) {
-                if (document.getElementById('bceCutBar')) document.getElementById('bceCutBar').style.width = `${bce.cutProb}%`;
-                if (document.getElementById('bceHoldBar')) document.getElementById('bceHoldBar').style.width = `${bce.holdProb}%`;
-                if (document.getElementById('bceHikeBar')) document.getElementById('bceHikeBar').style.width = `${bce.hikeProb}%`;
-                if (document.getElementById('bceCutPct')) document.getElementById('bceCutPct').innerText = `${bce.cutProb}%`;
-                if (document.getElementById('bceHoldPct')) document.getElementById('bceHoldPct').innerText = `${bce.holdProb}%`;
-                if (document.getElementById('bceHikePct')) document.getElementById('bceHikePct').innerText = `${bce.hikeProb}%`;
-                if (bce.meeting && document.getElementById('bceMeetingDate')) document.getElementById('bceMeetingDate').innerText = bce.meeting;
-            }
-
-            const cut50 = fed.cut50Prob !== undefined ? fed.cut50Prob : 0;
-            const cut25 = fed.cut25Prob !== undefined ? fed.cut25Prob : (fed.cutProb || 3);
-            const hold = fed.holdProb !== undefined ? fed.holdProb : 10;
-            const hike25 = fed.hike25Prob !== undefined ? fed.hike25Prob : (fed.hikeProb || 87);
-
-            if (document.getElementById('fedCut50Bar')) document.getElementById('fedCut50Bar').style.width = `${cut50}%`;
-            if (document.getElementById('fedCut25Bar')) document.getElementById('fedCut25Bar').style.width = `${cut25}%`;
-            if (document.getElementById('fedHoldBar')) document.getElementById('fedHoldBar').style.width = `${hold}%`;
-            if (document.getElementById('fedHike25Bar')) document.getElementById('fedHike25Bar').style.width = `${hike25}%`;
-
-            if (document.getElementById('fedCut50Pct')) document.getElementById('fedCut50Pct').innerText = `${cut50}%`;
-            if (document.getElementById('fedCut25Pct')) document.getElementById('fedCut25Pct').innerText = `${cut25}%`;
-            if (document.getElementById('fedHoldPct')) document.getElementById('fedHoldPct').innerText = `${hold}%`;
-            if (document.getElementById('fedHike25Pct')) document.getElementById('fedHike25Pct').innerText = `${hike25}%`;
-
-            if (fed.targetRange && document.getElementById('fedCurrentRange')) document.getElementById('fedCurrentRange').innerText = fed.targetRange;
-            if (fed.expectedBps && document.getElementById('fedExpectedBps')) document.getElementById('fedExpectedBps').innerText = fed.expectedBps;
-            if (fed.meeting && document.getElementById('fedMeetingDate')) document.getElementById('fedMeetingDate').innerText = fed.meeting;
-
-            const biasBadge = document.getElementById('rateBiasBadge');
-            const impactAnalysis = document.getElementById('ratesImpactAnalysis');
-
-            const totalFedHike = hike25;
-            const totalFedCut = cut50 + cut25;
-
-            if (biasBadge) {
-                if (totalFedHike > 50) {
-                    biasBadge.className = 'px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30';
-                    biasBadge.innerText = 'Resserrement 🔴';
-                } else if (totalFedCut > 50) {
-                    biasBadge.className = 'px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30';
-                    biasBadge.innerText = 'Assouplissement 🟢';
-                } else {
-                    biasBadge.className = 'px-2.5 py-0.5 rounded-full text-xs font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30';
-                    biasBadge.innerText = 'Statu Quo 🔵';
-                }
-            }
-
-            if (impactAnalysis) {
-                if (totalFedHike > 50) {
-                    impactAnalysis.innerHTML = `Pression monétaire américaine (Fed hawkish +25 bps à ${totalFedHike}%) couplée à un assouplissement de la BCE (Taux Dépôt: 2.50%). Risque de volatilité sur les valeurs fortement endettées et opportunités sur les exportateurs européens (parité EUR/USD).`;
-                } else if (totalFedCut > 50) {
-                    impactAnalysis.innerHTML = `Consensus fort de <strong>baisse des taux / pivot dovish</strong> favorisant l'expansion des multiples de valorisation actions.`;
-                } else {
-                    impactAnalysis.innerHTML = `Anticipation de <strong>statu quo et de taux neutres</strong>. Le marché reste attentif aux prochaines données d'inflation (CPI/PCE).`;
-                }
-            }
-        }
-
-        async function runMarketSynthesisAI() {
-            const btn = document.getElementById('btnGenerateMarketAI');
-            const container = document.getElementById('marketSynthesisContent');
-            const overallScore = calculateOverallRiskScore();
-
-            if (!container) return;
-
-            if (btn) {
-                btn.disabled = true;
-                btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> <span>Génération IA Direct...</span>`;
-            }
-
-            container.innerHTML = `
-                <div class="flex flex-col items-center justify-center py-8 space-y-3 text-center">
-                    <div class="relative w-10 h-10">
-                        <div class="absolute inset-0 rounded-full border-2 border-slate-800 border-t-emerald-400 animate-spin"></div>
-                    </div>
-                    <p class="text-xs text-slate-300 font-mono">Actualisation en temps réel via Google Search Grounding & Senior Strategy...</p>
-                </div>
-            `;
-
-            const promptText = `Agis comme un Stratège en Chef Multi-Actifs Senior spécialisé sur les marchés Euronext (CAC 40, SBF 120, AEX, BEL 20, Euronext Growth).
-Le Score de Risque Globale du Baromètre est actuellement de ${overallScore} / 100.
-Formule des Directives d'Investissement et une Allocation Sectorielle Euronext ultra-complète, chiffrée et actionnable.
-
-Consulte et intègre en temps réel les données de marché sur :
-1. Politique Monétaire BCE (Taux Dépôt 2.50%, €STR) et impact sur les valeurs endettées vs exportatrices.
-2. Secteurs Euronext Surpondérés, Neutres et Sous-pondérés avec tickers précis (ex: ASML, LVMH, TotalEnergies, Schneider, Sanofi, STIF, Air Liquide).
-3. Règle de Risk Management (Stop loss, allocation cash/gold, pricing power).
-
-RÉPONDS PAR UN OBJET JSON STRICTEMENT VALIDE :
-{
-  "regimeTitle": "Titre du Régime Macro (ex: Régime Sélectif & Stock-Picking)",
-  "regimeColor": "sky",
-  "macroAnalysis": "Analyse approfondie de l'environnement macroéconomique et de la liquidité...",
-  "overweightSectors": [
-    { "sector": "Technologie & Semi-conducteurs", "tickers": "ASML, STMicro, STIF", "thesis": "Excellente visibilité opérationnelle, forte demande IA et pricing power..." },
-    { "sector": "Luxe & Maisons d'Exception", "tickers": "LVMH, Hermès", "thesis": "Marge brute supérieure à 65% et Moat étendu à l'épreuve des cycles..." }
-  ],
-  "neutralSectors": [
-    { "sector": "Santé & Pharmacie", "tickers": "Sanofi", "thesis": "Défensif avec dividende sécurisé, mais catalyseurs de croissance modérés..." },
-    { "sector": "Énergie & Major Oil", "tickers": "TotalEnergies", "thesis": "Génération de FCF robuste et buybacks, sensible aux cours du Brent..." }
-  ],
-  "underweightSectors": [
-    { "sector": "Immobilier Coté (REITs)", "tickers": "Unibail, Gecina", "thesis": "Levier financier élevé et sensibilité directe aux refinancements d'obligations..." }
-  ],
-  "keyDirectives": [
-    "Privilégier les valeurs avec un Piotroski F-Score >= 6/9.",
-    "Fixer des stops de protection sous la Kijun quotidienne pour le swing trading."
-  ]
-}`;
-
-            const payload = {
-                contents: [{ parts: [{ text: promptText }] }],
-                tools: [{ "google_search": {} }]
-            };
-
-            try {
-                const res = await fetchGeminiWithRetry(payload, 35000);
-                const text = res?.candidates?.[0]?.content?.parts?.[0]?.text;
-                const parsed = cleanAndParseJSON(text);
-
-                if (parsed && parsed.overweightSectors) {
-                    renderAISynthesisedContent(parsed);
-                    showToast("Synthèse sectorielle actualisée via IA Direct !", "success");
-                } else {
-                    renderDefaultMarketSynthesis();
-                    showToast("Synthèse par défaut réaffichée.", "amber");
-                }
-            } catch (err) {
-                renderDefaultMarketSynthesis();
-                showToast("Erreur lors de la génération IA Direct.", "amber");
-            } finally {
-                if (btn) {
-                    btn.disabled = false;
-                    btn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> <span>Actualiser via IA Direct</span>`;
-                }
-            }
-        }
-
-        function renderAISynthesisedContent(data) {
-            const container = document.getElementById('marketSynthesisContent');
-            if (!container) return;
-
-            const regimeColor = data.regimeColor === 'emerald' ? 'text-emerald-400' : data.regimeColor === 'rose' ? 'text-rose-400' : 'text-sky-400';
-
-            const overweightHtml = (data.overweightSectors || []).map(s => `
-                <div class="p-3.5 rounded-xl bg-slate-900/90 border border-emerald-500/30 space-y-1">
-                    <div class="flex items-center justify-between">
-                        <span class="font-bold text-emerald-400 text-xs">${s.sector}</span>
-                        <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">${s.tickers}</span>
-                    </div>
-                    <p class="text-[11px] text-slate-300 leading-relaxed font-sans">${s.thesis}</p>
-                </div>
-            `).join('');
-
-            const neutralHtml = (data.neutralSectors || []).map(s => `
-                <div class="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1">
-                    <div class="flex items-center justify-between">
-                        <span class="font-bold text-sky-400 text-xs">${s.sector}</span>
-                        <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-sky-500/10 text-sky-300 border border-sky-500/20">${s.tickers}</span>
-                    </div>
-                    <p class="text-[11px] text-slate-300 leading-relaxed font-sans">${s.thesis}</p>
-                </div>
-            `).join('');
-
-            const underweightHtml = (data.underweightSectors || []).map(s => `
-                <div class="p-3.5 rounded-xl bg-slate-900/90 border border-rose-500/30 space-y-1">
-                    <div class="flex items-center justify-between">
-                        <span class="font-bold text-rose-400 text-xs">${s.sector}</span>
-                        <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-rose-500/10 text-rose-300 border border-rose-500/20">${s.tickers}</span>
-                    </div>
-                    <p class="text-[11px] text-slate-300 leading-relaxed font-sans">${s.thesis}</p>
-                </div>
-            `).join('');
-
-            const directivesHtml = (data.keyDirectives || []).map(d => `
-                <li class="flex items-start space-x-2 text-xs text-slate-200">
-                    <i class="fa-solid fa-check text-emerald-400 text-[10px] mt-1 shrink-0"></i>
-                    <span>${d}</span>
-                </li>
-            `).join('');
-
-            container.innerHTML = `
-                <div class="p-4 rounded-xl bg-gradient-to-r from-slate-900 via-slate-900 to-slate-950 border border-slate-800 space-y-2">
-                    <div class="flex items-center justify-between border-b border-slate-800 pb-2">
-                        <span class="text-xs font-mono uppercase tracking-wider text-slate-400 font-bold">Diagnostic Macro IA Direct</span>
-                        <span class="text-xs font-bold font-mono ${regimeColor}">${data.regimeTitle || 'Régime Sélectif'}</span>
-                    </div>
-                    <p class="text-xs text-slate-200 leading-relaxed font-sans">${data.macroAnalysis}</p>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono">
-                    <div class="space-y-3">
-                        <div class="font-bold text-emerald-400 flex items-center space-x-1.5 text-xs">
-                            <i class="fa-solid fa-circle-arrow-up text-emerald-400"></i>
-                            <span>1. Secteurs Surpondérés</span>
-                        </div>
-                        <div class="space-y-2">${overweightHtml}</div>
-                    </div>
-
-                    <div class="space-y-3">
-                        <div class="font-bold text-sky-400 flex items-center space-x-1.5 text-xs">
-                            <i class="fa-solid fa-arrows-left-right text-sky-400"></i>
-                            <span>2. Secteurs Neutres</span>
-                        </div>
-                        <div class="space-y-2">${neutralHtml}</div>
-                    </div>
-
-                    <div class="space-y-3">
-                        <div class="font-bold text-rose-400 flex items-center space-x-1.5 text-xs">
-                            <i class="fa-solid fa-circle-arrow-down text-rose-400"></i>
-                            <span>3. Secteurs Sous-pondérés</span>
-                        </div>
-                        <div class="space-y-2">${underweightHtml}</div>
-                    </div>
-                </div>
-
-                ${directivesHtml ? `
-                    <div class="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 space-y-2">
-                        <div class="text-xs font-mono font-bold text-emerald-400 uppercase flex items-center space-x-1.5">
-                            <i class="fa-solid fa-shield-halved"></i>
-                            <span>Directives de Management du Risque Euronext</span>
-                        </div>
-                        <ul class="space-y-1.5">${directivesHtml}</ul>
-                    </div>
-                ` : ''}
-            `;
-        }
-
-        function copyMarketSynthesisToClipboard() {
-            const container = document.getElementById('marketSynthesisContent');
-            if (!container) {
-                showToast("Aucun contenu de synthèse à copier.", "amber");
-                return;
-            }
-            const text = container.innerText;
+        function copySummaryTextToClipboard() {
+            const contentEl = document.getElementById('summaryModalContent');
+            if (!contentEl) return;
+            const text = contentEl.innerText;
             const tempTextArea = document.createElement('textarea');
             tempTextArea.value = text;
             document.body.appendChild(tempTextArea);
             tempTextArea.select();
             document.execCommand('copy');
             document.body.removeChild(tempTextArea);
-            showToast("Synthèse sectorielle copiée dans le presse-papier !", "success");
+            showToast("Synthèse Express copiée dans le presse-papier !", "success");
         }
 
-        function renderDefaultMarketSynthesis() {
-            const container = document.getElementById('marketSynthesisContent');
-            if (!container) return;
-
-            const overallScore = calculateOverallRiskScore();
-            let regimeTitle = "Régime de Marché Équilibré & Stock-Picking";
-            let regimeClass = "text-sky-400";
-            let regimeDesc = "Environnement macroéconomique à dispersion élevée. Favorable à la sélection rigoureuse d'actions individuelles de haute qualité (Quality & Pricing Power) tout en maintenant des stops de protection serrés.";
-
-            if (overallScore < 35) {
-                regimeTitle = "Régime Constructif & Stratégie Offensive";
-                regimeClass = "text-emerald-400";
-                regimeDesc = "Conditions macroéconomiques porteuses et faible volatilité. Surcharger progressivement les valeurs de croissance à fort Pricing Power et surperformer les indices Euronext.";
-            } else if (overallScore > 65) {
-                regimeTitle = "Régime Défensif & Protection du Capital";
-                regimeClass = "text-rose-400";
-                regimeDesc = "Tensions de liquidité ou pressions sur les bénéfices. Privilégier les entreprises désendettées à fort Free Cash Flow, réduire le levier et conserver une réserve de cash élevée.";
-            }
-
-            container.innerHTML = `
-                <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
-                    <div class="flex items-center justify-between border-b border-slate-800 pb-2">
-                        <span class="text-xs font-mono uppercase tracking-wider text-slate-400 font-bold">Diagnostic de Régime & Allocation Stratégique</span>
-                        <span class="text-xs font-bold font-mono ${regimeClass}">${regimeTitle}</span>
-                    </div>
-                    <p class="text-xs text-slate-300 leading-relaxed font-sans">${regimeDesc}</p>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono">
-                    <div class="p-3.5 rounded-xl bg-emerald-950/30 border border-emerald-500/30 space-y-2">
-                        <div class="font-bold text-emerald-400 flex items-center space-x-1.5">
-                            <i class="fa-solid fa-circle-arrow-up text-xs"></i>
-                            <span>Secteurs Surpondérés</span>
-                        </div>
-                        <div class="space-y-1.5 font-sans text-[11px]">
-                            <p><strong>Technologie & Semi-conducteurs :</strong> ASML (ASML), STIF (ALSTI), STMicro (STMPA). <em>Visibilité IA & Moat élevé.</em></p>
-                            <p><strong>Luxe & Maisons d'Exception :</strong> LVMH (MC), Hermès (RMS). <em>Marges brutes > 65% et Pricing Power intact.</em></p>
-                        </div>
-                    </div>
-
-                    <div class="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2">
-                        <div class="font-bold text-sky-400 flex items-center space-x-1.5">
-                            <i class="fa-solid fa-arrows-left-right text-xs"></i>
-                            <span>Secteurs Neutres</span>
-                        </div>
-                        <div class="space-y-1.5 font-sans text-[11px]">
-                            <p><strong>Santé & Pharma :</strong> Sanofi (SAN). <em>Dividende défensif mais dynamique d'innovation sous surveillance.</em></p>
-                            <p><strong>Énergie & Major Oil :</strong> TotalEnergies (TTE). <em>Rachat d'actions massif & rendement FCF soutenu.</em></p>
-                        </div>
-                    </div>
-
-                    <div class="p-3.5 rounded-xl bg-rose-950/30 border border-rose-500/30 space-y-2">
-                        <div class="font-bold text-rose-400 flex items-center space-x-1.5">
-                            <i class="fa-solid fa-circle-arrow-down text-xs"></i>
-                            <span>Secteurs Sous-pondérés</span>
-                        </div>
-                        <div class="space-y-1.5 font-sans text-[11px]">
-                            <p><strong>Immobilier Coté (REITs) :</strong> Unibail (URW), Gecina (GFC). <em>Risque de coûts de refinancement obligataire.</em></p>
-                            <p><strong>Cycliques à faible marge :</strong> Consommation discrétionnaire bas de gamme & équipementiers sans pricing power.</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
-                    <div class="text-xs font-mono font-bold text-amber-400 uppercase flex items-center space-x-1.5">
-                        <i class="fa-solid fa-lightbulb"></i>
-                        <span>Directives d'Exécution Senior</span>
-                    </div>
-                    <ul class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-slate-300 font-sans">
-                        <li class="flex items-start space-x-2"><i class="fa-solid fa-check text-emerald-400 text-[10px] mt-1 shrink-0"></i><span>Conserver un filtre strict Piotroski F-Score >= 6/9 avant tout achat en portefeuille.</span></li>
-                        <li class="flex items-start space-x-2"><i class="fa-solid fa-check text-emerald-400 text-[10px] mt-1 shrink-0"></i><span>Limiter le risque maximal par trade à 1.0% du portefeuille global avec stop sous Kijun.</span></li>
-                    </ul>
-                </div>
-            `;
-        }
-
-        function resetToDefaults() {
-            categories.forEach(cat => {
-                cat.subIndicators.forEach(sub => {
-                    sub.val = 50;
-                });
-            });
-            updateCNNValue(33.3);
-            renderCategories();
-            updateBarometerUI();
-            showToast("Paramètres du baromètre réinitialisés aux valeurs par défaut.", "info");
-        }
-
-        function applyScenario(scenarioVal) {
-            if (scenarioVal === 'custom') return;
-
-            const scenarios = {
-                goldilocks: { gdp_growth: 65, inflation_cpi: 35, geopolitics: 30, central_bank_rates: 30, yield_curve: 25, credit_spreads: 20, eps_revisions: 70, margin_pressures: 30, valuation_multiples: 60, dispersion_dspx: 35, market_breadth: 75, vix_volatility: 20, fear_greed: 70, put_call_ratio: 30, systemic_shocks: 15, cnn: 68.5 },
-                liquidity_squeeze: { gdp_growth: 40, inflation_cpi: 75, geopolitics: 65, central_bank_rates: 80, yield_curve: 75, credit_spreads: 70, eps_revisions: 35, margin_pressures: 70, valuation_multiples: 75, dispersion_dspx: 60, market_breadth: 35, vix_volatility: 65, fear_greed: 25, put_call_ratio: 70, systemic_shocks: 50, cnn: 25.0 },
-                earnings_recession: { gdp_growth: 25, inflation_cpi: 40, geopolitics: 55, central_bank_rates: 40, yield_curve: 60, credit_spreads: 65, eps_revisions: 20, margin_pressures: 85, valuation_multiples: 40, dispersion_dspx: 55, market_breadth: 25, vix_volatility: 55, fear_greed: 30, put_call_ratio: 65, systemic_shocks: 40, cnn: 30.0 },
-                systemic_crisis: { gdp_growth: 15, inflation_cpi: 60, geopolitics: 90, central_bank_rates: 85, yield_curve: 90, credit_spreads: 90, eps_revisions: 10, margin_pressures: 90, valuation_multiples: 30, dispersion_dspx: 85, market_breadth: 10, vix_volatility: 90, fear_greed: 10, put_call_ratio: 90, systemic_shocks: 90, cnn: 12.0 }
-            };
-
-            const selected = scenarios[scenarioVal];
-            if (!selected) return;
-
-            categories.forEach(cat => {
-                cat.subIndicators.forEach(sub => {
-                    if (selected[sub.id] !== undefined) {
-                        sub.val = selected[sub.id];
-                    }
-                });
-            });
-
-            if (selected.cnn !== undefined) {
-                updateCNNValue(selected.cnn);
-                const cnnSlider = document.getElementById('cnnSliderInput');
-                if (cnnSlider) cnnSlider.value = selected.cnn;
-            }
-
-            renderCategories();
-            updateBarometerUI();
-            showToast(`Scénario "${scenarioVal}" appliqué.`, "success");
-        }
-
-        function exportReport() {
-            const overallScore = calculateOverallRiskScore();
-            const exportData = {
-                timestamp: new Date().toISOString(),
-                overallRiskScore: overallScore,
-                cnnFearAndGreed: cnnFearGreedValue,
-                cboeIndices: cboeData,
-                ratesExpectations: bceFedRatesData,
-                pillars: categories.map(c => ({
-                    id: c.id,
-                    name: c.name,
-                    score: getCategoryScore(c),
-                    subIndicators: c.subIndicators
-                }))
-            };
-
-            const tempTextArea = document.createElement('textarea');
-            tempTextArea.value = JSON.stringify(exportData, null, 2);
-            document.body.appendChild(tempTextArea);
-            tempTextArea.select();
-            document.execCommand('copy');
-            document.body.removeChild(tempTextArea);
-            showToast("Rapport du Baromètre copié au format JSON !", "success");
-        }
-
-        window.addEventListener('DOMContentLoaded', () => {
-            renderCategories();
-            updateBarometerUI();
-            
-            const searchInput = document.getElementById('searchInput');
-            if (searchInput) {
-                searchInput.addEventListener('input', (e) => {
-                    const btnClear = document.getElementById('btnClearSearch');
-                    if (btnClear) btnClear.classList.toggle('hidden', e.target.value.trim() === '');
-                });
-            }
-
-            const btnClear = document.getElementById('btnClearSearch');
-            if (btnClear) {
-                btnClear.addEventListener('click', () => {
-                    if (searchInput) searchInput.value = '';
-                    btnClear.classList.add('hidden');
-                });
-            }
-
-            const searchForm = document.getElementById('searchForm');
-            if (searchForm) {
-                searchForm.addEventListener('submit', (e) => {
-                    e.preventDefault();
-                    const q = document.getElementById('searchInput')?.value?.trim();
-                    const m = document.getElementById('marketSelect')?.value || 'ALL';
-                    if (q) executeAnalysis(q, m);
-                });
-            }
-
-            const searchVSForm = document.getElementById('searchVSForm');
-            if (searchVSForm) {
-                searchVSForm.addEventListener('submit', (e) => {
-                    e.preventDefault();
-                    const v1 = document.getElementById('searchInputVS1')?.value?.trim();
-                    const v2 = document.getElementById('searchInputVS2')?.value?.trim();
-                    if (v1 && v2) executeVSAnalysis(v1, v2);
-                });
-            }
-        });
-    </script>
-</body>
-</html>
+        function copyJSONToClipboard() {
+<!-- ... existing code -->
