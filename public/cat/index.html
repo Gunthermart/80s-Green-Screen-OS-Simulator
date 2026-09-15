@@ -1,0 +1,1521 @@
+Voici la conception et le code complet du simulateur de vie féline (**Cat Life Simulator**), conçu selon les principes de l'IA comportementale émergente, d'une modélisation physiologique dynamique et d'une esthétique soignée en HTML5 / JavaScript Vanilla.
+
+---
+
+### Synthèse de l'Architecture & Graphe d'États
+
+#### 1. Structure Modulaire des Classes
+* **`SoundEngine`** : Synthétiseur procédural basé sur l'API Web Audio (LFOs à 25–50 Hz pour le ronronnement respiratoire, modulateurs de fréquence pour les miaulements et filtres passe-bande pour le sifflement d'agression).
+* **`MemoryBank`** : Répertoire de traces synaptiques associant des stimuli sensoriels (`KIBBLE_SOUND`, `VACUUM_NOISE`, `FEATHER`, `BOX`) à une valence émotionnelle (+/-) et un niveau de stress contextuel sujet à dégradation temporelle.
+* **`InteractiveObject` & `Platform`** : Gestion de l'environnement physique étagé (Sol, Canapé, Arbre à chat, Haut du réfrigérateur), du marquage en phéromones (frottements), des boîtes en carton et des objets renversables testant la gravité.
+* **`CatBrain` (Utility AI & HFSM)** : Moteur décisionnel calculant les utilités d'action à chaque cycle cognitif en pondérant besoins vitaux, attracteurs environnementaux (boîte > tout le reste, rayon de soleil) et le ratio d'**Obstination**.
+* **`Cat`** : Agent dynamique autonome (cinématique, cinématique inverse pour la queue, squelette procédural en Canvas 2D, pupilles adaptatives selon l'éclairage et l'excitation sensorielle).
+* **`SimulationEngine` & `UIController`** : Boucle de jeu (60 FPS avec delta-time), cycle circadien jour/nuit avec trajectoire thermique solaire, post-processing Canvas ("Vision Féline") et journal satirique de sous-titrage comportemental.
+
+```
+                  ┌──────────────────────────────────────────────┐
+                  │          Moteur Décisionnel Félin            │
+                  │   (Utility AI : Besoins & Obstination)       │
+                  └──────────────────────┬───────────────────────┘
+                                         │
+        ┌────────────────────┬───────────┴───────────┬───────────────────┐
+        ▼                    ▼                       ▼                   ▼
+┌──────────────┐     ┌──────────────┐        ┌──────────────┐    ┌──────────────┐
+│  REPOS /     │     │ NOURRITURE / │        │ JEU / CHASSE │    │   CHAOS &    │
+│  THERMIE     │     │ PHÉROMONES   │        │ STIMULATION  │    │ SOUVERAINETÉ │
+└───────┬──────┘     └───────┬──────┘        └───────┬──────┘    └───────┬──────┘
+        │                    │                       │                   │
+  [Sunbath]            [EatBowl]               [StalkFly]          [GravityTest]
+  [SleepOnFridge]      [RubFurniture]          [PounceFeather]     [OverdoseBite]
+  [BoxParadox]         [DigLitter]             [CrazyZoomies]      [IgnoreHuman]
+```
+
+---
+
+### Code Source Complet (`index.html`)
+
+Enregistrez ce code dans un fichier `index.html` et ouvrez-le directement dans n'importe quel navigateur moderne.
+
+```html
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simulateur de Vie Féline - Autonomous AI</title>
+<style>
+  :root {
+    --bg-primary: #12131a;
+    --bg-secondary: #1a1c26;
+    --panel-bg: rgba(28, 31, 46, 0.85);
+    --accent: #e07a5f;
+    --accent-glow: rgba(224, 122, 95, 0.4);
+    --sun: #f4a261;
+    --cyan-vision: #00f0ff;
+    --text-main: #f1f2f6;
+    --text-dim: #8b8ea2;
+    --font-mono: 'Consolas', 'Courier New', monospace;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+  body {
+    background-color: var(--bg-primary);
+    color: var(--text-main);
+    font-family: var(--font-sans);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    background: var(--bg-secondary);
+    padding: 8px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+
+  .title-group { display: flex; align-items: center; gap: 12px; }
+  .title-group h1 { font-size: 1.1rem; font-weight: 700; letter-spacing: 0.5px; }
+  .time-badge {
+    background: rgba(0,0,0,0.4);
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    color: var(--sun);
+  }
+
+  .header-actions { display: flex; gap: 10px; }
+  .toggle-btn {
+    background: #282c3f;
+    border: 1px solid rgba(255,255,255,0.15);
+    color: var(--text-main);
+    padding: 5px 12px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .toggle-btn.active {
+    background: #194347;
+    border-color: var(--cyan-vision);
+    color: var(--cyan-vision);
+    box-shadow: 0 0 10px rgba(0, 240, 255, 0.3);
+  }
+
+  #main-viewport {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    grid-template-rows: 1fr 210px;
+    gap: 12px;
+    padding: 12px;
+    height: calc(100vh - 48px);
+  }
+
+  .canvas-container {
+    grid-column: 1 / 2;
+    grid-row: 1 / 2;
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+    border: 1px solid rgba(255,255,255,0.05);
+  }
+
+  canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  /* Panneau Statistiques & Jauges */
+  .stats-panel {
+    grid-column: 2 / 3;
+    grid-row: 1 / 2;
+    background: var(--panel-bg);
+    backdrop-filter: blur(8px);
+    border-radius: 8px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    border: 1px solid rgba(255,255,255,0.06);
+    overflow-y: auto;
+  }
+
+  .panel-title {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: var(--text-dim);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    padding-bottom: 4px;
+  }
+
+  .gauge-group { display: flex; flex-direction: column; gap: 8px; }
+  .gauge-row {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .gauge-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+  }
+  .gauge-track {
+    height: 7px;
+    background: rgba(0,0,0,0.5);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .gauge-fill {
+    height: 100%;
+    width: 50%;
+    border-radius: 4px;
+    transition: width 0.3s ease, background-color 0.3s ease;
+  }
+
+  .obstinacy-meter {
+    background: rgba(224, 122, 95, 0.1);
+    border: 1px dashed var(--accent);
+    padding: 8px;
+    border-radius: 6px;
+  }
+
+  /* Interaction Deck */
+  .action-deck {
+    grid-column: 1 / 2;
+    grid-row: 2 / 3;
+    background: var(--panel-bg);
+    border-radius: 8px;
+    padding: 12px;
+    border: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .action-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 8px;
+    height: 100%;
+  }
+
+  .cat-btn {
+    background: #252839;
+    border: 1px solid rgba(255,255,255,0.1);
+    color: var(--text-main);
+    border-radius: 6px;
+    cursor: pointer;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    font-size: 0.8rem;
+    transition: all 0.15s ease;
+  }
+  .cat-btn:hover {
+    background: #32364c;
+    border-color: var(--accent);
+    transform: translateY(-2px);
+  }
+  .cat-btn:active { transform: translateY(0); }
+  .cat-btn span.icon { font-size: 1.2rem; }
+
+  /* Journal de bord "Pensées Félines" */
+  .log-panel {
+    grid-column: 2 / 3;
+    grid-row: 2 / 3;
+    background: var(--panel-bg);
+    border-radius: 8px;
+    padding: 10px;
+    border: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .log-stream {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    padding-right: 4px;
+  }
+
+  .log-entry {
+    background: rgba(0,0,0,0.25);
+    padding: 6px 8px;
+    border-radius: 4px;
+    border-left: 3px solid var(--accent);
+    animation: fadeIn 0.2s ease forwards;
+  }
+  .log-entry.urgent { border-left-color: #ff3366; background: rgba(255, 51, 102, 0.1); }
+  .log-entry.purr { border-left-color: #4ade80; }
+  .log-entry.humor { border-left-color: #f59e0b; }
+  .log-time { color: var(--text-dim); margin-right: 6px; font-size: 0.7rem; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateX(-5px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  /* Scrollbars personnalisées */
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+  ::-webkit-scrollbar-thumb { background: #3b3e54; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title-group">
+    <h1>FELIS SIMULATOR // AI COMPORTEMENTALE</h1>
+    <div class="time-badge" id="hud-clock">03:00 AM</div>
+  </div>
+  <div class="header-actions">
+    <button class="toggle-btn" id="btn-vision-toggle">
+      <span>👁️ Vision Féline</span>
+    </button>
+    <button class="toggle-btn" id="btn-audio-toggle">
+      <span>🔊 Audio Activé</span>
+    </button>
+  </div>
+</header>
+
+<main id="main-viewport">
+  <div class="canvas-container">
+    <canvas id="simCanvas" width="960" height="540"></canvas>
+  </div>
+
+  <section class="stats-panel">
+    <div class="panel-title">Moteur Physiologique & Psychologique</div>
+    
+    <div class="obstinacy-meter">
+      <div class="gauge-label">
+        <span style="font-weight:600; color:var(--accent);">Obstination Féline</span>
+        <span id="txt-obstinacy" style="font-family:var(--font-mono)">65%</span>
+      </div>
+      <div class="gauge-track" style="margin-top:5px; height:9px;">
+        <div class="gauge-fill" id="fill-obstinacy" style="background:#e07a5f; width:65%;"></div>
+      </div>
+    </div>
+
+    <div class="gauge-group">
+      <div class="gauge-row">
+        <div class="gauge-label"><span>Faim</span><span id="txt-hunger">30%</span></div>
+        <div class="gauge-track"><div class="gauge-fill" id="fill-hunger" style="background:#f4a261;"></div></div>
+      </div>
+      <div class="gauge-row">
+        <div class="gauge-label"><span>Énergie</span><span id="txt-energy">85%</span></div>
+        <div class="gauge-track"><div class="gauge-fill" id="fill-energy" style="background:#2a9d8f;"></div></div>
+      </div>
+      <div class="gauge-row">
+        <div class="gauge-label"><span>Propreté</span><span id="txt-hygiene">90%</span></div>
+        <div class="gauge-track"><div class="gauge-fill" id="fill-hygiene" style="background:#4ea8de;"></div></div>
+      </div>
+      <div class="gauge-row">
+        <div class="gauge-label"><span>Stimulation Cognitive</span><span id="txt-stimulation">40%</span></div>
+        <div class="gauge-track"><div class="gauge-fill" id="fill-stimulation" style="background:#9d4edd;"></div></div>
+      </div>
+      <div class="gauge-row">
+        <div class="gauge-label"><span>Affection / Bien-être</span><span id="txt-affection">70%</span></div>
+        <div class="gauge-track"><div class="gauge-fill" id="fill-affection" style="background:#ff758f;"></div></div>
+      </div>
+    </div>
+
+    <div class="panel-title" style="margin-top:8px;">Registre d'États & Territoire</div>
+    <div style="font-size:0.75rem; color:var(--text-dim); display:flex; flex-direction:column; gap:4px;">
+      <div>État Actuel : <strong id="lbl-current-state" style="color:var(--text-main);">SOMMEIL</strong></div>
+      <div>Surface Active : <strong id="lbl-current-surface" style="color:var(--text-main);">Sol</strong></div>
+      <div>Phéromones Locales : <strong id="lbl-pheromones" style="color:#4ade80;">Optimales (84%)</strong></div>
+    </div>
+  </section>
+
+  <section class="action-deck">
+    <div class="panel-title">Commandes Utilisateur & Événements</div>
+    <div class="action-grid">
+      <button class="cat-btn" id="act-food">
+        <span class="icon">🥫</span>
+        <span>Secouer Croquettes</span>
+      </button>
+      <button class="cat-btn" id="act-feather">
+        <span class="icon">🪶</span>
+        <span>Agiter Plumet</span>
+      </button>
+      <button class="cat-btn" id="act-pet">
+        <span class="icon">✋</span>
+        <span>Tenter Caresse</span>
+      </button>
+      <button class="cat-btn" id="act-call">
+        <span class="icon">🗣️</span>
+        <span>Appeler le Chat</span>
+      </button>
+      <button class="cat-btn" id="act-vacuum">
+        <span class="icon">🧹</span>
+        <span>Aspirateur (Chaos)</span>
+      </button>
+      <button class="cat-btn" id="act-litter">
+        <span class="icon">✨</span>
+        <span>Nettoyer Litière</span>
+      </button>
+      <button class="cat-btn" id="act-spawn-toy">
+        <span class="icon">📦</span>
+        <span>Acheter Cadeau Luxe</span>
+      </button>
+      <button class="cat-btn" id="act-fly">
+        <span class="icon">🪰</span>
+        <span>Lâcher Mouche</span>
+      </button>
+    </div>
+  </section>
+
+  <section class="log-panel">
+    <div class="panel-title">Traducteur de Pensées Félines</div>
+    <div class="log-stream" id="log-container"></div>
+  </section>
+</main>
+
+<script>
+/**
+ * FELIS SIMULATOR - ARCHITECTURE PRINCIPALE
+ * Moteur physique 2D, IA Hybride (Utility AI / HFSM), Synthèse Sonore Web Audio
+ */
+
+// ==========================================
+// 1. MODULE WEB AUDIO PROCEDURAL (Purr & Meows)
+// ==========================================
+class SoundEngine {
+  constructor() {
+    this.ctx = null;
+    this.isMuted = false;
+    this.purrOsc1 = null;
+    this.purrOsc2 = null;
+    this.purrGain = null;
+    this.isPurring = false;
+  }
+
+  init() {
+    if (this.ctx) return;
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    this.ctx = new AudioContext();
+    this.setupPurrSynthesizer();
+  }
+
+  setupPurrSynthesizer() {
+    if (!this.ctx) return;
+    this.purrGain = this.ctx.createGain();
+    this.purrGain.gain.setValueAtTime(0, this.ctx.currentTime);
+
+    // Osc 1 : Fréquence fondamentale du ronronnement félin (26-29 Hz)
+    this.purrOsc1 = this.ctx.createOscillator();
+    this.purrOsc1.type = 'sawtooth';
+    this.purrOsc1.frequency.setValueAtTime(27.5, this.ctx.currentTime);
+
+    // Osc 2 : Harmonique respiratoire
+    this.purrOsc2 = this.ctx.createOscillator();
+    this.purrOsc2.type = 'sine';
+    this.purrOsc2.frequency.setValueAtTime(55, this.ctx.currentTime);
+
+    // Modulateur d'amplitude LFO (rythme respiratoire du ronronnement à ~1.8 Hz)
+    const lfo = this.ctx.createOscillator();
+    lfo.frequency.setValueAtTime(1.8, this.ctx.currentTime);
+    const lfoGain = this.ctx.createGain();
+    lfoGain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+
+    // Filtre coupe-bas pour étouffer le son (ronronnement corporel interne)
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(120, this.ctx.currentTime);
+
+    lfo.connect(lfoGain.gain);
+    this.purrOsc1.connect(filter);
+    this.purrOsc2.connect(filter);
+    filter.connect(this.purrGain);
+    this.purrGain.connect(this.ctx.destination);
+
+    this.purrOsc1.start();
+    this.purrOsc2.start();
+    lfo.start();
+  }
+
+  setPurr(active) {
+    if (!this.ctx || this.isMuted) return;
+    if (active === this.isPurring) return;
+    this.isPurring = active;
+    const target = active ? 0.25 : 0;
+    this.purrGain.gain.setTargetAtTime(target, this.ctx.currentTime, 0.4);
+  }
+
+  playMeow(pitchMultiplier = 1.0, length = 0.35) {
+    if (!this.ctx || this.isMuted) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'triangle';
+    const baseFreq = 480 * pitchMultiplier;
+    
+    // Modulation de voyelle féline (glissando ascendant puis descendant)
+    osc.frequency.setValueAtTime(baseFreq, this.ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.6, this.ctx.currentTime + length * 0.4);
+    osc.frequency.exponentialRampToValueAtTime(baseFreq * 0.8, this.ctx.currentTime + length);
+
+    gain.gain.setValueAtTime(0.01, this.ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.2, this.ctx.currentTime + length * 0.2);
+    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + length);
+
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start();
+    osc.stop(this.ctx.currentTime + length);
+  }
+
+  playHiss() {
+    if (!this.ctx || this.isMuted) return;
+    // Bruit blanc filtré pour simuler le crachat / sifflement
+    const bufferSize = this.ctx.sampleRate * 0.4;
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    const noise = this.ctx.createBufferSource();
+    noise.buffer = buffer;
+
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(3200, this.ctx.currentTime);
+    filter.Q.setValueAtTime(3, this.ctx.currentTime);
+
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.25, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.4);
+
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.ctx.destination);
+    noise.start();
+  }
+
+  playCrash() {
+    if (!this.ctx || this.isMuted) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(120, this.ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(30, this.ctx.currentTime + 0.25);
+
+    gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.3);
+
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start();
+    osc.stop(this.ctx.currentTime + 0.3);
+  }
+}
+
+// ==========================================
+// 2. MATHS, VECTEURS ET MEMOIRE CONTEXTUELLE
+// ==========================================
+class Vec2 {
+  constructor(x = 0, y = 0) { this.x = x; this.y = y; }
+  set(x, y) { this.x = x; this.y = y; return this; }
+  dist(v) { return Math.hypot(this.x - v.x, this.y - v.y); }
+  lerp(v, alpha) { this.x += (v.x - this.x) * alpha; this.y += (v.y - this.y) * alpha; return this; }
+}
+
+class MemoryBank {
+  constructor() {
+    // Traces associatives : Stimulus -> { valence: -1..1, intensity: 0..1, decayRate }
+    this.engrams = new Map();
+    this.anxiousZones = []; // Positions X où l'aspirateur a terrorisé le sujet
+  }
+
+  recordStimulus(type, valence, intensity = 1.0) {
+    this.engrams.set(type, {
+      valence, // Positif (nourriture) ou Négatif (trauma aspirateur)
+      intensity,
+      timestamp: Date.now()
+    });
+  }
+
+  getStimulusResponse(type) {
+    const memory = this.engrams.get(type);
+    if (!memory) return 0;
+    const ageSeconds = (Date.now() - memory.timestamp) / 1000;
+    const factor = Math.max(0, 1 - (ageSeconds / 60)); // Oubli progressif en 1 minute
+    return memory.valence * memory.intensity * factor;
+  }
+
+  markAnxiousZone(x) {
+    this.anxiousZones.push({ x, radius: 140, strength: 1.0, created: Date.now() });
+  }
+
+  update(dt) {
+    const now = Date.now();
+    this.anxiousZones = this.anxiousZones.filter(z => (now - z.created) < 45000);
+  }
+
+  getFearAt(x) {
+    let fear = 0;
+    for (const z of this.anxiousZones) {
+      const d = Math.abs(x - z.x);
+      if (d < z.radius) {
+        fear += (1 - d / z.radius);
+      }
+    }
+    return Math.min(1.0, fear);
+  }
+}
+
+// ==========================================
+// 3. SURFACES & OBJETS DU MONDE INTERACTIF
+// ==========================================
+class Platform {
+  constructor(id, name, x1, x2, y, heightLevel = 0, comfort = 1.0) {
+    this.id = id;
+    this.name = name;
+    this.x1 = x1;
+    this.x2 = x2;
+    this.y = y;
+    this.heightLevel = heightLevel; // 0: sol, 1: canapé, 2: étagère/arbre, 3: frigo
+    this.comfort = comfort;
+    this.pheromoneLevel = 0.5; // 0 à 1 (se dégrade avec le temps)
+  }
+
+  containsX(x) { return x >= this.x1 && x <= this.x2; }
+}
+
+class KnockableObject {
+  constructor(name, x, y, parentPlatform) {
+    this.name = name;
+    this.pos = new Vec2(x, y);
+    this.velocity = new Vec2(0, 0);
+    this.platform = parentPlatform;
+    this.isFalling = false;
+    this.isBroken = false;
+    this.width = 16;
+    this.height = 24;
+  }
+
+  update(dt, floorY, soundEngine) {
+    if (this.isBroken) return;
+
+    if (this.isFalling) {
+      this.velocity.y += 980 * dt; // Gravité
+      this.pos.x += this.velocity.x * dt;
+      this.pos.y += this.velocity.y * dt;
+
+      if (this.pos.y >= floorY - this.height) {
+        this.pos.y = floorY - this.height;
+        this.isFalling = false;
+        this.isBroken = true;
+        soundEngine.playCrash();
+        return true; // Événement bris d'objet
+      }
+    }
+    return false;
+  }
+}
+
+// ==========================================
+// 4. AGENT FELIN : PHYSIOLOGIE ET LOGIQUE
+// ==========================================
+class Cat {
+  constructor(canvasWidth, canvasHeight, soundEngine) {
+    this.sound = soundEngine;
+    this.pos = new Vec2(200, 460);
+    this.vel = new Vec2(0, 0);
+    this.targetPos = new Vec2(200, 460);
+    this.facing = 1; // 1: droite, -1: gauche
+    this.currentPlatform = null;
+    this.state = 'SLEEP';
+    this.stateTimer = 0;
+
+    // Jauges Physiologiques (0 à 100)
+    this.hunger = 30;
+    this.energy = 85;
+    this.hygiene = 90;
+    this.stimulation = 40;
+    this.affection = 65;
+    this.obstinacy = 60; // Tempérament indépendant
+
+    // Cerveau et Mémoire
+    this.memory = new MemoryBank();
+
+    // Rendu Visuel Procédural
+    this.tailAngle = 0;
+    this.tailPhase = 0;
+    this.pupilDilation = 0.3; // 0.1 (fente) à 1.0 (zoomies / obscurité)
+    this.purrWaveRadius = 0;
+    this.isGrooming = false;
+    this.gravityVictim = null; // Objet ciblé pour le "Gravity Test"
+
+    // Paramètres cinématiques
+    this.speed = 120;
+    this.isJumping = false;
+    this.jumpProgress = 0;
+    this.jumpOrigin = new Vec2();
+    this.jumpTarget = new Vec2();
+  }
+
+  updateGauges(dt) {
+    this.hunger = Math.min(100, this.hunger + dt * 0.9);
+    this.hygiene = Math.max(0, this.hygiene - dt * 0.4);
+
+    // Dégradation de l'énergie selon l'activité
+    if (this.state === 'SLEEP') {
+      this.energy = Math.min(100, this.energy + dt * 2.8);
+      this.sound.setPurr(this.affection > 50);
+    } else if (this.state === 'ZOOMIES') {
+      this.energy = Math.max(0, this.energy - dt * 7.0);
+      this.sound.setPurr(false);
+    } else {
+      this.energy = Math.max(0, this.energy - dt * 0.6);
+      this.sound.setPurr(false);
+    }
+
+    // Perte naturelle de stimulation
+    this.stimulation = Math.max(0, this.stimulation - dt * 0.8);
+
+    // Fluctuation d'obstination selon l'état interne
+    if (this.hunger > 70) this.obstinacy = Math.max(20, this.obstinacy - dt * 1.5);
+    else this.obstinacy = Math.min(95, this.obstinacy + dt * 0.2);
+  }
+
+  jumpTo(x, y, targetPlatform) {
+    this.isJumping = true;
+    this.jumpProgress = 0;
+    this.jumpOrigin.set(this.pos.x, this.pos.y);
+    this.jumpTarget.set(x, y);
+    this.currentPlatform = targetPlatform;
+    this.facing = x > this.pos.x ? 1 : -1;
+  }
+}
+
+// ==========================================
+// 5. ENVIRONNEMENT, CYCLES & SCÉNOGRAPHIE
+// ==========================================
+class Environment {
+  constructor(width, height) {
+    this.width = width;
+    this.height = height;
+    this.floorY = 460;
+
+    // Définition topologique des hauteurs
+    this.platforms = [
+      new Platform('floor', 'Sol Carrelé', 0, width, this.floorY, 0, 0.4),
+      new Platform('sofa', 'Canapé Velours', 80, 280, 390, 1, 0.9),
+      new Platform('cat_tree_mid', 'Arbre à Chat (Palier)', 740, 880, 300, 2, 0.85),
+      new Platform('cat_tree_top', 'Arbre à Chat (Sommet)', 770, 870, 170, 3, 1.0),
+      new Platform('fridge', 'Haut du Frigo', 380, 520, 200, 3, 0.95)
+    ];
+
+    // Objets interactifs
+    this.kibbleBowlLevel = 0.5; // 0.0 (vide) à 1.0 (plein)
+    this.litterDirtiness = 0.1;
+    this.cardboardBox = null;   // Généré dynamiquement (Paradoxe du Carton)
+    this.fly = null;            // Entité mouche chaotique
+    this.knockableGlass = new KnockableObject("Verre de collection", 495, 176, this.platforms[4]);
+
+    // Cycle Solaire & Thermique (180s pour un cycle complet)
+    this.dayTime = 3.0; // 03:00 (démarre la nuit pour le quart d'heure de folie)
+    this.sunPosition = -200; // Rayon de soleil balayant le sol
+  }
+
+  update(dt) {
+    // Évolution de l'horloge
+    this.dayTime = (this.dayTime + dt * 0.1) % 24;
+
+    // Déplacement dynamique du rayon de soleil (entre 08h et 18h)
+    if (this.dayTime >= 8 && this.dayTime <= 18) {
+      const sunRatio = (this.dayTime - 8) / 10;
+      this.sunPosition = 60 + sunRatio * 750;
+    } else {
+      this.sunPosition = -500; // Hors de la pièce
+    }
+
+    // Dégradation lente des phéromones de marquage
+    for (const p of this.platforms) {
+      p.pheromoneLevel = Math.max(0.05, p.pheromoneLevel - dt * 0.005);
+    }
+
+    // Physique de la mouche
+    if (this.fly) {
+      this.fly.x += (Math.random() - 0.5) * 350 * dt;
+      this.fly.y += (Math.random() - 0.5) * 350 * dt;
+      this.fly.x = Math.max(40, Math.min(this.width - 40, this.fly.x));
+      this.fly.y = Math.max(60, Math.min(this.floorY - 20, this.fly.y));
+      this.fly.life -= dt;
+      if (this.fly.life <= 0) this.fly = null;
+    }
+  }
+
+  getPlatformAt(x, y) {
+    for (let i = this.platforms.length - 1; i >= 0; i--) {
+      const p = this.platforms[i];
+      if (p.containsX(x) && Math.abs(y - p.y) < 15) return p;
+    }
+    return this.platforms[0];
+  }
+}
+
+// ==========================================
+// 6. MOTEUR COMPORTEMENTAL (Utility AI & Chaos)
+// ==========================================
+class Brain {
+  constructor(cat, env, soundEngine, uiLogger) {
+    this.cat = cat;
+    this.env = env;
+    this.sound = soundEngine;
+    this.log = uiLogger;
+    this.thinkTimer = 0;
+  }
+
+  evaluateAndDecide(dt) {
+    this.thinkTimer -= dt;
+    if (this.thinkTimer > 0) return;
+    this.thinkTimer = 1.0 + Math.random() * 0.8; // Cycle cognitif toutes les ~1.5s
+
+    const cat = this.cat;
+    const env = this.env;
+
+    // 1. DÉCLENCHEURS CHAOTIQUES PRIORITAIRES (Quart d'heure de folie)
+    if (cat.state !== 'ZOOMIES' && Math.floor(env.dayTime) === 3 && Math.random() < 0.45) {
+      this.startZoomies();
+      return;
+    }
+
+    // Si déjà en pleine folie, continuer la séquence
+    if (cat.state === 'ZOOMIES') return;
+
+    // 2. PARADOXE DU CARTON (Priorité Absolue sur tout meuble neuf)
+    if (env.cardboardBox && env.cardboardBox.unoccupied && cat.state !== 'BOX_CHILL') {
+      this.enterBoxParadox(env.cardboardBox);
+      return;
+    }
+
+    // 3. ATTRACTION THERMIQUE (Rayon de soleil traversant le sol)
+    if (env.sunPosition > 0 && cat.energy < 70 && cat.state !== 'SUNBATHE') {
+      const distToSun = Math.abs(cat.pos.x - env.sunPosition);
+      if (distToSun < 350 && Math.random() > 0.3) {
+        this.seekSunlight(env.sunPosition);
+        return;
+      }
+    }
+
+    // 4. TEST DE GRAVITÉ (Si un objet est au bord du vide en hauteur)
+    if (env.knockableGlass && !env.knockableGlass.isBroken && !env.knockableGlass.isFalling) {
+      if (cat.currentPlatform && cat.currentPlatform.heightLevel >= 2 && Math.random() < 0.25) {
+        this.startGravityTest(env.knockableGlass);
+        return;
+      }
+    }
+
+    // 5. CHASSE À LA MOUCHE (Stimulation visuelle impulsive)
+    if (env.fly && cat.state !== 'STALK_FLY') {
+      this.stalkFly();
+      return;
+    }
+
+    // 6. UTILITÉ PHYSIOLOGIQUE : FAIM
+    if (cat.hunger > 65) {
+      this.handleHungerDrive();
+      return;
+    }
+
+    // 7. BESOIN DE HAUTEUR & DE REPOS
+    if (cat.energy < 30) {
+      this.seekHighPerchAndSleep();
+      return;
+    }
+
+    // 8. HYGIÈNE & TOILETTE
+    if (cat.hygiene < 40 && cat.state !== 'GROOM') {
+      this.startGrooming();
+      return;
+    }
+
+    // 9. MARQUAGE DE TERRITOIRE (Phéromones basses)
+    if (cat.currentPlatform && cat.currentPlatform.pheromoneLevel < 0.2) {
+      this.markTerritory(cat.currentPlatform);
+      return;
+    }
+
+    // 10. FLÂNERIE ALÉATOIRE / CONTEMPLATION SOUVERAINE
+    this.idleWander();
+  }
+
+  // --- ACTIONS ET COMPORTEMENTS ---
+
+  startZoomies() {
+    this.cat.state = 'ZOOMIES';
+    this.cat.pupilDilation = 0.95;
+    this.log.add("PULSION PSYCHOMOTRICE DE 03:00 : Le continuum espace-temps s'effondre. Fuite frénétique requise !", "urgent");
+    this.sound.playMeow(1.8, 0.15);
+
+    let dashes = 0;
+    const runSequence = () => {
+      if (dashes++ > 6 || this.cat.energy < 15) {
+        this.cat.state = 'IDLE';
+        this.cat.pupilDilation = 0.3;
+        this.log.add("Fin du quart d'heure de démence. Dignité restaurée immédiatement.");
+        return;
+      }
+      const randomPlat = this.env.platforms[Math.floor(Math.random() * this.env.platforms.length)];
+      const targetX = randomPlat.x1 + Math.random() * (randomPlat.x2 - randomPlat.x1);
+      this.cat.jumpTo(targetX, randomPlat.y, randomPlat);
+      setTimeout(runSequence, 550);
+    };
+    runSequence();
+  }
+
+  enterBoxParadox(box) {
+    this.cat.state = 'APPROACH_BOX';
+    this.log.add("PARADOXE DU CARTON : Objet noble identifié. Priorité d'occupation : Maximale.", "humor");
+    this.moveTo(box.x, () => {
+      this.cat.state = 'BOX_CHILL';
+      box.unoccupied = false;
+      this.log.add("Je fais un avec le carton. Le coussin orthopédique à 90€ peut pourrir sur place.", "purr");
+    });
+  }
+
+  seekSunlight(sunX) {
+    this.cat.state = 'SEEK_SUN';
+    this.log.add("Transfert thermique repéré au sol. Optimisation du confort solaire en cours...");
+    this.moveTo(sunX, () => {
+      this.cat.state = 'SUNBATHE';
+      this.log.add("Bain de photons initié. Ne me dérangez sous aucun prétexte.");
+    });
+  }
+
+  startGravityTest(object) {
+    this.cat.state = 'GRAVITY_TEST';
+    this.cat.gravityVictim = object;
+    this.log.add("Vérification physique : Ce récipient respecte-t-il les lois de Newton ?", "humor");
+    this.sound.playMeow(1.2, 0.2);
+
+    this.moveTo(object.pos.x - 22, () => {
+      // Fixe l'utilisateur du regard
+      this.log.add("Je te regarde droit dans les yeux, humain. Admire le processus scientifique.");
+      let taps = 0;
+      const tapInterval = setInterval(() => {
+        taps++;
+        object.pos.x += 7;
+        this.cat.tailAngle = Math.sin(taps * 2) * 0.5;
+
+        if (object.pos.x > object.platform.x2 - 4) {
+          clearInterval(tapInterval);
+          object.isFalling = true;
+          object.platform = null;
+          this.log.add("CRASH ! La gravité terrestre est formellement confirmée.", "urgent");
+          this.cat.gravityVictim = null;
+          this.cat.state = 'IDLE';
+        }
+      }, 700);
+    });
+  }
+
+  stalkFly() {
+    this.cat.state = 'STALK_FLY';
+    this.cat.pupilDilation = 0.85;
+    this.log.add("Anomalie volatile détectée. Émission de claquements de mâchoire (Ek-ek-ek).");
+    this.moveTo(this.env.fly.x, () => {
+      if (this.env.fly && Math.random() < 0.6) {
+        this.log.add("Frappe chirurgicale ! La mouche a été désintégrée.");
+        this.env.fly = null;
+        this.cat.stimulation = Math.min(100, this.cat.stimulation + 35);
+      }
+      this.cat.state = 'IDLE';
+    });
+  }
+
+  handleHungerDrive() {
+    this.cat.state = 'HUNGRY';
+    if (this.env.kibbleBowlLevel < 0.2) {
+      this.log.add("DRAME ABSOLU : Gamelle à moitié vide. C'est l'abandon caractérisé de ce foyer.", "urgent");
+      this.sound.playMeow(0.75, 0.5);
+    } else {
+      this.log.add("Consommation d'urgence des croquettes de fond de bol...");
+      this.moveTo(630, () => {
+        this.cat.hunger = Math.max(0, this.cat.hunger - 45);
+        this.env.kibbleBowlLevel = Math.max(0, this.env.kibbleBowlLevel - 0.25);
+        this.cat.state = 'IDLE';
+      });
+    }
+  }
+
+  seekHighPerchAndSleep() {
+    this.cat.state = 'FIND_PERCH';
+    // Privilégie les plateformes 3 (Frigo ou Sommet d'arbre)
+    const perches = this.env.platforms.filter(p => p.heightLevel >= 2);
+    const chosen = perches[Math.floor(Math.random() * perches.length)];
+    this.log.add(`Repli stratégique vers les hauteurs souveraines (${chosen.name}).`);
+
+    const targetX = chosen.x1 + 25;
+    this.cat.jumpTo(targetX, chosen.y, chosen);
+    setTimeout(() => {
+      this.cat.state = 'SLEEP';
+      this.cat.pupilDilation = 0.1;
+      this.log.add("Sommeil supérieur activé. Ne pas toucher sous peine de représailles.", "purr");
+    }, 1200);
+  }
+
+  startGrooming() {
+    this.cat.state = 'GROOM';
+    this.log.add("Protocole de lustrage d'urgence : La poussière de cet habitat est intolérable.");
+    setTimeout(() => {
+      this.cat.hygiene = 100;
+      this.cat.state = 'IDLE';
+    }, 3500);
+  }
+
+  markTerritory(platform) {
+    this.cat.state = 'RUB_TERRITORY';
+    this.log.add(`Dépôt de phéromones maxillaires sur [${platform.name}]. Ceci m'appartient.`);
+    platform.pheromoneLevel = 1.0;
+    setTimeout(() => { this.cat.state = 'IDLE'; }, 2000);
+  }
+
+  idleWander() {
+    this.cat.state = 'IDLE';
+    if (Math.random() < 0.5) {
+      const randX = 100 + Math.random() * (this.env.width - 200);
+      const plat = this.env.getPlatformAt(randX, this.cat.pos.y);
+      this.cat.jumpTo(randX, plat.y, plat);
+    }
+  }
+
+  moveTo(targetX, onComplete) {
+    const plat = this.env.getPlatformAt(targetX, this.cat.pos.y);
+    this.cat.facing = targetX > this.cat.pos.x ? 1 : -1;
+    this.cat.jumpTo(targetX, plat.y, plat);
+    setTimeout(onComplete, 1200);
+  }
+}
+
+// ==========================================
+// 7. MOTEUR GRAPHIQUE CANVAS 2D & PARTICULES
+// ==========================================
+class RenderEngine {
+  constructor(canvas, cat, env) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.cat = cat;
+    this.env = env;
+    this.felineVision = false;
+    this.particles = [];
+  }
+
+  addPheromoneParticle(x, y) {
+    this.particles.push({
+      x, y,
+      vx: (Math.random() - 0.5) * 15,
+      vy: -15 - Math.random() * 20,
+      life: 1.0,
+      color: '#4ade80'
+    });
+  }
+
+  render(dt) {
+    const ctx = this.ctx;
+    const w = this.canvas.width;
+    const h = this.canvas.height;
+
+    ctx.clearRect(0, 0, w, h);
+
+    // 1. Fond et Cycle Circadien (Mur & Sol)
+    this.drawRoomBackground(ctx, w, h);
+
+    // 2. Rayon de Soleil Thermique
+    if (this.env.sunPosition > 0) {
+      this.drawSunbeam(ctx, this.env.sunPosition, this.env.floorY);
+    }
+
+    // 3. Meubles et Plateformes
+    this.drawFurniture(ctx);
+
+    // 4. Objets Renversables & Carton
+    this.drawProps(ctx);
+
+    // 5. Particules (Phéromones & Ondes de Ronronnement)
+    this.updateAndDrawParticles(ctx, dt);
+
+    // 6. Entité Féline (Dessin Procédural)
+    this.drawProceduralCat(ctx, this.cat);
+
+    // 7. Filtre Post-Process "Vision Féline"
+    if (this.felineVision) {
+      this.applyFelineVisionShader(ctx, w, h);
+    }
+  }
+
+  drawRoomBackground(ctx, w, h) {
+    // Teinte céleste selon l'heure
+    const time = this.env.dayTime;
+    let bgGradient = ctx.createLinearGradient(0, 0, 0, h);
+    if (time >= 6 && time < 19) {
+      // Journée claire
+      bgGradient.addColorStop(0, '#2b3044');
+      bgGradient.addColorStop(1, '#1b1d28');
+    } else {
+      // Nuit profonde
+      bgGradient.addColorStop(0, '#0d0e15');
+      bgGradient.addColorStop(1, '#050608');
+    }
+    ctx.fillStyle = bgGradient;
+    ctx.fillRect(0, 0, w, h);
+
+    // Plinthe et sol
+    ctx.fillStyle = '#11131a';
+    ctx.fillRect(0, this.env.floorY, w, h - this.env.floorY);
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    ctx.strokeRect(0, this.env.floorY, w, 1);
+  }
+
+  drawSunbeam(ctx, x, floorY) {
+    ctx.save();
+    const beamGrad = ctx.createLinearGradient(x - 50, 0, x, floorY);
+    beamGrad.addColorStop(0, 'rgba(244, 162, 97, 0.0)');
+    beamGrad.addColorStop(0.7, 'rgba(244, 162, 97, 0.25)');
+    beamGrad.addColorStop(1, 'rgba(244, 162, 97, 0.45)');
+
+    ctx.fillStyle = beamGrad;
+    ctx.beginPath();
+    ctx.moveTo(x - 120, 0);
+    ctx.lineTo(x - 40, 0);
+    ctx.lineTo(x + 90, floorY);
+    ctx.lineTo(x - 30, floorY);
+    ctx.closePath();
+    ctx.fill();
+
+    // Tache lumineuse au sol
+    ctx.fillStyle = 'rgba(244, 162, 97, 0.5)';
+    ctx.beginPath();
+    ctx.ellipse(x + 30, floorY, 60, 14, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  drawFurniture(ctx) {
+    for (const p of this.env.platforms) {
+      if (p.id === 'floor') continue;
+
+      ctx.save();
+      // Ombrage de surface
+      ctx.fillStyle = '#202434';
+      ctx.fillRect(p.x1, p.y, p.x2 - p.x1, 16);
+
+      // Coussinet / Finition
+      ctx.fillStyle = p.id.includes('tree') ? '#6c584c' : (p.id === 'fridge' ? '#c5c6d0' : '#8d5b4c');
+      ctx.fillRect(p.x1, p.y - 6, p.x2 - p.x1, 6);
+
+      // Piliers de soutien
+      ctx.fillStyle = 'rgba(0,0,0,0.4)';
+      ctx.fillRect(p.x1 + 10, p.y + 16, 12, this.env.floorY - (p.y + 16));
+      ctx.fillRect(p.x2 - 22, p.y + 16, 12, this.env.floorY - (p.y + 16));
+
+      // Lueur des phéromones (visible si marquage récent ou en Vision Féline)
+      if (this.felineVision || p.pheromoneLevel > 0.4) {
+        ctx.fillStyle = `rgba(74, 222, 128, ${p.pheromoneLevel * 0.35})`;
+        ctx.fillRect(p.x1, p.y - 10, p.x2 - p.x1, 8);
+      }
+      ctx.restore();
+    }
+
+    // Gamelle de croquettes
+    ctx.fillStyle = '#495057';
+    ctx.beginPath();
+    ctx.ellipse(630, this.env.floorY - 4, 24, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+    if (this.env.kibbleBowlLevel > 0.05) {
+      ctx.fillStyle = '#bc6c25';
+      ctx.beginPath();
+      ctx.ellipse(630, this.env.floorY - 6, 16 * this.env.kibbleBowlLevel, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  drawProps(ctx) {
+    // Verre à renverser (Gravity Test)
+    const g = this.env.knockableGlass;
+    if (g && !g.isBroken) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(162, 210, 255, 0.65)';
+      ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+      ctx.fillRect(g.pos.x, g.pos.y, g.width, g.height);
+      ctx.strokeRect(g.pos.x, g.pos.y, g.width, g.height);
+      ctx.restore();
+    }
+
+    // Boîte en carton
+    if (this.env.cardboardBox) {
+      const b = this.env.cardboardBox;
+      ctx.fillStyle = '#b08968';
+      ctx.fillRect(b.x, b.y, 60, 35);
+      ctx.strokeStyle = '#7f5539';
+      ctx.strokeRect(b.x, b.y, 60, 35);
+      // Rabats
+      ctx.beginPath();
+      ctx.moveTo(b.x, b.y);
+      ctx.lineTo(b.x - 12, b.y - 12);
+      ctx.moveTo(b.x + 60, b.y);
+      ctx.lineTo(b.x + 72, b.y - 12);
+      ctx.stroke();
+    }
+
+    // Mouche
+    if (this.env.fly) {
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(this.env.fly.x, this.env.fly.y, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  updateAndDrawParticles(ctx, dt) {
+    // Ondes de choc du ronronnement
+    if (this.cat.sound.isPurring) {
+      this.cat.purrWaveRadius += dt * 50;
+      if (this.cat.purrWaveRadius > 65) this.cat.purrWaveRadius = 8;
+      ctx.strokeStyle = `rgba(74, 222, 128, ${1 - this.cat.purrWaveRadius / 65})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(this.cat.pos.x, this.cat.pos.y - 12, this.cat.purrWaveRadius, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+
+  drawProceduralCat(ctx, cat) {
+    ctx.save();
+    ctx.translate(cat.pos.x, cat.pos.y);
+    ctx.scale(cat.facing, 1);
+
+    const isSleeping = cat.state === 'SLEEP';
+
+    // 1. Queue dynamique (courbe sinusoïdale ou frétillement de chasse)
+    ctx.strokeStyle = '#d4a373';
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-16, -10);
+    const tailWiggle = Math.sin(Date.now() * 0.005) * 12;
+    ctx.quadraticCurveTo(-35, -28 + tailWiggle, -42, -15 + tailWiggle * 1.5);
+    ctx.stroke();
+
+    // 2. Corps félin (ovale souple)
+    ctx.fillStyle = '#e6ccb2';
+    ctx.beginPath();
+    if (isSleeping) {
+      ctx.ellipse(0, -8, 22, 14, 0, 0, Math.PI * 2);
+    } else {
+      ctx.ellipse(0, -14, 20, 16, -0.15, 0, Math.PI * 2);
+    }
+    ctx.fill();
+
+    // 3. Tête et Oreilles
+    const headY = isSleeping ? -10 : -26;
+    const headX = isSleeping ? 12 : 14;
+
+    ctx.fillStyle = '#e6ccb2';
+    ctx.beginPath();
+    ctx.arc(headX, headY, 13, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Oreilles triangulaires pointues
+    ctx.fillStyle = '#b08968';
+    ctx.beginPath();
+    ctx.moveTo(headX - 6, headY - 10);
+    ctx.lineTo(headX - 3, headY - 24);
+    ctx.lineTo(headX + 3, headY - 11);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(headX + 4, headY - 10);
+    ctx.lineTo(headX + 9, headY - 23);
+    ctx.lineTo(headX + 11, headY - 9);
+    ctx.fill();
+
+    // 4. Yeux et Pupilles adaptatives
+    if (isSleeping) {
+      ctx.strokeStyle = '#495057';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(headX + 4, headY + 1, 4, 0.2, Math.PI - 0.2);
+      ctx.stroke();
+    } else {
+      // Globe oculaire ambré
+      ctx.fillStyle = '#ffd166';
+      ctx.beginPath();
+      ctx.arc(headX + 4, headY - 1, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Pupille (fente fine ou circulaire selon excitation)
+      ctx.fillStyle = '#000000';
+      ctx.beginPath();
+      const pW = Math.max(1, 4 * cat.pupilDilation);
+      ctx.ellipse(headX + 4, headY - 1, pW, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 5. Moustaches
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(headX + 8, headY + 2);
+    ctx.lineTo(headX + 22, headY);
+    ctx.moveTo(headX + 8, headY + 4);
+    ctx.lineTo(headX + 20, headY + 7);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  applyFelineVisionShader(ctx, w, h) {
+    // Post-processing Canvas simulant la vision nocturne/instinctive
+    const imgData = ctx.getImageData(0, 0, w, h);
+    const data = imgData.data;
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      // Renforcement des contrastes et translation spectrale (cyan/vert félin)
+      data[i] = r * 0.4;
+      data[i + 1] = Math.min(255, g * 1.35 + 20);
+      data[i + 2] = Math.min(255, b * 1.5 + 40);
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    // Grille de vision thermique/tactique
+    ctx.strokeStyle = 'rgba(0, 240, 255, 0.08)';
+    ctx.lineWidth = 1;
+    for (let y = 0; y < h; y += 8) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+      ctx.stroke();
+    }
+  }
+}
+
+// ==========================================
+// 8. SOUS-TITRAGE & LOG CONVERSATIONNEL
+// ==========================================
+class UILogger {
+  constructor(containerId) {
+    this.container = document.getElementById(containerId);
+  }
+
+  add(message, type = 'normal') {
+    const entry = document.createElement('div');
+    entry.className = `log-entry ${type}`;
+
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    entry.innerHTML = `<span class="log-time">[${time}]</span> ${message}`;
+
+    this.container.appendChild(entry);
+    this.container.scrollTop = this.container.scrollHeight;
+  }
+}
+
+// ==========================================
+// 9. COORDINATEUR GENERAL & BINDINGS UI
+// ==========================================
+window.addEventListener('DOMContentLoaded', () => {
+  const canvas = document.getElementById('simCanvas');
+  const sound = new SoundEngine();
+  const logger = new UILogger('log-container');
+  const env = new Environment(canvas.width, canvas.height);
+  const cat = new Cat(canvas.width, canvas.height, sound);
+  const brain = new Brain(cat, env, sound, logger);
+  const renderer = new RenderEngine(canvas, cat, env);
+
+  // Positionnement initial du chat sur le canapé
+  cat.currentPlatform = env.platforms[1];
+  cat.pos.set(160, cat.currentPlatform.y);
+
+  logger.add("Initialisation de l'architecture féline autonome. Sujet opérationnel.", "purr");
+
+  // --- ACTIONS UTILISATEUR & COMMANDES ---
+
+  const registerUserInteraction = (action) => {
+    sound.init(); // Déblocage de l'AudioContext sur geste utilisateur
+    action();
+  };
+
+  document.getElementById('act-food').addEventListener('click', () => {
+    registerUserInteraction(() => {
+      env.kibbleBowlLevel = 1.0;
+      sound.playMeow(1.4, 0.2);
+      logger.add("Bruit de secousse du sachet de croquettes activé !", "urgent");
+      cat.memory.recordStimulus('KIBBLE_SOUND', 1.0, 1.0);
+
+      // Si l'obstination est trop forte, le chat attend avant de céder
+      if (Math.random() * 100 > cat.obstinacy) {
+        brain.handleHungerDrive();
+      } else {
+        logger.add("Le chat feint l'indifférence totale pour préserver son statut dominant.");
+      }
+    });
+  });
+
+  document.getElementById('act-feather').addEventListener('click', () => {
+    registerUserInteraction(() => {
+      logger.add("Agitation frénétique du plumet à plumes.");
+      cat.stimulation = Math.min(100, cat.stimulation + 50);
+      cat.pupilDilation = 0.85;
+      brain.stalkFly();
+    });
+  });
+
+  document.getElementById('act-pet').addEventListener('click', () => {
+    registerUserInteraction(() => {
+      // Non-déterminisme & Morsure de sur-stimulation sensorielle
+      if (cat.stimulation > 75) {
+        sound.playHiss();
+        logger.add("ATTENTION : Surcharge tactile ! Morsure punitive réflexe immédiate.", "urgent");
+        cat.affection = Math.max(10, cat.affection - 25);
+      } else if (Math.random() * 100 < cat.obstinacy) {
+        logger.add("Esquive hautaine : Le chat s'écarte avec dédain.");
+      } else {
+        sound.playMeow(1.1, 0.25);
+        cat.affection = Math.min(100, cat.affection + 20);
+        cat.purrWaveRadius = 10;
+        logger.add("Caresse validée. Tolérance tactile accordée pour 4.2 secondes.", "purr");
+      }
+    });
+  });
+
+  document.getElementById('act-call').addEventListener('click', () => {
+    registerUserInteraction(() => {
+      logger.add("Humain : 'Minou minou vient ici !'");
+      if (cat.obstinacy > 50) {
+        logger.add("Le chat a parfaitement entendu, a pivoté l'oreille gauche de 12°, et a choisi de t'ignorer.");
+      } else {
+        sound.playMeow(1.0, 0.3);
+        brain.moveTo(250, () => logger.add("Le chat daigne se déplacer par pure pitié."));
+      }
+    });
+  });
+
+  document.getElementById('act-vacuum').addEventListener('click', () => {
+    registerUserInteraction(() => {
+      sound.playHiss();
+      logger.add("TERREUR : L'aspirateur monstrueux est activé !", "urgent");
+      cat.memory.markAnxiousZone(cat.pos.x);
+      cat.energy = Math.max(10, cat.energy - 30);
+      brain.seekHighPerchAndSleep();
+    });
+  });
+
+  document.getElementById('act-litter').addEventListener('click', () => {
+    registerUserInteraction(() => {
+      env.litterDirtiness = 0.0;
+      cat.hygiene = Math.min(100, cat.hygiene + 25);
+      logger.add("Litière tamisée et nettoyée. L'offense olfactive a été lavée.");
+    });
+  });
+
+  document.getElementById('act-spawn-toy').addEventListener('click', () => {
+    registerUserInteraction(() => {
+      // Paradoxe du carton : Crée un emballage avec priorité d'attraction x10
+      env.cardboardBox = { x: 260, y: env.floorY - 35, unoccupied: true };
+      logger.add("Arrivée d'un arbre à chat de luxe en velours italien (et de son emballage en carton).");
+      setTimeout(() => brain.enterBoxParadox(env.cardboardBox), 500);
+    });
+  });
+
+  document.getElementById('act-fly').addEventListener('click', () => {
+    registerUserInteraction(() => {
+      env.fly = { x: 450, y: 180, life: 18.0 };
+      logger.add("Une mouche s'est introduite dans la pièce. Mode prédateur en alerte.");
+    });
+  });
+
+  // Toggles Header
+  const btnVision = document.getElementById('btn-vision-toggle');
+  btnVision.addEventListener('click', () => {
+    renderer.felineVision = !renderer.felineVision;
+    btnVision.classList.toggle('active', renderer.felineVision);
+    logger.add(renderer.felineVision ? "Activation du filtre optique : Spectre félin / Rods amplifiés." : "Retour à la vision humaine ordinaire.");
+  });
+
+  const btnAudio = document.getElementById('btn-audio-toggle');
+  btnAudio.addEventListener('click', () => {
+    sound.init();
+    sound.isMuted = !sound.isMuted;
+    btnAudio.classList.toggle('active', !sound.isMuted);
+    btnAudio.textContent = sound.isMuted ? "🔇 Audio Coupé" : "🔊 Audio Activé";
+  });
+
+  // --- BOUCLE PRINCIPALE D'ACTUALISATION (60 FPS) ---
+  let lastTime = performance.now();
+
+  function gameLoop(now) {
+    const dt = Math.min(0.1, (now - lastTime) / 1000);
+    lastTime = now;
+
+    // 1. Mises à jour Logiques
+    env.update(dt);
+    cat.updateGauges(dt);
+    brain.evaluateAndDecide(dt);
+
+    if (env.knockableGlass) {
+      env.knockableGlass.update(dt, env.floorY, sound);
+    }
+
+    // 2. Rendu Graphique
+    renderer.render(dt);
+
+    // 3. Synchronisation HUD & Jauges
+    document.getElementById('hud-clock').textContent = 
+      `${String(Math.floor(env.dayTime)).padStart(2, '0')}:${String(Math.floor((env.dayTime % 1) * 60)).padStart(2, '0')} ${env.dayTime >= 12 ? 'PM' : 'AM'}`;
+    
+    document.getElementById('txt-obstinacy').textContent = `${Math.round(cat.obstinacy)}%`;
+    document.getElementById('fill-obstinacy').style.width = `${cat.obstinacy}%`;
+
+    document.getElementById('txt-hunger').textContent = `${Math.round(cat.hunger)}%`;
+    document.getElementById('fill-hunger').style.width = `${cat.hunger}%`;
+
+    document.getElementById('txt-energy').textContent = `${Math.round(cat.energy)}%`;
+    document.getElementById('fill-energy').style.width = `${cat.energy}%`;
+
+    document.getElementById('txt-hygiene').textContent = `${Math.round(cat.hygiene)}%`;
+    document.getElementById('fill-hygiene').style.width = `${cat.hygiene}%`;
+
+    document.getElementById('txt-stimulation').textContent = `${Math.round(cat.stimulation)}%`;
+    document.getElementById('fill-stimulation').style.width = `${cat.stimulation}%`;
+
+    document.getElementById('txt-affection').textContent = `${Math.round(cat.affection)}%`;
+    document.getElementById('fill-affection').style.width = `${cat.affection}%`;
+
+    document.getElementById('lbl-current-state').textContent = cat.state;
+    document.getElementById('lbl-current-surface').textContent = cat.currentPlatform ? cat.currentPlatform.name : "Dans les airs";
+    
+    const phero = cat.currentPlatform ? Math.round(cat.currentPlatform.pheromoneLevel * 100) : 0;
+    document.getElementById('lbl-pheromones').textContent = `${phero}% (${phero > 50 ? 'Sécurisant' : 'Incertain'})`;
+
+    requestAnimationFrame(gameLoop);
+  }
+
+  requestAnimationFrame(gameLoop);
+});
+</script>
+</body>
+</html>
