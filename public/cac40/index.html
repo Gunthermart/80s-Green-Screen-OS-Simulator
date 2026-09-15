@@ -3231,4 +3231,186 @@ Réponds OBLIGATOIREMENT sous forme d'objet JSON avec ce schéma exact :
         }
 
         function copyMarketSynthesisToClipboard() {
-<!-- ... existing code -->
+            const container = document.getElementById('marketSynthesisContent');
+            if (!container) {
+                showToast("Aucun contenu de synthèse à copier.", "amber");
+                return;
+            }
+            const text = container.innerText;
+            const tempTextArea = document.createElement('textarea');
+            tempTextArea.value = text;
+            document.body.appendChild(tempTextArea);
+            tempTextArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempTextArea);
+            showToast("Synthèse sectorielle copiée dans le presse-papier !", "success");
+        }
+
+        function renderDefaultMarketSynthesis() {
+            const container = document.getElementById('marketSynthesisContent');
+            if (!container) return;
+
+            const overallScore = calculateOverallRiskScore();
+            let regimeTitle = "Régime de Marché Équilibré";
+            let regimeClass = "text-sky-400";
+            let regimeDesc = "Environnement favorable à la sélection rigoureuse de valeurs individuelles (Stock-Picking).";
+
+            if (overallScore < 35) {
+                regimeTitle = "Régime Constructif & Offensif";
+                regimeClass = "text-emerald-400";
+                regimeDesc = "Conditions macroéconomiques porteuses. Surcharger progressivement les valeurs de croissance à fort Pricing Power.";
+            } else if (overallScore > 65) {
+                regimeTitle = "Régime Defensive & Protection du Capital";
+                regimeClass = "text-rose-400";
+                regimeDesc = "Tensions de liquidité ou pressions sur les bénéfices. Privilégier les entreprises désendettées à fort Free Cash Flow.";
+            }
+
+            container.innerHTML = `
+                <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-mono uppercase tracking-wider text-slate-400 font-bold">Diagnostic de Régime</span>
+                        <span class="text-xs font-bold font-mono ${regimeClass}">${regimeTitle}</span>
+                    </div>
+                    <p class="text-xs text-slate-300 leading-relaxed">${regimeDesc}</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono">
+                    <div class="p-3.5 rounded-xl bg-emerald-950/30 border border-emerald-500/30 space-y-1.5">
+                        <div class="font-bold text-emerald-400 flex items-center space-x-1">
+                            <i class="fa-solid fa-circle-arrow-up text-[10px]"></i>
+                            <span>Secteurs Surpondérés</span>
+                        </div>
+                        <p class="text-[11px] text-slate-300 leading-normal font-sans">Technologie & Semi-conducteurs (ASML, STIF), Luxe (LVMH, Hermès), Transition Énergétique.</p>
+                    </div>
+
+                    <div class="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1.5">
+                        <div class="font-bold text-sky-400 flex items-center space-x-1">
+                            <i class="fa-solid fa-arrows-left-right text-[10px]"></i>
+                            <span>Secteurs Neutres</span>
+                        </div>
+                        <p class="text-[11px] text-slate-300 leading-normal font-sans">Santé & Pharma (Sanofi), Énergie (TotalEnergies), BTP & Concessions (Vinci).</p>
+                    </div>
+
+                    <div class="p-3.5 rounded-xl bg-rose-950/30 border border-rose-500/30 space-y-1.5">
+                        <div class="font-bold text-rose-400 flex items-center space-x-1">
+                            <i class="fa-solid fa-circle-arrow-down text-[10px]"></i>
+                            <span>Secteurs Sous-pondérés</span>
+                        </div>
+                        <p class="text-[11px] text-slate-300 leading-normal font-sans">Immobilier coté (REITs fortement endettées), Consommation cyclique bas de gamme.</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        function resetToDefaults() {
+            categories.forEach(cat => {
+                cat.subIndicators.forEach(sub => {
+                    sub.val = 50;
+                });
+            });
+            updateCNNValue(33.3);
+            renderCategories();
+            updateBarometerUI();
+            showToast("Paramètres du baromètre réinitialisés aux valeurs par défaut.", "info");
+        }
+
+        function applyScenario(scenarioVal) {
+            if (scenarioVal === 'custom') return;
+
+            const scenarios = {
+                goldilocks: { gdp_growth: 65, inflation_cpi: 35, geopolitics: 30, central_bank_rates: 30, yield_curve: 25, credit_spreads: 20, eps_revisions: 70, margin_pressures: 30, valuation_multiples: 60, dispersion_dspx: 35, market_breadth: 75, vix_volatility: 20, fear_greed: 70, put_call_ratio: 30, systemic_shocks: 15, cnn: 68.5 },
+                liquidity_squeeze: { gdp_growth: 40, inflation_cpi: 75, geopolitics: 65, central_bank_rates: 80, yield_curve: 75, credit_spreads: 70, eps_revisions: 35, margin_pressures: 70, valuation_multiples: 75, dispersion_dspx: 60, market_breadth: 35, vix_volatility: 65, fear_greed: 25, put_call_ratio: 70, systemic_shocks: 50, cnn: 25.0 },
+                earnings_recession: { gdp_growth: 25, inflation_cpi: 40, geopolitics: 55, central_bank_rates: 40, yield_curve: 60, credit_spreads: 65, eps_revisions: 20, margin_pressures: 85, valuation_multiples: 40, dispersion_dspx: 55, market_breadth: 25, vix_volatility: 55, fear_greed: 30, put_call_ratio: 65, systemic_shocks: 40, cnn: 30.0 },
+                systemic_crisis: { gdp_growth: 15, inflation_cpi: 60, geopolitics: 90, central_bank_rates: 85, yield_curve: 90, credit_spreads: 90, eps_revisions: 10, margin_pressures: 90, valuation_multiples: 30, dispersion_dspx: 85, market_breadth: 10, vix_volatility: 90, fear_greed: 10, put_call_ratio: 90, systemic_shocks: 90, cnn: 12.0 }
+            };
+
+            const selected = scenarios[scenarioVal];
+            if (!selected) return;
+
+            categories.forEach(cat => {
+                cat.subIndicators.forEach(sub => {
+                    if (selected[sub.id] !== undefined) {
+                        sub.val = selected[sub.id];
+                    }
+                });
+            });
+
+            if (selected.cnn !== undefined) {
+                updateCNNValue(selected.cnn);
+                const cnnSlider = document.getElementById('cnnSliderInput');
+                if (cnnSlider) cnnSlider.value = selected.cnn;
+            }
+
+            renderCategories();
+            updateBarometerUI();
+            showToast(`Scénario "${scenarioVal}" appliqué.`, "success");
+        }
+
+        function exportReport() {
+            const overallScore = calculateOverallRiskScore();
+            const exportData = {
+                timestamp: new Date().toISOString(),
+                overallRiskScore: overallScore,
+                cnnFearAndGreed: cnnFearGreedValue,
+                cboeIndices: cboeData,
+                ratesExpectations: bceFedRatesData,
+                pillars: categories.map(c => ({
+                    id: c.id,
+                    name: c.name,
+                    score: getCategoryScore(c),
+                    subIndicators: c.subIndicators
+                }))
+            };
+
+            const tempTextArea = document.createElement('textarea');
+            tempTextArea.value = JSON.stringify(exportData, null, 2);
+            document.body.appendChild(tempTextArea);
+            tempTextArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempTextArea);
+            showToast("Rapport du Baromètre copié au format JSON !", "success");
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            renderCategories();
+            updateBarometerUI();
+            
+            const searchInput = document.getElementById('searchInput');
+            if (searchInput) {
+                searchInput.addEventListener('input', (e) => {
+                    const btnClear = document.getElementById('btnClearSearch');
+                    if (btnClear) btnClear.classList.toggle('hidden', e.target.value.trim() === '');
+                });
+            }
+
+            const btnClear = document.getElementById('btnClearSearch');
+            if (btnClear) {
+                btnClear.addEventListener('click', () => {
+                    if (searchInput) searchInput.value = '';
+                    btnClear.classList.add('hidden');
+                });
+            }
+
+            const searchForm = document.getElementById('searchForm');
+            if (searchForm) {
+                searchForm.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    const q = document.getElementById('searchInput')?.value?.trim();
+                    const m = document.getElementById('marketSelect')?.value || 'ALL';
+                    if (q) executeAnalysis(q, m);
+                });
+            }
+
+            const searchVSForm = document.getElementById('searchVSForm');
+            if (searchVSForm) {
+                searchVSForm.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    const v1 = document.getElementById('searchInputVS1')?.value?.trim();
+                    const v2 = document.getElementById('searchInputVS2')?.value?.trim();
+                    if (v1 && v2) executeVSAnalysis(v1, v2);
+                });
+            }
+        });
+    </script>
+</body>
+</html>
