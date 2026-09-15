@@ -3041,7 +3041,6 @@ plot(targetPrice, "TP1", color=color.green, linewidth=2)
                 if (response.ok) {
                     const data = await response.json();
                     if (data && data.cnnFearAndGreed) {
-                        // Mise à jour Fear & Greed
                         if (data.cnnFearAndGreed.value !== undefined) {
                             updateCNNValue(data.cnnFearAndGreed.value);
                             const cnnSlider = document.getElementById('cnnSliderInput');
@@ -3050,31 +3049,30 @@ plot(targetPrice, "TP1", color=color.green, linewidth=2)
                         if (data.cnnFearAndGreed.subIndicators) {
                             updateCNNSubComponentsUI(data.cnnFearAndGreed.subIndicators);
                         }
-                        // Mise à jour Taux FedWatch & BCE
                         if (data.cmeFedWatch || data.bceRates) {
                             updateBceFedRatesUI({
                                 bce: {
                                     cutProb: data.bceRates?.expectations?.cutProb ?? 75,
                                     holdProb: data.bceRates?.expectations?.holdProb ?? 23,
                                     hikeProb: data.bceRates?.expectations?.hikeProb ?? 2,
-                                    meeting: "Taux BCE",
-                                    bias: data.bceRates?.bias || "Dovish"
+                                    meeting: data.bceRates?.source || "Portail BCE & Grounding Search",
+                                    bias: data.bceRates?.bias || "Assouplissement (Dovish)"
                                 },
                                 fed: {
-                                    targetRange: data.cmeFedWatch?.targetRange || "4.25% - 4.50%",
-                                    expectedBps: data.cmeFedWatch?.expectedBps || "-25 bps",
-                                    cut50Prob: data.cmeFedWatch?.probabilities?.cut50Pct ?? 10,
-                                    cut25Prob: data.cmeFedWatch?.probabilities?.cut25Pct ?? 70,
-                                    holdProb: data.cmeFedWatch?.probabilities?.holdPct ?? 18,
-                                    hike25Prob: data.cmeFedWatch?.probabilities?.hike25Pct ?? 2,
+                                    targetRange: data.cmeFedWatch?.targetRange || "3.50% - 3.75%",
+                                    expectedBps: data.cmeFedWatch?.expectedBps || "+25 bps",
+                                    cut50Prob: data.cmeFedWatch?.probabilities?.cut50Pct ?? 0,
+                                    cut25Prob: data.cmeFedWatch?.probabilities?.cut25Pct ?? 3,
+                                    holdProb: data.cmeFedWatch?.probabilities?.holdPct ?? 10,
+                                    hike25Prob: data.cmeFedWatch?.probabilities?.hike25Pct ?? 87,
                                     meeting: data.cmeFedWatch?.meetingDate || "CME FedWatch Tool",
-                                    bias: "Dovish"
+                                    bias: "Hawkish"
                                 }
                             });
                         }
                         renderCategories();
                         updateBarometerUI();
-                        showToast("Métriques rafraîchies via l'API Directe marketDataCollector !", "success");
+                        showToast("Métriques rafraîchies !", "success");
                         if (btn) {
                             btn.disabled = false;
                             btn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> <span>Analyser Marché Direct</span>`;
@@ -3086,11 +3084,12 @@ plot(targetPrice, "TP1", color=color.green, linewidth=2)
                 console.warn("Échec API directe, basculement sur l'IA Gemini Grounding...", err);
             }
 
-            // Tentative 2 : Fallback automatique via Gemini Search Grounding
+            // Tentative 2 : Fallback via Gemini Google Search Grounding
             const promptText = `Act en tant qu'expert en risque macroéconomique et de marché financier global.
-Effectue un diagnostic récent et ultra-précis du marché en consultant et croisant OBLIGATOIREMENT les données réelles issues de ces deux sources officielles de référence :
+Effectue un diagnostic récent et ultra-précis du marché en utilisant Google Search Grounding pour rechercher les données réelles et prévisions en direct sur :
 1. CNN Fear & Greed Index (https://edition.cnn.com/markets/fear-and-greed)
-2. CME FedWatch Tool - Conditional Meeting Probabilities (https://www.cmegroup.com/markets/interest-rates/cme-fedwatch-tool.html)
+2. CME FedWatch Tool (https://www.cmegroup.com/markets/interest-rates/cme-fedwatch-tool.html)
+3. Prévisions de taux BCE (baisse/maintien/hausse) selon le consensus d'économistes, swaps €STR et décisions du Conseil des gouverneurs de la BCE.
 
 Réponds OBLIGATOIREMENT sous forme d'objet JSON avec ce schéma exact :
 {
@@ -3110,11 +3109,11 @@ Réponds OBLIGATOIREMENT sous forme d'objet JSON avec ce schéma exact :
   "vix": 14.76, "vixeq": 16.50, "dspx": 41.42,
   "cboe_regime": "Stock-Picker's Market",
   "bce_fed_rates": {
-    "bce": { "cutProb": 75, "holdProb": 23, "hikeProb": 2, "meeting": "Décision BCE", "bias": "Dovish" },
+    "bce": { "cutProb": 75, "holdProb": 23, "hikeProb": 2, "meeting": "Prochaine réunion BCE", "bias": "Assouplissement (Dovish)" },
     "fed": {
-      "targetRange": "4.25% - 4.50%", "expectedBps": "-25 bps",
-      "cut50Prob": 10, "cut25Prob": 70, "holdProb": 18, "hike25Prob": 2,
-      "meeting": "CME FedWatch Tool", "bias": "Dovish"
+      "targetRange": "3.50% - 3.75%", "expectedBps": "+25 bps",
+      "cut50Prob": 0, "cut25Prob": 3, "holdProb": 10, "hike25Prob": 87,
+      "meeting": "CME FedWatch Tool", "bias": "Hawkish"
     }
   },
   "summary": "Climat de marché caractérisé par..."
@@ -3153,7 +3152,7 @@ Réponds OBLIGATOIREMENT sous forme d'objet JSON avec ce schéma exact :
                     }
                     renderCategories();
                     updateBarometerUI();
-                    showToast("Mise à jour effectuée via le fallback IA !", "success");
+                    showToast("Mise à jour effectuée via Grounding Search !", "success");
                 }
             } catch (e) {
                 showToast("Erreur d'analyse live.", "amber");
