@@ -3343,9 +3343,42 @@ Génère une synthèse exécutive structurée d'allocation sectorielle et de dir
 
 Consulte et croise les sources suivantes : BCE (Banque Centrale Européenne), Euronext Live, ZoneBourse, Seeking Alpha, FRED St. Louis, ShortSell.nl.
 
-Réponds obligatoirement par un objet JSON strictement valide avec ce format :
+Réponds obligatoirement par un objet JSON avec ce format :
 {
-  "macroDirectives": [
+  "summary": "Synthèse globale du marché...",
+  "directives": ["Directive 1...", "Directive 2..."],
+  "overweightSectors": [
+    { "name": "Défense", "picks": "Thales, Dassault", "reason": "Budgets militaires en hausse" }
+  ],
+  "underweightSectors": [
+    { "name": "Automobile", "avoid": "Stellantis, Valeo", "reason": "Guerre des prix" }
+  ]
+}`;
+
+            const payload = {
+                contents: [{ parts: [{ text: promptText }] }],
+                tools: [{ "google_search": {} }]
+            };
+
+            try {
+                const res = await fetchGeminiWithRetry(payload, 30000);
+                const text = res?.candidates?.[0]?.content?.parts?.[0]?.text;
+                const parsed = cleanAndParseJSON(text);
+
+                if (parsed) {
+                    renderDefaultMarketSynthesis();
+                    showToast("Directives et allocation sectorielle mises à jour via IA !", "success");
+                }
+            } catch (e) {
+                showToast("Erreur d'analyse sectorielle.", "amber");
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> <span>Actualiser via IA Direct</span>`;
+                }
+            }
+        }
+
         async function runLiveMarketAnalysis() {
             showToast("Analyse du marché en direct via CME FedWatch & Leonce IA...", "info");
             const btn = document.getElementById('btnLiveSearch');
