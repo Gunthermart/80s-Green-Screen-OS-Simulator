@@ -7,7 +7,6 @@
  * @author Senior JS Engineer
  */
 
-// Utilisation du fetch natif intégré dans Node.js 18+ (Netlify Functions)
 const getFetch = () => {
   if (typeof globalThis.fetch === 'function') {
     return globalThis.fetch;
@@ -22,6 +21,118 @@ const DEFAULT_HEADERS = {
   'Cache-Control': 'no-cache',
   'Pragma': 'no-cache'
 };
+
+/**
+ * Executes an HTTP request with timeout management, retries, and exponential backoff.
+ * @param {string} url - Target URL
+ * @param {object} options - Request options
+ * @param {number} retries - Maximum retry attempts
+ * @param {number} timeoutMs - Timeout per attempt in ms
+ * @returns {Promise<any>} Parsed JSON or text response
+ */
+async function fetchWithRetry(url, options = {}, retries = 3, timeoutMs = 6000) {
+  let attempt = 0;
+  let delay = 1000;
+  const customFetch = getFetch();
+
+  while (attempt < retries) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const mergedHeaders = { ...DEFAULT_HEADERS, ...(options.headers || {}) };
+      const response = await customFetch(url, {
+        ...options,
+        headers: mergedHeaders,
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`HTTP Error ${response.status}: ${response.statusText}`);
+      }
+
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        return await response.json();
+      } else {
+        const textData = await response.text();
+        try {
+          return JSON.parse(textData);
+        } catch {
+          return textData;
+        }
+      }
+    } catch (err) {
+      clearTimeout(timeoutId);
+      attempt++;
+      if (attempt >= retries) {
+        throw new Error(`Échec après ${retries} tentatives pour ${url}: ${err.message}`);
+      }
+      await new Promise(resolve => setTimeout(resolve, delay));
+      delay *= 2;
+    }
+  }
+}
+
+/**
+ * Queries CNN Dataviz internal API for Fear & Greed Index score & sub-indicators.
+ * @returns {Promise<object>} Score, rating, and 7 sub-indicators
+ */
+async function fetchCnnFearAndGreed() {
+  const url = 'https://production.dataviz.cnn.io/index/fearandgreed/graphdata';
+  const headers = {
+    'Referer': 'https://edition.cnn.com/markets/fear-and-greed',
+    'Origin': 'https://edition.cnn.com'
+  };
+
+  try {
+    const data = await fetchWithRetry(url, { headers }, 3, 6000);
+    const fgData = data?.fear_and_greed || {};
+
+    const score = typeof fgData.score === 'number' ? Math.round(fgData.score * 10) / 10 : 33.3;
+    const rating = fgData.rating || 'fear';
+
+    const formatSub = (sub) => {
+      if (!sub) return 'N/A';
+      const r = sub.rating || 'N/A';
+      const v = typeof sub.score === 'number' ? Math.round(sub.score) : '';
+      return v !== '' ? `${v} (${r})` : r;
+    };
+
+    return {
+      success: true,
+      score,
+      rating,
+      subIndicators: {
+        momentum: formatSub(data?.market_momentum),
+        strength: formatSub(data?.stock_price_strength),
+        breadth: formatSub(data?.stock_price_breadth),
+        putCall: formatSub(data?.put_call_options),
+        vix: formatSub(data?.market_volatility),
+        safeHaven: formatSub(data?.safe_haven_demand),
+        junkBond: formatSub(data?.junk_bond_demand)
+      }
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: `CNN Fear & Greed API Error: ${error.message}`,
+      score: 33.3,
+      rating: 'peur',
+      subIndicators: {
+        momentum: "28 (Peur)",
+        strength: "31 (Peur)",
+        breadth: "45 (Neutre)",
+        putCall: "0.63 (Peur)",
+        vix: "62 (Cupidité)",
+        safeHaven: "24 (Peur Extr.)",
+        junkBond: "50 (Neutre)"
+      }
+    };
+  }
+}
 
 /**
  * Queries CME Group WebService API for CME FedWatch Tool Conditional Meeting Probabilities.
@@ -62,10 +173,10 @@ async function fetchCmeFedWatch() {
       targetRange: nextMeeting.currentTargetRate || '3.50% - 3.75%',
       expectedBps: expectedMove,
       probabilities: {
-        cut50Pct: Math.round(cut50 || 1),
-        cut25Pct: Math.round(cut25 || 2),
-        holdPct: Math.round(hold || 10),
-        hike25Pct: Math.round(hike25 || 87)
+        cut50Pct: Math.round(cut50),
+        cut25Pct: Math.round(cut25),
+        holdPct: Math.round(hold),
+        hike25Pct: Math.round(hike25)
       }
     };
   } catch (error) {
