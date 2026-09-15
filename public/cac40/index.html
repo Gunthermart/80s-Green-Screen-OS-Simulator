@@ -1664,6 +1664,77 @@
 
         let radarChartInstance = null;
 
+        function activateMode(mode) {
+            activeAppMode = mode;
+            const tabSingle = document.getElementById('tabSingleMode');
+            const tabVS = document.getElementById('tabVSMode');
+            const tabSentiment = document.getElementById('tabSentimentMode');
+
+            const searchForm = document.getElementById('searchForm');
+            const searchVSForm = document.getElementById('searchVSForm');
+            const singlePresets = document.getElementById('singlePresets');
+
+            const welcomeContainer = document.getElementById('welcomeContainer');
+            const resultsContainer = document.getElementById('resultsContainer');
+            const vsResultsContainer = document.getElementById('vsResultsContainer');
+            const sentimentContainer = document.getElementById('sentimentMarketContainer');
+            const quickNavContainer = document.getElementById('quickNavContainer');
+
+            if (tabSingle) tabSingle.className = "px-4 py-2 rounded-lg text-slate-400 hover:text-white transition flex items-center space-x-2 cursor-pointer";
+            if (tabVS) tabVS.className = "px-4 py-2 rounded-lg text-slate-400 hover:text-white transition flex items-center space-x-2 cursor-pointer";
+            if (tabSentiment) tabSentiment.className = "px-4 py-2 rounded-lg text-slate-400 hover:text-white transition flex items-center space-x-2 cursor-pointer";
+
+            if (mode === 'single') {
+                if (tabSingle) tabSingle.className = "px-4 py-2 rounded-lg bg-sky-500 text-white font-bold shadow transition flex items-center space-x-2 cursor-pointer";
+                if (searchForm) searchForm.classList.remove('hidden');
+                if (searchVSForm) searchVSForm.classList.add('hidden');
+                if (singlePresets) singlePresets.classList.remove('hidden');
+
+                if (sentimentContainer) sentimentContainer.classList.add('hidden');
+                if (vsResultsContainer) vsResultsContainer.classList.add('hidden');
+
+                if (currentReportData) {
+                    if (welcomeContainer) welcomeContainer.classList.add('hidden');
+                    if (resultsContainer) resultsContainer.classList.remove('hidden');
+                    if (quickNavContainer) quickNavContainer.classList.remove('hidden');
+                } else {
+                    if (welcomeContainer) welcomeContainer.classList.remove('hidden');
+                    if (resultsContainer) resultsContainer.classList.add('hidden');
+                    if (quickNavContainer) quickNavContainer.classList.add('hidden');
+                }
+            } else if (mode === 'vs') {
+                if (tabVS) tabVS.className = "px-4 py-2 rounded-lg bg-amber-500 text-white font-bold shadow transition flex items-center space-x-2 cursor-pointer";
+                if (searchVSForm) searchVSForm.classList.remove('hidden');
+                if (searchForm) searchForm.classList.add('hidden');
+                if (singlePresets) singlePresets.classList.add('hidden');
+
+                if (sentimentContainer) sentimentContainer.classList.add('hidden');
+                if (resultsContainer) resultsContainer.classList.add('hidden');
+                if (quickNavContainer) quickNavContainer.classList.add('hidden');
+
+                if (welcomeContainer) welcomeContainer.classList.add('hidden');
+                if (vsResultsContainer) vsResultsContainer.classList.remove('hidden');
+            } else if (mode === 'sentiment') {
+                if (tabSentiment) tabSentiment.className = "px-4 py-2 rounded-lg bg-blue-600 text-white font-bold shadow transition flex items-center space-x-2 cursor-pointer";
+                if (searchForm) searchForm.classList.add('hidden');
+                if (searchVSForm) searchVSForm.classList.add('hidden');
+                if (singlePresets) singlePresets.classList.add('hidden');
+
+                if (welcomeContainer) welcomeContainer.classList.add('hidden');
+                if (resultsContainer) resultsContainer.classList.add('hidden');
+                if (vsResultsContainer) vsResultsContainer.classList.add('hidden');
+                if (quickNavContainer) quickNavContainer.classList.add('hidden');
+
+                if (sentimentContainer) sentimentContainer.classList.remove('hidden');
+                
+                // Auto-refresh market analysis on tab open
+                setTimeout(() => {
+                    renderBarometerControls();
+                    renderMarketSynthesisSection();
+                }, 50);
+            }
+        }
+
         function showToast(message, type = 'info') {
             const container = document.getElementById('toastContainer');
             if (!container) return;
@@ -1737,959 +1808,6 @@
             if (document.getElementById('mmEuroGain')) document.getElementById('mmEuroGain').innerText = `+${actualEuroGain} €`;
         }
 
-        function cleanAndParseJSON(rawText) {
-            if (!rawText) return null;
-            let clean = rawText.trim();
-            clean = clean.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
-            
-            const firstObj = clean.indexOf('{');
-            const firstArr = clean.indexOf('[');
-            let startIndex = -1;
-            
-            if (firstObj !== -1 && firstArr !== -1) {
-                startIndex = Math.min(firstObj, firstArr);
-            } else if (firstObj !== -1) {
-                startIndex = firstObj;
-            } else if (firstArr !== -1) {
-                startIndex = firstArr;
-            }
-            
-            const lastObj = clean.lastIndexOf('}');
-            const lastArr = clean.lastIndexOf(']');
-            const endIndex = Math.max(lastObj, lastArr);
-            
-            if (startIndex !== -1 && endIndex !== -1 && endIndex >= startIndex) {
-                clean = clean.substring(startIndex, endIndex + 1);
-            } else {
-                return null;
-            }
-            
-            try {
-                return JSON.parse(clean);
-            } catch (e) {
-                try {
-                    let repaired = clean
-                        .replace(/,\s*([}\]])/g, '$1')
-                        .replace(/:\s*\.\s*/g, ': "" ')
-                        .replace(/[\r\n]+/g, " ");
-                    return JSON.parse(repaired);
-                } catch (err) {
-                    console.error("Erreur de décodage JSON:", e);
-                    return null;
-                }
-            }
-        }
-
-        async function fetchGeminiWithRetry(payload, timeoutMs = 45000) {
-            const netlifyEndpoint = window.location.origin + '/.netlify/functions/StocksAnalyser';
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-            try {
-                const response = await fetch(netlifyEndpoint, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload),
-                    signal: controller.signal
-                });
-                clearTimeout(timeoutId);
-
-                if (response.ok) {
-                    const rawText = await response.text();
-                    try {
-                        const resData = JSON.parse(rawText);
-                        if (resData && !resData.error && resData.candidates) return resData;
-                    } catch (e) {}
-                }
-            } catch (err) {
-                clearTimeout(timeoutId);
-            }
-
-            return generateMockResponse(payload);
-        }
-
-        function generateMockResponse(payload) {
-            const mockSingle = {
-                companyInfo: { name: "LVMH Moët Hennessy", ticker: "MC", isin: "FR0000121014", market: "Euronext Paris", index: "CAC 40", icbSector: "Luxe", headquarters: "Paris, France", summary: "Leader mondial des produits de luxe.", competitivePositioning: "Moat étendu fondé sur la désirabilité de marque et le pricing power." },
-                financialKPIs: { currency: "M€", period: "Récente", revenue: "86 153 M€", netIncome: "15 174 M€", operatingMargin: "25.6%", netDebt: "10 742 M€" },
-                healthScores: { piotroskiScore: "7/9", piotroskiAnalysis: "Bilan très solide et rentabilité élevée.", altmanZScore: "4.25", altmanStatus: "Zone Sûre 🟢", altmanAnalysis: "Risque de défaillance quasi nul à 2 ans.", dividendYield: "2.8%", dividendSafety: "Sécurisé 🟢", dividendAnalysis: "Dividende très bien couvert par les flux de trésorerie libres (FCF)." },
-                financialRatios: [
-                    { ratioName: "PER (P/E NTM)", value: "24.5x", benchmark: "22.0x (Médiane Secteur)", status: "neutral", analysis: "Multiples normaux pour un leader de luxe." },
-                    { ratioName: "EV / EBITDA", value: "14.2x", benchmark: "12.5x", status: "positive", analysis: "Marge opérationnelle élevée justifiant le multiple." }
-                ],
-                growthAnalysis: { growthSummary: "Solide dynamique tirée par la division Mode & Maroquinerie.", growthDrivers: ["Expansion Asie/US", "Pricing Power exceptionnel"], growthOutlook: "Perspectives favorables." },
-                governanceAndCapital: { shareholders: ["Famille Arnault (48%)", "Flottant (52%)"], governanceNotes: "Conseil d'administration stable avec présence d'administrateurs indépendants." },
-                perspectivesAndGuidance: { guidanceSummary: "Objectif de croissance organique supérieure au marché.", strategicPillars: ["Discipline d'investissement", "Désirabilité des maisons"] },
-                consensusAndNews: { recommendation: "Achat Fort", targetPrice: "780 €", summary: "Objectif moyen traduisant un potentiel appréciable." },
-                documentedRisks: [
-                    { category: "Macro/Chine", description: "Sensibilité à la conjoncture de consommation asiatique." },
-                    { category: "Devises", description: "Sensibilité aux fluctuations EUR/USD et EUR/JPY." }
-                ],
-                shortInterest: { capitalPct: "0.2%", squeezePotential: "Faible", analysis: "VAD résiduelle." },
-                portfolioFilters: { grahamPass: true, kellyAlloc: "3.5%", kijunValid: true },
-                leonceDiagnostic: { overallScore: 84, shortTermSignal: "Favorable 🟢", shortTermAnalysis: "Momentum soutenu.", mediumTermSignal: "Solide 🟢", mediumTermAnalysis: "Excellente visibilité opérationnelle." },
-                tradingPlan: { entryZone: "680 - 700 €", stopLoss: "640 €", tp1: "780 €", tp2: "850 €" },
-                ichimokuAnalysis: { kumoStatus: "Bullish (Au-dessus du Nuage)", tkCrossStatus: "Signal Haussier Validé", chikouSpanStatus: "Chikou libre" },
-                qvmIndicator: { overallScore: 82, qualityAnalysis: "Excellente rentabilité.", valuationAnalysis: "Multiples raisonnables.", momentumAnalysis: "Tendance haussière." }
-            };
-            return { candidates: [{ content: { parts: [{ text: JSON.stringify(mockSingle) }] } }] };
-        }
-
-        async function executeAnalysis(query, marketFilter) {
-            const loadingContainer = document.getElementById('loadingContainer');
-            const resultsContainer = document.getElementById('resultsContainer');
-            const welcomeContainer = document.getElementById('welcomeContainer');
-            const errorContainer = document.getElementById('errorContainer');
-
-            if (welcomeContainer) welcomeContainer.classList.add('hidden');
-            if (errorContainer) errorContainer.classList.add('hidden');
-            if (loadingContainer) loadingContainer.classList.remove('hidden');
-
-            const promptText = `Agis comme un Analyste Financier Senior. Analyse la société cotée "${query}". ${marketFilter !== 'ALL' ? 'Marché: ' + marketFilter : ''}. 
-
-Consulte et croise OBLIGATOIREMENT les sources complémentaires suivantes :
-1. Sources Primaires & Directes : Site IR officiel (ex: /investors), Euronext Live (live.euronext.com) pour cours et OST, URD / Rapport annuel, AMF BDIF, SEC EDGAR.
-2. Transcriptions Calls : Quartr (quartr.com) pour transcriptions des Earnings Calls et ton du management.
-3. Shorts & VAD : ShortSell.nl (shortsell.nl) pour le Short Interest déclaré.
-4. Valorisation & Métriques Avancées : GuruFocus (gurufocus.com) pour Beneish M-Score & Altman Z-Score historique, Finchat.io / TIKR Terminal pour KPI opérationnels sectoriels, Koyfin, Simply Wall St, Macrotrends, Finviz.
-5. Macroéconomie & Taux : Banque Centrale Européenne / BCE (ecb.europa.eu), Banque de France, FRED Federal Reserve.
-6. Consensus & News : ZoneBourse, Seeking Alpha, Boursier.com, ABC Bourse, Investing.com, Yahoo Finance.
-7. Technique & Initiés : TradingView, OpenInsider.
-
-RÉPONDS PAR UN OBJET JSON STRICTEMENT VALIDE :
-{
-  "companyInfo": { "name": "", "ticker": "", "isin": "", "market": "", "index": "", "icbSector": "", "headquarters": "", "summary": "", "competitivePositioning": "" },
-  "financialKPIs": { "currency": "M€", "period": "", "revenue": "", "netIncome": "", "operatingMargin": "", "netDebt": "" },
-  "healthScores": {
-    "piotroskiScore": "7/9", "piotroskiAnalysis": "", "altmanZScore": "4.25", "altmanStatus": "Zone Sûre 🟢", "altmanAnalysis": "", "dividendYield": "2.8%", "dividendSafety": "Sécurisé 🟢", "dividendAnalysis": "", "fcfPayoutRatio": "45%", "interestCoverage": "> 12x", "debtEbitda": "1.2x", "currentRatio": "1.45", "roicWaccSpread": "+6.2%"
-  },
-  "financialRatios": [ { "ratioName": "", "value": "", "benchmark": "", "status": "positive", "analysis": "" } ],
-  "growthAnalysis": { "growthSummary": "", "growthDrivers": [], "growthOutlook": "" },
-  "governanceAndCapital": { "shareholders": [], "governanceNotes": "" },
-  "perspectivesAndGuidance": { "guidanceSummary": "", "strategicPillars": [] },
-  "consensusAndNews": { "recommendation": "", "targetPrice": "", "summary": "" },
-  "documentedRisks": [ { "category": "", "description": "" } ],
-  "shortInterest": { "capitalPct": "", "squeezePotential": "", "analysis": "" },
-  "portfolioFilters": { "grahamPass": true, "kellyAlloc": "3.5%", "kijunValid": true },
-  "leonceDiagnostic": { "overallScore": 84, "shortTermSignal": "Favorable", "shortTermAnalysis": "", "mediumTermSignal": "Solide", "mediumTermAnalysis": "" },
-  "tradingPlan": { "entryZone": "680 - 700 €", "stopLoss": "640 €", "tp1": "780 €", "tp2": "850 €" },
-  "ichimokuAnalysis": { "kumoStatus": "Bullish", "tkCrossStatus": "Signal Haussier", "chikouSpanStatus": "Chikou libre" },
-  "qvmIndicator": { "overallScore": 82, "qualityAnalysis": "", "valuationAnalysis": "", "momentumAnalysis": "" }
-}`;
-
-            const payload = {
-                contents: [{ parts: [{ text: promptText }] }],
-                tools: [{ "google_search": {} }]
-            };
-
-            try {
-                const res = await fetchGeminiWithRetry(payload, 45000);
-                const text = res?.candidates?.[0]?.content?.parts?.[0]?.text;
-                const parsed = cleanAndParseJSON(text);
-
-                if (loadingContainer) loadingContainer.classList.add('hidden');
-
-                if (parsed) {
-                    currentReportData = parsed;
-                    renderReport(parsed);
-                    activateMode('single');
-                } else {
-                    if (errorContainer) errorContainer.classList.remove('hidden');
-                }
-            } catch (err) {
-                if (loadingContainer) loadingContainer.classList.add('hidden');
-                if (errorContainer) errorContainer.classList.remove('hidden');
-            }
-        }
-
-        function formatSubKpi(valStr, metricType) {
-            if (!valStr || valStr === '---') return '<span class="text-slate-400 font-bold">---</span>';
-            const clean = valStr.toString().trim();
-            const num = parseFloat(clean.replace(',', '.').replace(/[^0-9.-]/g, ''));
-
-            let colorClass = 'text-sky-400'; 
-
-            if (metricType === 'interestCoverage') {
-                if (num >= 5 || clean.includes('> 5') || clean.includes('> 12') || clean.toLowerCase().includes('solide') || clean.toLowerCase().includes('robuste')) {
-                    colorClass = 'text-emerald-400'; 
-                } else if (num < 2.5 || clean.includes('< 2') || clean.toLowerCase().includes('faible') || clean.toLowerCase().includes('alerte')) {
-                    colorClass = 'text-rose-400'; 
-                } else {
-                    colorClass = 'text-sky-400'; 
-                }
-            } else if (metricType === 'debtEbitda') {
-                if (num <= 2.0 || clean.toLowerCase().includes('sain') || clean.toLowerCase().includes('maîtrisé')) {
-                    colorClass = 'text-emerald-400'; 
-                } else if (num > 3.5 || clean.toLowerCase().includes('élevé') || clean.toLowerCase().includes('tendu')) {
-                    colorClass = 'text-rose-400'; 
-                } else {
-                    colorClass = 'text-sky-400'; 
-                }
-            } else if (metricType === 'currentRatio') {
-                if (num >= 1.3 || clean.toLowerCase().includes('solvable') || clean.toLowerCase().includes('bon')) {
-                    colorClass = 'text-emerald-400'; 
-                } else if (num < 1.0 || clean.toLowerCase().includes('déficit')) {
-                    colorClass = 'text-rose-400'; 
-                } else {
-                    colorClass = 'text-sky-400'; 
-                }
-            } else if (metricType === 'roicWacc') {
-                if (clean.includes('+') || num > 0 || clean.toLowerCase().includes('création')) {
-                    colorClass = 'text-emerald-400'; 
-                } else if (clean.includes('-') || num < 0 || clean.toLowerCase().includes('destruction')) {
-                    colorClass = 'text-rose-400'; 
-                } else {
-                    colorClass = 'text-sky-400'; 
-                }
-            }
-
-            return `<span class="text-sm font-bold ${colorClass}">${clean}</span>`;
-        }
-
-        function renderReport(data) {
-            const resultsContainer = document.getElementById('resultsContainer');
-            const quickNavContainer = document.getElementById('quickNavContainer');
-            if (resultsContainer) resultsContainer.classList.remove('hidden');
-            if (quickNavContainer) quickNavContainer.classList.remove('hidden');
-
-            const info = data.companyInfo || {};
-            const kpi = data.financialKPIs || {};
-            const health = data.healthScores || {};
-            const growth = data.growthAnalysis || {};
-            const gov = data.governanceAndCapital || {};
-            const guidance = data.perspectivesAndGuidance || {};
-            const consensus = data.consensusAndNews || {};
-            const risks = data.documentedRisks || [];
-            const shorts = data.shortInterest || {};
-            const filters = data.portfolioFilters || {};
-            const diag = data.leonceDiagnostic || {};
-            const trading = data.tradingPlan || {};
-            const ichi = data.ichimokuAnalysis || {};
-            const qvm = data.qvmIndicator || {};
-
-            document.getElementById('reportCompanyName').innerText = info.name || 'Société';
-            document.getElementById('reportTickerBadge').innerText = info.ticker ? `Ticker: ${info.ticker}` : '---';
-            document.getElementById('reportMarketBadge').innerText = info.market || 'Euronext';
-            document.getElementById('reportIsin').innerText = info.isin || 'N/A';
-            document.getElementById('reportSector').innerText = info.icbSector || 'N/A';
-
-            document.getElementById('infoMarketDetailed').innerText = info.market || '---';
-            document.getElementById('infoIndex').innerText = info.index || 'N/A';
-            document.getElementById('infoHeadquarters').innerText = info.headquarters || '---';
-            document.getElementById('infoSummary').innerText = info.summary || '---';
-            document.getElementById('infoPositioning').innerText = info.competitivePositioning || '---';
-
-            document.getElementById('kpiRevenue').innerText = kpi.revenue || '---';
-            document.getElementById('kpiNetIncome').innerText = kpi.netIncome || '---';
-            document.getElementById('kpiMargin').innerText = kpi.operatingMargin || '---';
-            document.getElementById('kpiDebt').innerText = kpi.netDebt || '---';
-
-            // Piotroski F-Score Dynamic Rendering
-            const rawPiotroskiStr = String(health.piotroskiScore || '5');
-            const piotroskiNum = parseInt(rawPiotroskiStr.match(/\d+/)?.[0] || '5', 10);
-            const clampedPiotroski = Math.max(0, Math.min(9, piotroskiNum));
-
-            document.getElementById('piotroskiValue').innerText = `${clampedPiotroski} / 9`;
-            if (document.getElementById('piotroskiAnalysis')) {
-                document.getElementById('piotroskiAnalysis').innerText = health.piotroskiAnalysis || 'Évaluation de la solidité bilancielle.';
-            }
-
-            const piotroskiBadge = document.getElementById('piotroskiBadge');
-            const piotroskiBarContainer = document.getElementById('piotroskiBarContainer');
-
-            let pColorClass = 'bg-sky-500/20 text-sky-300 border-sky-500/30';
-            let pLabel = 'Neutre 🔵';
-            let barBg = 'bg-sky-500';
-
-            if (clampedPiotroski <= 3) {
-                pColorClass = 'bg-rose-500/20 text-rose-300 border-rose-500/30';
-                pLabel = 'Fragile 🔴';
-                barBg = 'bg-rose-500';
-            } else if (clampedPiotroski >= 7) {
-                pColorClass = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
-                pLabel = 'Très Solide 🟢';
-                barBg = 'bg-emerald-500';
-            }
-
-            if (piotroskiBadge) {
-                piotroskiBadge.className = `px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${pColorClass}`;
-                piotroskiBadge.innerText = pLabel;
-            }
-
-            if (piotroskiBarContainer) {
-                let barHtml = '';
-                for (let i = 1; i <= 9; i++) {
-                    if (i <= clampedPiotroski) {
-                        barHtml += `<div class="h-full flex-1 rounded-sm ${barBg}"></div>`;
-                    } else {
-                        barHtml += `<div class="h-full flex-1 rounded-sm bg-slate-800"></div>`;
-                    }
-                }
-                piotroskiBarContainer.innerHTML = barHtml;
-            }
-
-            // Altman Z-Score Dynamic Calculation
-            const rawAltmanVal = parseFloat(String(health.altmanZScore || '1.8').replace(',', '.'));
-            const altmanVal = isNaN(rawAltmanVal) ? 1.8 : rawAltmanVal;
-
-            document.getElementById('altmanValue').innerText = altmanVal.toFixed(2);
-            if (document.getElementById('altmanAnalysis')) {
-                document.getElementById('altmanAnalysis').innerText = health.altmanAnalysis || 'Risque théorique de défaillance bilancielle à 2 ans.';
-            }
-
-            const altmanBadge = document.getElementById('altmanBadge');
-            if (altmanBadge) {
-                if (altmanVal < 1.81) {
-                    altmanBadge.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30';
-                    altmanBadge.innerText = 'Détresse 🔴';
-                } else if (altmanVal <= 2.99) {
-                    altmanBadge.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30';
-                    altmanBadge.innerText = 'Zone Grise 🔵';
-                } else {
-                    altmanBadge.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30';
-                    altmanBadge.innerText = 'Zone Sûre 🟢';
-                }
-            }
-
-            // Dividend & FCF Safety Dynamic Evaluation
-            let divYieldStr = health.dividendYield || '0.0%';
-            let divYieldNum = parseFloat(String(divYieldStr).replace(',', '.').replace('%', ''));
-            if (isNaN(divYieldNum)) divYieldNum = 0.0;
-
-            const fcfPayoutStr = health.fcfPayoutRatio || '45%';
-            const fcfPayoutNum = parseInt(String(fcfPayoutStr).replace('%', ''), 10) || 0;
-
-            if (document.getElementById('dividendYieldValue')) {
-                document.getElementById('dividendYieldValue').innerText = `${divYieldNum.toFixed(1)}%`;
-                document.getElementById('dividendYieldValue').className = divYieldNum > 0 ? 'text-3xl font-black font-mono text-emerald-400' : 'text-3xl font-black font-mono text-slate-400';
-            }
-
-            if (document.getElementById('fcfPayoutValue')) {
-                document.getElementById('fcfPayoutValue').innerText = divYieldNum > 0 ? `${fcfPayoutNum}% (Couvert)` : 'N/A';
-            }
-
-            if (document.getElementById('fcfPayoutBar')) {
-                const fcfBar = document.getElementById('fcfPayoutBar');
-                fcfBar.style.width = divYieldNum > 0 ? `${Math.min(100, fcfPayoutNum)}%` : '0%';
-                fcfBar.className = fcfPayoutNum > 85 ? 'bg-rose-500 h-full transition-all duration-300' : fcfPayoutNum > 65 ? 'bg-sky-400 h-full transition-all duration-300' : 'bg-emerald-400 h-full transition-all duration-300';
-            }
-
-            if (document.getElementById('dividendAnalysis')) {
-                document.getElementById('dividendAnalysis').innerText = health.dividendAnalysis || 'Évaluation de la pérennité du rendement FCF.';
-            }
-
-            const divSafetyBadge = document.getElementById('dividendSafetyBadge');
-            if (divSafetyBadge) {
-                if (divYieldNum <= 0) {
-                    divSafetyBadge.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-slate-400 border border-slate-700';
-                    divSafetyBadge.innerText = 'Pas de Dividende ⚪';
-                } else if (fcfPayoutNum > 85 || String(health.dividendSafety).includes('Risque') || String(health.dividendSafety).includes('Faible')) {
-                    divSafetyBadge.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30';
-                    divSafetyBadge.innerText = 'Risque de coupe 🔴';
-                } else if (fcfPayoutNum > 65) {
-                    divSafetyBadge.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30';
-                    divSafetyBadge.innerText = 'Sous surveillance 🔵';
-                } else {
-                    divSafetyBadge.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30';
-                    divSafetyBadge.innerText = 'Sécurisé 🟢';
-                }
-            }
-
-            // Sub-KPI Solvency Metrics Rendering
-            if (document.getElementById('subInterestCoverage')) document.getElementById('subInterestCoverage').innerHTML = formatSubKpi(health.interestCoverage || '> 5x', 'interestCoverage');
-            if (document.getElementById('subDebtEbitda')) document.getElementById('subDebtEbitda').innerHTML = formatSubKpi(health.debtEbitda || '1.8x', 'debtEbitda');
-            if (document.getElementById('subCurrentRatio')) document.getElementById('subCurrentRatio').innerHTML = formatSubKpi(health.currentRatio || '1.35', 'currentRatio');
-            if (document.getElementById('subRoicWacc')) document.getElementById('subRoicWacc').innerHTML = formatSubKpi(health.roicWaccSpread || '+5.0%', 'roicWacc');
-
-            // Render ratios list with color mapping
-            if (document.getElementById('ratiosContainer') && Array.isArray(data.financialRatios)) {
-                document.getElementById('ratiosContainer').innerHTML = data.financialRatios.map(r => {
-                    const st = (r.status || 'neutral').toLowerCase();
-                    const isPos = st.includes('positive') || st.includes('positif');
-                    const isNeg = st.includes('warning') || st.includes('negative') || st.includes('négatif') || st.includes('negatif');
-
-                    const cardBg = isPos ? 'bg-emerald-950/20 border-emerald-500/40' : isNeg ? 'bg-rose-950/20 border-rose-500/40' : 'bg-sky-950/20 border-sky-500/40';
-                    const badgeStyle = isPos ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : isNeg ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' : 'bg-sky-500/10 text-sky-400 border-sky-500/30';
-                    const valColor = isPos ? 'text-emerald-400' : isNeg ? 'text-rose-400' : 'text-sky-400';
-                    const labelText = isPos ? 'POSITIF' : isNeg ? 'NÉGATIF' : 'NEUTRE';
-
-                    return `
-                        <div class="p-4 rounded-xl border ${cardBg} space-y-2">
-                            <div class="flex items-center justify-between">
-                                <span class="text-xs font-mono font-semibold text-slate-200">${r.ratioName}</span>
-                                <span class="text-[11px] font-mono px-2 py-0.5 rounded border ${badgeStyle}">${labelText}</span>
-                            </div>
-                            <div class="text-xl font-black font-mono ${valColor}">${r.value}</div>
-                            ${r.benchmark ? `<div class="text-[11px] text-slate-400 font-mono">Médiane secteur: <b class="text-slate-300">${r.benchmark}</b></div>` : ''}
-                            <p class="text-xs text-slate-300 pt-1 border-t border-slate-800/60">${r.analysis}</p>
-                        </div>
-                    `;
-                }).join('');
-            }
-
-            // Sections 4 to 14
-            if (document.getElementById('growthSummaryText')) document.getElementById('growthSummaryText').innerText = growth.growthSummary || 'Données de croissance disponibles.';
-            if (document.getElementById('growthOutlookText')) document.getElementById('growthOutlookText').innerText = growth.growthOutlook || 'Perspectives de croissance solides.';
-            if (document.getElementById('governanceNotesText')) document.getElementById('governanceNotesText').innerText = gov.governanceNotes || 'Structure de gouvernance conforme.';
-
-            if (document.getElementById('majorShareholdersList')) {
-                const list = gov.shareholders || ["Flottant institutionnel & individuel"];
-                document.getElementById('majorShareholdersList').innerHTML = list.map(s => `<div class="p-2 rounded bg-slate-900 border border-slate-800 text-slate-300">${s}</div>`).join('');
-            }
-
-            if (document.getElementById('guidanceSummaryText')) document.getElementById('guidanceSummaryText').innerText = guidance.guidanceSummary || 'Perspectives stratégiques confirmées.';
-            if (document.getElementById('strategicPillarsList')) {
-                const pillars = guidance.strategicPillars || ["Discipline de capital", "Croissance organique"];
-                document.getElementById('strategicPillarsList').innerHTML = pillars.map(p => `<div class="p-2 rounded bg-slate-900 border border-slate-800 text-slate-300 flex items-center space-x-2"><i class="fa-solid fa-check text-emerald-400 text-xs"></i><span>${p}</span></div>`).join('');
-            }
-
-            if (document.getElementById('consensusRec')) document.getElementById('consensusRec').innerText = consensus.recommendation || 'Achat / Surperformer';
-            if (document.getElementById('targetPriceAvg')) document.getElementById('targetPriceAvg').innerText = consensus.targetPrice || '---';
-            if (document.getElementById('consensusSummaryText')) document.getElementById('consensusSummaryText').innerText = consensus.summary || 'Consensus très favorable.';
-
-            if (document.getElementById('riskFactorsGrid')) {
-                document.getElementById('riskFactorsGrid').innerHTML = risks.map(r => `
-                    <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1">
-                        <div class="text-xs font-mono font-bold text-rose-400">${r.category || 'Facteur de Risque'}</div>
-                        <p class="text-xs text-slate-300 leading-relaxed">${r.description}</p>
-                    </div>
-                `).join('');
-            }
-
-            if (document.getElementById('shortCapitalPct')) document.getElementById('shortCapitalPct').innerText = shorts.capitalPct || 'N/A';
-            if (document.getElementById('shortSqueezePotential')) document.getElementById('shortSqueezePotential').innerText = shorts.squeezePotential || 'Modéré';
-            if (document.getElementById('shortAnalysisText')) document.getElementById('shortAnalysisText').innerText = shorts.analysis || 'Faible niveau de VAD.';
-
-            if (document.getElementById('filterGrahamStatus')) document.getElementById('filterGrahamStatus').innerText = filters.grahamPass ? 'Validé 🟢' : 'Sous réserve 🟡';
-            if (document.getElementById('filterKellyValue')) document.getElementById('filterKellyValue').innerText = `${filters.kellyAlloc || '3.0%'} Alloc.`;
-            if (document.getElementById('filterKijunStatus')) document.getElementById('filterKijunStatus').innerText = filters.kijunValid ? 'Validé 🟢' : 'En attente 🟡';
-
-            document.getElementById('overallScoreBadge').innerText = `${diag.overallScore || '--'} / 100`;
-            document.getElementById('stAnalysisText').innerText = diag.shortTermAnalysis || '---';
-            document.getElementById('mtAnalysisText').innerText = diag.mediumTermAnalysis || '---';
-
-            document.getElementById('planEntry').innerText = trading.entryZone || '---';
-            document.getElementById('planStopLoss').innerText = trading.stopLoss || '---';
-            document.getElementById('planTP1').innerText = trading.tp1 || '---';
-            document.getElementById('planTP2').innerText = trading.tp2 || '---';
-
-            calculateMoneyManagement();
-
-            if (document.getElementById('ichimokuKumoStatus')) document.getElementById('ichimokuKumoStatus').innerText = ichi.kumoStatus || 'Kumo Bullish';
-            if (document.getElementById('ichimokuTKStatus')) document.getElementById('ichimokuTKStatus').innerText = ichi.tkCrossStatus || 'Signal Haussier';
-            if (document.getElementById('ichimokuChikouStatus')) document.getElementById('ichimokuChikouStatus').innerText = ichi.chikouSpanStatus || 'Chikou Libre';
-
-            document.getElementById('qvmOverallScoreBadge').innerText = `${qvm.overallScore || '--'} / 100`;
-            document.getElementById('qvmQualityAnalysis').innerText = qvm.qualityAnalysis || '---';
-            document.getElementById('qvmValuationAnalysis').innerText = qvm.valuationAnalysis || '---';
-            document.getElementById('qvmMomentumAnalysis').innerText = qvm.momentumAnalysis || '---';
-        }
-
-        function activateMode(mode) {
-            activeAppMode = mode;
-            const tabSingle = document.getElementById('tabSingleMode');
-            const tabVS = document.getElementById('tabVSMode');
-            const tabSentiment = document.getElementById('tabSentimentMode');
-
-            const searchForm = document.getElementById('searchForm');
-            const searchVSForm = document.getElementById('searchVSForm');
-            const singlePresets = document.getElementById('singlePresets');
-
-            const welcomeContainer = document.getElementById('welcomeContainer');
-            const resultsContainer = document.getElementById('resultsContainer');
-            const vsResultsContainer = document.getElementById('vsResultsContainer');
-            const sentimentContainer = document.getElementById('sentimentMarketContainer');
-            const quickNavContainer = document.getElementById('quickNavContainer');
-
-            if (tabSingle) tabSingle.className = "px-4 py-2 rounded-lg text-slate-400 hover:text-white transition flex items-center space-x-2 cursor-pointer";
-            if (tabVS) tabVS.className = "px-4 py-2 rounded-lg text-slate-400 hover:text-white transition flex items-center space-x-2 cursor-pointer";
-            if (tabSentiment) tabSentiment.className = "px-4 py-2 rounded-lg text-slate-400 hover:text-white transition flex items-center space-x-2 cursor-pointer";
-
-            if (mode === 'single') {
-                if (tabSingle) tabSingle.className = "px-4 py-2 rounded-lg bg-sky-500 text-white font-bold shadow transition flex items-center space-x-2 cursor-pointer";
-                if (searchForm) searchForm.classList.remove('hidden');
-                if (searchVSForm) searchVSForm.classList.add('hidden');
-                if (singlePresets) singlePresets.classList.remove('hidden');
-
-                if (sentimentContainer) sentimentContainer.classList.add('hidden');
-                if (vsResultsContainer) vsResultsContainer.classList.add('hidden');
-
-                if (currentReportData) {
-                    if (welcomeContainer) welcomeContainer.classList.add('hidden');
-                    if (resultsContainer) resultsContainer.classList.remove('hidden');
-                    if (quickNavContainer) quickNavContainer.classList.remove('hidden');
-                } else {
-                    if (welcomeContainer) welcomeContainer.classList.remove('hidden');
-                    if (resultsContainer) resultsContainer.classList.add('hidden');
-                    if (quickNavContainer) quickNavContainer.classList.add('hidden');
-                }
-            } else if (mode === 'vs') {
-                if (tabVS) tabVS.className = "px-4 py-2 rounded-lg bg-amber-500 text-white font-bold shadow transition flex items-center space-x-2 cursor-pointer";
-                if (searchVSForm) searchVSForm.classList.remove('hidden');
-                if (searchForm) searchForm.classList.add('hidden');
-                if (singlePresets) singlePresets.classList.add('hidden');
-
-                if (sentimentContainer) sentimentContainer.classList.add('hidden');
-                if (resultsContainer) resultsContainer.classList.add('hidden');
-                if (quickNavContainer) quickNavContainer.classList.add('hidden');
-
-                if (welcomeContainer) welcomeContainer.classList.add('hidden');
-                if (vsResultsContainer) vsResultsContainer.classList.remove('hidden');
-            } else if (mode === 'sentiment') {
-                if (tabSentiment) tabSentiment.className = "px-4 py-2 rounded-lg bg-blue-600 text-white font-bold shadow transition flex items-center space-x-2 cursor-pointer";
-                if (searchForm) searchForm.classList.add('hidden');
-                if (searchVSForm) searchVSForm.classList.add('hidden');
-                if (singlePresets) singlePresets.classList.add('hidden');
-
-                if (welcomeContainer) welcomeContainer.classList.add('hidden');
-                if (resultsContainer) resultsContainer.classList.add('hidden');
-                if (vsResultsContainer) vsResultsContainer.classList.add('hidden');
-                if (quickNavContainer) quickNavContainer.classList.add('hidden');
-
-                if (sentimentContainer) sentimentContainer.classList.remove('hidden');
-            }
-        }
-
-        function jumpToSection(sectionId) {
-            const targetEl = document.getElementById(sectionId);
-            if (targetEl) {
-                const headerOffset = 130;
-                const elementPosition = targetEl.getBoundingClientRect().top;
-                const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
-                window.scrollTo({ top: offsetPosition, behavior: 'smooth' });
-            }
-        }
-
-        function openDeepDiveModal(topic = 'Général') {
-            const modal = document.getElementById('deepDiveModal');
-            const companyNameEl = document.getElementById('deepDiveModalCompanyName');
-            const companyInfo = currentReportData?.companyInfo || {};
-            const companyName = companyInfo.name || document.getElementById('searchInput')?.value || 'Titre Sélectionné';
-            const ticker = companyInfo.ticker ? `(${companyInfo.ticker})` : '';
-
-            if (companyNameEl) companyNameEl.innerText = `${companyName} ${ticker}`.trim();
-
-            const output = document.getElementById('deepDiveOutput');
-            if (output) {
-                output.innerHTML = `
-                    <div class="flex flex-col items-center justify-center py-8 space-y-3 text-center">
-                        <div class="relative w-10 h-10">
-                            <div class="absolute inset-0 rounded-full border-2 border-slate-800 border-t-amber-400 animate-spin"></div>
-                        </div>
-                        <p class="text-xs text-slate-300 font-mono">Analyse approfondie sur "${topic}" en cours via Leonce IA...</p>
-                    </div>
-                `;
-            }
-
-            if (modal) modal.classList.remove('hidden');
-            runDeepDiveAnalysis(topic);
-        }
-
-        function closeDeepDiveModal() {
-            const modal = document.getElementById('deepDiveModal');
-            if (modal) modal.classList.add('hidden');
-        }
-
-        async function runDeepDiveAnalysis(topic) {
-            const output = document.getElementById('deepDiveOutput');
-            const companyInfo = currentReportData?.companyInfo || {};
-            const companyName = companyInfo.name || document.getElementById('searchInput')?.value || 'Titre Sélectionné';
-            const ticker = companyInfo.ticker ? `(${companyInfo.ticker})` : '';
-
-            if (!output) return;
-
-            output.innerHTML = `
-                <div class="flex flex-col items-center justify-center py-8 space-y-3 text-center">
-                    <div class="relative w-10 h-10">
-                        <div class="absolute inset-0 rounded-full border-2 border-slate-800 border-t-amber-400 animate-spin"></div>
-                    </div>
-                    <p class="text-xs text-slate-300 font-mono">Analyse approfondie sur "${topic}" en cours pour ${companyName}...</p>
-                </div>
-            `;
-
-            const promptText = `Agis comme un Analyste Financier Senior. Fournis une analyse financière et stratégique approfondie et hautement pertinente sur le thème "${topic}" pour la société "${companyName}" ${ticker} cotée sur Euronext.
-
-Consulte et croise les sources suivantes : Site IR Officiel, Euronext Live, Quartr Earnings Calls, ShortSell.nl (Short Interest), GuruFocus (Beneish M-Score & Altman Z), Finchat.io, AMF BDIF, SEC EDGAR, TradingView, OpenInsider, BCE & FRED.
-
-RÉPONDS PAR UN OBJET JSON STRICTEMENT VALIDE :
-{
-  "summary": "Synthèse exécutive claire et directe (2-3 phrases).",
-  "verdict": "Conclusion / Signal (ex: Intérêt Acheteur Fort, Marge de Sécurité 15%, Risque Modéré)",
-  "verdictColor": "emerald",
-  "metrics": [
-    { "label": "Chiffre d'Affaires 2025", "value": "90,5 M€", "note": "Forte progression", "color": "emerald" }
-  ],
-  "sections": [
-    {
-      "title": "Titre du Pilier 1",
-      "icon": "fa-chart-pie",
-      "content": "Explication détaillée, chiffrée et factuelle...",
-      "bullets": ["Point clé 1", "Point clé 2"]
-    }
-  ],
-  "takeaway": "Recommandation ou conclusion stratégique à moyen terme."
-}`;
-
-            const payload = {
-                contents: [{ parts: [{ text: promptText }] }],
-                tools: [{ "google_search": {} }]
-            };
-
-            try {
-                const res = await fetchGeminiWithRetry(payload, 35000);
-                const text = res?.candidates?.[0]?.content?.parts?.[0]?.text;
-                
-                if (!text) {
-                    output.innerHTML = `<div class="p-4 rounded-xl bg-rose-950/40 border border-rose-800 text-rose-300 text-xs">Impossible d'obtenir l'analyse pour le moment. Veuillez réessayer.</div>`;
-                    return;
-                }
-
-                const parsedJson = cleanAndParseJSON(text);
-
-                if (parsedJson && (parsedJson.summary || parsedJson.sections)) {
-                    output.innerHTML = renderDeepDiveJSON(parsedJson, topic, companyName);
-                } else if (text.trim().startsWith('{') || text.includes('"summary"')) {
-                    output.innerHTML = repairAndRenderBrokenJSON(text, topic);
-                } else {
-                    output.innerHTML = formatDeepDiveMarkdown(text, topic);
-                }
-            } catch (err) {
-                output.innerHTML = `<div class="p-4 rounded-xl bg-rose-950/40 border border-rose-800 text-rose-300 text-xs">Une erreur s'est produite lors de la génération : ${err.message || 'Erreur réseau'}.</div>`;
-            }
-        }
-
-        function renderDeepDiveJSON(data, topic, companyName) {
-            const verdictColor = data.verdictColor || 'sky';
-            const colorClasses = {
-                emerald: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
-                sky: 'bg-sky-500/10 text-sky-300 border-sky-500/30',
-                blue: 'bg-sky-500/10 text-sky-300 border-sky-500/30',
-                rose: 'bg-rose-500/10 text-rose-300 border-rose-500/30'
-            }[verdictColor] || 'bg-sky-500/10 text-sky-300 border-sky-500/30';
-
-            const metricsHtml = (data.metrics && data.metrics.length > 0) ? `
-                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                    ${data.metrics.map(m => {
-                        const mColor = m.color === 'emerald' ? 'text-emerald-400' : m.color === 'rose' ? 'text-rose-400' : 'text-sky-400';
-                        return `
-                        <div class="p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1">
-                            <div class="text-[10px] font-mono uppercase text-slate-400">${m.label}</div>
-                            <div class="text-base font-extrabold font-mono ${mColor}">${m.value}</div>
-                            ${m.note ? `<div class="text-[11px] text-slate-400">${m.note}</div>` : ''}
-                        </div>
-                    `}).join('')}
-                </div>
-            ` : '';
-
-            const sectionsHtml = (data.sections && data.sections.length > 0) ? `
-                <div class="space-y-4">
-                    ${data.sections.map(s => `
-                        <div class="p-4 rounded-xl bg-slate-900/70 border border-slate-800/80 space-y-2.5">
-                            <div class="flex items-center space-x-2 text-xs font-bold text-amber-400 font-mono uppercase">
-                                <i class="fa-solid ${s.icon || 'fa-circle-dot'} text-amber-400"></i>
-                                <span>${s.title}</span>
-                            </div>
-                            ${s.content ? `<p class="text-xs text-slate-300 leading-relaxed">${s.content}</p>` : ''}
-                            ${s.bullets && s.bullets.length > 0 ? `
-                                <ul class="space-y-1.5 pt-1">
-                                    ${s.bullets.map(b => `
-                                        <li class="flex items-start space-x-2 text-xs text-slate-300">
-                                            <i class="fa-solid fa-check text-emerald-400 text-[10px] mt-1 shrink-0"></i>
-                                            <span>${b}</span>
-                                        </li>
-                                    `).join('')}
-                                </ul>
-                            ` : ''}
-                        </div>
-                    `).join('')}
-                </div>
-            ` : '';
-
-            return `
-                <div class="space-y-5 text-xs">
-                    <div class="p-4 rounded-xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-slate-950 border border-slate-800 space-y-2">
-                        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2">
-                            <span class="font-mono text-[11px] text-slate-400 uppercase tracking-wider flex items-center space-x-1.5">
-                                <i class="fa-solid fa-crosshair text-amber-400"></i>
-                                <span>${topic}</span>
-                            </span>
-                            ${data.verdict ? `<span class="px-2.5 py-1 rounded-full text-xs font-bold border ${colorClasses}">${data.verdict}</span>` : ''}
-                        </div>
-                        ${data.summary ? `<p class="text-xs text-slate-200 leading-relaxed font-medium">${data.summary}</p>` : ''}
-                    </div>
-
-                    ${metricsHtml}
-                    ${sectionsHtml}
-
-                    ${data.takeaway ? `
-                        <div class="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-1 text-amber-200">
-                            <div class="text-[11px] font-mono font-bold uppercase text-amber-400 flex items-center space-x-1.5">
-                                <i class="fa-solid fa-lightbulb"></i>
-                                <span>Conclusion Stratégique</span>
-                            </div>
-                            <p class="text-xs leading-relaxed text-slate-200">${data.takeaway}</p>
-                        </div>
-                    ` : ''}
-                </div>
-            `;
-        }
-
-        function repairAndRenderBrokenJSON(rawText, topic) {
-            const extractString = (key) => {
-                const reg = new RegExp(`"${key}"\\s*:\\s*"([^"]+)"`, 'i');
-                const m = rawText.match(reg);
-                return m ? m[1] : null;
-            };
-
-            const summary = extractString('summary') || 'Synthèse d\'analyse générée par Leonce IA.';
-            const verdict = extractString('verdict') || 'Analyse Complétée';
-            const takeaway = extractString('takeaway');
-
-            const bulletMatches = rawText.match(/"bullets"\s*:\s*\[([\s\S]*?)\]/i);
-            let bullets = [];
-            if (bulletMatches && bulletMatches[1]) {
-                bullets = Array.from(bulletMatches[1].matchAll(/"([^"]+)"/g)).map(m => m[1]);
-            }
-
-            let cleanContent = rawText
-                .replace(/\{|\}|\[|\]|"/g, ' ')
-                .replace(/summary|verdict|metrics|sections|bullets|takeaway/g, '')
-                .replace(/\s+/g, ' ')
-                .trim();
-
-            return `
-                <div class="space-y-4 text-xs">
-                    <div class="p-4 rounded-xl bg-slate-900 border border-amber-500/30 space-y-2">
-                        <div class="flex justify-between items-center border-b border-slate-800 pb-2">
-                            <span class="font-mono text-[11px] text-amber-400 uppercase font-bold">Analyse : ${topic}</span>
-                            <span class="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-bold text-[10px] border border-emerald-500/30">${verdict}</span>
-                        </div>
-                        <p class="text-xs text-slate-200 leading-relaxed">${summary}</p>
-                    </div>
-
-                    ${bullets.length > 0 ? `
-                        <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2">
-                            <div class="font-bold text-sky-400 font-mono text-[11px] uppercase">Points Clés Identifiés :</div>
-                            <ul class="space-y-1.5">
-                                ${bullets.map(b => `
-                                    <li class="flex items-start space-x-2 text-slate-300">
-                                        <i class="fa-solid fa-check text-emerald-400 text-[10px] mt-1 shrink-0"></i>
-                                        <span>${b}</span>
-                                    </li>
-                                `).join('')}
-                            </ul>
-                        </div>
-                    ` : ''}
-
-                    <div class="p-4 rounded-xl bg-slate-900/60 border border-slate-800/80 text-slate-300 leading-relaxed text-xs">
-                        ${cleanContent.slice(0, 800)}...
-                    </div>
-
-                    ${takeaway ? `
-                        <div class="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-slate-200 text-xs">
-                            <strong class="text-amber-400 block mb-1">Takeaway :</strong>
-                            ${takeaway}
-                        </div>
-                    ` : ''}
-                </div>
-            `;
-        }
-
-        function formatDeepDiveMarkdown(rawText, topic) {
-            if (!rawText) return '';
-            let formatted = rawText
-                .replace(/```html/gi, '')
-                .replace(/```json/gi, '')
-                .replace(/```/g, '')
-                .trim();
-
-            formatted = formatted.replace(/^### (.*$)/gim, '<h4 class="text-xs font-bold text-amber-400 font-mono uppercase mt-4 mb-2 flex items-center space-x-2"><i class="fa-solid fa-chevron-right text-[10px]"></i><span>$1</span></h4>');
-            formatted = formatted.replace(/^## (.*$)/gim, '<h3 class="text-sm font-extrabold text-white mt-5 mb-2 border-b border-slate-800 pb-1">$1</h3>');
-            formatted = formatted.replace(/^# (.*$)/gim, '<h2 class="text-base font-extrabold text-amber-300 mt-6 mb-3">$1</h2>');
-
-            formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong class="text-slate-100 font-semibold">$1</strong>');
-
-            formatted = formatted.replace(/^\* (.*$)/gim, '<li class="flex items-start space-x-2 my-1"><i class="fa-solid fa-circle-small text-amber-400 text-[8px] mt-1.5 shrink-0"></i><span>$1</span></li>');
-            formatted = formatted.replace(/^- (.*$)/gim, '<li class="flex items-start space-x-2 my-1"><i class="fa-solid fa-check text-emerald-400 text-[10px] mt-1 shrink-0"></i><span>$1</span></li>');
-
-            return `
-                <div class="space-y-3 text-xs text-slate-300 leading-relaxed font-sans">
-                    <div class="p-3 rounded-xl bg-slate-900 border border-amber-500/30 text-amber-300 font-mono text-[11px] flex items-center justify-between">
-                        <span>Analyse Approfondie : ${topic}</span>
-                        <span class="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold">Leonce IA Live</span>
-                    </div>
-                    <div class="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2">
-                        ${formatted}
-                    </div>
-                </div>
-            `;
-        }
-
-        function selectPreset(value) {
-            const input = document.getElementById('searchInput');
-            if (input) {
-                input.value = value;
-                const market = document.getElementById('marketSelect')?.value || 'ALL';
-                executeAnalysis(value, market);
-            }
-        }
-
-        function selectVSPreset(v1, v2) {
-            const input1 = document.getElementById('searchInputVS1');
-            const input2 = document.getElementById('searchInputVS2');
-            if (input1) input1.value = v1;
-            if (input2) input2.value = v2;
-            executeVSAnalysis(v1, v2);
-        }
-
-        function copyPPToClipboard() {
-            if (!currentReportData) {
-                showToast("Veuillez d'abord réaliser l'analyse d'un titre.", "amber");
-                return;
-            }
-            const info = currentReportData.companyInfo || {};
-            const plan = currentReportData.tradingPlan || {};
-            const diag = currentReportData.leonceDiagnostic || {};
-
-            const companyHashtag = '#' + (info.name || 'Societe').replace(/[^a-zA-Z0-9]/g, '');
-            const tickerTag = info.ticker ? `$${info.ticker}` : '';
-            const entry = plan.entryZone || 'N/A';
-            const sl = plan.stopLoss || 'N/A';
-            const tp1 = plan.tp1 || 'N/A';
-            const tp2 = plan.tp2 || 'N/A';
-
-            const entryNum = parsePriceValue(entry);
-            const slNum = parsePriceValue(sl);
-            const tp1Num = parsePriceValue(tp1);
-            let rrStr = '2,75';
-            if (entryNum && slNum && tp1Num && (entryNum - slNum) > 0) {
-                rrStr = ((tp1Num - entryNum) / (entryNum - slNum)).toFixed(2).replace('.', ',');
-            }
-
-            const thesis = diag.mediumTermAnalysis || diag.shortTermAnalysis || info.summary || 'Excellente dynamique opérationnelle et perspectives fondamentales solides.';
-
-            const formattedMessage = `${companyHashtag} ${tickerTag}|In:${entry}|SL:${sl}|TP1:${tp1}|TP2:${tp2}| R/R: ${rrStr}\nThèse: ${thesis}`;
-
-            const tempTextArea = document.createElement('textarea');
-            tempTextArea.value = formattedMessage;
-            document.body.appendChild(tempTextArea);
-            tempTextArea.select();
-            document.execCommand('copy');
-            document.body.removeChild(tempTextArea);
-
-            showToast('Format PP copié dans le presse-papier !', 'success');
-        }
-
-        function copyPineScript() {
-            const ticker = currentReportData?.companyInfo?.ticker || 'STOCK';
-            const entry = currentReportData?.tradingPlan?.entryZone || '100';
-            const sl = currentReportData?.tradingPlan?.stopLoss || '90';
-            const tp1 = currentReportData?.tradingPlan?.tp1 || '120';
-
-            const pineCode = `//@version=5
-indicator("Plan de Trading Leonce IA - ${ticker}", overlay=true)
-entryPrice = input.float(${parsePriceValue(entry)}, "Prix d'entrée")
-stopLossPrice = input.float(${parsePriceValue(sl)}, "Stop Loss")
-targetPrice = input.float(${parsePriceValue(tp1)}, "Objectif TP1")
-
-plot(entryPrice, "Entrée", color=color.blue, linewidth=2)
-plot(stopLossPrice, "Stop Loss", color=color.red, linewidth=2)
-plot(targetPrice, "TP1", color=color.green, linewidth=2)
-`;
-            const tempTextArea = document.createElement('textarea');
-            tempTextArea.value = pineCode;
-            document.body.appendChild(tempTextArea);
-            tempTextArea.select();
-            document.execCommand('copy');
-            document.body.removeChild(tempTextArea);
-            showToast('Code PineScript v5 copié dans le presse-papier !', 'success');
-        }
-
-        async function saveCurrentTrade() {
-            if (!currentReportData) {
-                showToast("Aucune donnée de titre chargée à enregistrer.", "amber");
-                return;
-            }
-            const companyName = currentReportData.companyInfo?.name || 'Inconnu';
-            const ticker = currentReportData.companyInfo?.ticker || 'INC';
-            const plan = currentReportData.tradingPlan || {};
-
-            try {
-                await db.trades.add({
-                    companyName: companyName,
-                    ticker: ticker,
-                    status: 'Actif',
-                    entryZone: plan.entryZone || 'N/A',
-                    stopLoss: plan.stopLoss || 'N/A',
-                    tp1: plan.tp1 || 'N/A',
-                    timestamp: new Date().toISOString()
-                });
-                showToast(`Trade pour ${companyName} (${ticker}) enregistré dans le Journal !`, 'success');
-                renderTradesList();
-            } catch (e) {
-                console.error("Erreur enregistrement trade:", e);
-                showToast("Erreur lors de l'enregistrement du trade.", "amber");
-            }
-        }
-
-        async function renderTradesList() {
-            const tradesList = document.getElementById('tradesList');
-            if (!tradesList) return;
-            try {
-                const trades = await db.trades.orderBy('id').reverse().toArray();
-                if (!trades || trades.length === 0) {
-                    tradesList.innerHTML = `<div class="text-center py-8 text-xs text-slate-500">Aucun trade enregistré dans le journal.</div>`;
-                    return;
-                }
-                tradesList.innerHTML = trades.map(t => `
-                    <div class="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 flex items-center justify-between gap-3 font-mono text-xs">
-                        <div class="space-y-1">
-                            <div class="flex items-center space-x-2">
-                                <span class="font-bold text-white text-sm">${t.companyName || t.ticker}</span>
-                                <span class="px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 text-[10px] border border-sky-500/20">${t.ticker}</span>
-                                <span class="px-2 py-0.5 rounded ${t.status === 'Clôturé' ? 'bg-slate-800 text-slate-400' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'} text-[10px]">${t.status || 'Actif'}</span>
-                            </div>
-                            <div class="text-[11px] text-slate-400 flex flex-wrap gap-x-3 gap-y-0.5">
-                                <span>Entrée: <strong class="text-sky-300">${t.entryZone || 'N/A'}</strong></span>
-                                <span>SL: <strong class="text-rose-400">${t.stopLoss || 'N/A'}</strong></span>
-                                <span>TP1: <strong class="text-emerald-400">${t.tp1 || 'N/A'}</strong></span>
-                            </div>
-                        </div>
-                        <div class="flex items-center space-x-1 shrink-0">
-                            <button onclick="deleteTrade(${t.id})" class="p-2 text-slate-500 hover:text-rose-400 transition cursor-pointer" title="Supprimer">
-                                <i class="fa-solid fa-trash-can"></i>
-                            </button>
-                        </div>
-                    </div>
-                `).join('');
-            } catch (e) {
-                tradesList.innerHTML = `<div class="text-center py-4 text-xs text-rose-400">Erreur lors de la lecture des trades.</div>`;
-            }
-        }
-
-        async function deleteTrade(id) {
-            try {
-                await db.trades.delete(id);
-                renderTradesList();
-                showToast("Trade supprimé du journal.", "info");
-            } catch (e) {
-                showToast("Erreur lors de la suppression.", "amber");
-            }
-        }
-
-        function openHistoryModal() {
-            const historyModal = document.getElementById('historyModal');
-            if (historyModal) {
-                historyModal.classList.remove('hidden');
-                renderTradesList();
-            }
-        }
-
-        function closeHistoryModal() {
-            const historyModal = document.getElementById('historyModal');
-            if (historyModal) historyModal.classList.add('hidden');
-        }
-
         function openSummaryModal() {
             if (!currentReportData) {
                 showToast("Veuillez d'abord réaliser l'analyse d'un titre.", "amber");
@@ -2715,7 +1833,6 @@ plot(targetPrice, "TP1", color=color.green, linewidth=2)
             if (contentEl) {
                 contentEl.innerHTML = `
                     <div class="space-y-4 text-xs font-sans">
-                        <!-- Diagnostic & Score Card -->
                         <div class="p-4 rounded-xl bg-slate-950 border border-sky-500/30 flex items-center justify-between flex-wrap gap-2">
                             <div class="space-y-1">
                                 <span class="text-[10px] font-mono uppercase text-sky-400 font-bold">Score Global Leonce IA</span>
@@ -2729,7 +1846,6 @@ plot(targetPrice, "TP1", color=color.green, linewidth=2)
                             </div>
                         </div>
 
-                        <!-- 2 Core Columns Breakdown -->
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                             <div class="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1.5">
                                 <div class="font-bold text-sky-400 text-xs font-mono uppercase flex items-center space-x-1">
@@ -2757,7 +1873,6 @@ plot(targetPrice, "TP1", color=color.green, linewidth=2)
                             </div>
                         </div>
 
-                        <!-- Plan de Trading Express -->
                         <div class="p-4 rounded-xl bg-slate-950/90 border border-emerald-500/40 space-y-2">
                             <div class="flex items-center justify-between border-b border-slate-800 pb-1.5 font-mono text-xs">
                                 <span class="font-bold text-emerald-400 uppercase">Plan d'Exécution Trading & Risk Management</span>
@@ -2807,5 +1922,309 @@ plot(targetPrice, "TP1", color=color.green, linewidth=2)
             showToast("Synthèse Express copiée dans le presse-papier !", "success");
         }
 
-        function copyJSONToClipboard() {
-<!-- ... existing code -->
+        function openHistoryModal() {
+            const modal = document.getElementById('historyModal');
+            if (modal) {
+                modal.classList.remove('hidden');
+                renderTradesList();
+            }
+        }
+
+        function closeHistoryModal() {
+            const modal = document.getElementById('historyModal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        async function renderTradesList() {
+            const tradesList = document.getElementById('tradesList');
+            if (!tradesList) return;
+            try {
+                const trades = await db.trades.orderBy('id').reverse().toArray();
+                if (!trades || trades.length === 0) {
+                    tradesList.innerHTML = `<div class="text-center py-8 text-xs text-slate-500">Aucun trade enregistré dans le journal.</div>`;
+                    return;
+                }
+                tradesList.innerHTML = trades.map(t => `
+                    <div class="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 flex items-center justify-between gap-3 font-mono text-xs">
+                        <div class="space-y-1">
+                            <div class="flex items-center space-x-2">
+                                <span class="font-bold text-white text-sm">${t.companyName || t.ticker}</span>
+                                <span class="px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 text-[10px] border border-sky-500/20">${t.ticker}</span>
+                            </div>
+                            <div class="text-[11px] text-slate-400 flex flex-wrap gap-x-3 gap-y-0.5">
+                                <span>Entrée: <strong class="text-sky-300">${t.entryZone || 'N/A'}</strong></span>
+                                <span>SL: <strong class="text-rose-400">${t.stopLoss || 'N/A'}</strong></span>
+                                <span>TP1: <strong class="text-emerald-400">${t.tp1 || 'N/A'}</strong></span>
+                            </div>
+                        </div>
+                        <button onclick="deleteTrade(${t.id})" class="p-2 text-slate-500 hover:text-rose-400 transition cursor-pointer" title="Supprimer">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </div>
+                `).join('');
+            } catch (e) {
+                tradesList.innerHTML = `<div class="text-center py-4 text-xs text-rose-400">Erreur lors de la lecture des trades.</div>`;
+            }
+        }
+
+        async function deleteTrade(id) {
+            try {
+                await db.trades.delete(id);
+                renderTradesList();
+                showToast("Trade supprimé du journal.", "info");
+            } catch (e) {
+                showToast("Erreur lors de la suppression.", "amber");
+            }
+        }
+
+        function renderBarometerControls() {
+            const container = document.getElementById('categoriesContainer');
+            if (!container) return;
+
+            container.innerHTML = categories.map(cat => `
+                <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-3">
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                        <span class="text-xs font-bold text-white flex items-center gap-2">
+                            <i class="fa-solid ${cat.icon} text-${cat.color}-400"></i>
+                            ${cat.name}
+                        </span>
+                        <span class="font-mono text-xs font-bold text-${cat.color}-400">${calculateCategoryScore(cat)} / 100</span>
+                    </div>
+                    <div class="space-y-2">
+                        ${cat.subIndicators.map(sub => `
+                            <div class="space-y-1 text-xs">
+                                <div class="flex justify-between text-slate-300 font-mono text-[11px]">
+                                    <span class="truncate max-w-[180px]">${sub.name}</span>
+                                    <span class="font-bold text-slate-200">${sub.val}</span>
+                                </div>
+                                <input type="range" min="0" max="100" value="${sub.val}" oninput="updateSubVal('${cat.id}', '${sub.id}', this.value)" class="w-full cursor-pointer">
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('');
+
+            updateOverallRiskScore();
+        }
+
+        function calculateCategoryScore(cat) {
+            if (!cat || !cat.subIndicators) return 50;
+            let sum = 0;
+            let weightSum = 0;
+            cat.subIndicators.forEach(s => {
+                sum += s.val * s.weight;
+                weightSum += s.weight;
+            });
+            return Math.round(sum / (weightSum || 1));
+        }
+
+        function updateSubVal(catId, subId, val) {
+            const cat = categories.find(c => c.id === catId);
+            if (!cat) return;
+            const sub = cat.subIndicators.find(s => s.id === subId);
+            if (!sub) return;
+            sub.val = parseInt(val, 10);
+            updateOverallRiskScore();
+        }
+
+        function updateOverallRiskScore() {
+            let totalScore = 0;
+            let totalWeight = 0;
+            categories.forEach(cat => {
+                const catScore = calculateCategoryScore(cat);
+                totalScore += catScore * cat.weight;
+                totalWeight += cat.weight;
+            });
+            const finalScore = Math.round(totalScore / (totalWeight || 1));
+
+            const scoreEl = document.getElementById('overallScoreText');
+            if (scoreEl) scoreEl.innerText = finalScore;
+
+            const badge = document.getElementById('riskBadge');
+            if (badge) {
+                if (finalScore < 25) {
+                    badge.className = "px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+                    badge.innerText = "Faible";
+                } else if (finalScore < 45) {
+                    badge.className = "px-2.5 py-1 rounded-full text-xs font-bold bg-green-500/20 text-green-400 border border-green-800/30";
+                    badge.innerText = "Modéré-";
+                } else if (finalScore < 65) {
+                    badge.className = "px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30";
+                    badge.innerText = "Modéré+";
+                } else if (finalScore < 85) {
+                    badge.className = "px-2.5 py-1 rounded-full text-xs font-bold bg-orange-500/20 text-orange-400 border border-orange-500/30";
+                    badge.innerText = "Élevé";
+                } else {
+                    badge.className = "px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30";
+                    badge.innerText = "Extrême";
+                }
+            }
+
+            drawGaugeCanvas(finalScore);
+            initRadarChart();
+
+            let actionsPct = Math.max(10, 100 - finalScore);
+            let cashPct = Math.min(40, Math.max(10, Math.round(finalScore * 0.35)));
+            let obligPct = Math.max(0, 100 - actionsPct - cashPct);
+
+            if (document.getElementById('barActions')) document.getElementById('barActions').style.width = actionsPct + '%';
+            if (document.getElementById('barOblig')) document.getElementById('barOblig').style.width = obligPct + '%';
+            if (document.getElementById('barCash')) document.getElementById('barCash').style.width = cashPct + '%';
+
+            if (document.getElementById('pctActions')) document.getElementById('pctActions').innerText = actionsPct + '%';
+            if (document.getElementById('pctOblig')) document.getElementById('pctOblig').innerText = obligPct + '%';
+            if (document.getElementById('pctCash')) document.getElementById('pctCash').innerText = cashPct + '%';
+
+            const allocTag = document.getElementById('allocTag');
+            if (allocTag) {
+                if (finalScore < 35) allocTag.innerText = "Offensive (70/20/10)";
+                else if (finalScore < 65) allocTag.innerText = "Équilibrée (50/35/15)";
+                else allocTag.innerText = "Défensive (25/45/30)";
+            }
+        }
+
+        function drawGaugeCanvas(score) {
+            const canvas = document.getElementById('gaugeCanvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height - 15;
+            const radius = 95;
+
+            const segments = [
+                { limit: 20, color: '#10b981' },
+                { limit: 40, color: '#22c55e' },
+                { limit: 60, color: '#f59e0b' },
+                { limit: 80, color: '#f97316' },
+                { limit: 100, color: '#f43f5e' }
+            ];
+
+            let startAngle = Math.PI;
+            segments.forEach((seg, i) => {
+                const segEndAngle = Math.PI + (seg.limit / 100) * Math.PI;
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, radius, startAngle, segEndAngle, false);
+                ctx.lineWidth = 16;
+                ctx.strokeStyle = seg.color;
+                ctx.stroke();
+                startAngle = segEndAngle;
+            });
+
+            const angle = Math.PI + (score / 100) * Math.PI;
+            ctx.save();
+            ctx.translate(centerX, centerY);
+            ctx.rotate(angle + Math.PI / 2);
+            ctx.beginPath();
+            ctx.moveTo(-4, 0);
+            ctx.lineTo(4, 0);
+            ctx.lineTo(0, -radius + 15);
+            ctx.closePath();
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+            ctx.restore();
+
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 7, 0, 2 * Math.PI);
+            ctx.fillStyle = '#38bdf8';
+            ctx.fill();
+        }
+
+        function initRadarChart() {
+            const canvas = document.getElementById('radarChart');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+
+            if (radarChartInstance) {
+                radarChartInstance.destroy();
+            }
+
+            radarChartInstance = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: categories.map(c => c.name),
+                    datasets: [{
+                        label: 'Niveau de Risque',
+                        data: categories.map(c => calculateCategoryScore(c)),
+                        backgroundColor: 'rgba(56, 189, 248, 0.25)',
+                        borderColor: '#38bdf8',
+                        borderWidth: 2,
+                        pointBackgroundColor: '#38bdf8',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: '#38bdf8'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        r: {
+                            angleLines: { color: 'rgba(255, 255, 255, 0.1)' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                            pointLabels: { color: '#94a3b8', font: { size: 10, family: 'Inter' } },
+                            ticks: { display: false },
+                            suggestedMin: 0,
+                            suggestedMax: 100
+                        }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        function renderMarketSynthesisSection() {
+            const container = document.getElementById('marketSynthesisContent');
+            if (!container) return;
+            container.innerHTML = `
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-sans">
+                    <div class="p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/30 space-y-2">
+                        <div class="font-bold text-emerald-400 font-mono uppercase flex items-center space-x-1.5">
+                            <i class="fa-solid fa-arrow-trend-up"></i>
+                            <span>Secteurs Surpondérés</span>
+                        </div>
+                        <ul class="space-y-1.5 text-slate-300">
+                            <li>• <strong>Semi-conducteurs & IA :</strong> ASML, STMicro</li>
+                            <li>• <strong>Transition Énergétique :</strong> TotalEnergies, STIF</li>
+                            <li>• <strong>Santé & Pharma :</strong> Sanofi,UCB</li>
+                        </ul>
+                    </div>
+
+                    <div class="p-4 rounded-xl bg-sky-950/20 border border-sky-500/30 space-y-2">
+                        <div class="font-bold text-sky-400 font-mono uppercase flex items-center space-x-1.5">
+                            <i class="fa-solid fa-minus"></i>
+                            <span>Secteurs Neutres</span>
+                        </div>
+                        <ul class="space-y-1.5 text-slate-300">
+                            <li>• <strong>Luxe & Cosmétique :</strong> LVMH, Hermès, L'Oréal</li>
+                            <li>• <strong>Bancaire & Assurance :</strong> BNP Paribas, AXA</li>
+                            <li>• <strong>Aéronautique :</strong> Airbus, Safran</li>
+                        </ul>
+                    </div>
+
+                    <div class="p-4 rounded-xl bg-rose-950/20 border border-rose-500/30 space-y-2">
+                        <div class="font-bold text-rose-400 font-mono uppercase flex items-center space-x-1.5">
+                            <i class="fa-solid fa-arrow-trend-down"></i>
+                            <span>Secteurs Sous-Pondérés</span>
+                        </div>
+                        <ul class="space-y-1.5 text-slate-300">
+                            <li>• <strong>Immobilier Coté (SIIC) :</strong> Unibail, Gecina</li>
+                            <li>• <strong>Automobile Classique :</strong> Stellantis, Renault</li>
+                            <li>• <strong>Consommation Discrétionnaire :</strong> Kering</li>
+                        </ul>
+                    </div>
+                </div>
+            `;
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            activateMode('single');
+            renderBarometerControls();
+            renderMarketSynthesisSection();
+        });
+    </script>
+</body>
+</html>
