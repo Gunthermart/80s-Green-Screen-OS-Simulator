@@ -7,7 +7,13 @@
  * @author Senior JS Engineer
  */
 
-const fetch = require('node-fetch');
+// Utilisation du fetch natif intégré dans Node.js 18+ (Netlify Functions)
+const getFetch = () => {
+  if (typeof globalThis.fetch === 'function') {
+    return globalThis.fetch;
+  }
+  throw new Error("Le fetch natif n'est pas disponible dans cet environnement Node.");
+};
 
 const DEFAULT_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -27,7 +33,8 @@ const DEFAULT_HEADERS = {
  */
 async function fetchWithRetry(url, options = {}, retries = 3, timeoutMs = 6000) {
   let attempt = 0;
-  let delay = 800; // Initial delay of 800ms
+  let delay = 800;
+  const nativeFetch = getFetch();
 
   while (attempt < retries) {
     const controller = new AbortController();
@@ -35,7 +42,7 @@ async function fetchWithRetry(url, options = {}, retries = 3, timeoutMs = 6000) 
 
     try {
       const mergedHeaders = { ...DEFAULT_HEADERS, ...(options.headers || {}) };
-      const response = await fetch(url, {
+      const response = await nativeFetch(url, {
         ...options,
         headers: mergedHeaders,
         signal: controller.signal
@@ -64,9 +71,8 @@ async function fetchWithRetry(url, options = {}, retries = 3, timeoutMs = 6000) 
       if (attempt >= retries) {
         throw new Error(`Failure after ${retries} attempts for ${url}. Reason: ${err.message}`);
       }
-      // Exponential backoff delay
       await new Promise(resolve => setTimeout(resolve, delay));
-      delay *= 2; // e.g., 800ms -> 1600ms -> 3200ms
+      delay *= 2;
     }
   }
 }
@@ -106,7 +112,6 @@ async function fetchCnnFearAndGreed() {
       }
     };
   } catch (error) {
-    // Robust fallback structure if CNN API blocks the request
     return {
       success: false,
       error: `CNN Fear & Greed API Error: ${error.message}`,
@@ -171,7 +176,6 @@ async function fetchCmeFedWatch() {
       }
     };
   } catch (error) {
-    // Robust fallback structure if CME Group API requires browser session
     return {
       success: false,
       error: `CME FedWatch API Error: ${error.message}`,
@@ -276,14 +280,12 @@ async function getMarketRiskBarometerData() {
   };
 }
 
-// Export functions for CommonJS
 module.exports = {
   fetchCnnFearAndGreed,
   fetchCmeFedWatch,
   fetchEcbRates,
   getMarketRiskBarometerData,
   
-  // Netlify Serverless Function Handler
   handler: async (event, context) => {
     try {
       const data = await getMarketRiskBarometerData();
@@ -305,11 +307,3 @@ module.exports = {
     }
   }
 };
-
-if (require.main === module) {
-  console.log('🔄 Collecte des métriques du Baromètre du Risque...');
-  getMarketRiskBarometerData().then(result => {
-    console.log('✅ Données de marché unifiées :');
-    console.log(JSON.stringify(result, null, 2));
-  });
-}
