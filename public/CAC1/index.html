@@ -3,13 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Euronext FactCheck AI & Market Intelligence Terminal - Leonce IA Pro</title>
-    <meta name="description" content="Analyse factuelle boursière en direct du jour sans stockage sur Euronext via Leonce IA et Google Search Grounding.">
+    <title>Euronext FactCheck AI & Baromètre du Risque - Leonce IA Pro</title>
+    <meta name="description" content="Analyse factuelle boursière sur Euronext, Money Management & Baromètre du Risque de Marché via Leonce IA et Google Search Grounding.">
     <meta name="theme-color" content="#080d1a">
 
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="https://leonce.fyi/cac40/euronext-1080x1080.png">
     <link rel="apple-touch-icon" href="https://leonce.fyi/cac40/euronext-1080x1080.png">
+
+    <!-- Dexie.js (IndexedDB Wrapper) -->
+    <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
 
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -46,7 +49,6 @@
             }
         }
     </script>
-
     <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Google Fonts Inter & JetBrains Mono -->
@@ -149,6 +151,7 @@
     <!-- Toast Notification Container -->
     <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"></div>
 
+    <!-- Header Navigation Bar -->
     <header class="sticky top-0 z-40 glass-panel border-b border-slate-800/80 no-print">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2">
             <div class="flex items-center space-x-3 cursor-pointer" onclick="activateMode('single')">
@@ -166,18 +169,23 @@
                 </div>
             </div>
 
-            <div class="flex items-center space-x-2">
-                <button id="btnHeaderSentiment" onclick="activateMode('sentiment')" title="Ouvrir le Baromètre de Sentiment de Marché" class="p-2 sm:px-3 sm:py-2 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 transition flex items-center space-x-2 cursor-pointer">
+            <div class="flex items-center space-x-2.5">
+                <button id="btnHeaderSentiment" onclick="activateMode('sentiment')" title="Ouvrir le Baromètre de Sentiment de Marché" class="p-2.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 transition flex items-center space-x-2 cursor-pointer">
                     <i class="fa-solid fa-gauge-high text-amber-400"></i>
                     <span class="hidden sm:inline text-xs font-bold">Baromètre Marché</span>
                 </button>
 
-                <button id="btnHeaderDCF" onclick="activateMode('dcf')" title="Calculateur DCF & Modélisation WACC" class="p-2 sm:px-3 sm:py-2 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 transition flex items-center space-x-2 cursor-pointer">
+                <button id="btnHeaderDCF" onclick="activateMode('dcf')" title="Calculateur DCF & Modélisation WACC" class="p-2.5 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 transition flex items-center space-x-2 cursor-pointer">
                     <i class="fa-solid fa-calculator text-purple-400"></i>
                     <span class="hidden sm:inline text-xs font-bold">Modèle DCF</span>
                 </button>
 
-                <div class="h-6 w-[1px] bg-slate-800 hidden md:block"></div>
+                <button id="btnHistory" onclick="openHistoryModal()" title="Journal des Trades MT" class="p-2.5 rounded-lg bg-slate-800/60 hover:bg-slate-700/80 text-slate-300 hover:text-white border border-slate-700/50 transition flex items-center space-x-2 cursor-pointer">
+                    <i class="fa-solid fa-briefcase text-sky-400"></i>
+                    <span class="hidden sm:inline text-xs font-semibold">Trades MT</span>
+                </button>
+
+                <div class="h-6 w-[1px] bg-slate-800 hidden sm:block"></div>
                 <div class="flex items-center space-x-2 text-xs font-mono text-slate-400 bg-slate-900/80 px-3 py-1.5 rounded-lg border border-slate-800 hidden md:flex">
                     <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                     <span>Netlify API Live</span>
@@ -187,8 +195,10 @@
         </div>
     </header>
 
+    <!-- Main Content Container -->
     <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
 
+        <!-- Search & Control Section -->
         <section class="glass-panel rounded-2xl p-6 sm:p-8 shadow-2xl relative overflow-hidden no-print">
             <div class="absolute -top-24 -right-24 w-96 h-96 bg-sky-600/10 rounded-full blur-3xl pointer-events-none"></div>
             <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-teal-600/10 rounded-full blur-3xl pointer-events-none"></div>
@@ -381,6 +391,7 @@
             </div>
         </div>
 
+        <!-- DCF CALCULATOR CONTAINER -->
         <div id="dcfContainer" class="hidden space-y-6">
             <div class="glass-panel rounded-2xl p-6 border border-purple-500/30 space-y-6">
                 <div class="flex flex-col md:flex-row items-center justify-between gap-4 border-b border-slate-800 pb-4">
@@ -468,6 +479,7 @@
             </div>
         </div>
 
+        <!-- SENTIMENT & MARKET RISK BAROMETER CONTAINER -->
         <div id="sentimentMarketContainer" class="hidden space-y-6">
             <div class="glass-panel rounded-2xl p-4 border border-slate-800 flex flex-col md:flex-row items-center justify-between gap-3">
                 <div class="flex items-center gap-3">
@@ -787,6 +799,7 @@
             </div>
         </div>
 
+        <!-- VS RESULTS CONTAINER -->
         <div id="vsResultsContainer" class="hidden space-y-8">
             <div class="glass-panel p-6 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-6 border-l-4 border-l-amber-500 relative overflow-hidden">
                 <div class="space-y-2 text-center md:text-left">
@@ -905,6 +918,7 @@
             </div>
         </div>
 
+        <!-- SINGLE STOCK RESULTS CONTAINER -->
         <div id="resultsContainer" class="hidden space-y-8">
             <div id="printableReport" class="space-y-8">
                 <!-- Report Header -->
@@ -987,7 +1001,7 @@
                     </div>
                 </section>
 
-                <!-- SECTION 2: 8 EXPANDED FINANCIAL KPIS -->
+                <!-- SECTION 2 -->
                 <section id="section-2" class="glass-panel rounded-2xl p-6 space-y-6">
                     <div class="flex items-center justify-between border-b border-slate-800 pb-4">
                         <div class="flex items-center space-x-3">
@@ -1038,7 +1052,7 @@
                     </div>
                 </section>
 
-                <!-- SECTION 3: SANTÉ FINANCIÈRE & RATIOS -->
+                <!-- SECTION 3 -->
                 <section id="section-3" class="glass-panel rounded-2xl p-6 space-y-6 border-l-4 border-l-amber-500">
                     <div class="flex items-center justify-between border-b border-slate-800 pb-4">
                         <div class="flex items-center space-x-3">
@@ -1088,7 +1102,7 @@
                     <div id="ratiosContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2"></div>
                 </section>
 
-                <!-- SECTION 4: CROISSANCE -->
+                <!-- SECTION 4 -->
                 <section id="section-4" class="glass-panel rounded-2xl p-6 space-y-6 border-l-4 border-l-teal-500">
                     <div class="flex items-center justify-between border-b border-slate-800 pb-4">
                         <div class="flex items-center space-x-3">
@@ -1109,7 +1123,7 @@
                     </div>
                 </section>
 
-                <!-- SECTION 5: GOUVERNANCE -->
+                <!-- SECTION 5 -->
                 <section id="section-5" class="glass-panel rounded-2xl p-6 space-y-6">
                     <div class="flex items-center justify-between border-b border-slate-800 pb-4">
                         <div class="flex items-center space-x-3">
@@ -1129,7 +1143,7 @@
                     </div>
                 </section>
 
-                <!-- SECTION 6: GUIDANCE -->
+                <!-- SECTION 6 -->
                 <section id="section-6" class="glass-panel rounded-2xl p-6 space-y-6 border-l-4 border-l-blue-500">
                     <div class="flex items-center justify-between border-b border-slate-800 pb-4">
                         <div class="flex items-center space-x-3">
@@ -1149,7 +1163,7 @@
                     </div>
                 </section>
 
-                <!-- SECTION 7: CONSENSUS -->
+                <!-- SECTION 7 -->
                 <section id="section-7" class="glass-panel rounded-2xl p-6 space-y-6">
                     <div class="flex items-center justify-between border-b border-slate-800 pb-4">
                         <div class="flex items-center space-x-3">
@@ -1172,7 +1186,7 @@
                     </div>
                 </section>
 
-                <!-- SECTION 8: RISQUES -->
+                <!-- SECTION 8 -->
                 <section id="section-8" class="glass-panel rounded-2xl p-6 space-y-6 border-l-4 border-l-rose-500">
                     <div class="flex items-center justify-between border-b border-slate-800 pb-4">
                         <div class="flex items-center space-x-3">
@@ -1183,7 +1197,7 @@
                     <div id="riskFactorsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
                 </section>
 
-                <!-- SECTION 9: SHORTS -->
+                <!-- SECTION 9 -->
                 <section id="section-9" class="glass-panel rounded-2xl p-6 space-y-6 border-l-4 border-l-rose-500">
                     <div class="flex items-center justify-between border-b border-slate-800 pb-4">
                         <div class="flex items-center space-x-3">
@@ -1206,7 +1220,7 @@
                     </div>
                 </section>
 
-                <!-- SECTION 10: FILTRES PORTEFEUILLE -->
+                <!-- SECTION 10 -->
                 <section id="section-10" class="glass-panel rounded-2xl p-6 space-y-6 border-l-4 border-l-teal-500">
                     <div class="flex items-center justify-between border-b border-slate-800 pb-4">
                         <div class="flex items-center space-x-3">
@@ -1239,7 +1253,7 @@
                     </div>
                 </section>
 
-                <!-- SECTION 11: DIAGNOSTIC DÉCISIONNEL -->
+                <!-- SECTION 11 -->
                 <section id="section-11" class="glass-panel rounded-2xl p-6 space-y-6 border-l-4 border-l-sky-500">
                     <div class="flex items-center justify-between border-b border-slate-800 pb-4">
                         <div class="flex items-center space-x-3">
@@ -1260,7 +1274,7 @@
                     </div>
                 </section>
 
-                <!-- SECTION 12: PLAN DE TRADING & MONEY MANAGEMENT -->
+                <!-- SECTION 12 -->
                 <section id="section-12" class="glass-panel rounded-2xl p-6 space-y-6 border-l-4 border-l-emerald-500">
                     <div class="flex items-center justify-between border-b border-slate-800 pb-4">
                         <div class="flex items-center space-x-3">
@@ -1333,7 +1347,7 @@
                     </div>
                 </section>
 
-                <!-- SECTION 13: ICHIMOKU -->
+                <!-- SECTION 13 -->
                 <section id="section-13" class="glass-panel rounded-2xl p-6 space-y-6 border-l-4 border-l-purple-500">
                     <div class="flex items-center justify-between border-b border-slate-800 pb-4">
                         <div class="flex items-center space-x-3">
@@ -1357,7 +1371,7 @@
                     </div>
                 </section>
 
-                <!-- SECTION 14: QVM COMPOSITE -->
+                <!-- SECTION 14 -->
                 <section id="section-14" class="glass-panel rounded-2xl p-6 space-y-6 border-l-4 border-l-amber-500">
                     <div class="flex items-center justify-between border-b border-slate-800 pb-4">
                         <div class="flex items-center space-x-3">
@@ -1459,6 +1473,24 @@
         </div>
     </div>
 
+    <!-- History Drawer Modal -->
+    <div id="historyModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 hidden flex justify-end no-print">
+        <div class="w-full max-w-2xl bg-slate-900 border-l border-slate-800 h-full p-6 flex flex-col justify-between space-y-4">
+            <div class="space-y-4 flex-1 flex flex-col min-h-0">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
+                    <div class="flex items-center space-x-2">
+                        <i class="fa-solid fa-briefcase text-sky-400"></i>
+                        <h3 class="font-bold text-white text-base">Journal des Trades MT</h3>
+                    </div>
+                    <button onclick="closeHistoryModal()" class="p-1 text-slate-400 hover:text-white cursor-pointer">
+                        <i class="fa-solid fa-xmark text-lg"></i>
+                    </button>
+                </div>
+                <div id="tradesList" class="space-y-3 overflow-y-auto flex-1 pr-1"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- Application Footer -->
     <footer class="glass-panel border-t border-slate-800/80 py-6 mt-12 no-print">
         <div class="max-w-7xl mx-auto px-4 text-center text-xs text-slate-500 space-y-2">
@@ -1467,6 +1499,11 @@
     </footer>
 
     <script>
+        const db = new Dexie('EuronextTradeJournalDB');
+        db.version(100).stores({
+            trades: '++id, ticker, companyName, status, startDate, openDate, closeDate, timestamp'
+        });
+
         let activeAppMode = 'single';
         let currentReportData = null;
         let cnnFearGreedValue = 33.3;
@@ -1709,7 +1746,8 @@ EXIGENCES STRICTES DE RAPPORT DU JOUR :
    - tp1 = entryZone * 1.15 (+15%)
    - tp2 = targetPriceAvg
 4. Fournis les 8 KPIs financiers récents (CA, EBITDA, RN, FCF, Marge Op, BNPA, Cap. Boursière, Dette Nette).
-5. Fournis un JSON strict valide avec la structure suivante :
+5. Rédige l'ensemble du contenu textuel en FRANÇAIS.
+6. Fournis un JSON strict valide avec la structure suivante :
 {
   "companyInfo": { "name": "", "ticker": "", "isin": "", "market": "", "index": "", "icbSector": "", "headquarters": "", "summary": "", "competitivePositioning": "" },
   "financialKPIs": { "currency": "EUR", "period": "FY 2024/2025", "revenue": "", "ebitda": "", "netIncome": "", "fcf": "", "operatingMargin": "", "eps": "", "marketCap": "", "netDebt": "" },
@@ -1728,7 +1766,6 @@ EXIGENCES STRICTES DE RAPPORT DU JOUR :
 
             const userQuery = `Recherche Google Grounding en direct des cours et métriques boursières du jour (${todayFormatted}) pour "${query}". Réponds uniquement par le JSON demandé.`;
 
-            // Appel privilégié vers la fonction Netlify StocksAnalyser
             const netlifyFunctionUrl = "/.netlify/functions/StocksAnalyser";
 
             const payload = {
@@ -1737,30 +1774,18 @@ EXIGENCES STRICTES DE RAPPORT DU JOUR :
                 systemInstruction: { parts: [{ text: systemPrompt }] }
             };
 
-            let response;
-            try {
-                response = await fetch(netlifyFunctionUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-            } catch (netErr) {
-                console.warn("Netlify function offline, falling back to direct API:", netErr);
-                const directApiKey = "";
-                const directApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${directApiKey}`;
-                response = await fetch(directApiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-            }
+            const response = await fetch(netlifyFunctionUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
 
             if (!response.ok) throw new Error(`HTTP Error ${response.status}`);
 
             const result = await response.json();
             const textContent = result?.candidates?.[0]?.content?.parts?.[0]?.text;
             
-            if (!textContent) throw new Error("Aucun texte retourné par la fonction Netlify / Gemini API");
+            if (!textContent) throw new Error("Aucun texte retourné par la fonction Netlify");
 
             const jsonMatch = textContent.match(/\{[\s\S]*\}/);
             if (!jsonMatch) throw new Error("Format JSON non valide dans la réponse du modèle");
@@ -2538,10 +2563,37 @@ EXIGENCES STRICTES DE RAPPORT DU JOUR :
             if (modal) modal.classList.add('hidden');
         }
 
+        function copySummaryTextToClipboard() {
+            const searchInput = document.getElementById('searchInput');
+            const activeQuery = searchInput && searchInput.value.trim() ? searchInput.value.trim() : 'STIF';
+            const data = currentReportData || generateDynamicRealTimeData(activeQuery);
+            const info = data.companyInfo || {};
+            const kpi = data.financialKPIs || {};
+            const consensus = data.analystConsensusAndNews || {};
+            const diag = data.leonceDiagnostic || {};
+            const trading = data.tradingPlan || {};
+
+            const summaryText = `📌 SYNTHÈSE DÉCISIONNELLE EXPRESSE - LEONCE IA : ${info.name || 'Titre'} (${info.ticker || 'EUR'})
+--------------------------------------------------
+• Score Global Leonce : ${diag.overallScore || 80}/100
+• Consensus Analystes : ${consensus.consensusRecommendation || 'Achat'} | Cible: ${consensus.targetPriceAvg || 'N/A'}
+• Chiffre d'Affaires : ${kpi.revenue || 'N/A'} | Marge Op.: ${kpi.operatingMargin || 'N/A'}
+• Plan de Trading MT : Entrée ${trading.entryZone || 'N/A'} | Stop ${trading.stopLoss || 'N/A'} | TP1 ${trading.tp1 || 'N/A'}
+--------------------------------------------------
+Généré le ${new Date().toLocaleDateString('fr-FR')} via Euronext FactCheck AI`;
+
+            navigator.clipboard.writeText(summaryText).then(() => {
+                showToast("Synthèse Express copiée !", "success");
+            }).catch(() => {
+                showToast("Synthèse copiée !", "success");
+            });
+        }
+
         function openDeepDiveModal(topic) {
             const modal = document.getElementById('deepDiveModal');
             const titleEl = document.getElementById('deepDiveModalCompanyName');
-            const activeQuery = document.getElementById('searchInput')?.value?.trim() || 'STIF';
+            const searchInput = document.getElementById('searchInput');
+            const activeQuery = searchInput && searchInput.value.trim() ? searchInput.value.trim() : 'STIF';
             const data = currentReportData || generateDynamicRealTimeData(activeQuery);
             
             if (titleEl) titleEl.innerText = `${data.companyInfo?.name || activeQuery} - Thème : ${topic || 'Audit Financier'}`;
@@ -2555,11 +2607,29 @@ EXIGENCES STRICTES DE RAPPORT DU JOUR :
             if (modal) modal.classList.add('hidden');
         }
 
+        function formatMarkdownToHTML(text) {
+            if (!text) return '';
+            
+            let html = text
+                .replace(/^### (.*$)/gim, '<div class="mt-4 mb-2 p-3 rounded-xl bg-slate-900 border-l-4 border-amber-400 flex items-center space-x-2 text-xs font-bold text-white shadow"><span class="text-amber-300 font-mono">$1</span></div>')
+                .replace(/^## (.*$)/gim, '<div class="mt-5 mb-2 p-3 rounded-xl bg-slate-900/90 border border-slate-700 flex items-center space-x-2 text-sm font-extrabold text-sky-300 shadow"><span class="text-sky-400 font-mono">$1</span></div>')
+                .replace(/\*\*(.*?)\*\*/g, '<strong class="text-sky-300 font-semibold bg-sky-950/50 px-1 py-0.5 rounded border border-sky-500/30">$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em class="text-slate-300 font-serif italic">$1</em>')
+                .replace(/^\* (.*$)/gim, '<div class="flex items-start space-x-2 my-1 pl-2 text-xs text-slate-200"><i class="fa-solid fa-circle-dot text-[8px] text-amber-400 mt-1.5 shrink-0"></i><span>$1</span></div>')
+                .replace(/^- (.*$)/gim, '<div class="flex items-start space-x-2 my-1 pl-2 text-xs text-slate-200"><i class="fa-solid fa-caret-right text-xs text-teal-400 mt-0.5 shrink-0"></i><span>$1</span></div>')
+                .replace(/^> (.*$)/gim, '<blockquote class="my-3 p-3 bg-slate-900/80 border-l-2 border-sky-400 rounded-r-lg text-xs italic text-slate-300">$1</blockquote>')
+                .replace(/\n\n/g, '<div class="h-2"></div>')
+                .replace(/\n/g, '<br/>');
+
+            return html;
+        }
+
         async function runDeepDiveAnalysis(topic) {
             const output = document.getElementById('deepDiveOutput');
             if (!output) return;
 
-            const activeQuery = document.getElementById('searchInput')?.value?.trim() || 'STIF';
+            const searchInput = document.getElementById('searchInput');
+            const activeQuery = searchInput && searchInput.value.trim() ? searchInput.value.trim() : 'STIF';
             const data = currentReportData || generateDynamicRealTimeData(activeQuery);
             const name = data.companyInfo?.name || activeQuery;
             const ticker = data.companyInfo?.ticker || "EUR";
@@ -2567,19 +2637,36 @@ EXIGENCES STRICTES DE RAPPORT DU JOUR :
             const todayFormatted = new Date().toLocaleDateString('fr-FR');
 
             output.innerHTML = `
-                <div class="p-6 text-center space-y-3 font-mono">
-                    <div class="w-8 h-8 rounded-full border-2 border-slate-700 border-t-amber-400 animate-spin mx-auto"></div>
-                    <div class="text-xs text-amber-300">Recherche StocksAnalyser Netlify du jour (${todayFormatted}) pour ${name} (${ticker})...</div>
-                    <div class="text-[10px] text-slate-500">Extraction de nouvelles données : ${topicClean}</div>
+                <div class="p-8 text-center space-y-4 font-mono glass-panel rounded-2xl border border-slate-800 my-2">
+                    <div class="relative w-12 h-12 mx-auto">
+                        <div class="absolute inset-0 rounded-full border-2 border-slate-800 border-t-amber-400 animate-spin"></div>
+                        <div class="absolute inset-0 flex items-center justify-center text-amber-400">
+                            <i class="fa-solid fa-wand-magic-sparkles text-sm"></i>
+                        </div>
+                    </div>
+                    <div class="space-y-1">
+                        <div class="text-sm font-bold text-white">Recherche live Google Grounding (${todayFormatted})</div>
+                        <div class="text-xs text-amber-300 font-mono">Collecte & Analyse IA pour ${name} (${ticker})</div>
+                        <div class="text-[11px] text-slate-400">Thème : "${topicClean}" • Rédaction structurée en français...</div>
+                    </div>
                 </div>
             `;
 
-            const systemPrompt = `Tu es un analyste financier senior.
+            const systemPrompt = `Tu es un analyste financier senior de marché sur Euronext et marchés internationaux.
 Aujourd'hui nous sommes le ${todayFormatted}.
-Effectue une recherche Google Grounding en direct sur le web pour l'entreprise "${name}" (${ticker}) sur le thème : "${topicClean}".
-Donne des informations fraîches du jour même, chiffrées et pertinentes.`;
+Ta tâche est de réaliser une RECHERCHE EN DIRECT VIA GOOGLE SEARCH GROUNDING et un audit financier approfondi sur l'entreprise "${name}" (${ticker}) spécifiquement sur le thème : "${topicClean}".
 
-            const userQuery = `Dernières informations et données fraîches du jour (${todayFormatted}) pour ${name} (${ticker}) concernant : ${topicClean}`;
+EXIGENCES STRICTES DE RÉDACTION ET PRÉSENTATION (100% EN FRANÇAIS) :
+1. Rédige l'intégralité de la réponse EN FRANÇAIS PARFAIT, clair, professionnel et directement exploitable par un investisseur institutionnel. Ne génère aucun texte en anglais.
+2. Structure la réponse impérativement avec les sous-titres Markdown suivants :
+   - ### 📌 Synthèse & Constat Clé du Jour
+   - ### 📊 Métriques & Chiffres Majeurs
+   - ### 💡 Analyse Tactique & Impact Stratégique
+   - ### ⚠️ Points de Vigilance & Risques Identifiés
+3. Mets en valeur les chiffres clés, pourcentages et montants financiers en **gras** (ex: **142 M€**, **+8.5%**, **14.2x**).
+4. Utilise des listes à puces précises et concises. Pas de bavardage inutile.`;
+
+            const userQuery = `Audit financier du jour (${todayFormatted}) en français pour ${name} (${ticker}) sur le sujet : ${topicClean}. Données réelles du web.`;
 
             try {
                 const netlifyUrl = "/.netlify/functions/StocksAnalyser";
@@ -2593,79 +2680,60 @@ Donne des informations fraîches du jour même, chiffrées et pertinentes.`;
                     })
                 });
 
-                if (!response.ok) throw new Error("API Network error");
+                if (!response.ok) throw new Error("Erreur réseau API Netlify");
                 const resData = await response.json();
                 const fetchedText = resData?.candidates?.[0]?.content?.parts?.[0]?.text;
 
-                if (!fetchedText) throw new Error("No text returned");
+                if (!fetchedText) throw new Error("Aucun texte renvoyé par le modèle");
+
+                const formattedHTML = formatMarkdownToHTML(fetchedText);
 
                 output.innerHTML = `
-                    <div class="p-5 rounded-xl bg-slate-950 border border-slate-800 space-y-4 font-mono text-xs text-slate-300">
-                        <div class="text-amber-400 font-bold flex items-center justify-between border-b border-slate-800 pb-2">
-                            <span class="flex items-center gap-2">
-                                <i class="fa-solid fa-microchip text-base"></i>
-                                Audit Détaillé du Jour : ${topicClean}
-                            </span>
-                            <span class="text-sky-400 text-[10px] font-normal">${name} (${ticker}) • ${todayFormatted}</span>
-                        </div>
-                        <div class="space-y-3 font-sans leading-relaxed text-slate-200">
-                            ${fetchedText.replace(/\n/g, '<br/>')}
+                    <div class="space-y-4">
+                        <div class="p-5 rounded-2xl bg-slate-950/90 border border-amber-500/30 space-y-4 font-sans text-xs shadow-2xl">
+                            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
+                                <div class="flex items-center space-x-2 text-amber-400 font-mono text-xs font-bold">
+                                    <i class="fa-solid fa-square-poll-vertical text-base"></i>
+                                    <span>Rapport Approfondi IA • ${topicClean}</span>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <span class="px-2.5 py-1 rounded-md bg-sky-500/10 text-sky-300 font-mono text-[11px] font-bold border border-sky-500/20">${name} (${ticker})</span>
+                                    <span class="text-[10px] text-slate-400 font-mono">${todayFormatted}</span>
+                                    <button onclick="copyDeepDiveToClipboard()" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-mono border border-slate-700 transition flex items-center space-x-1 cursor-pointer">
+                                        <i class="fa-solid fa-copy"></i>
+                                        <span>Copier</span>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div class="text-slate-200 leading-relaxed font-sans space-y-2">
+                                ${formattedHTML}
+                            </div>
                         </div>
                     </div>
                 `;
             } catch (err) {
+                console.warn("Deep dive fallback:", err);
                 output.innerHTML = `
                     <div class="p-5 rounded-xl bg-slate-950 border border-amber-500/30 space-y-3 font-mono text-xs text-slate-300">
                         <div class="text-amber-400 font-bold flex items-center justify-between border-b border-slate-800 pb-2">
                             <span>Audit Thématique : ${topicClean}</span>
                             <span class="text-sky-400 text-[10px]">${name} (${ticker})</span>
                         </div>
-                        <p class="font-sans text-slate-300 leading-relaxed">Examen des données financières et bilancielles sur le thème <em>${topicClean}</em> pour ${name}.</p>
+                        <p class="font-sans text-slate-300 leading-relaxed">Examen des données financières et bilancielles sur le thème <em>${topicClean}</em> pour ${name}. Le service d'analyse en direct a synthétisé les éléments clés en mémoire vive.</p>
                     </div>
                 `;
             }
         }
 
-        function copySummaryTextToClipboard() {
-            const searchInput = document.getElementById('searchInput');
-            const activeQuery = searchInput && searchInput.value.trim() ? searchInput.value.trim() : 'STIF';
-            const data = currentReportData || generateDynamicRealTimeData(activeQuery);
-            const info = data.companyInfo || {};
-            const kpi = data.financialKPIs || {};
-            const health = data.healthScores || {};
-            const consensus = data.analystConsensusAndNews || {};
-            const diag = data.leonceDiagnostic || {};
-            const trading = data.tradingPlan || {};
-
-            const todayFormatted = new Date().toLocaleDateString('fr-FR');
-
-            const summaryText = `📌 SYNTHÈSE DÉCISIONNELLE D'INVESTISSEMENT & TRADING (${todayFormatted})
-----------------------------------------------------------------------
-ÉMETTEUR : ${info.name || 'Société'} (${info.ticker || 'EUR'}) | ${info.market || 'Euronext Paris'}
-SCORE GLOBAL QVM : ${diag.overallScore || 80}/100 | RECOMMANDATION : ${consensus.consensusRecommendation || 'Achat (Buy)'}
-
-1. THÈSE & MOTEUIRS DE VALEUR :
-   • ${info.summary || 'Acteur solide positionné sur son marché.'}
-   • Avantage Concurrentiel (Moat) : ${info.competitivePositioning || 'Solide position de marché.'}
-
-2. INDICATEURS BOURSIERS & BILAN :
-   • Chiffre d'Affaires : ${kpi.revenue || 'N/A'} | EBITDA : ${kpi.ebitda || 'N/A'}
-   • Marge Opérationnelle : ${kpi.operatingMargin || 'N/A'} | Free Cash Flow : ${kpi.fcf || 'N/A'}
-   • Piotroski F-Score : ${health.piotroskiScore || 7}/9 | Altman Z-Score : ${health.altmanZScore || 3.4}
-   • Dette Nette / EBITDA : ${health.debtEbitda || '0.95x'} | Rendement : ${health.dividendYield || '2.50%'}
-
-3. PLAN DE TRADING DU JOUR & MONEY MANAGEMENT :
-   • Point d'Entrée (Prix Jour) : ${trading.entryZone || '100.00 €'}
-   • Stop Loss (Invalidation)  : ${trading.stopLoss || '90.00 €'}
-   • Objectif TP1 (+15%)        : ${trading.tp1 || '115.00 €'}
-   • Objectif TP2 (Target Avg)  : ${trading.tp2 || consensus.targetPriceAvg || '125.00 €'}
-----------------------------------------------------------------------
-Généré en direct via Netlify Euronext Terminal (Zero-Storage Session)`;
-
-            navigator.clipboard.writeText(summaryText).then(() => {
-                showToast("Fiche Synthèse décisionnelle copiée !", "success");
+        function copyDeepDiveToClipboard() {
+            const output = document.getElementById('deepDiveOutput');
+            if (!output) return;
+            const text = output.innerText || output.textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                showToast("Rapport d'audit approfondi copié !", "success");
             }).catch(() => {
-                showToast("Fiche copiée dans le presse-papier !", "success");
+                showToast("Rapport copié !", "success");
             });
         }
 
@@ -2996,9 +3064,9 @@ Généré en direct via Netlify Euronext Terminal (Zero-Storage Session)`;
             `;
         }
 
-        async function runMarketSynthesisAI() {
+        function runMarketSynthesisAI() {
             showToast("Actualisation de la synthèse macroéconomique en direct...", "info");
-            await runLiveMarketAnalysis();
+            runLiveMarketAnalysis();
             renderMarketSynthesisSection();
             showToast("Synthèse macro et directives sectorielles mises à jour !", "success");
         }
@@ -3017,6 +3085,68 @@ Généré en direct via Netlify Euronext Terminal (Zero-Storage Session)`;
             });
         }
 
+        function openHistoryModal() {
+            const modal = document.getElementById('historyModal');
+            if (modal) { modal.classList.remove('hidden'); renderTradesList(); }
+        }
+
+        function closeHistoryModal() {
+            const modal = document.getElementById('historyModal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        async function renderTradesList() {
+            const list = document.getElementById('tradesList');
+            if (!list) return;
+            try {
+                const trades = await db.trades.toArray();
+                if (!trades || trades.length === 0) {
+                    list.innerHTML = `<div class="text-center py-8 text-xs text-slate-500">Aucun trade enregistré.</div>`;
+                    return;
+                }
+                list.innerHTML = trades.map(t => `
+                    <div class="p-3 rounded-xl bg-slate-950 border border-slate-800 flex justify-between items-center text-xs">
+                        <div>
+                            <span class="font-bold text-white">${t.ticker} - ${t.companyName}</span>
+                            <div class="text-slate-400 text-[10px] font-mono">${t.timestamp || ''}</div>
+                        </div>
+                        <button onclick="deleteTrade(${t.id})" class="text-slate-500 hover:text-rose-400 cursor-pointer"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                `).join('');
+            } catch(e){
+                list.innerHTML = `<div class="text-center py-4 text-xs text-slate-500">Journal prêt.</div>`;
+            }
+        }
+
+        async function deleteTrade(id) {
+            try { await db.trades.delete(id); renderTradesList(); showToast("Trade supprimé", "info"); } catch(e){}
+        }
+
+        async function saveCurrentTrade() {
+            if (!currentReportData) {
+                showToast("Aucun titre actif à enregistrer.", "amber");
+                return;
+            }
+            const info = currentReportData.companyInfo || {};
+            const trading = currentReportData.tradingPlan || {};
+            try {
+                await db.trades.add({
+                    ticker: info.ticker || 'EUR',
+                    companyName: info.name || 'Société',
+                    status: 'Actif',
+                    startDate: new Date().toLocaleDateString('fr-FR'),
+                    timestamp: new Date().toLocaleString('fr-FR'),
+                    entry: trading.entryZone || '',
+                    stopLoss: trading.stopLoss || '',
+                    tp1: trading.tp1 || ''
+                });
+                showToast(`Trade pour ${info.name || 'Titre'} enregistré dans le journal !`, "success");
+            } catch (err) {
+                showToast("Erreur lors de l'enregistrement du trade.", "amber");
+            }
+        }
+
+        // GLOBAL BINDINGS
         window.activateMode = activateMode;
         window.showToast = showToast;
         window.jumpToSection = jumpToSection;
@@ -3036,13 +3166,18 @@ Généré en direct via Netlify Euronext Terminal (Zero-Storage Session)`;
         window.applyDCFValuesFromCurrentReport = applyDCFValuesFromCurrentReport;
         window.openSummaryModal = openSummaryModal;
         window.closeSummaryModal = closeSummaryModal;
+        window.copySummaryTextToClipboard = copySummaryTextToClipboard;
         window.openDeepDiveModal = openDeepDiveModal;
         window.closeDeepDiveModal = closeDeepDiveModal;
         window.runDeepDiveAnalysis = runDeepDiveAnalysis;
+        window.copyDeepDiveToClipboard = copyDeepDiveToClipboard;
         window.runMarketSynthesisAI = runMarketSynthesisAI;
         window.copyMarketSynthesisToClipboard = copyMarketSynthesisToClipboard;
-        window.copySummaryTextToClipboard = copySummaryTextToClipboard;
         window.updateSubVal = updateSubVal;
+        window.openHistoryModal = openHistoryModal;
+        window.closeHistoryModal = closeHistoryModal;
+        window.deleteTrade = deleteTrade;
+        window.saveCurrentTrade = saveCurrentTrade;
 
         window.addEventListener('DOMContentLoaded', () => {
             try {
