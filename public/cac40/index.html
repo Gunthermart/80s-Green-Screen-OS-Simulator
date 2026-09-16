@@ -2475,7 +2475,6 @@ Fournis des données chiffrées exactes et crédibles pour les 14 sections sans 
                         const fed = data.cmeFedWatch;
                         if (document.getElementById('fedMeetingDate')) document.getElementById('fedMeetingDate').innerText = fed.meetingDate || 'Prochaine réunion FOMC';
                         if (document.getElementById('fedCurrentRange')) document.getElementById('fedCurrentRange').innerText = fed.targetRange || '3.50% - 3.75%';
-                        if (document.getElementById('fedExpectedBps')) document.getElementById('fedExpectedBps').innerText = fed.expectedBps || '-25 bps';
                         
                         if (fed.probabilities) {
                             const p = fed.probabilities;
@@ -2488,6 +2487,8 @@ Fournis des données chiffrées exactes et crédibles pour les 14 sections sans 
                             if (document.getElementById('fedCut25Bar')) document.getElementById('fedCut25Bar').style.width = `${p.cut25Pct}%`;
                             if (document.getElementById('fedHoldBar')) document.getElementById('fedHoldBar').style.width = `${p.holdPct}%`;
                             if (document.getElementById('fedHike25Bar')) document.getElementById('fedHike25Bar').style.width = `${p.hike25Pct}%`;
+
+                            updateMonetaryStanceUI(p);
                         }
                     }
 
@@ -2498,8 +2499,7 @@ Fournis des données chiffrées exactes et crédibles pour les 14 sections sans 
                         if (document.getElementById('bceRefiVal')) document.getElementById('bceRefiVal').innerText = bce.refinancingRate || '2.65%';
                         if (document.getElementById('bceMarginalVal')) document.getElementById('bceMarginalVal').innerText = bce.marginalLendingRate || '2.90%';
                         if (document.getElementById('bceEstrVal')) document.getElementById('bceEstrVal').innerText = bce.estrRate || '2.40%';
-                        
-                        if (document.getElementById('rateBiasBadge')) document.getElementById('rateBiasBadge').innerText = `${bce.bias || 'Assouplissement (Dovish)'} 🟢`;
+
                         if (document.getElementById('ratesImpactAnalysis') && bce.diagnostic) {
                             document.getElementById('ratesImpactAnalysis').innerText = bce.diagnostic;
                         }
@@ -2539,6 +2539,54 @@ Fournis des données chiffrées exactes et crédibles pour les 14 sections sans 
                 }
             } catch (err) {
                 showToast("Marché direct actualisé !", "info");
+            }
+        }
+
+        function updateMonetaryStanceUI(p) {
+            const cutTotal = (p?.cut25Pct || 0) + (p?.cut50Pct || 0);
+            const holdTotal = p?.holdPct || 0;
+            const hikeTotal = p?.hike25Pct || 0;
+
+            const badge = document.getElementById('rateBiasBadge');
+            const expBps = document.getElementById('fedExpectedBps');
+            const diagText = document.getElementById('ratesImpactAnalysis');
+
+            if (hikeTotal > cutTotal && hikeTotal > holdTotal) {
+                if (badge) {
+                    badge.innerText = "Resserrement (Hawkish) 🔴";
+                    badge.className = "px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30";
+                }
+                if (expBps) {
+                    expBps.innerText = "+25 bps";
+                    expBps.className = "text-rose-400 font-bold";
+                }
+                if (diagText) {
+                    diagText.innerText = "Anticipation de resserrement monétaire par le marché (+25 bps). Prudence recommandée sur le levier financier et les MidCaps dépendantes de lignes de crédit bancaires à taux variable.";
+                }
+            } else if (holdTotal > cutTotal && holdTotal > hikeTotal) {
+                if (badge) {
+                    badge.innerText = "Statu Quo (Neutre) ⚪";
+                    badge.className = "px-2.5 py-0.5 rounded-full text-xs font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30";
+                }
+                if (expBps) {
+                    expBps.innerText = "0 bps";
+                    expBps.className = "text-sky-300 font-bold";
+                }
+                if (diagText) {
+                    diagText.innerText = "Maintien des taux à leurs niveaux actuels (Statu Quo 0 bps). Visibilité accrue pour les entreprises de qualité génératrices de Cash-Flows libres solides.";
+                }
+            } else {
+                if (badge) {
+                    badge.innerText = "Assouplissement (Dovish) 🟢";
+                    badge.className = "px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30";
+                }
+                if (expBps) {
+                    expBps.innerText = "-25 bps";
+                    expBps.className = "text-emerald-400 font-bold";
+                }
+                if (diagText) {
+                    diagText.innerText = "Phase d'assouplissement monétaire synchrone (Fed & BCE). Taux Dépôt BCE à 2.50% avec taux spot €STR à 2.40%. Cette baisse graduelle du coût du capital soutient directement les valorisations de la Tech et améliore la marge nette des MidCaps industrielles Euronext (ex: STIF) fortement utilisatrices de lignes de crédit.";
+                }
             }
         }
 
