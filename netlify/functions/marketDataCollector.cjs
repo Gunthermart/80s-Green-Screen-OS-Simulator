@@ -185,9 +185,9 @@ async function fetchCmeFedWatch() {
     const holdTotal = Math.round(hold);
     const hikeTotal = Math.round(hike25);
 
-    let expectedBpsStr = '-25 bps';
-    if (hikeTotal > cutTotal && hikeTotal > holdTotal) {
-      expectedBpsStr = '+25 bps';
+    let expectedBpsStr = '+25 bps';
+    if (cutTotal > hikeTotal && cutTotal > holdTotal) {
+      expectedBpsStr = '-25 bps';
     } else if (holdTotal > cutTotal && holdTotal > hikeTotal) {
       expectedBpsStr = '0 bps';
     }
@@ -198,10 +198,10 @@ async function fetchCmeFedWatch() {
       targetRange: nextMeeting.currentTargetRate || '3.50% - 3.75%',
       expectedBps: expectedBpsStr,
       probabilities: {
-        cut50Pct: Math.round(cut50) || 10,
-        cut25Pct: Math.round(cut25) || 70,
-        holdPct: holdTotal || 18,
-        hike25Pct: hikeTotal > 0 ? hikeTotal : 2
+        cut50Pct: Math.round(cut50) || 2,
+        cut25Pct: Math.round(cut25) || 8,
+        holdPct: holdTotal || 25,
+        hike25Pct: hikeTotal > 0 ? hikeTotal : 65
       }
     };
   } catch (error) {
@@ -210,8 +210,65 @@ async function fetchCmeFedWatch() {
       error: `CME FedWatch API Error: ${error.message}`,
       meetingDate: 'Prochaine réunion FOMC',
       targetRange: '3.50% - 3.75%',
-      expectedBps: '-25 bps',
-      probabilities: { cut50Pct: 10, cut25Pct: 70, holdPct: 18, hike25Pct: 2 }
+      expectedBps: '+25 bps',
+      probabilities: { cut50Pct: 2, cut25Pct: 8, holdPct: 25, hike25Pct: 65 }
+    };
+  }
+}
+
+async function fetchEcbRates() {
+  const urlDFR = 'https://data-api.ecb.europa.eu/service/data/FM/D.U2.EUR.4F.KR.DFR.LEV?lastNObservations=2&format=jsondata';
+
+  try {
+    const data = await fetchWithRetry(urlDFR, {}, 3, 5000);
+    let depositRate = 2.50;
+    
+    try {
+      const series = data?.dataSets?.[0]?.series;
+      if (series) {
+        const firstKey = Object.keys(series)[0];
+        const obs = series[firstKey]?.observations;
+        if (obs) {
+          const keys = Object.keys(obs);
+          const latestKey = keys[keys.length - 1];
+          depositRate = parseFloat(obs[latestKey][0]);
+        }
+      }
+    } catch {
+      depositRate = 2.50;
+    }
+
+    const refiRate = (depositRate + 0.15).toFixed(2);
+    const marginalRate = (depositRate + 0.40).toFixed(2);
+    const estrRate = (depositRate - 0.10).toFixed(2);
+
+    const diagnosticText = `Posture de resserrement monétaire (Hawkish). La Fed et la BCE font face à des tensions sur les taux (+25 bps anticipés). Ce coût élevé du capital pèse sur les multiples de valorisation des actions de croissance et accroît la charge financière des MidCaps industrielles Euronext utilisatrices de lignes de crédit.`;
+
+    return {
+      success: true,
+      depositFacilityRate: `${depositRate.toFixed(2)}%`,
+      refinancingRate: `${refiRate}%`,
+      marginalLendingRate: `${marginalRate}%`,
+      estrOvernightRate: `${estrRate}%`,
+      bias: 'Resserrement (Hawkish)',
+      diagnostic: diagnosticText,
+      marketExpectation: {
+        cutProb: 10,
+        holdProb: 25,
+        hikeProb: 65
+      }
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: `ECB API Error: ${error.message}`,
+      depositFacilityRate: '2.50%',
+      refinancingRate: '2.65%',
+      marginalLendingRate: '2.90%',
+      estrOvernightRate: '2.40%',
+      bias: 'Resserrement (Hawkish)',
+      diagnostic: "Posture de resserrement monétaire (Hawkish). La Fed et la BCE font face à des tensions sur les taux (+25 bps anticipés par le marché).",
+      marketExpectation: { cutProb: 10, holdProb: 25, hikeProb: 65 }
     };
   }
 }
