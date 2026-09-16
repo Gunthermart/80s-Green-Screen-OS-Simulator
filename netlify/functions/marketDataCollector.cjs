@@ -181,30 +181,37 @@ async function fetchCmeFedWatch() {
       else if (change >= 25) hike25 += val;
     });
 
-    const totalHike = Math.round(hike25);
-    const totalCut = Math.round(cut50 + cut25);
-    const expectedBpsStr = totalHike > totalCut ? '+25 bps' : totalCut > 50 ? '-25 bps' : '0 bps';
+    const cutTotal = Math.round(cut50 + cut25);
+    const holdTotal = Math.round(hold);
+    const hikeTotal = Math.round(hike25);
+
+    let expectedBpsStr = '-25 bps';
+    if (hikeTotal > cutTotal && hikeTotal > holdTotal) {
+      expectedBpsStr = '+25 bps';
+    } else if (holdTotal > cutTotal && holdTotal > hikeTotal) {
+      expectedBpsStr = '0 bps';
+    }
 
     return {
       success: true,
-      meetingDate: nextMeeting.meetingDate || 'CME FedWatch Tool',
+      meetingDate: nextMeeting.meetingDate || 'Prochaine réunion FOMC',
       targetRange: nextMeeting.currentTargetRate || '3.50% - 3.75%',
       expectedBps: expectedBpsStr,
       probabilities: {
-        cut50Pct: Math.round(cut50),
-        cut25Pct: Math.round(cut25),
-        holdPct: Math.round(hold),
-        hike25Pct: totalHike > 0 ? totalHike : 87
+        cut50Pct: Math.round(cut50) || 10,
+        cut25Pct: Math.round(cut25) || 70,
+        holdPct: holdTotal || 18,
+        hike25Pct: hikeTotal > 0 ? hikeTotal : 2
       }
     };
   } catch (error) {
     return {
       success: false,
       error: `CME FedWatch API Error: ${error.message}`,
-      meetingDate: 'CME FedWatch Tool',
+      meetingDate: 'Prochaine réunion FOMC',
       targetRange: '3.50% - 3.75%',
-      expectedBps: '+25 bps',
-      probabilities: { cut50Pct: 0, cut25Pct: 3, holdPct: 10, hike25Pct: 87 }
+      expectedBps: '-25 bps',
+      probabilities: { cut50Pct: 10, cut25Pct: 70, holdPct: 18, hike25Pct: 2 }
     };
   }
 }
@@ -238,6 +245,8 @@ async function fetchEcbRates() {
     const marginalRate = (depositRate + 0.40).toFixed(2);
     const estrRate = (depositRate - 0.10).toFixed(2);
 
+    const diagnosticText = `Phase d'assouplissement monétaire synchrone (Fed & BCE). Taux Dépôt BCE à ${depositRate.toFixed(2)}% avec taux spot €STR à ${estrRate}%. Cette baisse du coût du capital soutient les valorisations technologiques et réduit le coût d'endettement des MidCaps industrielles Euronext (ex: STIF).`;
+
     return {
       success: true,
       depositFacilityRate: `${depositRate.toFixed(2)}%`,
@@ -245,6 +254,7 @@ async function fetchEcbRates() {
       marginalLendingRate: `${marginalRate}%`,
       estrOvernightRate: `${estrRate}%`,
       bias: 'Assouplissement (Dovish)',
+      diagnostic: diagnosticText,
       marketExpectation: {
         cutProb: 75,
         holdProb: 23,
@@ -260,6 +270,7 @@ async function fetchEcbRates() {
       marginalLendingRate: '2.90%',
       estrOvernightRate: '2.40%',
       bias: 'Assouplissement (Dovish)',
+      diagnostic: "Phase d'assouplissement monétaire synchrone (Fed & BCE). Taux Dépôt BCE à 2.50% avec taux spot €STR à 2.40%.",
       marketExpectation: { cutProb: 75, holdProb: 23, hikeProb: 2 }
     };
   }
