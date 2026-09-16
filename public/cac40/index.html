@@ -1612,7 +1612,146 @@
             return match ? parseFloat(match[1]) : 0;
         }
 
-        let categories = [
+        /**
+         * Bascule le mode actif de l'application ('single', 'vs', 'sentiment')
+         */
+        function activateMode(mode) {
+            activeAppMode = mode;
+            const tabSingle = document.getElementById('tabSingleMode');
+            const tabVS = document.getElementById('tabVSMode');
+            const tabSentiment = document.getElementById('tabSentimentMode');
+
+            const searchForm = document.getElementById('searchForm');
+            const searchVSForm = document.getElementById('searchVSForm');
+            const singlePresets = document.getElementById('singlePresets');
+
+            const welcomeContainer = document.getElementById('welcomeContainer');
+            const resultsContainer = document.getElementById('resultsContainer');
+            const vsResultsContainer = document.getElementById('vsResultsContainer');
+            const sentimentContainer = document.getElementById('sentimentMarketContainer');
+            const quickNavContainer = document.getElementById('quickNavContainer');
+
+            // Réinitialisation des styles d'onglets
+            const inactiveStyle = "px-4 py-2 rounded-lg text-slate-400 hover:text-white transition flex items-center space-x-2 cursor-pointer";
+            if (tabSingle) tabSingle.className = inactiveStyle;
+            if (tabVS) tabVS.className = inactiveStyle;
+            if (tabSentiment) tabSentiment.className = inactiveStyle;
+
+            if (mode === 'single') {
+                if (tabSingle) tabSingle.className = "px-4 py-2 rounded-lg bg-sky-500 text-white font-bold shadow transition flex items-center space-x-2 cursor-pointer";
+                if (searchForm) searchForm.classList.remove('hidden');
+                if (searchVSForm) searchVSForm.classList.add('hidden');
+                if (singlePresets) singlePresets.classList.remove('hidden');
+
+                if (sentimentContainer) sentimentContainer.classList.add('hidden');
+                if (vsResultsContainer) vsResultsContainer.classList.add('hidden');
+
+                if (currentReportData) {
+                    if (welcomeContainer) welcomeContainer.classList.add('hidden');
+                    if (resultsContainer) resultsContainer.classList.remove('hidden');
+                    if (quickNavContainer) quickNavContainer.classList.remove('hidden');
+                } else {
+                    if (welcomeContainer) welcomeContainer.classList.remove('hidden');
+                    if (resultsContainer) resultsContainer.classList.add('hidden');
+                    if (quickNavContainer) quickNavContainer.classList.add('hidden');
+                }
+            } else if (mode === 'vs') {
+                if (tabVS) tabVS.className = "px-4 py-2 rounded-lg bg-amber-500 text-white font-bold shadow transition flex items-center space-x-2 cursor-pointer";
+                if (searchVSForm) searchVSForm.classList.remove('hidden');
+                if (searchForm) searchForm.classList.add('hidden');
+                if (singlePresets) singlePresets.classList.add('hidden');
+
+                if (sentimentContainer) sentimentContainer.classList.add('hidden');
+                if (resultsContainer) resultsContainer.classList.add('hidden');
+                if (quickNavContainer) quickNavContainer.classList.add('hidden');
+
+                if (welcomeContainer) welcomeContainer.classList.add('hidden');
+                if (vsResultsContainer) vsResultsContainer.classList.remove('hidden');
+            } else if (mode === 'sentiment') {
+                if (tabSentiment) tabSentiment.className = "px-4 py-2 rounded-lg bg-blue-600 text-white font-bold shadow transition flex items-center space-x-2 cursor-pointer";
+                if (searchForm) searchForm.classList.add('hidden');
+                if (searchVSForm) searchVSForm.classList.add('hidden');
+                if (singlePresets) singlePresets.classList.add('hidden');
+
+                if (welcomeContainer) welcomeContainer.classList.add('hidden');
+                if (resultsContainer) resultsContainer.classList.add('hidden');
+                if (vsResultsContainer) vsResultsContainer.classList.add('hidden');
+                if (quickNavContainer) quickNavContainer.classList.add('hidden');
+
+                if (sentimentContainer) sentimentContainer.classList.remove('hidden');
+                
+                setTimeout(() => {
+                    try {
+                        if (typeof renderBarometerControls === 'function') renderBarometerControls();
+                        if (typeof renderMarketSynthesisSection === 'function') renderMarketSynthesisSection();
+                        if (typeof runLiveMarketAnalysis === 'function') runLiveMarketAnalysis();
+                    } catch (err) {
+                        console.warn("Erreur lors de l'activation du mode Sentiment:", err);
+                    }
+                }, 50);
+            }
+        }
+
+        function selectPreset(presetText) {
+            const searchInput = document.getElementById('searchInput');
+            if (searchInput) {
+                searchInput.value = presetText;
+                activateMode('single');
+                executeAnalysis(presetText, 'ALL');
+            }
+        }
+
+        function selectVSPreset(stock1, stock2) {
+            const vs1 = document.getElementById('searchInputVS1');
+            const vs2 = document.getElementById('searchInputVS2');
+            if (vs1 && vs2) {
+                vs1.value = stock1;
+                vs2.value = stock2;
+                activateMode('vs');
+                executeVSAnalysis(stock1, stock2);
+            }
+        }
+
+        function clearSearchInput() {
+            const input = document.getElementById('searchInput');
+            const btnClear = document.getElementById('btnClearSearch');
+            if (input) input.value = '';
+            if (btnClear) btnClear.classList.add('hidden');
+        }
+
+        function handleSingleSearch(e) {
+            if (e) e.preventDefault();
+            const input = document.getElementById('searchInput');
+            if (input && input.value.trim()) {
+                executeAnalysis(input.value.trim(), 'ALL');
+            }
+        }
+
+        function handleVSSearch(e) {
+            if (e) e.preventDefault();
+            const vs1 = document.getElementById('searchInputVS1');
+            const vs2 = document.getElementById('searchInputVS2');
+            if (vs1 && vs2 && vs1.value.trim() && vs2.value.trim()) {
+                executeVSAnalysis(vs1.value.trim(), vs2.value.trim());
+            }
+        }
+
+        function jumpToSection(sectionId) {
+            const el = document.getElementById(sectionId);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+
+        // Attachement global immédiat
+        window.activateMode = activateMode;
+        window.selectPreset = selectPreset;
+        window.selectVSPreset = selectVSPreset;
+        window.clearSearchInput = clearSearchInput;
+        window.handleSingleSearch = handleSingleSearch;
+        window.handleVSSearch = handleVSSearch;
+        window.jumpToSection = jumpToSection;
+
             {
                 id: 'macro', name: 'Macroéconomie', weight: 15, icon: 'fa-earth-americas', color: 'blue',
                 subIndicators: [
