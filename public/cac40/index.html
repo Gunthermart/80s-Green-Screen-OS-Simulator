@@ -2198,31 +2198,41 @@
             }, 400);
 
             try {
-                const systemPrompt = `Tu es un Analyste Financier Senior (Buy-Side Equity Analyst & Portfolio Manager) spécialisé sur Euronext et les marchés mondiaux.
-Ta mission est de réaliser un audit financier ULTRA-DÉTAILLÉ, RIGOUREUX et EXHAUSTIF pour la société demandée.
+                const systemPrompt = `Tu es un Analyste Financier Senior (Buy-Side Equity Analyst & Portfolio Manager) spécialisé sur Euronext et les marchés financiers internationaux.
+Ta mission est d'effectuer une RECHERCHE EN DIRECT ultra-précise et d'exécuter un AUDIT FINANCIER EXHAUSTIF pour la société demandée.
 
-Tu DOIS impérativement croiser les données financières à partir des 23 sources suivantes :
-1. Dépôts Officiels : amf-france.org (BDIF), sec.gov (EDGAR), euronext.com.
-2. Actualités & Marché FR : boursier.com, abcbourse.com, zonebourse.com.
-3. Recherche & Analyse US/Europe : seekingalpha.com, investors.com (IBD), finance.yahoo.com, investing.com.
-4. Screeners & Modélisation : simplywall.st, morningstar.fr, stockanalysis.com, finviz.com, stockrover.com.
-5. Termineaux & Données Avancées : finchat.io, tikr.com, koyfin.com, gurufocus.com, macrotrends.net.
-6. Valorisation DCF : alphaspread.com, finbox.com.
-7. Suivi Institutionnels & Shorts : dataroma.com, whalewisdom.com.
+DIRECTIVES CRUCIALES POUR LE GROUNDING ET LA PRÉCISION DES COURS :
+1. RECHERCHE OBLIGATOIRE DU COURS EN DIRECT :
+   - Recherche en temps réel le DERNIER COURS DE BOURSE EXACT (Closing / Live Price en € ou devise locale) de la société sur Euronext, ZoneBourse, Yahoo Finance ou Boursier.com.
+   - Le champ "tradingPlan.entryZone" DOIT IMPÉRATIVEMENT ÉGALER CE COURS REEL (ex: "46.50 €" pour STIF, "18.50 €" pour Vallourec, "565.00 €" pour LVMH).
 
-Règles de qualité strictes :
-- Ne fournis JAMAIS de réponses vagues ou génériques.
-- Donne les métriques exactes : Chiffre d'Affaires exact (M€ ou Md€), Marge Opérationnelle %, Résultat Net, Dette Nette exacte, P/E NTM vs historique 5 ans, EV/EBITDA, P/FCF, ROE, ROIC vs WACC.
-- Détailler l'Altman Z-Score et le Piotroski F-Score (0 à 9).
-- Détailler les 3 catalyseurs majeurs de croissance et les 3 facteurs de risques quantifiés.
-- Fournir les objectifs de cours du consensus (Moyen, Haut, Bas) et la recommandation majoritaire.
-- Donner le capital vendu à découvert (% Short Interest) et le potentiel de Squeeze.
-- Calibrer le plan de trading (Entrée, Stop Loss %, TP1 %, TP2 %, Ratio R/R et Kelly Alloc %).
-- Renvoie EXCLUSIVEMENT un objet JSON valide contenant l'ensemble des 14 sections.`;
+2. RECHERCHE DU CONSENSUS ANALYSTES ET OBJECTIF DE COURS :
+   - Recherche l'OBJECTIF DE COURS MOYEN DU CONSENSUS DES ANALYSTES (Target Price) le plus récent.
+   - Calcule le potentiel de hausse/baisse exact entre le cours actuel et l'objectif moyen (ex: "58.50 € (+25.8%)").
 
-                const userPrompt = `Effectue l'analyse complète, détaillée et chiffrée de la société "${query}" (${marketFilter || 'ALL'}) en interrogeant les 23 sources financières cibles (amf-france.org, sec.gov, boursier.com, abcbourse.com, zonebourse.com, seekingalpha.com, simplywall.st, finance.yahoo.com, investing.com, finchat.io, morningstar.fr, tikr.com, koyfin.com, finviz.com, gurufocus.com, stockanalysis.com, alphaspread.com, finbox.com, stockrover.com, macrotrends.net, dataroma.com, whalewisdom.com, investors.com).
+3. COHÉRENCE DU PLAN DE TRADING (Section 12) :
+   - Point d'entrée ("entryZone") = Cours actuel réel recherché (ex: "46.50 €").
+   - Stop Loss ("stopLoss") = Placé entre -8% et -12% sous le cours actuel en dessous d'un support technique (ex: "41.20 € (-11.4%)").
+   - TP1 ("tp1") = Premier objectif intermédiaire technique (ex: +12% à +18% du cours actuel).
+   - TP2 ("tp2") = Objectif de hausse aligné sur ou proche de l'objectif moyen du consensus des analystes.
 
-Génère les données exactes pour les 14 sections et retourne UNIQUEMENT l'objet JSON strictement structuré suivant :
+4. RECHERCHE DES CHIFFRES DE SANTÉ ET RATIOS FINANCIERS :
+   - Recherche le CA exact (M€ ou Md€), le Résultat Net, la Marge Opérationnelle %, et la Dette Nette.
+   - Calcule ou extrait le Piotroski F-Score (0-9), l'Altman Z-Score, le P/E NTM vs historique 5 ans, EV/EBITDA, P/FCF, et le % du capital vendu à découvert (Short Interest sur AMF BDIF / ShortSell.nl).
+
+5. FORMAT DE RÉPONSE :
+   - Renvoie UNIQUEMENT un objet JSON strictement valide contenant l'intégralité des 14 sections sans texte d'introduction ni conclusion.`;
+
+                const userPrompt = `Effectue la recherche Google Grounding en direct et l'analyse complète, détaillée et chiffrée de la société "${query}" (${marketFilter || 'ALL'}).
+
+ÉTAPES DE RECHERCHE ET DE CALCUL :
+1. Recherche d'abord "cours action ${query} Euronext Zonebourse Yahoo Finance" pour obtenir le cours de clôture exact en €.
+2. Recherche "consensus analystes objectif de cours ${query} Zonebourse Boursier" pour avoir le cours cible moyen du consensus.
+3. Renseigne "tradingPlan.entryZone" avec le cours réel obtenu.
+4. Renseigne "analystConsensusAndNews.targetPriceAvg" avec l'objectif de cours moyen exact + le % de hausse/baisse calculé par rapport au cours réel.
+5. Renseigne "tradingPlan.stopLoss", "tradingPlan.tp1" et "tradingPlan.tp2" en parfaite cohérence mathématique.
+
+Retourne UNIQUEMENT l'objet JSON strictement structuré suivant :
 {
   "companyInfo": { "name": "", "ticker": "", "isin": "", "market": "", "index": "", "icbSector": "", "headquarters": "", "summary": "", "competitivePositioning": "" },
   "financialKPIs": { "currency": "EUR", "period": "FY 2024/2025", "revenue": "", "netIncome": "", "operatingMargin": "", "netDebt": "" },
