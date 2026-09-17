@@ -400,11 +400,12 @@
                             <i class="fa-solid fa-calculator text-lg"></i>
                         </div>
                         <div>
-                            <h2 class="text-xl font-bold text-white flex items-center gap-2">
-                                Modélisation DCF (Discounted Cash Flow) & Matrice de Sensibilité
+                            <h2 class="text-xl font-bold text-white flex items-center gap-2 flex-wrap">
+                                Modélisation DCF & Matrice de Sensibilité - 
+                                <span id="dcfCompanyName" class="text-purple-300 font-mono text-base px-2.5 py-0.5 rounded-lg bg-purple-500/20 border border-purple-500/30">Société non sélectionnée</span>
                                 <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-300 border border-purple-500/20">Fair Value Live</span>
                             </h2>
-                            <p class="text-xs text-slate-400">Valeur intrinsèque théorique par action calculée directement d'après les FCF extraits du jour</p>
+                            <p class="text-xs text-slate-400">Valeur intrinsèque théorique par action calculée directement d'après les FCF et cours du jour</p>
                         </div>
                     </div>
                     <button onclick="applyDCFValuesFromCurrentReport()" class="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-lg shadow-purple-600/20 transition flex items-center space-x-2 cursor-pointer">
@@ -2090,6 +2091,9 @@ EXIGENCES STRICTES DE RAPPORT DU JOUR :
             if (document.getElementById('qvmQualityAnalysis')) document.getElementById('qvmQualityAnalysis').innerText = qvm.qualityAnalysis || 'Qualité élevée.';
             if (document.getElementById('qvmValuationAnalysis')) document.getElementById('qvmValuationAnalysis').innerText = qvm.valuationAnalysis || 'Valorisation équilibrée.';
             if (document.getElementById('qvmMomentumAnalysis')) document.getElementById('qvmMomentumAnalysis').innerText = qvm.momentumAnalysis || 'Tendance haussière.';
+
+            // Synchroniser automatiquement le modèle DCF avec l'action analysée
+            applyDCFValuesFromCurrentReport();
         }
 
         async function executeVSAnalysis(stock1, stock2) {
@@ -2303,10 +2307,12 @@ EXIGENCES STRICTES DE RAPPORT DU JOUR :
             const fairValueEl = document.getElementById('dcfFairValueResult');
             const marginEl = document.getElementById('dcfMarginSafetyResult');
             const badgeEl = document.getElementById('dcfVerdictBadge');
+            const companyNameEl = document.getElementById('dcfCompanyName');
+            const companyLabel = companyNameEl ? companyNameEl.innerText : 'Action';
 
             if (fairValueEl) fairValueEl.innerText = `${fairValuePerShare.toFixed(2)} €`;
             if (marginEl) {
-                marginEl.innerText = `Décote / Marge de Sécurité : ${marginPct >= 0 ? '+' : ''}${marginPct.toFixed(1)}%`;
+                marginEl.innerText = `${companyLabel} • ${marginPct >= 0 ? 'Décote' : 'Surcote'} / Marge de Sécurité : ${marginPct >= 0 ? '+' : ''}${marginPct.toFixed(1)}%`;
                 marginEl.className = marginPct >= 0 ? "text-xs font-bold text-emerald-400 font-mono" : "text-xs font-bold text-rose-400 font-mono";
             }
             if (badgeEl) {
@@ -2364,17 +2370,34 @@ EXIGENCES STRICTES DE RAPPORT DU JOUR :
                 showToast("Veuillez d'abord exécuter une analyse de titre.", "amber");
                 return;
             }
+            const info = currentReportData.companyInfo || {};
             const kpi = currentReportData.financialKPIs || {};
             const trading = currentReportData.tradingPlan || {};
 
+            const stockLabel = `${info.name || 'Société'} (${info.ticker || 'EUR'})`;
+            if (document.getElementById('dcfCompanyName')) {
+                document.getElementById('dcfCompanyName').innerText = stockLabel;
+            }
+
             const fcfVal = extractNumericValue(kpi.fcf) || 145;
             const priceVal = extractNumericValue(trading.entryZone) || 46.50;
+            const marketCapVal = extractNumericValue(kpi.marketCap);
+
+            let estimatedShares = 50;
+            if (marketCapVal > 0 && priceVal > 0) {
+                let mCapInM = marketCapVal;
+                if (String(kpi.marketCap).toLowerCase().includes('md')) {
+                    mCapInM = marketCapVal * 1000;
+                }
+                estimatedShares = Math.max(1, Math.round(mCapInM / priceVal));
+            }
 
             if (document.getElementById('dcfBaseFCF')) document.getElementById('dcfBaseFCF').value = fcfVal;
             if (document.getElementById('dcfCurrentPrice')) document.getElementById('dcfCurrentPrice').value = priceVal;
+            if (document.getElementById('dcfSharesCount')) document.getElementById('dcfSharesCount').value = estimatedShares;
 
             runDCFCalculation();
-            showToast(`Données FCF & Prix du jour injectées dans le modèle DCF !`, "success");
+            showToast(`Modèle DCF synchronisé pour ${stockLabel} !`, "success");
         }
 
         function openSummaryModal() {
