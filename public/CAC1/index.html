@@ -2029,13 +2029,62 @@ EXIGENCES STRICTES DE RAPPORT DU JOUR :
 
             const shBox = document.getElementById('majorShareholdersList');
             if (shBox) {
-                const shList = gov.majorShareholders || [{ name: "Actionnaires Principaux", percentage: "50.0%" }];
-                shBox.innerHTML = shList.map(s => `
-                    <div class="flex justify-between items-center p-2 rounded bg-slate-950 border border-slate-800/80">
-                        <span class="text-slate-200 font-medium">${s.name}</span>
-                        <span class="text-sky-400 font-bold">${s.percentage}</span>
-                    </div>
-                `).join('');
+                let shList = gov.majorShareholders;
+                if (!Array.isArray(shList) || shList.length === 0) {
+                    shList = [
+                        { name: "Fondateurs & Management", percentage: "45.0%" },
+                        { name: "Flottant Boursier (Public)", percentage: "55.0%" }
+                    ];
+                }
+
+                shBox.innerHTML = shList.map(s => {
+                    let name = "Actionnaire";
+                    let pctStr = "N/A";
+                    let numericPct = 0;
+
+                    if (typeof s === 'string') {
+                        name = s;
+                        const match = s.match(/(\d+(?:[\.,]\d+)?)\s*%/);
+                        if (match) {
+                            numericPct = parseFloat(match[1].replace(',', '.'));
+                            pctStr = `${numericPct}%`;
+                        }
+                    } else if (s && typeof s === 'object') {
+                        name = s.name || s.holder || s.shareholder || s.entity || s.nom || "Actionnaire";
+                        pctStr = s.percentage || s.pct || s.share || s.stake || s.value || "N/A";
+                        
+                        const numVal = extractNumericValue(pctStr);
+                        if (numVal > 0 && numVal <= 100) {
+                            numericPct = numVal;
+                        }
+                    }
+
+                    let iconClass = "fa-user-tie text-purple-400";
+                    const lowerName = name.toLowerCase();
+                    if (lowerName.includes('flottant') || lowerName.includes('public') || lowerName.includes('free float')) {
+                        iconClass = "fa-users text-sky-400";
+                    } else if (lowerName.includes('fondateur') || lowerName.includes('famille') || lowerName.includes('management') || lowerName.includes('dirigeant')) {
+                        iconClass = "fa-crown text-amber-400";
+                    } else if (lowerName.includes('blackrock') || lowerName.includes('vanguard') || lowerName.includes('bpi') || lowerName.includes('fond') || lowerName.includes('capital') || lowerName.includes('institution')) {
+                        iconClass = "fa-building-columns text-emerald-400";
+                    }
+
+                    return `
+                        <div class="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1.5 transition hover:border-purple-500/40">
+                            <div class="flex justify-between items-center text-xs">
+                                <div class="flex items-center space-x-2 truncate pr-2">
+                                    <i class="fa-solid ${iconClass} text-xs shrink-0"></i>
+                                    <span class="text-slate-200 font-semibold truncate" title="${name}">${name}</span>
+                                </div>
+                                <span class="text-purple-300 font-bold font-mono shrink-0">${pctStr}</span>
+                            </div>
+                            ${numericPct > 0 ? `
+                            <div class="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden border border-slate-800/80">
+                                <div class="bg-gradient-to-r from-purple-500 via-indigo-400 to-sky-400 h-full rounded-full transition-all duration-500" style="width: ${Math.min(100, numericPct)}%"></div>
+                            </div>` : ''}
+                        </div>
+                    `;
+                }).join('');
             }
             if (document.getElementById('governanceNotesText')) document.getElementById('governanceNotesText').innerText = gov.governanceNotes || 'Gouvernance transparente.';
 
