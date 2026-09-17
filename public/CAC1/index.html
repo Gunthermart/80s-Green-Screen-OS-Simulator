@@ -2610,6 +2610,7 @@ EXIGENCES STRICTES DE RAPPORT DU JOUR :
             const info = data.companyInfo || {};
             const kpi = data.financialKPIs || {};
             const health = data.healthScores || {};
+            const growth = data.growthAnalysis || {};
             const consensus = data.analystConsensusAndNews || {};
             const diag = data.leonceDiagnostic || {};
             const trading = data.tradingPlan || {};
@@ -2629,6 +2630,18 @@ EXIGENCES STRICTES DE RAPPORT DU JOUR :
             const investedCapital = (recommendedShares * entryPrice).toFixed(0);
             const capitalPct = ((investedCapital / defaultPortfolio) * 100).toFixed(1);
 
+            const gainTP1Euro = (recommendedShares * (tp1 - entryPrice)).toFixed(0);
+            const gainTP2Euro = (recommendedShares * (targetAvg - entryPrice)).toFixed(0);
+
+            // Extraction DCF Fair Value si disponible
+            const dcfFairValueText = document.getElementById('dcfFairValueResult')?.innerText || 'N/A';
+            const dcfMarginText = document.getElementById('dcfMarginSafetyResult')?.innerText || '';
+
+            // Rumeur clé
+            const topRumor = growth.marketRumorsAndChatter && growth.marketRumorsAndChatter.length > 0
+                ? growth.marketRumorsAndChatter[0]
+                : { source: "Grounding Live", type: "Thèse du Jour", summary: info.summary || "Dossier de qualité.", impact: "Neutre ⚪", credibility: "Piste Analytique" };
+
             const score = diag.overallScore || 80;
             let signalBadge = { title: "ACHAT FORT 🟢", class: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" };
             if (score < 55) {
@@ -2637,12 +2650,13 @@ EXIGENCES STRICTES DE RAPPORT DU JOUR :
                 signalBadge = { title: "ACHAT SUR REPLI 🟡", class: "bg-amber-500/20 text-amber-300 border-amber-500/40" };
             }
 
-            if (titleEl) titleEl.innerText = `${info.name || 'Société Euronext'} - Synthèse Décisionnelle Express`;
+            if (titleEl) titleEl.innerText = `${info.name || 'Société Euronext'} - Synthèse Décisionnelle Express ⚡`;
             if (tickerEl) tickerEl.innerText = info.ticker ? `${info.ticker}` : 'EUR';
 
             if (contentEl) {
                 contentEl.innerHTML = `
                     <div class="space-y-4 text-xs font-sans">
+                        <!-- Top Header Banner -->
                         <div class="p-4 rounded-xl bg-slate-950 border border-slate-800 flex flex-col md:flex-row items-center justify-between gap-4">
                             <div class="flex items-center space-x-3 text-center md:text-left">
                                 <div class="px-3.5 py-2 rounded-xl text-xs font-mono font-extrabold border ${signalBadge.class}">
@@ -2659,10 +2673,14 @@ EXIGENCES STRICTES DE RAPPORT DU JOUR :
                                 </div>
                             </div>
 
-                            <div class="grid grid-cols-3 gap-2 text-center font-mono w-full md:w-auto shrink-0">
+                            <div class="grid grid-cols-4 gap-2 text-center font-mono w-full md:w-auto shrink-0">
                                 <div class="p-2 rounded-lg bg-slate-900 border border-slate-800">
                                     <span class="text-[9px] text-slate-400 uppercase block">Ratio R/R</span>
                                     <strong class="text-emerald-400 text-xs">1 : ${riskRewardRatio}</strong>
+                                </div>
+                                <div class="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                                    <span class="text-[9px] text-slate-400 uppercase block">Ratio PEG</span>
+                                    <strong class="text-teal-300 text-xs">${health.pegRatio || '0.85'}</strong>
                                 </div>
                                 <div class="p-2 rounded-lg bg-slate-900 border border-slate-800">
                                     <span class="text-[9px] text-slate-400 uppercase block">Piotroski</span>
@@ -2675,7 +2693,9 @@ EXIGENCES STRICTES DE RAPPORT DU JOUR :
                             </div>
                         </div>
 
+                        <!-- 4 Main Grids -->
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <!-- 1. Thèse & Moat -->
                             <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2">
                                 <div class="text-xs font-mono font-bold text-sky-400 uppercase flex items-center space-x-1.5">
                                     <i class="fa-solid fa-bullseye"></i>
@@ -2688,36 +2708,33 @@ EXIGENCES STRICTES DE RAPPORT DU JOUR :
                                 </div>
                             </div>
 
-                            <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2">
-                                <div class="text-xs font-mono font-bold text-amber-400 uppercase flex items-center space-x-1.5">
-                                    <i class="fa-solid fa-shield-halved"></i>
-                                    <span>2. Santé Bilancielle & Garde-fous</span>
+                            <!-- 2. Bruits de Marché & FinTwit Pulse -->
+                            <div class="p-4 rounded-xl bg-slate-900/80 border border-amber-500/30 space-y-2">
+                                <div class="text-xs font-mono font-bold text-amber-400 uppercase flex items-center justify-between">
+                                    <span class="flex items-center space-x-1.5">
+                                        <i class="fa-solid fa-comments"></i>
+                                        <span>2. Bruit / Rumeur de Marché Clé</span>
+                                    </span>
+                                    <span class="text-[10px] text-slate-400 font-normal">${topRumor.source || 'Social'}</span>
                                 </div>
-                                <div class="grid grid-cols-2 gap-2 font-mono text-[11px]">
-                                    <div class="p-2 rounded bg-slate-950 border border-slate-800">
-                                        <span class="text-slate-400 block text-[9px] uppercase">Dette Nette / EBITDA</span>
-                                        <strong class="text-emerald-400">${health.debtEbitda || '0.95x'}</strong>
+                                <div class="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 space-y-1">
+                                    <div class="flex justify-between items-center text-[10px] font-mono">
+                                        <span class="text-sky-400 font-bold uppercase">${topRumor.type || 'Rumeur'}</span>
+                                        <span class="text-emerald-400 font-bold">${topRumor.impact || 'Neutre'}</span>
                                     </div>
-                                    <div class="p-2 rounded bg-slate-950 border border-slate-800">
-                                        <span class="text-slate-400 block text-[9px] uppercase">Couverture Intérêts</span>
-                                        <strong class="text-sky-300">${health.interestCoverage || '12.5x'}</strong>
-                                    </div>
-                                    <div class="p-2 rounded bg-slate-950 border border-slate-800">
-                                        <span class="text-slate-400 block text-[9px] uppercase">Dividende / Rend.</span>
-                                        <strong class="text-purple-300">${health.dividendYield || '2.50%'}</strong>
-                                    </div>
-                                    <div class="p-2 rounded bg-slate-950 border border-slate-800">
-                                        <span class="text-slate-400 block text-[9px] uppercase">Vente à Découvert</span>
-                                        <strong class="text-rose-400">${data.shortInterest?.shortCapitalPct || '0.15%'}</strong>
-                                    </div>
+                                    <p class="text-slate-200 text-[11px] leading-relaxed">${topRumor.summary || 'Aucune rumeur majeure détectée sur la séance.'}</p>
                                 </div>
-                                <p class="text-[10px] text-slate-400 leading-tight font-mono">${health.piotroskiAnalysis || 'Structure bilancielle maîtrisée.'}</p>
+                                <div class="text-[10px] text-slate-400 font-mono flex justify-between">
+                                    <span>Niveau de crédibilité : <strong class="text-amber-300">${topRumor.credibility || 'Bruit de marché'}</strong></span>
+                                    <span>Vente à découvert : <strong class="text-rose-400">${data.shortInterest?.shortCapitalPct || '0.15%'}</strong></span>
+                                </div>
                             </div>
 
+                            <!-- 3. Santé, Valorisation & DCF Fair Value -->
                             <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2">
                                 <div class="text-xs font-mono font-bold text-purple-400 uppercase flex items-center space-x-1.5">
                                     <i class="fa-solid fa-calculator"></i>
-                                    <span>3. Valorisation & Métriques Clés</span>
+                                    <span>3. Valorisation, PEG & Modèle DCF</span>
                                 </div>
                                 <div class="grid grid-cols-3 gap-2 font-mono text-center text-[11px]">
                                     <div class="p-2 rounded bg-slate-950 border border-slate-800">
@@ -2733,18 +2750,20 @@ EXIGENCES STRICTES DE RAPPORT DU JOUR :
                                         <strong class="text-teal-300">${kpi.fcf || 'N/A'}</strong>
                                     </div>
                                 </div>
-                                <p class="text-[10px] text-slate-300 leading-relaxed font-mono">
-                                    P/E NTM : <strong class="text-sky-300">${data.financialRatios?.[0]?.value || '14.5x'}</strong> • P/FCF : <strong class="text-teal-300">${data.financialRatios?.[2]?.value || '11.8x'}</strong>.
-                                </p>
+                                <div class="p-2.5 rounded-lg bg-slate-950/80 border border-purple-500/30 flex justify-between items-center text-[11px] font-mono">
+                                    <span>Fair Value DCF Théorique : <strong class="text-purple-300 font-bold">${dcfFairValueText}</strong></span>
+                                    <span class="text-emerald-400 font-bold">${dcfMarginText || 'GARP Attractif'}</span>
+                                </div>
                             </div>
 
+                            <!-- 4. Plan d'Exécution & Position Sizing -->
                             <div class="p-4 rounded-xl bg-slate-950 border border-emerald-500/40 space-y-2">
                                 <div class="text-xs font-mono font-bold text-emerald-400 uppercase flex items-center justify-between">
                                     <span class="flex items-center space-x-1.5">
                                         <i class="fa-solid fa-crosshairs"></i>
-                                        <span>4. Cadre d'Exécution & Taille de Position</span>
+                                        <span>4. Cadre d'Exécution & Money Management</span>
                                     </span>
-                                    <span class="text-[10px] text-slate-400 font-normal">Règle 1% Risque</span>
+                                    <span class="text-[10px] text-slate-400 font-normal">Risque 1.0%</span>
                                 </div>
 
                                 <div class="grid grid-cols-4 gap-1.5 text-center font-mono text-[11px]">
@@ -2767,8 +2786,12 @@ EXIGENCES STRICTES DE RAPPORT DU JOUR :
                                 </div>
 
                                 <div class="p-2 rounded-lg bg-slate-900 border border-slate-800 flex justify-between items-center text-[11px] font-mono">
-                                    <span class="text-slate-400">Position Simulée (Portefeuille 50k€) :</span>
+                                    <span class="text-slate-400">Position Simulée (50k€) :</span>
                                     <span class="text-emerald-400 font-bold">${recommendedShares} actions (~${investedCapital} € / ${capitalPct}%)</span>
+                                </div>
+                                <div class="flex justify-between text-[10px] font-mono text-slate-400 px-1">
+                                    <span>Gain Max TP1 : <strong class="text-emerald-400">+${gainTP1Euro} €</strong></span>
+                                    <span>Gain Max TP2 : <strong class="text-teal-300">+${gainTP2Euro} €</strong></span>
                                 </div>
                             </div>
                         </div>
@@ -2779,34 +2802,52 @@ EXIGENCES STRICTES DE RAPPORT DU JOUR :
             if (modal) modal.classList.remove('hidden');
         }
 
-        function closeSummaryModal() {
-            const modal = document.getElementById('summaryModal');
-            if (modal) modal.classList.add('hidden');
-        }
-
         function copySummaryTextToClipboard() {
             const searchInput = document.getElementById('searchInput');
             const activeQuery = searchInput && searchInput.value.trim() ? searchInput.value.trim() : 'STIF';
             const data = currentReportData || generateDynamicRealTimeData(activeQuery);
             const info = data.companyInfo || {};
             const kpi = data.financialKPIs || {};
+            const health = data.healthScores || {};
+            const growth = data.growthAnalysis || {};
             const consensus = data.analystConsensusAndNews || {};
             const diag = data.leonceDiagnostic || {};
             const trading = data.tradingPlan || {};
 
-            const summaryText = `📌 SYNTHÈSE DÉCISIONNELLE EXPRESSE - LEONCE IA : ${info.name || 'Titre'} (${info.ticker || 'EUR'})
---------------------------------------------------
-• Score Global Leonce : ${diag.overallScore || 80}/100
-• Consensus Analystes : ${consensus.consensusRecommendation || 'Achat'} | Cible: ${consensus.targetPriceAvg || 'N/A'}
-• Chiffre d'Affaires : ${kpi.revenue || 'N/A'} | Marge Op.: ${kpi.operatingMargin || 'N/A'}
-• Plan de Trading MT : Entrée ${trading.entryZone || 'N/A'} | Stop ${trading.stopLoss || 'N/A'} | TP1 ${trading.tp1 || 'N/A'}
---------------------------------------------------
+            const dcfFairValueText = document.getElementById('dcfFairValueResult')?.innerText || 'N/A';
+            const topRumor = growth.marketRumorsAndChatter && growth.marketRumorsAndChatter.length > 0
+                ? growth.marketRumorsAndChatter[0].summary
+                : (info.summary || "Dossier solide.");
+
+            const summaryText = `⚡ SYNTHÈSE DÉCISIONNELLE EXPRESSE - LEONCE IA
+==================================================
+📍 TITRE : ${info.name || 'Société'} (${info.ticker || 'EUR'}) - ${info.market || 'Euronext'}
+📊 SCORE COMPOSITE QVM : ${diag.overallScore || 80}/100
+🎯 CONSENSUS : ${consensus.consensusRecommendation || 'Achat'} | Cible Target: ${consensus.targetPriceAvg || 'N/A'}
+==================================================
+1. THÈSE & MOAT :
+   • ${info.summary || 'Positions de marché solides.'}
+   • Moat : ${info.competitivePositioning || 'Avantage concurrentiel défendable.'}
+
+2. BRUIT / RUMEUR DE MARCHÉ :
+   • ${topRumor}
+
+3. VALORISATION & SANTÉ BILANCIELE :
+   • CA: ${kpi.revenue || 'N/A'} | Marge Op.: ${kpi.operatingMargin || 'N/A'} | FCF: ${kpi.fcf || 'N/A'}
+   • Ratio PEG: ${health.pegRatio || '0.85'} | Piotroski: ${health.piotroskiScore || 7}/9 | Altman Z: ${health.altmanZScore || 3.4}
+   • Fair Value DCF: ${dcfFairValueText}
+
+4. CADRE D'EXÉCUTION TRADING (MONEY MANAGEMENT) :
+   • Entrée Jour: ${trading.entryZone || 'N/A'}
+   • Stop Loss: ${trading.stopLoss || 'N/A'}
+   • TP1 (+15%): ${trading.tp1 || 'N/A'} | TP2 Target: ${trading.tp2 || consensus.targetPriceAvg || 'N/A'}
+==================================================
 Généré le ${new Date().toLocaleDateString('fr-FR')} via Euronext FactCheck AI`;
 
             navigator.clipboard.writeText(summaryText).then(() => {
-                showToast("Synthèse Express copiée !", "success");
+                showToast("Fiche Synthèse Express copiée en presse-papiers !", "success");
             }).catch(() => {
-                showToast("Synthèse copiée !", "success");
+                showToast("Fiche Synthèse copiée !", "success");
             });
         }
 
