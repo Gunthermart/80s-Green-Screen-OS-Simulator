@@ -1334,9 +1334,9 @@
 
                         <!-- Action buttons for Trade Section -->
                         <div class="flex items-center space-x-2 shrink-0">
-                            <button onclick="copyTradeTweet()" class="px-3.5 py-2 rounded-xl bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 font-mono text-xs font-bold border border-sky-500/30 transition flex items-center space-x-2 cursor-pointer" title="Copier le trade sous forme de tweet (< 270 car.) sans icônes">
+                            <button onclick="copyTradeTweet()" class="px-3.5 py-2 rounded-xl bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 font-mono text-xs font-bold border border-sky-500/30 transition flex items-center space-x-2 cursor-pointer" title="Copier le plan de trade avec thèse/rumeur pour publication">
                                 <i class="fa-brands fa-x-twitter text-sky-400"></i>
-                                <span>Copier Tweet Trade (< 270 car.)</span>
+                                <span>PP</span>
                             </button>
                             <button onclick="saveCurrentTrade()" class="px-3.5 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 font-mono text-xs font-bold border border-emerald-500/30 transition flex items-center space-x-2 cursor-pointer" title="Enregistrer ce trade dans le journal de trading MT">
                                 <i class="fa-solid fa-briefcase text-emerald-400"></i>
@@ -3302,6 +3302,7 @@ EXIGENCES STRICTES DE RÉDACTION ET PRÉSENTATION (100% EN FRANÇAIS) :
 
         function copyTradeTweet() {
             const info = currentReportData?.companyInfo || {};
+            const growth = currentReportData?.growthAnalysis || {};
             const rawTicker = info.ticker || 'EUR';
             const cleanTicker = rawTicker.replace(/[^a-zA-Z0-9]/g, '');
             const companyName = info.name || 'Trade';
@@ -3312,26 +3313,30 @@ EXIGENCES STRICTES DE RÉDACTION ET PRÉSENTATION (100% EN FRANÇAIS) :
             const tp2Text = document.getElementById('planTP2')?.innerText || '140.00 EUR';
             const rrText = document.getElementById('mmRiskRewardDisplay')?.innerText || '1 : 2.5';
             
-            let tweet = `Trade Plan $${cleanTicker} (${companyName})
-Point d'Entree: ${entryText}
-Stop Loss: ${slText}
-Objectif TP1: ${tp1Text}
-Objectif TP2: ${tp2Text}
-Ratio Risk/Reward: ${rrText}
-Analyse via Euronext FactCheck AI`;
+            // Extraction de la rumeur récente ou de la thèse d'investissement
+            let thesisOrRumor = '';
+            if (growth.marketRumorsAndChatter && growth.marketRumorsAndChatter.length > 0 && growth.marketRumorsAndChatter[0].summary) {
+                thesisOrRumor = `Catalyseur/Rumeur: ${growth.marketRumorsAndChatter[0].summary}`;
+            } else if (info.summary) {
+                thesisOrRumor = `Thèse: ${info.summary}`;
+            }
 
-            if (tweet.length > 268) {
-                tweet = `Trade $${cleanTicker}
-Entree: ${entryText}
-SL: ${slText}
-TP1: ${tp1Text}
-TP2: ${tp2Text}
-R/R: ${rrText}
-FactCheck AI Euronext`;
+            let tweet = `Trade Plan $${cleanTicker} (${companyName})
+Entrée: ${entryText} | SL: ${slText} | TP1: ${tp1Text} | TP2: ${tp2Text} (R/R ${rrText})
+${thesisOrRumor ? thesisOrRumor + '\n' : ''}Euronext FactCheck AI`;
+
+            // Tronquage propre si le texte dépasse la limite
+            if (tweet.length > 275) {
+                const maxLen = Math.max(30, 275 - (tweet.length - thesisOrRumor.length) - 5);
+                const shortText = thesisOrRumor.substring(0, maxLen) + '...';
+                tweet = `Trade Plan $${cleanTicker} (${companyName})
+Entrée: ${entryText} | SL: ${slText} | TP1: ${tp1Text} | TP2: ${tp2Text}
+${shortText}
+Euronext FactCheck AI`;
             }
 
             copyTextToClipboard(tweet);
-            showToast(`Tweet du trade copié (${tweet.length} car.) !`, 'success');
+            showToast(`Post PP copié avec succès (${tweet.length} car.) !`, 'success');
         }
 
         async function runMarketSynthesisAI() {
