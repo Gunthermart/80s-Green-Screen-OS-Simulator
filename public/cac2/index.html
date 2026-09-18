@@ -1664,8 +1664,93 @@
         window.activateMode = activateMode;
 
         /**
-         * STREAMING_CHUNK:Connecting StocksAnalyser API wrapper with Netlify Function endpoint...
+         * Robust JSON extractor that scans character-by-character for balanced braces/brackets
+         * to ignore citations or markdown trailing text returned by AI models.
          */
+        function extractAndParseJSON(rawText) {
+            if (!rawText || typeof rawText !== 'string') return null;
+
+            let clean = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+
+            try {
+                return JSON.parse(clean);
+            } catch (e) {}
+
+            function findBalancedJSON(str) {
+                let firstSquare = str.indexOf('[');
+                let firstCurly = str.indexOf('{');
+
+                let startIdx = -1;
+                let isArray = false;
+
+                if (firstSquare !== -1 && (firstCurly === -1 || firstSquare < firstCurly)) {
+                    startIdx = firstSquare;
+                    isArray = true;
+                } else if (firstCurly !== -1) {
+                    startIdx = firstCurly;
+                    isArray = false;
+                }
+
+                if (startIdx === -1) return null;
+
+                let openChar = isArray ? '[' : '{';
+                let closeChar = isArray ? ']' : '}';
+
+                let depth = 0;
+                let inString = false;
+                let escapeNext = false;
+
+                for (let i = startIdx; i < str.length; i++) {
+                    let char = str[i];
+
+                    if (escapeNext) {
+                        escapeNext = false;
+                        continue;
+                    }
+
+                    if (char === '\\') {
+                        escapeNext = true;
+                        continue;
+                    }
+
+                    if (char === '"') {
+                        inString = !inString;
+                        continue;
+                    }
+
+                    if (!inString) {
+                        if (char === openChar) {
+                            depth++;
+                        } else if (char === closeChar) {
+                            depth--;
+                            if (depth === 0) {
+                                return str.substring(startIdx, i + 1);
+                            }
+                        }
+                    }
+                }
+                return null;
+            }
+
+            const candidate = findBalancedJSON(clean);
+            if (candidate) {
+                try {
+                    return JSON.parse(candidate);
+                } catch (err) {
+                    let sanitized = candidate
+                        .replace(/,\s*([\]}])/g, '$1')
+                        .replace(/[\u0000-\u001F\u007F-\u009F]/g, " ");
+                    try {
+                        return JSON.parse(sanitized);
+                    } catch (e2) {
+                        console.warn("JSON parse retry error:", e2);
+                    }
+                }
+            }
+
+            return null;
+        }
+
         async function callStocksAnalyserAPI(systemPrompt, userQuery) {
             const endpoint = resolveEndpointUrl("/.netlify/functions/StocksAnalyser");
             const payload = {
@@ -1691,8 +1776,8 @@
 
                 const text = result?.candidates?.[0]?.content?.parts?.[0]?.text;
                 if (text) {
-                    const match = text.match(/\{[\s\S]*\}/) || text.match(/\[[\s\S]*\]/);
-                    if (match) return JSON.parse(match[0]);
+                    const parsed = extractAndParseJSON(text);
+                    if (parsed) return parsed;
                     return text;
                 }
             } catch (e) {
@@ -1722,7 +1807,7 @@ Effectue une recherche Google Grounding en direct via les 29 sources financieres
 Consulte les 29 sources financieres officielles :
 https://www.amf-france.org, https://www.sec.gov, https://www.zonebourse.com, https://www.boursier.com, https://www.abcbourse.com, https://finance.yahoo.com, https://www.investing.com, https://www.investors.com, https://simplywall.st, https://www.morningstar.com, https://www.gurufocus.com, https://www.alphaspread.com, https://finbox.com, https://stockanalysis.com, https://www.stockrover.com, https://www.macrotrends.net, https://tikr.com, https://www.koyfin.com, https://finchat.io, https://seekingalpha.com, https://finviz.com, https://www.dataroma.com, https://whalewisdom.com, https://edition.cnn.com/markets/fear-and-greed, https://www.cboe.com, https://www.cmegroup.com, https://www.ecb.europa.eu, https://quartr.com, https://www.shortsell.nl.
 
-Retourne un JSON STRICT valide au format :
+Retourne UNIFIQUEMENT UN JSON STRICT valide au format :
 {
   "companyInfo": { "name": "", "ticker": "", "isin": "", "market": "", "index": "", "icbSector": "", "headquarters": "", "summary": "", "competitivePositioning": "" },
   "financialKPIs": { "currency": "EUR", "period": "FY 2024 / 2025", "revenue": "", "ebitda": "", "netIncome": "", "fcf": "", "operatingMargin": "", "eps": "", "marketCap": "", "netDebt": "" },
@@ -1765,9 +1850,6 @@ Retourne un JSON STRICT valide au format :
         }
         window.executeAnalysis = executeAnalysis;
 
-        /**
-         * STREAMING_CHUNK:Rendering single stock report across 14 sections...
-         */
         function renderReport(data) {
             if (!data) return;
             const info = data.companyInfo || {};
@@ -1923,9 +2005,6 @@ Retourne un JSON STRICT valide au format :
             calculateMoneyManagement();
         }
 
-        /**
-         * STREAMING_CHUNK:Calculating money management parameters and position sizing...
-         */
         function calculateMoneyManagement() {
             const entryText = document.getElementById('planEntry')?.innerText || "680.50";
             const entry = parseFloat(entryText.replace(/[^0-9.]/g, '')) || 680.50;
@@ -1995,9 +2074,6 @@ Retourne un JSON STRICT valide au format :
         }
         window.calculateMoneyManagement = calculateMoneyManagement;
 
-        /**
-         * STREAMING_CHUNK:Executing VS dual arbitrage analysis via StocksAnalyser...
-         */
         async function executeVSAnalysis(stock1, stock2) {
             const loader = document.getElementById('loadingContainer');
             const vsContainer = document.getElementById('vsResultsContainer');
@@ -2009,7 +2085,7 @@ Retourne un JSON STRICT valide au format :
             try {
                 const todayFormatted = new Date().toLocaleDateString('fr-FR');
                 const vsSystemPrompt = `Tu es un arbitre financier senior Euronext. Compare "${stock1}" et "${stock2}" en direct du ${todayFormatted} via la fonction Netlify en consultant ZoneBourse, Boursier, Yahoo Finance, Finchat.io, TIKR, Koyfin, Simply Wall St, Morningstar, Shortsell.nl.
-Retourne un JSON STRICT valide avec la structure :
+Retourne UNIFIQUEMENT UN JSON STRICT valide avec la structure :
 {
   "stock1Name": "${stock1}", "stock2Name": "${stock2}", "winner": "${stock1}", "winnerTicker": "MC",
   "subText": "Surperformance Marges & Resilience Moat", "allocation": "65% / 35%",
@@ -2112,9 +2188,6 @@ Retourne un JSON STRICT valide avec la structure :
             }
         }
 
-        /**
-         * STREAMING_CHUNK:Scanning rumors and trade opportunities via StocksAnalyser...
-         */
         async function runRumorsRadarScan() {
             const grid = document.getElementById('rumorsRadarGrid');
             if (!grid) return;
@@ -2129,50 +2202,65 @@ Retourne un JSON STRICT valide avec la structure :
             try {
                 const todayFormatted = new Date().toLocaleDateString('fr-FR');
                 const rumorsPrompt = `Tu es un radar de rumeurs et d'opportunités boursières Euronext. Cherche les rumeurs M&A/OPA spéculatives, gros contrats, mouvements d'initiés AMF et bruits FinTwit (X) du ${todayFormatted}.
-Retourne un JSON STRICT array de 3 à 6 cartes d'idées de trades :
+IMPORTANT: Réponds uniquement avec un JSON STRICT sous la forme d'un tableau d'objets (array). Ne rajoute aucun texte avant ou après le JSON.
 [
   {
-    "ticker": "ALSTI", "company": "STIF", "category": "Contrats BESS",
+    "ticker": "ALSTI",
+    "company": "STIF",
+    "category": "Contrats BESS",
     "rumor": "Fort flux d'ordres et spéculation de contrat majeur BESS aux USA.",
-    "credibility": "Haute 🟢", "impact": "+18.0% (Haussier)",
-    "entry": "46.50 €", "stopLoss": "41.85 €", "tp1": "53.48 €", "tp2": "58.40 €"
+    "credibility": "Haute 🟢",
+    "impact": "+18.0% (Haussier)",
+    "entry": "46.50 €",
+    "stopLoss": "41.85 €",
+    "tp1": "53.48 €",
+    "tp2": "58.40 €"
   }
 ]`;
 
                 const rumorsQuery = `Radar rumeurs boursieres Euronext Netlify du ${todayFormatted}`;
                 let res = await callStocksAnalyserAPI(rumorsPrompt, rumorsQuery);
 
-                if (!Array.isArray(res) || res.length === 0) {
+                let rumorsArray = [];
+                if (Array.isArray(res)) {
+                    rumorsArray = res;
+                } else if (res && typeof res === 'object') {
+                    if (Array.isArray(res.rumors)) rumorsArray = res.rumors;
+                    else if (Array.isArray(res.data)) rumorsArray = res.data;
+                    else if (Array.isArray(res.cards)) rumorsArray = res.cards;
+                }
+
+                if (!rumorsArray || rumorsArray.length === 0) {
                     showToast("Impossible de charger les rumeurs via Netlify. Vérifiez votre fonction StocksAnalyser.", "amber");
                     grid.innerHTML = `<div class="col-span-full text-xs text-slate-500 font-mono text-center p-6">Scannez via la fonction Netlify configurée.</div>`;
                     return;
                 }
 
-                grid.innerHTML = res.map(card => `
+                grid.innerHTML = rumorsArray.map(card => `
                     <div class="p-5 rounded-2xl bg-slate-900/90 border border-amber-500/30 space-y-4 shadow-xl hover:border-amber-500/60 transition">
                         <div class="flex items-center justify-between border-b border-slate-800 pb-2">
                             <div class="flex items-center space-x-2">
-                                <span class="font-black text-amber-400 font-mono text-base">${card.ticker}</span>
-                                <span class="text-xs font-semibold text-slate-300">${card.company}</span>
+                                <span class="font-black text-amber-400 font-mono text-base">${card.ticker || 'EUR'}</span>
+                                <span class="text-xs font-semibold text-slate-300">${card.company || 'Société'}</span>
                             </div>
-                            <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">${card.category}</span>
+                            <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">${card.category || 'Opportunité'}</span>
                         </div>
 
-                        <p class="text-xs text-slate-300 leading-relaxed italic">"${card.rumor}"</p>
+                        <p class="text-xs text-slate-300 leading-relaxed italic">"${card.rumor || 'Rumeur de marché identifiée.'}"</p>
 
                         <div class="grid grid-cols-2 gap-2 text-[11px] font-mono bg-slate-950 p-2.5 rounded-xl border border-slate-800">
-                            <div><span class="text-slate-400 block text-[9px]">Crédibilité:</span><strong class="text-emerald-400">${card.credibility}</strong></div>
-                            <div><span class="text-slate-400 block text-[9px]">Impact Est.:</span><strong class="text-amber-300">${card.impact}</strong></div>
+                            <div><span class="text-slate-400 block text-[9px]">Crédibilité:</span><strong class="text-emerald-400">${card.credibility || 'Haute 🟢'}</strong></div>
+                            <div><span class="text-slate-400 block text-[9px]">Impact Est.:</span><strong class="text-amber-300">${card.impact || 'Haussier'}</strong></div>
                         </div>
 
                         <div class="grid grid-cols-4 gap-1 text-[10px] font-mono text-center">
-                            <div class="p-1 rounded bg-slate-950 border border-slate-800"><span class="text-slate-400 block text-[8px]">Entrée</span><strong>${card.entry}</strong></div>
-                            <div class="p-1 rounded bg-slate-950 border border-slate-800"><span class="text-rose-400 block text-[8px]">SL</span><strong class="text-rose-400">${card.stopLoss}</strong></div>
-                            <div class="p-1 rounded bg-slate-950 border border-slate-800"><span class="text-emerald-400 block text-[8px]">TP1</span><strong class="text-emerald-400">${card.tp1}</strong></div>
-                            <div class="p-1 rounded bg-slate-950 border border-slate-800"><span class="text-teal-300 block text-[8px]">TP2</span><strong class="text-teal-300">${card.tp2}</strong></div>
+                            <div class="p-1 rounded bg-slate-950 border border-slate-800"><span class="text-slate-400 block text-[8px]">Entrée</span><strong>${card.entry || '--'}</strong></div>
+                            <div class="p-1 rounded bg-slate-950 border border-slate-800"><span class="text-rose-400 block text-[8px]">SL</span><strong class="text-rose-400">${card.stopLoss || '--'}</strong></div>
+                            <div class="p-1 rounded bg-slate-950 border border-slate-800"><span class="text-emerald-400 block text-[8px]">TP1</span><strong class="text-emerald-400">${card.tp1 || '--'}</strong></div>
+                            <div class="p-1 rounded bg-slate-950 border border-slate-800"><span class="text-teal-300 block text-[8px]">TP2</span><strong class="text-teal-300">${card.tp2 || '--'}</strong></div>
                         </div>
 
-                        <button onclick="window.selectPreset && window.selectPreset('${card.ticker}')" class="w-full py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-bold text-xs transition flex items-center justify-center space-x-1.5 cursor-pointer shadow">
+                        <button onclick="window.selectPreset && window.selectPreset('${card.ticker || card.company}')" class="w-full py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-bold text-xs transition flex items-center justify-center space-x-1.5 cursor-pointer shadow">
                             <span>Lancer l'Analyse Complète 🎯</span>
                             <i class="fa-solid fa-arrow-right text-[10px]"></i>
                         </button>
@@ -2186,9 +2274,6 @@ Retourne un JSON STRICT array de 3 à 6 cartes d'idées de trades :
         }
         window.runRumorsRadarScan = runRumorsRadarScan;
 
-        /**
-         * STREAMING_CHUNK:Fetching market data from Netlify marketDataCollector endpoint...
-         */
         async function runLiveMarketAnalysis() {
             const btn = document.getElementById('btnLiveSearch');
             if (btn) btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Collecte Netlify...`;
@@ -2249,9 +2334,6 @@ Retourne un JSON STRICT array de 3 à 6 cartes d'idées de trades :
             if (document.getElementById('bceEstrVal')) document.getElementById('bceEstrVal').innerText = bceEstr;
         }
 
-        /**
-         * STREAMING_CHUNK:Calculating DCF Fair Value and sensitivity matrix...
-         */
         function runDCFCalculation() {
             const baseFCF = parseFloat(document.getElementById('dcfBaseFCF')?.value) || 145;
             const gRate = (parseFloat(document.getElementById('dcfGrowthRate')?.value) || 8.5) / 100;
