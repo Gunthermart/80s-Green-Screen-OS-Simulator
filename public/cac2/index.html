@@ -2283,6 +2283,26 @@ IMPORTANT: Réponds uniquement avec un JSON STRICT sous la forme d'un tableau d'
                 const res = await fetch(endpoint, { method: 'GET' });
                 if (res.ok) {
                     const data = await res.json();
+                    
+                    // Direct live grounding backup if Cboe indices are missing from the Netlify response
+                    if (!data?.cboeIndices?.vix) {
+                        const todayStr = new Date().toLocaleDateString('fr-FR');
+                        const vixPrompt = `Recherche en direct les indices Cboe du jour (${todayStr}) sur https://www.cboe.com et Yahoo Finance:
+1. VIX (S&P 500 Volatility Index)
+2. VIXEQ (Euronext / Europe Volatility)
+3. DSPX (Cboe S&P 500 Dispersion Index)
+Retourne UNIQUEMENT un JSON STRICT:
+{"vix": 16.5, "vixeq": 17.8, "dspx": 28.4, "regime": "Stock-Picker's Market"}`;
+                        const vixData = await callStocksAnalyserAPI(vixPrompt, `Cboe VIX live ${todayStr}`);
+                        if (vixData && vixData.vix) {
+                            if (!data.cboeIndices) data.cboeIndices = {};
+                            data.cboeIndices.vix = vixData.vix;
+                            data.cboeIndices.vixeq = vixData.vixeq || (vixData.vix + 1.2).toFixed(2);
+                            data.cboeIndices.dspx = vixData.dspx;
+                            data.cboeIndices.regime = vixData.regime;
+                        }
+                    }
+
                     updateMarketBarometerUI(data);
                     showToast("Baromètre actualisé via Netlify marketDataCollector !", "success");
                 } else {
@@ -2300,45 +2320,51 @@ IMPORTANT: Réponds uniquement avec un JSON STRICT sous la forme d'un tableau d'
 
         function updateMarketBarometerUI(data) {
             if (!data) return;
-            const cnnVal = data?.cnnFearAndGreed?.value ?? 48.0;
+            const cnnVal = data?.cnnFearAndGreed?.value;
             const subs = data?.cnnFearAndGreed?.subIndicators || {};
 
-            if (document.getElementById('cnnValDisplay')) document.getElementById('cnnValDisplay').innerText = cnnVal;
-            if (document.getElementById('cnnLabelBadge')) document.getElementById('cnnLabelBadge').innerText = `Neutre (${cnnVal}) 🟡`;
-            if (document.getElementById('cnnPointer')) document.getElementById('cnnPointer').style.left = `${Math.min(100, Math.max(0, cnnVal))}%`;
+            if (document.getElementById('cnnValDisplay')) document.getElementById('cnnValDisplay').innerText = cnnVal != null ? cnnVal : '--';
+            if (document.getElementById('cnnLabelBadge')) document.getElementById('cnnLabelBadge').innerText = cnnVal != null ? `${data?.cnnFearAndGreed?.sentiment || 'Score'} (${cnnVal})` : 'En attente...';
+            if (document.getElementById('cnnPointer')) document.getElementById('cnnPointer').style.left = cnnVal != null ? `${Math.min(100, Math.max(0, cnnVal))}%` : '50%';
 
-            if (document.getElementById('cnnSubMomentum')) document.getElementById('cnnSubMomentum').innerText = subs.momentum || "52 (Neutre)";
-            if (document.getElementById('cnnSubStrength')) document.getElementById('cnnSubStrength').innerText = subs.strength || "45 (Peur)";
-            if (document.getElementById('cnnSubBreadth')) document.getElementById('cnnSubBreadth').innerText = subs.breadth || "50 (Neutre)";
-            if (document.getElementById('cnnSubPutCall')) document.getElementById('cnnSubPutCall').innerText = subs.putCall || "55 (Neutre)";
-            if (document.getElementById('cnnSubVix')) document.getElementById('cnnSubVix').innerText = subs.vix || "48 (Neutre)";
-            if (document.getElementById('cnnSubSafeHaven')) document.getElementById('cnnSubSafeHaven').innerText = subs.safeHaven || "42 (Peur)";
-            if (document.getElementById('cnnSubJunkBond')) document.getElementById('cnnSubJunkBond').innerText = subs.junkBond || "50 (Neutre)";
+            if (document.getElementById('cnnSubMomentum')) document.getElementById('cnnSubMomentum').innerText = subs.momentum || "--";
+            if (document.getElementById('cnnSubStrength')) document.getElementById('cnnSubStrength').innerText = subs.strength || "--";
+            if (document.getElementById('cnnSubBreadth')) document.getElementById('cnnSubBreadth').innerText = subs.breadth || "--";
+            if (document.getElementById('cnnSubPutCall')) document.getElementById('cnnSubPutCall').innerText = subs.putCall || "--";
+            if (document.getElementById('cnnSubVix')) document.getElementById('cnnSubVix').innerText = subs.vix || "--";
+            if (document.getElementById('cnnSubSafeHaven')) document.getElementById('cnnSubSafeHaven').innerText = subs.safeHaven || "--";
+            if (document.getElementById('cnnSubJunkBond')) document.getElementById('cnnSubJunkBond').innerText = subs.junkBond || "--";
 
-            /* Dynamic VIX & Cboe Binding */
-            const vix = data?.cboeIndices?.vix ?? 17.08;
-            const vixeq = data?.cboeIndices?.vixeq ?? (vix + 1.20).toFixed(2);
-            const dspx = data?.cboeIndices?.dspx ?? (vix > 20 ? 45.50 : 28.40);
+            /* Dynamic VIX & Cboe Binding - ZERO HARDCODED FALLBACKS */
+            const vix = data?.cboeIndices?.vix;
+            const vixeq = data?.cboeIndices?.vixeq;
+            const dspx = data?.cboeIndices?.dspx;
+            const regime = data?.cboeIndices?.regime;
 
-            if (document.getElementById('cboeVixVal')) document.getElementById('cboeVixVal').innerText = vix;
-            if (document.getElementById('cboeVixeqVal')) document.getElementById('cboeVixeqVal').innerText = vixeq;
-            if (document.getElementById('cboeDspxVal')) document.getElementById('cboeDspxVal').innerText = dspx;
+            if (document.getElementById('cboeVixVal')) document.getElementById('cboeVixVal').innerText = vix != null ? vix : '--';
+            if (document.getElementById('cboeVixeqVal')) document.getElementById('cboeVixeqVal').innerText = vixeq != null ? vixeq : '--';
+            if (document.getElementById('cboeDspxVal')) document.getElementById('cboeDspxVal').innerText = dspx != null ? dspx : '--';
+            if (document.getElementById('cboeRegimeBadge')) document.getElementById('cboeRegimeBadge').innerText = regime || 'En attente...';
 
             const regimeAnalysisEl = document.getElementById('cboeRegimeAnalysis');
             if (regimeAnalysisEl) {
-                let text = `Volatilité VIX sous contrôle (~${vix}). Environnement propice à la sélection de valeurs Euronext aux fondamentaux solides.`;
-                if (vix > 20 && vix <= 25) {
-                    text = `Prudence : Volatilité VIX en hausse (~${vix}). Marché sous tension, resserrer les Stop Loss.`;
-                } else if (vix > 25) {
-                    text = `Alerte Volatilité Élevée : VIX à (~${vix}). Panique ou réallocation défensive en cours.`;
+                if (vix != null && !isNaN(vix)) {
+                    let text = `Volatilité VIX sous contrôle (~${vix}). Environnement propice à la sélection de valeurs Euronext aux fondamentaux solides.`;
+                    if (vix > 20 && vix <= 25) {
+                        text = `Prudence : Volatilité VIX en hausse (~${vix}). Marché sous tension, resserrer les Stop Loss.`;
+                    } else if (vix > 25) {
+                        text = `Alerte Volatilité Élevée : VIX à (~${vix}). Panique ou réallocation défensive en cours.`;
+                    }
+                    regimeAnalysisEl.innerText = text;
+                } else {
+                    regimeAnalysisEl.innerText = "Lancer la collecte pour extraire les indices VIX & Dispersion Cboe du jour...";
                 }
-                regimeAnalysisEl.innerText = text;
             }
 
-            const bceDep = data?.bceRates?.depositRate ?? "2.50%";
-            const bceRefi = data?.bceRates?.refinancingRate ?? "2.65%";
-            const bceMarg = data?.bceRates?.marginalLendingRate ?? "2.90%";
-            const bceEstr = data?.bceRates?.estrRate ?? "2.40%";
+            const bceDep = data?.bceRates?.depositRate || "--";
+            const bceRefi = data?.bceRates?.refinancingRate || "--";
+            const bceMarg = data?.bceRates?.marginalLendingRate || "--";
+            const bceEstr = data?.bceRates?.estrRate || "--";
 
             if (document.getElementById('bceDepositVal')) document.getElementById('bceDepositVal').innerText = bceDep;
             if (document.getElementById('bceRefiVal')) document.getElementById('bceRefiVal').innerText = bceRefi;
