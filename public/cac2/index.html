@@ -1541,6 +1541,29 @@
         let currentReportData = null;
         let currentVSData = null;
 
+        /**
+         * Resolves relative Netlify function paths into valid URLs even in blob: sandboxed previews.
+         */
+        function resolveEndpointUrl(path) {
+            if (!path) return '';
+            if (path.startsWith('http://') || path.startsWith('https://')) return path;
+
+            try {
+                let base = window.location.href;
+                if (base.startsWith('blob:')) {
+                    base = base.replace(/^blob:/, '');
+                }
+                return new URL(path, base).href;
+            } catch (e) {
+                if (window.location.origin && window.location.origin !== 'null' && !window.location.origin.startsWith('blob:')) {
+                    const cleanOrigin = window.location.origin.replace(/\/$/, '');
+                    const cleanPath = path.startsWith('/') ? path : '/' + path;
+                    return cleanOrigin + cleanPath;
+                }
+                return path;
+            }
+        }
+
         function showToast(message, type = 'info') {
             const container = document.getElementById('toastContainer');
             if (!container) return;
@@ -1641,7 +1664,7 @@
         window.activateMode = activateMode;
 
         async function callStocksAnalyserAPI(systemPrompt, userQuery) {
-            const endpoint = "/.netlify/functions/StocksAnalyser";
+            const endpoint = resolveEndpointUrl("/.netlify/functions/StocksAnalyser");
             const payload = {
                 contents: [{ parts: [{ text: userQuery }] }],
                 tools: [{ "google_search": {} }],
@@ -1659,7 +1682,7 @@
 
                 if (!res.ok) {
                     console.error("Erreur serveur Netlify StocksAnalyser:", result);
-                    showToast(result.error || `Erreur Netlify ${res.status}: Vérifiez la variable d'environnement 'StocksAnalyserKey'`, 'amber');
+                    showToast(result.error || `Erreur Netlify ${res.status}: Vérifiez 'StocksAnalyserKey' sur Netlify.`, 'amber');
                     return null;
                 }
 
@@ -1671,7 +1694,7 @@
                 }
             } catch (e) {
                 console.error("Erreur d'accès à la fonction Netlify StocksAnalyser:", e);
-                showToast("Erreur d'accès à la fonction Netlify `/.netlify/functions/StocksAnalyser`", "amber");
+                showToast("Erreur d'accès à la fonction Netlify `/.netlify/functions/StocksAnalyser`. Assurez-vous que l'application est déployée sur Netlify.", "amber");
             }
 
             return null;
@@ -1718,7 +1741,7 @@ Retourne un JSON STRICT valide au format :
                 let resData = await callStocksAnalyserAPI(systemPrompt, userQuery);
 
                 if (!resData || !resData.companyInfo) {
-                    showToast("La fonction Netlify n'a pas pu retourner de JSON valide. Veuillez vérifier votre clé d'API sur Netlify.", "amber");
+                    showToast("La fonction Netlify n'a pas pu retourner de données. Vérifiez la configuration de votre serveur Netlify.", "amber");
                     if (loader) loader.classList.add('hidden');
                     return;
                 }
@@ -1997,7 +2020,7 @@ Retourne un JSON STRICT valide avec la structure :
                 let vsData = await callStocksAnalyserAPI(vsSystemPrompt, vsQuery);
 
                 if (!vsData || !vsData.metrics) {
-                    showToast("Impossible d'exécuter le duel VS via Netlify. Vérifiez votre configuration Netlify.", "amber");
+                    showToast("Impossible d'exécuter le duel VS via Netlify. Vérifiez votre fonction StocksAnalyser.", "amber");
                     if (loader) loader.classList.add('hidden');
                     return;
                 }
@@ -2153,7 +2176,7 @@ Retourne un JSON STRICT array de 3 à 6 cartes d'idées de trades :
             if (btn) btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Collecte Netlify...`;
 
             try {
-                const endpoint = "/.netlify/functions/marketDataCollector";
+                const endpoint = resolveEndpointUrl("/.netlify/functions/marketDataCollector");
                 const res = await fetch(endpoint, { method: 'GET' });
                 if (res.ok) {
                     const data = await res.json();
@@ -2161,11 +2184,11 @@ Retourne un JSON STRICT array de 3 à 6 cartes d'idées de trades :
                     showToast("Baromètre actualisé via Netlify marketDataCollector !", "success");
                 } else {
                     const errData = await res.json().catch(() => ({}));
-                    showToast(errData.error || `Erreur Netlify marketDataCollector (${res.status})`, "amber");
+                    showToast(errData.error || `Erreur Netlify marketDataCollector (${res.status}). Assurez-vous que l'application est déployée sur Netlify.`, "amber");
                 }
             } catch (e) {
                 console.error("Erreur Netlify marketDataCollector:", e);
-                showToast("Fonction Netlify marketDataCollector indisponible.", "amber");
+                showToast("Fonction Netlify marketDataCollector non disponible sur cet environnement.", "amber");
             }
 
             if (btn) btn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> Actualiser via Netlify`;
