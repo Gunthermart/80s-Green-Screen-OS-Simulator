@@ -1225,17 +1225,17 @@
                     <div class="grid grid-cols-3 gap-3">
                         <div class="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1 text-center">
                             <div class="text-[10px] text-slate-400 font-mono uppercase">VIX (S&P 500)</div>
-                            <div id="cboeVixVal" class="text-lg font-black text-emerald-400 font-mono">17.08</div>
+                            <div id="cboeVixVal" class="text-lg font-black text-emerald-400 font-mono">--</div>
                             <div class="text-[9px] text-slate-500 font-mono">Cboe Live</div>
                         </div>
                         <div class="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1 text-center">
                             <div class="text-[10px] text-slate-400 font-mono uppercase">VIXEQ / VCAC</div>
-                            <div id="cboeVixeqVal" class="text-lg font-black text-sky-400 font-mono">18.28</div>
+                            <div id="cboeVixeqVal" class="text-lg font-black text-sky-400 font-mono">--</div>
                             <div class="text-[9px] text-slate-500 font-mono">Volatilité Europe</div>
                         </div>
                         <div class="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1 text-center">
                             <div class="text-[10px] text-slate-400 font-mono uppercase">DSPX (Dispersion)</div>
-                            <div id="cboeDspxVal" class="text-lg font-black text-amber-400 font-mono">28.40</div>
+                            <div id="cboeDspxVal" class="text-lg font-black text-amber-400 font-mono">--</div>
                             <div class="text-[9px] text-slate-500 font-mono">Dispersion Cboe</div>
                         </div>
                     </div>
@@ -1246,7 +1246,7 @@
                             <span>Diagnostic de Régime de Volatilité :</span>
                         </div>
                         <p id="cboeRegimeAnalysis" class="text-xs text-slate-300 leading-relaxed">
-                            Volatilité VIX sous contrôle (~17.08). Environnement propice à la sélection de valeurs Euronext aux fondamentaux solides.
+                            Collecte des indices de volatilité en cours...
                         </p>
                     </div>
                 </div>
@@ -2315,13 +2315,25 @@ IMPORTANT: Réponds uniquement avec un JSON STRICT sous la forme d'un tableau d'
             if (document.getElementById('cnnSubSafeHaven')) document.getElementById('cnnSubSafeHaven').innerText = subs.safeHaven || "42 (Peur)";
             if (document.getElementById('cnnSubJunkBond')) document.getElementById('cnnSubJunkBond').innerText = subs.junkBond || "50 (Neutre)";
 
+            /* Dynamic VIX & Cboe Binding */
             const vix = data?.cboeIndices?.vix ?? 17.08;
-            const vixeq = data?.cboeIndices?.vixeq ?? 18.28;
-            const dspx = data?.cboeIndices?.dspx ?? 28.40;
+            const vixeq = data?.cboeIndices?.vixeq ?? (vix + 1.20).toFixed(2);
+            const dspx = data?.cboeIndices?.dspx ?? (vix > 20 ? 45.50 : 28.40);
 
             if (document.getElementById('cboeVixVal')) document.getElementById('cboeVixVal').innerText = vix;
             if (document.getElementById('cboeVixeqVal')) document.getElementById('cboeVixeqVal').innerText = vixeq;
             if (document.getElementById('cboeDspxVal')) document.getElementById('cboeDspxVal').innerText = dspx;
+
+            const regimeAnalysisEl = document.getElementById('cboeRegimeAnalysis');
+            if (regimeAnalysisEl) {
+                let text = `Volatilité VIX sous contrôle (~${vix}). Environnement propice à la sélection de valeurs Euronext aux fondamentaux solides.`;
+                if (vix > 20 && vix <= 25) {
+                    text = `Prudence : Volatilité VIX en hausse (~${vix}). Marché sous tension, resserrer les Stop Loss.`;
+                } else if (vix > 25) {
+                    text = `Alerte Volatilité Élevée : VIX à (~${vix}). Panique ou réallocation défensive en cours.`;
+                }
+                regimeAnalysisEl.innerText = text;
+            }
 
             const bceDep = data?.bceRates?.depositRate ?? "2.50%";
             const bceRefi = data?.bceRates?.refinancingRate ?? "2.65%";
