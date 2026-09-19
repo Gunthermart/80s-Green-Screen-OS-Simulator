@@ -1017,8 +1017,11 @@
 
                         <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2 text-xs font-mono">
                             <div class="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-0.5">
-                                <div class="text-[10px] text-slate-400">Nombre d'Actions</div>
-                                <div id="mmSharesToBuy" class="text-base font-extrabold text-white">--</div>
+                                <div class="text-[10px] text-slate-400 font-mono flex justify-between">
+                                    <span>Nombre d'Actions</span>
+                                    <span class="text-emerald-400 font-bold">Modifiable</span>
+                                </div>
+                                <input type="number" id="mmSharesInput" step="1" min="1" value="10" oninput="window.calculateMoneyManagement && window.calculateMoneyManagement('sharesInput')" class="w-full bg-slate-950 text-white font-extrabold text-base font-mono border border-slate-700/80 rounded-lg px-2.5 py-1 focus:ring-2 focus:ring-emerald-500 outline-none">
                             </div>
 
                             <div class="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-0.5">
@@ -1811,6 +1814,25 @@
                     <button onclick="window.filterJournal && window.filterJournal('CLOSED')" id="journalFilterCLOSED" class="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white transition cursor-pointer">Clôturés (CLOSED)</button>
                 </div>
 
+                <!-- Export / Import Bar for JSON & Google Sheets -->
+                <div class="flex flex-wrap items-center justify-between gap-2 shrink-0 pt-2 border-t border-slate-800/80 text-xs font-mono">
+                    <div class="flex items-center space-x-1.5">
+                        <button onclick="window.exportJournalJSON && window.exportJournalJSON()" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 transition flex items-center space-x-1 cursor-pointer" title="Exporter au format JSON">
+                            <i class="fa-solid fa-download text-[10px]"></i>
+                            <span>Export JSON</span>
+                        </button>
+                        <button onclick="document.getElementById('importJsonFileInput').click()" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 transition flex items-center space-x-1 cursor-pointer" title="Importer un fichier JSON">
+                            <i class="fa-solid fa-upload text-[10px]"></i>
+                            <span>Import JSON</span>
+                        </button>
+                        <input type="file" id="importJsonFileInput" accept=".json" onchange="window.importJournalJSON && window.importJournalJSON(event)" class="hidden">
+                    </div>
+                    <button onclick="window.exportJournalCSV && window.exportJournalCSV()" class="px-2.5 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 transition flex items-center space-x-1.5 cursor-pointer" title="Exporter pour Google Sheets (CSV)">
+                        <i class="fa-solid fa-file-csv text-[11px]"></i>
+                        <span>Google Sheets (CSV)</span>
+                    </button>
+                </div>
+
                 <div id="tradesList" class="space-y-3 overflow-y-auto flex-1 pr-1 font-mono"></div>
             </div>
         </div>
@@ -2368,6 +2390,7 @@ Retourne UNIFIQUEMENT UN JSON STRICT valide au format :
             const riskPct = parseFloat(document.getElementById('mmRiskRange')?.value) || 1.0;
             const brokerFeePct = (parseFloat(document.getElementById('mmBrokerFeePct')?.value) || 0.15) / 100;
             const slRange = document.getElementById('mmSLRange');
+            const sharesInput = document.getElementById('mmSharesInput');
 
             let sl = parseFloat(slInput?.value);
             if (triggerSource === 'slider' && slRange) {
@@ -2415,18 +2438,25 @@ Retourne UNIFIQUEMENT UN JSON STRICT valide au format :
             if (document.getElementById('planRRTP1')) document.getElementById('planRRTP1').innerText = `R:R 1 : ${rrTP1}`;
             if (document.getElementById('planRRTP2')) document.getElementById('planRRTP2').innerText = `R:R 1 : ${rrTP2}`;
 
-            const euroRiskMax = portfolioSize * (riskPct / 100);
-            const sharesToBuy = Math.floor(euroRiskMax / slRiskPerShare);
+            let sharesToBuy = 0;
+            if (triggerSource === 'sharesInput' && sharesInput) {
+                sharesToBuy = parseInt(sharesInput.value, 10) || 1;
+            } else {
+                const euroRiskMax = portfolioSize * (riskPct / 100);
+                sharesToBuy = Math.floor(euroRiskMax / slRiskPerShare);
+                if (sharesInput) sharesInput.value = sharesToBuy;
+            }
+
             const capitalInvested = sharesToBuy * entry;
             const capitalPct = (capitalInvested / portfolioSize) * 100;
+            const euroRiskActual = sharesToBuy * slRiskPerShare;
 
             const totalFeeEstimate = capitalInvested * brokerFeePct * 2;
             const netGainTP1 = Math.round((sharesToBuy * tp1GainPerShare) - totalFeeEstimate);
             const netGainTP2 = Math.round((sharesToBuy * tp2GainPerShare) - totalFeeEstimate);
 
-            if (document.getElementById('mmSharesToBuy')) document.getElementById('mmSharesToBuy').innerText = `${sharesToBuy} actions`;
             if (document.getElementById('mmCapitalInvested')) document.getElementById('mmCapitalInvested').innerText = `${capitalInvested.toLocaleString('fr-FR')} € (${capitalPct.toFixed(1)}%)`;
-            if (document.getElementById('mmEuroRisk')) document.getElementById('mmEuroRisk').innerText = `${Math.round(euroRiskMax + totalFeeEstimate).toLocaleString('fr-FR')} €`;
+            if (document.getElementById('mmEuroRisk')) document.getElementById('mmEuroRisk').innerText = `${Math.round(euroRiskActual + totalFeeEstimate).toLocaleString('fr-FR')} €`;
             if (document.getElementById('mmEuroGain')) document.getElementById('mmEuroGain').innerText = `+${netGainTP1.toLocaleString('fr-FR')} €`;
             if (document.getElementById('mmEuroGainTP2')) document.getElementById('mmEuroGainTP2').innerText = `+${netGainTP2.toLocaleString('fr-FR')} €`;
 
@@ -2453,151 +2483,143 @@ Retourne UNIFIQUEMENT UN JSON STRICT valide au format :
         }
         window.calculateMoneyManagement = calculateMoneyManagement;
 
-        async function executeVSAnalysis(stock1, stock2) {
-            const loader = document.getElementById('loadingContainer');
-            const vsContainer = document.getElementById('vsResultsContainer');
-            const welcome = document.getElementById('welcomeContainer');
+        function saveCurrentTrade() {
+            if (!db) { showToast("IndexedDB indisponible", "amber"); return; }
+            const info = currentReportData?.companyInfo || { name: "STIF", ticker: "ALSTI" };
             
-            if (welcome) welcome.classList.add('hidden');
-            if (loader) loader.classList.remove('hidden');
+            const entryVal = parseFloat(document.getElementById('planEntryInput')?.value) || 0;
+            const slVal = parseFloat(document.getElementById('planStopLossInput')?.value) || 0;
+            const tp1Val = parseFloat(document.getElementById('planTP1Input')?.value) || 0;
+            const tp2Val = parseFloat(document.getElementById('planTP2Input')?.value) || 0;
+            
+            const portfolioSize = parseFloat(document.getElementById('mmPortfolioSize')?.value) || 50000;
+            const riskPct = parseFloat(document.getElementById('mmRiskRange')?.value) || 1.0;
+            const slRiskPerShare = Math.max(0.01, entryVal - slVal);
+            const euroRiskMax = portfolioSize * (riskPct / 100);
+            
+            const sharesToBuy = parseInt(document.getElementById('mmSharesInput')?.value, 10) || Math.floor(euroRiskMax / slRiskPerShare);
+            const capitalInvested = sharesToBuy * entryVal;
 
-            try {
-                const todayFormatted = new Date().toLocaleDateString('fr-FR');
-                const vsSystemPrompt = `Tu es un arbitre financier senior Euronext. Compare "${stock1}" et "${stock2}" en direct du ${todayFormatted} via la fonction Netlify en consultant ZoneBourse, Boursier, Yahoo Finance, Finchat.io, TIKR, Koyfin, Simply Wall St, Morningstar, Shortsell.nl.
-Retourne UNIFIQUEMENT UN JSON STRICT valide avec la structure :
-{
-  "stock1Name": "${stock1}", "stock2Name": "${stock2}", "winner": "${stock1}", "winnerTicker": "MC",
-  "subText": "Surperformance Marges & Resilience Moat", "allocation": "65% / 35%",
-  "valuation": "Diagnostic de valorisation relative.", "riskReward": "Diagnostic Rendement/Risque.",
-  "keyTakeaway": "Conclusion d'arbitrage claire.",
-  "metrics": [
-    { "name": "Marge Opérationnelle", "val1": "24.5%", "val2": "15.2%", "winner": 1 },
-    { "name": "Ratio PEG", "val1": "0.88", "val2": "1.35", "winner": 1 }
-  ],
-  "pillars": [
-    { "name": "1. Qualité Bilancielle", "score1": 92, "score2": 70 },
-    { "name": "2. Valorisation Relative", "score1": 80, "score2": 75 },
-    { "name": "3. Momentum Technique", "score1": 85, "score2": 62 },
-    { "name": "4. Génération Cash FCF", "score1": 90, "score2": 68 },
-    { "name": "5. Upside Target Consensus", "score1": 84, "score2": 72 }
-  ]
-}`;
+            db.trades.add({
+                ticker: info.ticker || 'EUR',
+                companyName: info.name || 'Société',
+                status: 'OPEN',
+                entryPrice: entryVal,
+                stopLoss: slVal,
+                tp1: tp1Val,
+                tp2: tp2Val,
+                quantity: sharesToBuy,
+                invested: capitalInvested,
+                timestamp: new Date().toLocaleString('fr-FR'),
+                createdAt: Date.now()
+            }).then(() => {
+                showToast(`Position ${info.ticker} (${sharesToBuy} actions) enregistrée dans le Journal MT !`, "success");
+            });
+        }
+        window.saveCurrentTrade = saveCurrentTrade;
 
-                const vsQuery = `Duel boursier direct Netlify du ${todayFormatted}: ${stock1} vs ${stock2}`;
-                let vsData = await callStocksAnalyserAPI(vsSystemPrompt, vsQuery);
+        function exportJournalJSON() {
+            if (!db) { showToast("Base de données indisponible", "amber"); return; }
+            db.trades.toArray().then(trades => {
+                if (!trades || trades.length === 0) {
+                    showToast("Aucun trade à exporter.", "amber");
+                    return;
+                }
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(trades, null, 2));
+                const downloadAnchor = document.createElement('a');
+                downloadAnchor.setAttribute("href", dataStr);
+                downloadAnchor.setAttribute("download", `Euronext_Journal_Trades_${new Date().toISOString().slice(0, 10)}.json`);
+                document.body.appendChild(downloadAnchor);
+                downloadAnchor.click();
+                downloadAnchor.remove();
+                showToast("Journal exporté au format JSON !", "success");
+            });
+        }
+        window.exportJournalJSON = exportJournalJSON;
 
-                if (!vsData || !vsData.metrics) {
-                    showToast("Impossible d'exécuter le duel VS via Netlify. Vérifiez votre fonction StocksAnalyser.", "amber");
-                    if (loader) loader.classList.add('hidden');
+        function importJournalJSON(event) {
+            if (!db) return;
+            const file = event.target.files?.[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    if (!Array.isArray(imported)) {
+                        showToast("Format JSON invalide (un tableau est attendu).", "amber");
+                        return;
+                    }
+                    const cleaned = imported.map(t => {
+                        const copy = { ...t };
+                        delete copy.id;
+                        return copy;
+                    });
+
+                    db.trades.bulkAdd(cleaned).then(() => {
+                        showToast(`${cleaned.length} trades importés avec succès !`, "success");
+                        openHistoryModal();
+                    }).catch(err => {
+                        console.error("Erreur import DB:", err);
+                        showToast("Erreur lors de l'insertion en base.", "amber");
+                    });
+                } catch (err) {
+                    showToast("Fichier JSON corrompu ou illisible.", "amber");
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = '';
+        }
+        window.importJournalJSON = importJournalJSON;
+
+        function exportJournalCSV() {
+            if (!db) { showToast("Base de données indisponible", "amber"); return; }
+            db.trades.toArray().then(trades => {
+                if (!trades || trades.length === 0) {
+                    showToast("Aucun trade à exporter.", "amber");
                     return;
                 }
 
-                currentVSData = vsData;
-                renderVSReport(vsData);
+                const headers = ["Ticker", "Nom Société", "Statut", "Date Horodatage", "Prix Entree (€)", "Quantite", "Capital Investi (€)", "Stop Loss (€)", "TP1 (€)", "TP2 (€)", "Prix Sortie (€)", "Date Sortie", "PnL Net (€)", "PnL Net (%)"];
+                
+                let csvRows = [];
+                csvRows.push(headers.join(";"));
 
-                if (loader) loader.classList.add('hidden');
-                if (vsContainer) vsContainer.classList.remove('hidden');
+                trades.forEach(t => {
+                    const row = [
+                        `"${t.ticker || ''}"`,
+                        `"${(t.companyName || '').replace(/"/g, '""')}"`,
+                        `"${t.status || 'OPEN'}"`,
+                        `"${t.timestamp || ''}"`,
+                        t.entryPrice ? t.entryPrice.toString().replace('.', ',') : '',
+                        t.quantity || 0,
+                        t.invested ? t.invested.toString().replace('.', ',') : '',
+                        t.stopLoss ? t.stopLoss.toString().replace('.', ',') : '',
+                        t.tp1 ? t.tp1.toString().replace('.', ',') : '',
+                        t.tp2 ? t.tp2.toString().replace('.', ',') : '',
+                        t.exitPrice ? t.exitPrice.toString().replace('.', ',') : '',
+                        `"${t.exitDate || ''}"`,
+                        t.pnlEuro !== undefined ? t.pnlEuro.toString().replace('.', ',') : '',
+                        t.pnlPct !== undefined ? t.pnlPct.toString().replace('.', ',') : ''
+                    ];
+                    csvRows.push(row.join(";"));
+                });
 
-                showToast(`Duel Netlify généré : ${stock1} vs ${stock2} !`, 'success');
-            } catch (err) {
-                console.error("Erreur duel VS:", err);
-                if (loader) loader.classList.add('hidden');
-                showToast("Erreur lors de l'exécution du duel.", "amber");
-            }
+                const csvString = "\uFEFF" + csvRows.join("\n");
+                const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const downloadAnchor = document.createElement('a');
+                downloadAnchor.setAttribute("href", url);
+                downloadAnchor.setAttribute("download", `Euronext_Journal_GoogleSheets_${new Date().toISOString().slice(0, 10)}.csv`);
+                document.body.appendChild(downloadAnchor);
+                downloadAnchor.click();
+                downloadAnchor.remove();
+                URL.revokeObjectURL(url);
+
+                showToast("Fichier CSV généré pour Google Sheets !", "success");
+            });
         }
-        window.executeVSAnalysis = executeVSAnalysis;
-
-        function renderVSReport(data) {
-            if (!data) return;
-            const s1Name = data.stock1Name || "Société 1";
-            const s2Name = data.stock2Name || "Société 2";
-
-            if (document.getElementById('vsTitleStock1')) document.getElementById('vsTitleStock1').innerText = s1Name;
-            if (document.getElementById('vsTitleStock2')) document.getElementById('vsTitleStock2').innerText = s2Name;
-            if (document.getElementById('vsTableHeaderStock1')) document.getElementById('vsTableHeaderStock1').innerText = s1Name;
-            if (document.getElementById('vsTableHeaderStock2')) document.getElementById('vsTableHeaderStock2').innerText = s2Name;
-
-            if (document.getElementById('vsWinnerText')) document.getElementById('vsWinnerText').innerText = data.winner || s1Name;
-            if (document.getElementById('vsWinnerSubText')) document.getElementById('vsWinnerSubText').innerText = data.subText || "Avantage Tactique Globale";
-            if (document.getElementById('vsAllocationSplitBadge')) document.getElementById('vsAllocationSplitBadge').innerText = `Allocation conseillée: ${data.allocation || '65% / 35%'}`;
-
-            if (document.getElementById('vsValuationAnalysis')) document.getElementById('vsValuationAnalysis').innerText = data.valuation || "Diagnostic de valorisation relative.";
-            if (document.getElementById('vsRiskRewardAnalysis')) document.getElementById('vsRiskRewardAnalysis').innerText = data.riskReward || "Diagnostic rendement / risque.";
-            if (document.getElementById('vsKeyTakeaway')) document.getElementById('vsKeyTakeaway').innerText = data.keyTakeaway || "Conclusion d'arbitrage.";
-
-            const tbody = document.getElementById('vsComparisonTableBody');
-            if (tbody && data.metrics) {
-                tbody.innerHTML = data.metrics.map(m => {
-                    const w1 = m.winner === 1;
-                    const w2 = m.winner === 2;
-                    return `
-                        <tr class="hover:bg-slate-900/50 transition">
-                            <td class="p-3 font-semibold text-slate-200">${m.name}</td>
-                            <td class="p-3 text-center font-bold ${w1 ? 'text-emerald-400 bg-emerald-500/10 rounded-lg' : 'text-slate-300'}">${m.val1} ${w1 ? '🟢' : ''}</td>
-                            <td class="p-3 text-center font-bold ${w2 ? 'text-amber-400 bg-amber-500/10 rounded-lg' : 'text-slate-300'}">${m.val2} ${w2 ? '🟠' : ''}</td>
-                            <td class="p-3 text-center text-xs">
-                                ${w1 ? `<span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold">${s1Name}</span>` : w2 ? `<span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold">${s2Name}</span>` : `<span class="text-slate-500">Égalité</span>`}
-                            </td>
-                        </tr>
-                    `;
-                }).join('');
-            }
-
-            const barsContainer = document.getElementById('vsVisualBarsContainer');
-            if (barsContainer && data.pillars) {
-                barsContainer.innerHTML = data.pillars.map(p => `
-                    <div class="space-y-1.5 p-3 rounded-xl bg-slate-950/80 border border-slate-800">
-                        <div class="flex justify-between items-center text-xs">
-                            <span class="font-bold text-slate-300">${p.name}</span>
-                            <div class="space-x-3 text-[11px]">
-                                <span class="text-sky-400 font-bold">${s1Name}: ${p.score1}/100</span>
-                                <span class="text-amber-400 font-bold">${s2Name}: ${p.score2}/100</span>
-                            </div>
-                        </div>
-                        <div class="grid grid-cols-2 gap-2">
-                            <div class="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-slate-800">
-                                <div class="bg-sky-500 h-full transition-all duration-300" style="width: ${p.score1}%;"></div>
-                            </div>
-                            <div class="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-slate-800">
-                                <div class="bg-amber-500 h-full transition-all duration-300" style="width: ${p.score2}%;"></div>
-                            </div>
-                        </div>
-                    </div>
-                `).join('');
-            }
-        }
-
-        async function runRumorsRadarScan() {
-            const grid = document.getElementById('rumorsRadarGrid');
-            if (!grid) return;
-
-            grid.innerHTML = `
-                <div class="col-span-full p-8 text-center space-y-3 font-mono">
-                    <div class="w-8 h-8 rounded-full border-2 border-slate-700 border-t-amber-400 animate-spin mx-auto"></div>
-                    <div class="text-xs text-amber-300">Netlify Scan des rumeurs FinTwit (X), Boursorama & Opportunités...</div>
-                </div>
-            `;
-
-            try {
-                const todayFormatted = new Date().toLocaleDateString('fr-FR');
-                const rumorsPrompt = `Tu es un radar de rumeurs et d'opportunités boursières Euronext. Cherche les rumeurs M&A/OPA spéculatives, gros contrats, mouvements d'initiés AMF et bruits FinTwit (X) du ${todayFormatted}.
-IMPORTANT: Réponds uniquement avec un JSON STRICT sous la forme d'un tableau d'objets (array). Ne rajoute aucun texte avant ou après le JSON.
-[
-  {
-    "ticker": "ALSTI",
-    "company": "STIF",
-    "category": "Contrats BESS",
-    "rumor": "Fort flux d'ordres et spéculation de contrat majeur BESS aux USA.",
-    "credibility": "Haute 🟢",
-    "impact": "+18.0% (Haussier)",
-    "entry": "46.50 €",
-    "stopLoss": "41.85 €",
-    "tp1": "53.48 €",
-    "tp2": "58.40 €"
-  }
-]`;
-
-                const rumorsQuery = `Radar rumeurs boursieres Euronext Netlify du ${todayFormatted}`;
+        window.exportJournalCSV = exportJournalCSV;
                 let res = await callStocksAnalyserAPI(rumorsPrompt, rumorsQuery);
 
                 let rumorsArray = [];
