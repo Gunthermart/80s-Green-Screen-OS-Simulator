@@ -2099,7 +2099,7 @@ Retourne UNIFIQUEMENT UN JSON STRICT valide au format :
   "shortInterest": { "shortCapitalPct": "0.20%", "shortSqueezePotential": "Faible", "shortAnalysis": "" },
   "portfolioEntryIndicators": { "grahamStatus": "Validé 🟢", "grahamDesc": "", "kellyValue": "4.0% Alloc.", "kellyDesc": "", "kijunStatus": "Confirmé 🟢", "kijunDesc": "" },
   "leonceDiagnostic": { "overallScore": 85, "stAnalysis": "", "mtAnalysis": "" },
-  "tradingPlan": { "entryZone": "", "stopLoss": "", "tp1": "", "tp2": "", "ichimokuKumo": "Kumo Haussier 🟢", "ichimokuTK": "Tenkan > Kijun", "ichimokuChikou": "Libre au-dessus des cours", "tradeExamples": [{ "title": "Exemple de Setup", "source": "TradingView / FinTwit", "author": "Analyste", "url": "https://...", "setupSummary": "Explication du trade...", "entry": "0.00 €", "stopLoss": "0.00 €", "target": "0.00 €" }] },
+  "tradingPlan": { "entryZone": "", "stopLoss": "", "tp1": "", "tp2": "", "ichimokuKumo": "Kumo Haussier 🟢", "ichimokuTK": "Tenkan > Kijun", "ichimokuChikou": "Libre au-dessus des cours", "tradeExamples": [{ "title": "Exemple de Setup", "source": "TradingView / FinTwit", "author": "Analyste", "url": "https://...", "setupSummary": "Explication du trade...", "entry": "0.00 €", "stopLoss": "0.00 €", "target": "0.00 €", "rrRatio": "1 : 2.10" }] },
   "qvmComposite": { "overallScore": 85, "qualityScore": 88, "valuationScore": 80, "momentumScore": 85, "qualityAnalysis": "", "valuationAnalysis": "", "momentumAnalysis": "" }
 }`;
 
@@ -2288,7 +2288,20 @@ Retourne UNIFIQUEMENT UN JSON STRICT valide au format :
                 if (examples.length === 0) {
                     examplesGrid.innerHTML = `<div class="col-span-full text-xs text-slate-500 font-mono text-center py-2">Aucun exemple de trade externe répertorié pour cette valeur.</div>`;
                 } else {
-                    examplesGrid.innerHTML = examples.map(ex => `
+                    examplesGrid.innerHTML = examples.map(ex => {
+                        let rrDisplay = ex.rrRatio || '--';
+                        // Calcul dynamique de secours si le ratio n'est pas directement fourni
+                        if (ex.entry && ex.stopLoss && ex.target) {
+                            const entryNum = parseFloat(String(ex.entry).replace(/[^0-9.]/g, ''));
+                            const slNum = parseFloat(String(ex.stopLoss).replace(/[^0-9.]/g, ''));
+                            const tpNum = parseFloat(String(ex.target).replace(/[^0-9.]/g, ''));
+                            if (entryNum && slNum && tpNum && Math.abs(entryNum - slNum) > 0) {
+                                const rr = Math.abs(tpNum - entryNum) / Math.abs(entryNum - slNum);
+                                rrDisplay = `1 : ${rr.toFixed(2)}`;
+                            }
+                        }
+
+                        return `
                         <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-2.5 text-xs font-mono">
                             <div class="flex items-center justify-between border-b border-slate-800/80 pb-2">
                                 <span class="font-bold text-emerald-400 flex items-center space-x-1.5">
@@ -2298,10 +2311,11 @@ Retourne UNIFIQUEMENT UN JSON STRICT valide au format :
                                 <span class="text-[10px] text-slate-400">${ex.source || 'TradingView'}${ex.author ? ` • ${ex.author}` : ''}</span>
                             </div>
                             <p class="text-slate-300 font-sans text-xs leading-relaxed">${ex.setupSummary || 'Description du plan de trade.'}</p>
-                            <div class="grid grid-cols-3 gap-1.5 text-[10px] text-center bg-slate-950 p-2 rounded-lg border border-slate-800">
+                            <div class="grid grid-cols-4 gap-1.5 text-[10px] text-center bg-slate-950 p-2 rounded-lg border border-slate-800">
                                 <div><span class="text-slate-400 block text-[9px]">Entrée</span><strong class="text-sky-300">${ex.entry || '--'}</strong></div>
                                 <div><span class="text-rose-400 block text-[9px]">Stop Loss</span><strong class="text-rose-400">${ex.stopLoss || '--'}</strong></div>
                                 <div><span class="text-emerald-400 block text-[9px]">Target</span><strong class="text-emerald-400">${ex.target || '--'}</strong></div>
+                                <div><span class="text-amber-300 block text-[9px]">Ratio R:R</span><strong class="text-amber-300">${rrDisplay}</strong></div>
                             </div>
                             ${ex.url ? `
                                 <div class="pt-1 flex justify-end">
@@ -2312,7 +2326,8 @@ Retourne UNIFIQUEMENT UN JSON STRICT valide au format :
                                 </div>
                             ` : ''}
                         </div>
-                    `).join('');
+                    `;
+                    }).join('');
                 }
             }
 
