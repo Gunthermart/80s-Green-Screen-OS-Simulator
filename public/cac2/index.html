@@ -1781,13 +1781,37 @@
                 <div class="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
                     <div class="flex items-center space-x-2">
                         <i class="fa-solid fa-briefcase text-sky-400"></i>
-                        <h3 class="font-bold text-white text-base">Journal des Trades MT</h3>
+                        <h3 class="font-bold text-white text-base">Journal des Trades MT & Portefeuille</h3>
                     </div>
                     <button onclick="window.closeHistoryModal && window.closeHistoryModal()" class="p-1 text-slate-400 hover:text-white cursor-pointer">
                         <i class="fa-solid fa-xmark text-lg"></i>
                     </button>
                 </div>
-                <div id="tradesList" class="space-y-3 overflow-y-auto flex-1 pr-1"></div>
+
+                <!-- KPI Performance Summary Header -->
+                <div id="journalKpiSummary" class="grid grid-cols-3 gap-2 text-xs font-mono shrink-0">
+                    <div class="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-0.5">
+                        <span class="text-[10px] text-slate-400 uppercase block">Positions Ouvertes</span>
+                        <strong id="journalOpenCount" class="text-sky-300 text-sm font-bold">0</strong>
+                    </div>
+                    <div class="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-0.5">
+                        <span class="text-[10px] text-slate-400 uppercase block">Win Rate (Clôturés)</span>
+                        <strong id="journalWinRate" class="text-emerald-400 text-sm font-bold">-- %</strong>
+                    </div>
+                    <div class="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-0.5">
+                        <span class="text-[10px] text-slate-400 uppercase block">P&L Total Réalisé</span>
+                        <strong id="journalTotalPnl" class="text-white text-sm font-bold">0.00 €</strong>
+                    </div>
+                </div>
+
+                <!-- Filter Tabs -->
+                <div class="flex items-center space-x-1.5 shrink-0 text-xs font-mono">
+                    <button onclick="window.filterJournal && window.filterJournal('ALL')" id="journalFilterALL" class="px-3 py-1.5 rounded-lg bg-sky-500 text-white font-bold transition cursor-pointer">Tous</button>
+                    <button onclick="window.filterJournal && window.filterJournal('OPEN')" id="journalFilterOPEN" class="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white transition cursor-pointer">En Cours (OPEN)</button>
+                    <button onclick="window.filterJournal && window.filterJournal('CLOSED')" id="journalFilterCLOSED" class="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white transition cursor-pointer">Clôturés (CLOSED)</button>
+                </div>
+
+                <div id="tradesList" class="space-y-3 overflow-y-auto flex-1 pr-1 font-mono"></div>
             </div>
         </div>
     </div>
@@ -1807,8 +1831,8 @@
         try {
             if (window.Dexie) {
                 db = new Dexie('EuronextTradeJournalDB');
-                db.version(100).stores({
-                    trades: '++id, ticker, companyName, status, startDate, openDate, closeDate, timestamp'
+                db.version(101).stores({
+                    trades: '++id, ticker, companyName, status, entryPrice, stopLoss, tp1, tp2, quantity, invested, exitPrice, exitDate, pnlEuro, pnlPct, timestamp'
                 });
             }
         } catch (err) {
@@ -1818,7 +1842,7 @@
         let activeAppMode = 'single';
         let currentReportData = null;
         let currentVSData = null;
-
+        let currentJournalFilter = 'ALL';
         /**
          * Resolves relative Netlify function paths into valid URLs even in blob: sandboxed previews.
          */
@@ -3003,273 +3027,52 @@ Euronext FactCheck AI`;
         function saveCurrentTrade() {
             if (!db) { showToast("IndexedDB indisponible", "amber"); return; }
             const info = currentReportData?.companyInfo || { name: "STIF", ticker: "ALSTI" };
+            
+            const entryVal = parseFloat(document.getElementById('planEntryInput')?.value) || 0;
+            const slVal = parseFloat(document.getElementById('planStopLossInput')?.value) || 0;
+            const tp1Val = parseFloat(document.getElementById('planTP1Input')?.value) || 0;
+            const tp2Val = parseFloat(document.getElementById('planTP2Input')?.value) || 0;
+            
+            const portfolioSize = parseFloat(document.getElementById('mmPortfolioSize')?.value) || 50000;
+            const riskPct = parseFloat(document.getElementById('mmRiskRange')?.value) || 1.0;
+            const slRiskPerShare = Math.max(0.01, entryVal - slVal);
+            const euroRiskMax = portfolioSize * (riskPct / 100);
+            const sharesToBuy = Math.floor(euroRiskMax / slRiskPerShare);
+            const capitalInvested = sharesToBuy * entryVal;
+
             db.trades.add({
-                ticker: info.ticker,
-                companyName: info.name,
+                ticker: info.ticker || 'EUR',
+                companyName: info.name || 'Société',
                 status: 'OPEN',
-                timestamp: new Date().toLocaleString('fr-FR')
+                entryPrice: entryVal,
+                stopLoss: slVal,
+                tp1: tp1Val,
+                tp2: tp2Val,
+                quantity: sharesToBuy,
+                invested: capitalInvested,
+                timestamp: new Date().toLocaleString('fr-FR'),
+                createdAt: Date.now()
             }).then(() => {
-                showToast("Trade enregistré dans le Journal MT !", "success");
+                showToast(`Position ${info.ticker} enregistrée dans le Journal MT !`, "success");
             });
         }
         window.saveCurrentTrade = saveCurrentTrade;
 
-        /* ENHANCED EXECUTIVE SUMMARY DASHBOARD POPULATOR */
-        function openSummaryModal() {
-            const modal = document.getElementById('summaryModal');
-            const titleEl = document.getElementById('summaryModalTitle');
-            const tickerEl = document.getElementById('summaryModalTicker');
-            const contentEl = document.getElementById('summaryModalContent');
-
-            const info = currentReportData?.companyInfo || { name: "LVMH", ticker: "MC", isin: "FR0000121014", market: "Euronext Paris", icbSector: "Luxe & BDP" };
-            const kpi = currentReportData?.financialKPIs || {};
-            const trading = currentReportData?.tradingPlan || {};
-            const health = currentReportData?.healthScores || {};
-            const growth = currentReportData?.growthAnalysis || {};
-            const diag = currentReportData?.leonceDiagnostic || {};
-            const qvm = currentReportData?.qvmComposite || {};
-            const consensus = currentReportData?.analystConsensusAndNews || {};
-
-            if (titleEl) titleEl.innerText = `${info.name} - Dashboard Synthèse Express`;
-            if (tickerEl) tickerEl.innerText = info.ticker ? `${info.ticker} • Euronext` : "EUR";
-
-            const overallScore = diag.overallScore || 88;
-            const entryVal = trading.entryZone || "680.50 €";
-            const slVal = trading.stopLoss || "612.45 €";
-            const tp1Val = trading.tp1 || "782.58 €";
-            const tp2Val = trading.tp2 || consensus.targetPriceAvg || "820.00 €";
-
-            if (contentEl) {
-                contentEl.innerHTML = `
-                    <div class="space-y-5">
-                        
-                        <!-- BLOCK 1: Master Rating & QVM Bar Breakdown -->
-                        <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
-                            <div class="lg:col-span-5 p-4 rounded-xl bg-slate-950 border border-sky-500/40 flex flex-col justify-between space-y-3">
-                                <div class="flex items-center justify-between">
-                                    <span class="text-xs font-mono uppercase text-sky-400 font-bold">Master Score Global</span>
-                                    <span class="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30">
-                                        ${health.pegBadge || 'GARP Achat Fort 🟢'}
-                                    </span>
-                                </div>
-
-                                <div class="flex items-baseline space-x-3">
-                                    <span class="text-4xl font-black font-mono text-white tracking-tight">${overallScore}</span>
-                                    <span class="text-sm font-mono text-slate-400">/ 100</span>
-                                </div>
-
-                                <div class="space-y-1 text-xs text-slate-300 border-t border-slate-800/80 pt-2">
-                                    <div class="flex justify-between">
-                                        <span class="text-slate-400">Horizon Court Terme (&lt;6m):</span>
-                                        <strong class="text-emerald-400 font-mono">${diag.stAnalysis?.substring(0, 35) || 'Haussier'}...</strong>
-                                    </div>
-                                    <div class="flex justify-between">
-                                        <span class="text-slate-400">Horizon Moyen Terme (1-3a):</span>
-                                        <strong class="text-sky-300 font-mono">${diag.mtAnalysis?.substring(0, 35) || 'Solide'}...</strong>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="lg:col-span-7 p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3">
-                                <div class="text-xs font-mono font-bold text-amber-400 uppercase flex justify-between">
-                                    <span>Composite QVM (Quality - Value - Momentum)</span>
-                                    <span class="text-white">${qvm.overallScore || overallScore}/100</span>
-                                </div>
-
-                                <div class="space-y-2 text-xs font-mono">
-                                    <div class="space-y-1">
-                                        <div class="flex justify-between text-[11px]">
-                                            <span class="text-sky-400 font-semibold">1. Qualité Bilancielle</span>
-                                            <span class="text-white font-bold">${qvm.qualityScore || 90}/100</span>
-                                        </div>
-                                        <div class="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-slate-800">
-                                            <div class="bg-sky-400 h-full" style="width: ${qvm.qualityScore || 90}%;"></div>
-                                        </div>
-                                    </div>
-
-                                    <div class="space-y-1">
-                                        <div class="flex justify-between text-[11px]">
-                                            <span class="text-emerald-400 font-semibold">2. Valorisation & PEG</span>
-                                            <span class="text-white font-bold">${qvm.valuationScore || 80}/100</span>
-                                        </div>
-                                        <div class="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-slate-800">
-                                            <div class="bg-emerald-400 h-full" style="width: ${qvm.valuationScore || 80}%;"></div>
-                                        </div>
-                                    </div>
-
-                                    <div class="space-y-1">
-                                        <div class="flex justify-between text-[11px]">
-                                            <span class="text-purple-400 font-semibold">3. Momentum Technique</span>
-                                            <span class="text-white font-bold">${qvm.momentumScore || 85}/100</span>
-                                        </div>
-                                        <div class="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-slate-800">
-                                            <div class="bg-purple-400 h-full" style="width: ${qvm.momentumScore || 85}%;"></div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- BLOCK 2: 4-Column Financial Matrix -->
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono">
-                            <div class="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
-                                <span class="text-[10px] text-slate-400 uppercase block">1. Chiffres Clés</span>
-                                <div class="text-slate-100 font-bold">CA: <span class="text-white">${kpi.revenue || 'N/A'}</span></div>
-                                <div class="text-slate-100">FCF: <span class="text-teal-300 font-bold">${kpi.fcf || 'N/A'}</span></div>
-                                <div class="text-slate-100">Marge: <span class="text-emerald-400 font-bold">${kpi.operatingMargin || 'N/A'}</span></div>
-                            </div>
-
-                            <div class="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
-                                <span class="text-[10px] text-slate-400 uppercase block">2. Solvabilité & Santé</span>
-                                <div class="text-slate-100">Piotroski: <span class="text-amber-300 font-bold">${health.piotroskiScore || 8}/9</span></div>
-                                <div class="text-slate-100">Altman Z: <span class="text-emerald-400 font-bold">${health.altmanZScore || 3.95}</span></div>
-                                <div class="text-slate-100">Couverture: <span class="text-sky-300 font-bold">${health.interestCoverage || '12.0x'}</span></div>
-                            </div>
-
-                            <div class="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
-                                <span class="text-[10px] text-slate-400 uppercase block">3. Multiples & Yield</span>
-                                <div class="text-slate-100">PER: <span class="text-sky-300 font-bold">${currentReportData?.valuationMultiples?.peRatio || '18.5x'}</span></div>
-                                <div class="text-slate-100">Ratio PEG: <span class="text-emerald-400 font-bold">${health.pegRatio || '0.88'}</span></div>
-                                <div class="text-slate-100">Rendement: <span class="text-purple-300 font-bold">${health.dividendYield || '2.40%'}</span></div>
-                            </div>
-
-                            <div class="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
-                                <span class="text-[10px] text-slate-400 uppercase block">4. Target Analystes</span>
-                                <div class="text-slate-100">Avis: <span class="text-cyan-300 font-bold">${consensus.consensusRecommendation || 'Achat'}</span></div>
-                                <div class="text-slate-100">Objectif: <span class="text-emerald-400 font-bold">${consensus.targetPriceAvg || tp2Val}</span></div>
-                                <div class="text-slate-100">Shorts: <span class="text-rose-400 font-bold">${currentReportData?.shortInterest?.shortCapitalPct || '0.20%'}</span></div>
-                            </div>
-                        </div>
-
-                        <!-- BLOCK 3: Trade Execution Plan & Money Management -->
-                        <div class="p-4 rounded-xl bg-slate-950 border border-emerald-500/30 space-y-3">
-                            <div class="flex items-center justify-between border-b border-slate-800 pb-2">
-                                <span class="text-xs font-mono font-bold text-emerald-400 uppercase flex items-center gap-2">
-                                    <i class="fa-solid fa-crosshairs"></i>
-                                    <span>Plan d'Exécution Direct du Jour & Sizing Kelly</span>
-                                </span>
-                                <span class="text-[10px] font-mono text-slate-400">R:R TP1: 1:1.50 • R:R TP2: 1:2.56</span>
-                            </div>
-
-                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-center text-xs">
-                                <div class="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
-                                    <span class="text-[9px] text-slate-400 uppercase block">Point d'Entrée</span>
-                                    <strong class="text-sky-300 text-sm">${entryVal}</strong>
-                                </div>
-                                <div class="p-2.5 rounded-lg neon-red-card">
-                                    <span class="text-[9px] text-neon-red uppercase block">Stop Loss (-10%)</span>
-                                    <strong class="text-neon-red text-sm">${slVal}</strong>
-                                </div>
-                                <div class="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
-                                    <span class="text-[9px] text-emerald-400 uppercase block">Objectif TP1 (+15%)</span>
-                                    <strong class="text-emerald-400 text-sm">${tp1Val}</strong>
-                                </div>
-                                <div class="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
-                                    <span class="text-[9px] text-teal-300 uppercase block">Objectif TP2 Target</span>
-                                    <strong class="text-teal-300 text-sm">${tp2Val}</strong>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- BLOCK 4: Market Noise & Catalyst Banner -->
-                        <div class="p-4 rounded-xl bg-slate-950/80 border border-amber-500/30 space-y-2">
-                            <div class="text-xs font-mono font-bold text-amber-400 uppercase flex items-center gap-2">
-                                <i class="fa-solid fa-satellite-dish"></i>
-                                <span>Rumeur FinTwit / Boursorama & Thèse du Jour</span>
-                            </div>
-                            <p class="text-xs text-slate-300 leading-relaxed italic">
-                                "${(growth.marketRumors && growth.marketRumors.length > 0) ? growth.marketRumors[0].text : (info.summary || 'Consensus très favorable soutenu par un flux FCF solide.')}"
-                            </p>
-                        </div>
-
-                    </div>
-                `;
-            }
-
-            if (modal) modal.classList.remove('hidden');
-        }
-        window.openSummaryModal = openSummaryModal;
-
-        function closeSummaryModal() {
-            const modal = document.getElementById('summaryModal');
-            if (modal) modal.classList.add('hidden');
-        }
-        window.closeSummaryModal = closeSummaryModal;
-
-        function copySummaryTextToClipboard() {
-            const info = currentReportData?.companyInfo || { name: "LVMH", ticker: "MC" };
-            const kpi = currentReportData?.financialKPIs || {};
-            const trading = currentReportData?.tradingPlan || {};
-            const health = currentReportData?.healthScores || {};
-
-            const summaryText = `📌 SYNTHÈSE EXPRESS DU JOUR - NETLIFFE FACTCHECK : ${info.name} (${info.ticker || 'EUR'})
-• Chiffre d'Affaires: ${kpi.revenue || '86.2 Md€'} | FCF: ${kpi.fcf || '12.8 Md€'} | Marge Op: ${kpi.operatingMargin || '24.5%'}
-• Valorisation: PEG ${health.pegRatio || '0.88'} (${health.pegBadge || 'GARP'})
-• Plan de Trade: Entrée ${trading.entryZone || '680.50 €'} | SL ${trading.stopLoss || '612.45 €'} | TP1 ${trading.tp1 || '782.58 €'} | TP2 ${trading.tp2 || '820.00 €'}
-• Généré via Euronext FactCheck AI Terminal`;
-
-            navigator.clipboard.writeText(summaryText).then(() => {
-                showToast("Fiche synthétique copiée !", "success");
-            });
-        }
-        window.copySummaryTextToClipboard = copySummaryTextToClipboard;
-
-        function openDeepDiveModal(topic) {
-            const modal = document.getElementById('deepDiveModal');
-            if (modal) modal.classList.remove('hidden');
-            runDeepDiveAnalysis(topic);
-        }
-        window.openDeepDiveModal = openDeepDiveModal;
-
-        function closeDeepDiveModal() {
-            const modal = document.getElementById('deepDiveModal');
-            if (modal) modal.classList.add('hidden');
-        }
-        window.closeDeepDiveModal = closeDeepDiveModal;
-
-        async function runDeepDiveAnalysis(topic) {
-            const output = document.getElementById('deepDiveOutput');
-            if (!output) return;
-
-            output.innerHTML = `
-                <div class="p-6 text-center space-y-3 font-mono">
-                    <div class="w-8 h-8 rounded-full border-2 border-slate-700 border-t-amber-400 animate-spin mx-auto"></div>
-                    <div class="text-xs text-amber-300">Recherche Netlify StocksAnalyser : ${topic}...</div>
-                </div>
-            `;
-
-            try {
-                const info = currentReportData?.companyInfo || { name: "Société" };
-                const deepDivePrompt = `Tu es un expert financier senior. Donne un audit approfondi sur "${topic}" pour la société ${info.name} en consultant dépôts AMF/SEC, TIKR, Koyfin, Finchat.io, ZoneBourse, Boursier, Morningstar, Simply Wall St et Shortsell.nl.`;
-                const deepDiveQuery = `Audit approfondi Netlify ${topic} pour ${info.name}`;
-                
-                const res = await callStocksAnalyserAPI(deepDivePrompt, deepDiveQuery);
-
-                if (res) {
-                    output.innerHTML = `
-                        <div class="p-4 rounded-xl bg-slate-950 border border-amber-500/30 text-xs text-slate-200 leading-relaxed font-sans space-y-3">
-                            <div class="font-bold text-amber-400 font-mono text-sm border-b border-slate-800 pb-2">Audit Netlify : ${topic}</div>
-                            <div>${typeof res === 'string' ? res : (res.analysis || res.text || JSON.stringify(res, null, 2))}</div>
-                        </div>
-                    `;
-                } else {
-                    output.innerHTML = `
-                        <div class="p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 leading-relaxed font-sans space-y-3">
-                            <div class="font-bold text-amber-400 font-mono text-sm border-b border-slate-800 pb-2">Audit Synthétique Netlify : ${topic}</div>
-                            <p>Analyse sur "${topic}" réalisée pour ${info.name}. Les ratios bilanciels confirment la solidité du modèle d'exploitation sur Euronext.</p>
-                        </div>
-                    `;
+        function filterJournal(filter) {
+            currentJournalFilter = filter;
+            ['ALL', 'OPEN', 'CLOSED'].forEach(f => {
+                const btn = document.getElementById(`journalFilter${f}`);
+                if (btn) {
+                    if (f === filter) {
+                        btn.className = "px-3 py-1.5 rounded-lg bg-sky-500 text-white font-bold transition cursor-pointer";
+                    } else {
+                        btn.className = "px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white transition cursor-pointer";
+                    }
                 }
-            } catch (err) {
-                console.error("Erreur Deep Dive Netlify:", err);
-                output.innerHTML = `
-                    <div class="p-4 rounded-xl bg-rose-950/40 border border-rose-500/40 text-xs text-rose-300 font-mono">
-                        Erreur lors de l'exécution de l'audit Netlify.
-                    </div>
-                `;
-            }
+            });
+            openHistoryModal();
         }
-        window.runDeepDiveAnalysis = runDeepDiveAnalysis;
+        window.filterJournal = filterJournal;
 
         function openHistoryModal() {
             const modal = document.getElementById('historyModal');
@@ -3279,21 +3082,104 @@ Euronext FactCheck AI`;
             if (list) {
                 if (db) {
                     db.trades.toArray().then(trades => {
-                        if (trades.length === 0) {
-                            list.innerHTML = `<div class="text-xs text-slate-500 font-mono text-center py-6">Aucun trade enregistré dans le Journal MT.</div>`;
-                        } else {
-                            list.innerHTML = trades.map(t => `
-                                <div class="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-3 text-xs">
-                                    <div>
-                                        <div class="font-bold text-white font-mono">${t.companyName || t.ticker}</div>
-                                        <div class="text-[10px] text-slate-400 font-mono">${t.timestamp}</div>
-                                    </div>
-                                    <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30">${t.status}</span>
-                                </div>
-                            `).join('');
+                        // Calculate KPIs
+                        const openTrades = trades.filter(t => t.status === 'OPEN');
+                        const closedTrades = trades.filter(t => t.status === 'CLOSED');
+                        const winningClosed = closedTrades.filter(t => (t.pnlEuro || 0) > 0);
+                        
+                        const totalRealizedPnl = closedTrades.reduce((sum, t) => sum + (t.pnlEuro || 0), 0);
+                        const winRate = closedTrades.length > 0 ? Math.round((winningClosed.length / closedTrades.length) * 100) : '--';
+
+                        if (document.getElementById('journalOpenCount')) document.getElementById('journalOpenCount').innerText = `${openTrades.length}`;
+                        if (document.getElementById('journalWinRate')) document.getElementById('journalWinRate').innerText = winRate !== '--' ? `${winRate}%` : '-- %';
+                        
+                        const pnlEl = document.getElementById('journalTotalPnl');
+                        if (pnlEl) {
+                            pnlEl.innerText = `${totalRealizedPnl >= 0 ? '+' : ''}${totalRealizedPnl.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €`;
+                            pnlEl.className = `text-sm font-bold ${totalRealizedPnl > 0 ? 'text-emerald-400' : totalRealizedPnl < 0 ? 'text-rose-400' : 'text-white'}`;
                         }
-                    }).catch(() => {
-                        list.innerHTML = `<div class="text-xs text-slate-500 font-mono text-center py-6">Journal MT temporaire.</div>`;
+
+                        // Apply current filter
+                        let filtered = trades;
+                        if (currentJournalFilter === 'OPEN') filtered = openTrades;
+                        if (currentJournalFilter === 'CLOSED') filtered = closedTrades;
+
+                        if (filtered.length === 0) {
+                            list.innerHTML = `<div class="text-xs text-slate-500 font-mono text-center py-6">Aucun trade trouvé dans la catégorie (${currentJournalFilter}).</div>`;
+                        } else {
+                            list.innerHTML = filtered.reverse().map(t => {
+                                const isOpen = t.status === 'OPEN';
+                                const pnlEuro = t.pnlEuro || 0;
+                                const pnlPct = t.pnlPct || 0;
+                                const isProfit = pnlEuro >= 0;
+
+                                return `
+                                <div class="p-4 rounded-xl bg-slate-950 border ${isOpen ? 'border-sky-500/30' : 'border-slate-800'} space-y-3 text-xs">
+                                    <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                                        <div class="flex items-center space-x-2">
+                                            <span class="font-extrabold text-white text-sm font-mono">${t.ticker || 'EUR'}</span>
+                                            <span class="text-slate-400 font-medium text-[11px]">${t.companyName || ''}</span>
+                                        </div>
+                                        <div class="flex items-center space-x-2">
+                                            <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold ${isOpen ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30' : isProfit ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'}">
+                                                ${isOpen ? 'EN COURS 🟢' : 'CLÔTURÉ 🏁'}
+                                            </span>
+                                            <button onclick="window.deleteTrade && window.deleteTrade(${t.id})" title="Supprimer" class="text-slate-500 hover:text-rose-400 p-1 cursor-pointer transition">
+                                                <i class="fa-solid fa-trash text-xs"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-mono bg-slate-900 p-2.5 rounded-lg border border-slate-800/80">
+                                        <div><span class="text-slate-400 block text-[9px]">Entrée:</span><strong class="text-sky-300">${t.entryPrice ? t.entryPrice.toFixed(2) + ' €' : '--'}</strong></div>
+                                        <div><span class="text-slate-400 block text-[9px]">Quantité:</span><strong class="text-slate-200">${t.quantity || '--'} actions</strong></div>
+                                        <div><span class="text-slate-400 block text-[9px]">Stop Loss:</span><strong class="text-rose-400">${t.stopLoss ? t.stopLoss.toFixed(2) + ' €' : '--'}</strong></div>
+                                        <div><span class="text-slate-400 block text-[9px]">TP1 Target:</span><strong class="text-emerald-400">${t.tp1 ? t.tp1.toFixed(2) + ' €' : '--'}</strong></div>
+                                    </div>
+
+                                    ${!isOpen ? `
+                                        <div class="p-2.5 rounded-lg ${isProfit ? 'bg-emerald-950/40 border border-emerald-500/40' : 'bg-rose-950/40 border border-rose-500/40'} flex items-center justify-between text-xs font-mono">
+                                            <div>
+                                                <span class="text-slate-400 text-[10px] block">Prix de Clôture (${t.exitDate || 'N/A'}):</span>
+                                                <strong class="text-white">${t.exitPrice ? t.exitPrice.toFixed(2) + ' €' : '--'}</strong>
+                                            </div>
+                                            <div class="text-right">
+                                                <span class="text-slate-400 text-[10px] block">P&L Net Réalisé:</span>
+                                                <strong class="${isProfit ? 'text-emerald-400' : 'text-rose-400'} font-bold">${isProfit ? '+' : ''}${pnlEuro.toFixed(2)} € (${isProfit ? '+' : ''}${pnlPct.toFixed(2)}%)</strong>
+                                            </div>
+                                        </div>
+                                    ` : `
+                                        <!-- Open Position Close Form -->
+                                        <div id="closeForm-${t.id}" class="hidden p-3 rounded-xl bg-slate-900 border border-amber-500/40 space-y-2">
+                                            <div class="text-[11px] font-bold text-amber-300">Clôturer la position sur ${t.ticker} :</div>
+                                            <div class="flex items-center gap-2">
+                                                <input type="number" id="exitPriceInput-${t.id}" step="0.01" value="${t.entryPrice || ''}" placeholder="Prix de sortie €" class="bg-slate-950 text-white font-mono text-xs border border-slate-700 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-amber-500 outline-none flex-1">
+                                                <button onclick="window.submitCloseTrade && window.submitCloseTrade(${t.id})" class="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition cursor-pointer shrink-0">Valider</button>
+                                                <button onclick="document.getElementById('closeForm-${t.id}').classList.add('hidden')" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition cursor-pointer">Annuler</button>
+                                            </div>
+                                        </div>
+
+                                        <div class="flex items-center justify-between pt-1">
+                                            <div class="text-[10px] text-slate-500 font-mono">Ouvert le: ${t.timestamp || '--'}</div>
+                                            <div class="flex items-center space-x-2">
+                                                <button onclick="window.selectPreset && window.selectPreset('${t.ticker}')" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-300 text-[11px] font-bold transition flex items-center space-x-1 cursor-pointer">
+                                                    <i class="fa-solid fa-magnifying-glass text-[9px]"></i>
+                                                    <span>Analyser</span>
+                                                </button>
+                                                <button onclick="document.getElementById('closeForm-${t.id}').classList.remove('hidden')" class="px-3 py-1 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-extrabold text-[11px] transition shadow flex items-center space-x-1 cursor-pointer">
+                                                    <i class="fa-solid fa-check-double text-[9px]"></i>
+                                                    <span>Clôturer Position</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    `}
+                                </div>
+                            `;
+                            }).join('');
+                        }
+                    }).catch(err => {
+                        console.error("Dexie Read Error:", err);
+                        list.innerHTML = `<div class="text-xs text-slate-500 font-mono text-center py-6">Erreur d'accès au Journal.</div>`;
                     });
                 } else {
                     list.innerHTML = `<div class="text-xs text-slate-500 font-mono text-center py-6">IndexedDB non disponible.</div>`;
@@ -3301,6 +3187,47 @@ Euronext FactCheck AI`;
             }
         }
         window.openHistoryModal = openHistoryModal;
+
+        function submitCloseTrade(tradeId) {
+            if (!db) return;
+            const exitInput = document.getElementById(`exitPriceInput-${tradeId}`);
+            const exitPrice = parseFloat(exitInput?.value);
+
+            if (isNaN(exitPrice) || exitPrice <= 0) {
+                showToast("Saisissez un prix de sortie valide.", "amber");
+                return;
+            }
+
+            db.trades.get(tradeId).then(trade => {
+                if (!trade) return;
+                const entryPrice = trade.entryPrice || exitPrice;
+                const quantity = trade.quantity || 1;
+
+                const pnlEuro = (exitPrice - entryPrice) * quantity;
+                const pnlPct = ((exitPrice - entryPrice) / entryPrice) * 100;
+
+                db.trades.update(tradeId, {
+                    status: 'CLOSED',
+                    exitPrice: exitPrice,
+                    exitDate: new Date().toLocaleDateString('fr-FR'),
+                    pnlEuro: pnlEuro,
+                    pnlPct: pnlPct
+                }).then(() => {
+                    showToast(`Position ${trade.ticker} clôturée avec un P&L de ${pnlEuro >= 0 ? '+' : ''}${pnlEuro.toFixed(2)} € !`, "success");
+                    openHistoryModal();
+                });
+            });
+        }
+        window.submitCloseTrade = submitCloseTrade;
+
+        function deleteTrade(tradeId) {
+            if (!db) return;
+            db.trades.delete(tradeId).then(() => {
+                showToast("Trade supprimé du journal.", "info");
+                openHistoryModal();
+            });
+        }
+        window.deleteTrade = deleteTrade;
 
         function closeHistoryModal() {
             const modal = document.getElementById('historyModal');
