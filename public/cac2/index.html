@@ -2808,6 +2808,281 @@ Retourne UNIQUEMENT un JSON STRICT sous la forme d'un tableau d'objets (array).
                 }
             }
         }
+
+        function openSummaryModal() {
+            const modal = document.getElementById('summaryModal');
+            const content = document.getElementById('summaryModalContent');
+            
+            if (!currentReportData) {
+                showToast("Veuillez d'abord réaliser une analyse de titre.", "amber");
+                return;
+            }
+
+            const info = currentReportData.companyInfo || {};
+            const kpi = currentReportData.financialKPIs || {};
+            const health = currentReportData.healthScores || {};
+            const mult = currentReportData.valuationMultiples || {};
+            const diag = currentReportData.leonceDiagnostic || {};
+            const trading = currentReportData.tradingPlan || {};
+            const qvm = currentReportData.qvmComposite || {};
+
+            const titleEl = document.getElementById('summaryModalTitle');
+            const tickerEl = document.getElementById('summaryModalTicker');
+            if (titleEl) titleEl.innerText = `Synthèse Express: ${info.name || 'Société'}`;
+            if (tickerEl) tickerEl.innerText = info.ticker ? `Ticker: ${info.ticker}` : 'EUR';
+
+            const entryPrice = document.getElementById('planEntryInput')?.value || trading.entryZone || '--';
+            const slPrice = document.getElementById('planStopLossInput')?.value || trading.stopLoss || '--';
+            const tp1Price = document.getElementById('planTP1Input')?.value || trading.tp1 || '--';
+            const tp2Price = document.getElementById('planTP2Input')?.value || trading.tp2 || '--';
+
+            if (content) {
+                content.innerHTML = `
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 font-mono text-xs">
+                        <!-- Score Global -->
+                        <div class="p-4 rounded-xl bg-slate-950 border border-sky-500/30 text-center space-y-2">
+                            <span class="text-slate-400 uppercase text-[10px]">Score Global Euronext</span>
+                            <div class="text-3xl font-black text-sky-400">${diag.overallScore || 85} / 100</div>
+                            <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                                ${(diag.overallScore || 85) >= 75 ? 'Achat Fort 🟢' : 'Achat Modéré 🟡'}
+                            </span>
+                        </div>
+
+                        <!-- QVM Score Breakdown -->
+                        <div class="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+                            <span class="text-slate-400 uppercase text-[10px] block border-b border-slate-800 pb-1">Composite QVM</span>
+                            <div class="flex justify-between items-center"><span>Qualité:</span><strong class="text-sky-300">${qvm.qualityScore || 85}/100</strong></div>
+                            <div class="flex justify-between items-center"><span>Valorisation:</span><strong class="text-emerald-400">${qvm.valuationScore || 80}/100</strong></div>
+                            <div class="flex justify-between items-center"><span>Momentum:</span><strong class="text-purple-300">${qvm.momentumScore || 85}/100</strong></div>
+                        </div>
+
+                        <!-- Ratios Clés -->
+                        <div class="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+                            <span class="text-slate-400 uppercase text-[10px] block border-b border-slate-800 pb-1">Piotroski & Altman</span>
+                            <div class="flex justify-between items-center"><span>Piotroski F-Score:</span><strong class="text-amber-300">${health.piotroskiScore || 8}/9</strong></div>
+                            <div class="flex justify-between items-center"><span>Altman Z-Score:</span><strong class="text-emerald-400">${health.altmanZScore || '3.95'}</strong></div>
+                            <div class="flex justify-between items-center"><span>PEG Ratio:</span><strong class="text-sky-300">${health.pegRatio || '0.88'}</strong></div>
+                        </div>
+                    </div>
+
+                    <!-- Trade Execution Plan -->
+                    <div class="p-4 rounded-xl bg-slate-950 border border-emerald-500/30 space-y-3 font-mono text-xs">
+                        <div class="text-emerald-400 font-bold uppercase flex items-center justify-between border-b border-slate-800 pb-2">
+                            <span>Plan d'Exécution Rapide</span>
+                            <span class="text-[10px] text-slate-400 font-normal">Sizing personnalisé disponible Section 12</span>
+                        </div>
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                            <div class="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
+                                <span class="text-slate-400 block text-[10px]">Entrée (€)</span>
+                                <strong class="text-sky-300 text-sm">${entryPrice} €</strong>
+                            </div>
+                            <div class="p-2.5 rounded-lg bg-slate-900 border border-rose-500/40">
+                                <span class="text-rose-400 block text-[10px]">Stop Loss (€)</span>
+                                <strong class="text-rose-400 text-sm">${slPrice} €</strong>
+                            </div>
+                            <div class="p-2.5 rounded-lg bg-slate-900 border border-emerald-500/40">
+                                <span class="text-emerald-400 block text-[10px]">TP1 Objectif (€)</span>
+                                <strong class="text-emerald-400 text-sm">${tp1Price} €</strong>
+                            </div>
+                            <div class="p-2.5 rounded-lg bg-slate-900 border border-teal-500/40">
+                                <span class="text-teal-300 block text-[10px]">TP2 Target (€)</span>
+                                <strong class="text-teal-300 text-sm">${tp2Price} €</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Diagnostics CT & MT -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                        <div class="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+                            <span class="text-teal-400 font-bold font-mono uppercase block text-[11px]">Diagnostic Court Terme (&lt; 6 mois)</span>
+                            <p class="text-slate-300 leading-relaxed">${diag.stAnalysis || 'Momentum haussier confirmé avec supports préservés.'}</p>
+                        </div>
+                        <div class="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+                            <span class="text-sky-400 font-bold font-mono uppercase block text-[11px]">Diagnostic Moyen Terme (1-3 ans)</span>
+                            <p class="text-slate-300 leading-relaxed">${diag.mtAnalysis || 'Fondamentaux bilanciels et génération FCF très solides.'}</p>
+                        </div>
+                    </div>
+                `;
+            }
+
+            if (modal) modal.classList.remove('hidden');
+        }
+        window.openSummaryModal = openSummaryModal;
+
+        function closeSummaryModal() {
+            const modal = document.getElementById('summaryModal');
+            if (modal) modal.classList.add('hidden');
+        }
+        window.closeSummaryModal = closeSummaryModal;
+
+        function copySummaryTextToClipboard() {
+            if (!currentReportData) return;
+            const info = currentReportData.companyInfo || {};
+            const diag = currentReportData.leonceDiagnostic || {};
+            const entryPrice = document.getElementById('planEntryInput')?.value || '46.50';
+            const slPrice = document.getElementById('planStopLossInput')?.value || '41.85';
+            const tp1Price = document.getElementById('planTP1Input')?.value || '53.48';
+
+            const summaryText = `📊 SYNTHÈSE EXPRESS EURONEXT FACTCHECK AI
+Société: ${info.name || 'Société'} ($${info.ticker || 'EUR'})
+Score Global: ${diag.overallScore || 85}/100
+Entrée: ${entryPrice} € | Stop Loss: ${slPrice} € | TP1: ${tp1Price} €
+Diagnostic CT: ${diag.stAnalysis || 'Momentum favorable'}`;
+
+            navigator.clipboard.writeText(summaryText).then(() => {
+                showToast("Synthèse Express copiée dans le presse-papier !", "success");
+            });
+        }
+        window.copySummaryTextToClipboard = copySummaryTextToClipboard;
+
+        function openDeepDiveModal() {
+            const modal = document.getElementById('deepDiveModal');
+            if (modal) modal.classList.remove('hidden');
+            const compEl = document.getElementById('deepDiveModalCompanyName');
+            if (compEl && currentReportData) {
+                compEl.innerText = currentReportData.companyInfo?.name || 'Société';
+            }
+        }
+        window.openDeepDiveModal = openDeepDiveModal;
+
+        function closeDeepDiveModal() {
+            const modal = document.getElementById('deepDiveModal');
+            if (modal) modal.classList.add('hidden');
+        }
+        window.closeDeepDiveModal = closeDeepDiveModal;
+
+        async function runDeepDiveAnalysis(queryTheme) {
+            openDeepDiveModal();
+            const output = document.getElementById('deepDiveOutput');
+            const company = currentReportData?.companyInfo?.name || "la société sélectionnée";
+
+            if (!queryTheme || queryTheme.trim() === '') {
+                queryTheme = 'Analyse financière approfondie';
+            }
+
+            if (output) {
+                output.innerHTML = `
+                    <div class="p-6 text-center space-y-3 font-mono">
+                        <div class="w-8 h-8 rounded-full border-2 border-slate-700 border-t-amber-400 animate-spin mx-auto"></div>
+                        <div class="text-xs text-amber-300">Interrogation Netlify StocksAnalyser sur le thème "${queryTheme}" pour ${company}...</div>
+                    </div>
+                `;
+            }
+
+            try {
+                const sysPrompt = `Tu es un expert financier. Réponds de façon synthétique, structurée et précise en français sur la société "${company}". Thème d'audit demandé : "${queryTheme}". Fournis des arguments factuels chiffrés.`;
+                const userPrompt = `Recherche approfondie sur "${company}" - Thème : ${queryTheme}`;
+                
+                const res = await callStocksAnalyserAPI(sysPrompt, userPrompt);
+                let resText = typeof res === 'string' ? res : JSON.stringify(res, null, 2);
+
+                if (output) {
+                    output.innerHTML = `
+                        <div class="p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 leading-relaxed space-y-3 font-sans">
+                            <div class="font-bold text-amber-400 font-mono border-b border-slate-800 pb-2">Résultat Netlify Deep Dive : ${queryTheme}</div>
+                            <div class="whitespace-pre-line">${resText}</div>
+                        </div>
+                    `;
+                }
+            } catch (e) {
+                if (output) {
+                    output.innerHTML = `<div class="p-4 rounded-xl bg-rose-950/80 border border-rose-500/40 text-xs text-rose-300">Erreur lors de la recherche Deep Dive : ${e.message}</div>`;
+                }
+            }
+        }
+        window.runDeepDiveAnalysis = runDeepDiveAnalysis;
+
+        function runDCFCalculation() {
+            const baseFCF = parseFloat(document.getElementById('dcfBaseFCF')?.value) || 145;
+            const growthRate = (parseFloat(document.getElementById('dcfGrowthRate')?.value) || 8.5) / 100;
+            const wacc = (parseFloat(document.getElementById('dcfWACC')?.value) || 9.0) / 100;
+            const gPerp = (parseFloat(document.getElementById('dcfPerpetualGrowth')?.value) || 2.0) / 100;
+            const sharesCount = parseFloat(document.getElementById('dcfSharesCount')?.value) || 50;
+            const currentPrice = parseFloat(document.getElementById('dcfCurrentPrice')?.value) || 46.50;
+
+            if (wacc <= gPerp) {
+                if (document.getElementById('dcfFairValueResult')) document.getElementById('dcfFairValueResult').innerText = "WACC <= g (Invalide)";
+                return;
+            }
+
+            let pvFCFSum = 0;
+            let lastFCF = baseFCF;
+
+            for (let t = 1; t <= 5; t++) {
+                lastFCF = lastFCF * (1 + growthRate);
+                const pv = lastFCF / Math.pow(1 + wacc, t);
+                pvFCFSum += pv;
+            }
+
+            const terminalValue = (lastFCF * (1 + gPerp)) / (wacc - gPerp);
+            const pvTerminalValue = terminalValue / Math.pow(1 + wacc, 5);
+
+            const enterpriseValue = pvFCFSum + pvTerminalValue;
+            const fairValuePerShare = enterpriseValue / sharesCount;
+
+            const marginOfSafety = ((fairValuePerShare - currentPrice) / currentPrice) * 100;
+
+            const resValEl = document.getElementById('dcfFairValueResult');
+            const resMarginEl = document.getElementById('dcfMarginSafetyResult');
+            const badgeEl = document.getElementById('dcfVerdictBadge');
+
+            if (resValEl) resValEl.innerText = `${fairValuePerShare.toFixed(2)} €`;
+            if (resMarginEl) {
+                resMarginEl.innerText = `Marge de Sécurité / Potentiel : ${marginOfSafety >= 0 ? '+' : ''}${marginOfSafety.toFixed(1)}%`;
+                resMarginEl.className = `text-xs font-bold font-mono ${marginOfSafety >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
+            }
+
+            if (badgeEl) {
+                if (marginOfSafety > 15) {
+                    badgeEl.innerText = "Sous-évalué 🟢";
+                    badgeEl.className = "px-4 py-2 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-sm font-bold font-mono text-center";
+                } else if (marginOfSafety < -10) {
+                    badgeEl.innerText = "Surévalué 🔴";
+                    badgeEl.className = "px-4 py-2 rounded-xl bg-rose-500/20 text-rose-300 border border-rose-500/30 text-sm font-bold font-mono text-center";
+                } else {
+                    badgeEl.innerText = "Correctement Évalué 🟡";
+                    badgeEl.className = "px-4 py-2 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 text-sm font-bold font-mono text-center";
+                }
+            }
+
+            const table = document.getElementById('dcfSensitivityTable');
+            if (table) {
+                const waccSteps = [wacc - 0.01, wacc - 0.005, wacc, wacc + 0.005, wacc + 0.01];
+                const gSteps = [gPerp - 0.005, gPerp, gPerp + 0.005];
+
+                let html = `<thead><tr class="text-slate-400 border-b border-slate-800 bg-slate-950"><th class="p-2 text-left">WACC / g</th>`;
+                gSteps.forEach(g => {
+                    html += `<th class="p-2 text-center">g = ${(g * 100).toFixed(1)}%</th>`;
+                });
+                html += `</tr></thead><tbody class="divide-y divide-slate-800/60">`;
+
+                waccSteps.forEach(w => {
+                    const isBaseWacc = Math.abs(w - wacc) < 0.0001;
+                    html += `<tr class="${isBaseWacc ? 'bg-purple-950/30' : ''}"><td class="p-2 text-left font-bold text-slate-300">WACC ${(w * 100).toFixed(1)}%</td>`;
+                    gSteps.forEach(g => {
+                        if (w <= g) {
+                            html += `<td class="p-2 text-center text-slate-600">--</td>`;
+                        } else {
+                            let sum = 0;
+                            let f = baseFCF;
+                            for (let t = 1; t <= 5; t++) {
+                                f = f * (1 + growthRate);
+                                sum += f / Math.pow(1 + w, t);
+                            }
+                            const tv = (f * (1 + g)) / (w - g);
+                            const pvTv = tv / Math.pow(1 + w, 5);
+                            const fv = (sum + pvTv) / sharesCount;
+
+                            const isCellBase = isBaseWacc && Math.abs(g - gPerp) < 0.0001;
+                            html += `<td class="p-2 text-center ${isCellBase ? 'font-black text-purple-300 bg-purple-500/20 rounded-lg border border-purple-500/40' : fv >= currentPrice ? 'text-emerald-400' : 'text-rose-400'}">${fv.toFixed(2)} €</td>`;
+                        }
+                    });
+                    html += `</tr>`;
+                });
+                html += `</tbody>`;
+                table.innerHTML = html;
+            }
+        }
         window.runDCFCalculation = runDCFCalculation;
 
         function applyDCFValuesFromCurrentReport() {
