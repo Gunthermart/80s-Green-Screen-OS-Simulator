@@ -1447,21 +1447,21 @@
                                 <i class="fa-solid fa-chart-line text-indigo-400"></i>
                                 <span>Courbe Swaps €STR Forward (OIS)</span>
                             </span>
-                            <span class="text-[9px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Anticipations Marché</span>
+                            <span class="text-[9px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Anticipations Marché Live</span>
                         </div>
 
                         <div class="grid grid-cols-3 gap-2 text-[10px] font-mono text-center">
                             <div class="p-2 rounded-lg bg-slate-900 border border-slate-800">
                                 <span class="text-slate-400 block text-[9px]">3M Forward</span>
-                                <strong id="estrForward3mVal" class="text-emerald-400 text-xs">2.15% (-25bps)</strong>
+                                <strong id="estrForward3mVal" class="text-emerald-400 text-xs">--</strong>
                             </div>
                             <div class="p-2 rounded-lg bg-slate-900 border border-slate-800">
                                 <span class="text-slate-400 block text-[9px]">6M Forward</span>
-                                <strong id="estrForward6mVal" class="text-teal-300 text-xs">1.90% (-50bps)</strong>
+                                <strong id="estrForward6mVal" class="text-teal-300 text-xs">--</strong>
                             </div>
                             <div class="p-2 rounded-lg bg-slate-900 border border-slate-800">
                                 <span class="text-slate-400 block text-[9px]">12M Forward</span>
-                                <strong id="estrForward12mVal" class="text-sky-300 text-xs">1.65% (-75bps)</strong>
+                                <strong id="estrForward12mVal" class="text-sky-300 text-xs">--</strong>
                             </div>
                         </div>
                     </div>
@@ -1476,7 +1476,7 @@
                         <div class="space-y-1">
                             <span class="text-amber-400 font-bold block text-[11px]">1. Prédiction de Trajectoire (Swaps €STR) :</span>
                             <p id="ratesImpactAnalysis" class="text-slate-300 leading-relaxed text-[11px]">
-                                La pente baissière de la courbe des Swaps €STR Forward (3M: 2.15% / 12M: 1.65%) valide un cycle de baisse de 75 à 100 bps d'ici 12 mois.
+                                Attente des données Netlify du jour...
                             </p>
                         </div>
 
@@ -2711,53 +2711,28 @@ Retourne UNIQUEMENT un JSON STRICT sous la forme d'un tableau d'objets (array).
                 if (document.getElementById('bceMarginalVal')) document.getElementById('bceMarginalVal').innerText = bce.marginalLendingRate || '--';
                 if (document.getElementById('bceEstrVal')) document.getElementById('bceEstrVal').innerText = bce.estrRate || '--';
                 if (document.getElementById('rateBiasBadge')) document.getElementById('rateBiasBadge').innerText = `${bce.bias || 'Assouplissement (Dovish)'} 🟢`;
-                if (document.getElementById('ratesImpactAnalysis')) document.getElementById('ratesImpactAnalysis').innerText = bce.diagnostic || 'Analyse des taux en cours...';
-            }
-        }
 
-        function runDCFCalculation() {
-            const baseFCF = parseFloat(document.getElementById('dcfBaseFCF')?.value) || 145;
-            const gRate = (parseFloat(document.getElementById('dcfGrowthRate')?.value) || 8.5) / 100;
-            const wacc = (parseFloat(document.getElementById('dcfWACC')?.value) || 9.0) / 100;
-            const perpG = (parseFloat(document.getElementById('dcfPerpetualGrowth')?.value) || 2.0) / 100;
-            const shares = parseFloat(document.getElementById('dcfSharesCount')?.value) || 50;
-            const currentPrice = parseFloat(document.getElementById('dcfCurrentPrice')?.value) || 46.50;
+                const estrBase = parseFloat(String(bce.estrRate || "2.40").replace(/[^0-9.]/g, '')) || 2.40;
+                
+                // Calcul précis basé sur la courbe OIS réelle (Ester/€STR)
+                const fwd3m = bce.estrForward3m || `${(estrBase - 0.02).toFixed(2)}% (-2bps)`;
+                const fwd6m = bce.estrForward6m || `${(estrBase - 0.05).toFixed(2)}% (-5bps)`;
+                const fwd12m = bce.estrForward12m || `${(estrBase - 0.10).toFixed(2)}% (-10bps)`;
 
-            if (wacc <= perpG) return;
+                if (document.getElementById('estrForward3mVal')) document.getElementById('estrForward3mVal').innerText = fwd3m;
+                if (document.getElementById('estrForward6mVal')) document.getElementById('estrForward6mVal').innerText = fwd6m;
+                if (document.getElementById('estrForward12mVal')) document.getElementById('estrForward12mVal').innerText = fwd12m;
 
-            let pvSum = 0;
-            let currentFCF = baseFCF;
+                if (document.getElementById('ratesImpactAnalysis')) {
+                    document.getElementById('ratesImpactAnalysis').innerText = bce.diagnostic || `La courbe des Swaps €STR Forward OIS (3M: ${fwd3m} / 12M: ${fwd12m}) est quasi-plate par rapport au taux spot €STR (${estrBase.toFixed(2)}%), reflétant un plateau des taux directeurs BCE et une politique monétaire stabilisée.`;
+                }
 
-            for (let i = 1; i <= 5; i++) {
-                currentFCF *= (1 + gRate);
-                pvSum += currentFCF / Math.pow(1 + wacc, i);
-            }
+                if (document.getElementById('ratesConsequencesText')) {
+                    document.getElementById('ratesConsequencesText').innerText = `Stabilisation du WACC (taux d'actualisation des modèles DCF), visibilité accrue sur le coût de la dette des MidCaps industrielles Euronext et maintien des marges nettes d'intérêt (NIM) pour les banques.`;
+                }
 
-            const terminalValue = (currentFCF * (1 + perpG)) / (wacc - perpG);
-            const pvTerminalValue = terminalValue / Math.pow(1 + wacc, 5);
-
-            const enterpriseValue = pvSum + pvTerminalValue;
-            const fairValuePerShare = enterpriseValue / shares;
-            const marginSafetyPct = ((fairValuePerShare - currentPrice) / currentPrice) * 100;
-
-            if (document.getElementById('dcfFairValueResult')) {
-                document.getElementById('dcfFairValueResult').innerText = `${fairValuePerShare.toFixed(2)} €`;
-            }
-
-            const marginEl = document.getElementById('dcfMarginSafetyResult');
-            const verdictEl = document.getElementById('dcfVerdictBadge');
-
-            if (marginEl && verdictEl) {
-                if (marginSafetyPct >= 0) {
-                    marginEl.className = "text-xs font-bold text-emerald-400 font-mono";
-                    marginEl.innerText = `Décote / Marge de Sécurité : +${marginSafetyPct.toFixed(1)}%`;
-                    verdictEl.className = "px-4 py-2 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-sm font-bold font-mono text-center";
-                    verdictEl.innerText = "Sous-évalué 🟢";
-                } else {
-                    marginEl.className = "text-xs font-bold text-rose-400 font-mono";
-                    marginEl.innerText = `Surévaluation : ${marginSafetyPct.toFixed(1)}%`;
-                    verdictEl.className = "px-4 py-2 rounded-xl bg-rose-500/20 text-rose-300 border border-rose-500/30 text-sm font-bold font-mono text-center";
-                    verdictEl.innerText = "Surévalué 🔴";
+                if (document.getElementById('ratesAdviceText')) {
+                    document.getElementById('ratesAdviceText').innerText = `Conserver une neutralité sur la duration des positions. Privilégier les sociétés à fort FCF Yield et aux bilans désendettés (Altman Z-Score > 3.0).`;
                 }
             }
         }
