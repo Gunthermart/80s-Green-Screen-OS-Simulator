@@ -2711,14 +2711,27 @@ Retourne UNIQUEMENT un JSON STRICT sous la forme d'un tableau d'objets (array).
                 if (document.getElementById('bceMarginalVal')) document.getElementById('bceMarginalVal').innerText = bce.marginalLendingRate || '2.90%';
                 if (document.getElementById('bceEstrVal')) document.getElementById('bceEstrVal').innerText = bce.estrRate || '2.40%';
                 
-                const currentBias = bce.bias || 'Resserrement (Hawkish)';
-                if (document.getElementById('rateBiasBadge')) {
-                    document.getElementById('rateBiasBadge').innerText = `${currentBias} 🔴`;
-                    document.getElementById('rateBiasBadge').className = "px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 whitespace-nowrap";
+                // Calcul dynamique strict du biais selon CME FedWatch & BCE
+                const fedHike = data?.cmeFedWatch?.probabilities?.hike25Pct || 0;
+                const fedCut = (data?.cmeFedWatch?.probabilities?.cut25Pct || 0) + (data?.cmeFedWatch?.probabilities?.cut50Pct || 0);
+                const expectedBps = data?.cmeFedWatch?.expectedBps || '';
+                const isHawkish = fedHike > fedCut || expectedBps.includes('+') || (bce.bias && bce.bias.includes('Resserrement'));
+
+                const badgeEl = document.getElementById('rateBiasBadge');
+                if (badgeEl) {
+                    if (isHawkish) {
+                        badgeEl.innerText = "Resserrement (Hawkish) 🔴";
+                        badgeEl.className = "px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 whitespace-nowrap";
+                    } else if (fedCut > fedHike || expectedBps.includes('-')) {
+                        badgeEl.innerText = "Assouplissement (Dovish) 🟢";
+                        badgeEl.className = "px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 whitespace-nowrap";
+                    } else {
+                        badgeEl.innerText = "Statu Quo / Neutre 🟡";
+                        badgeEl.className = "px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 whitespace-nowrap";
+                    }
                 }
 
                 const estrBase = parseFloat(String(bce.estrRate || "2.40").replace(/[^0-9.]/g, '')) || 2.40;
-                
                 const fwd3m = bce.estrForward3m || `${(estrBase + 0.08).toFixed(2)}% (+8bps)`;
                 const fwd6m = bce.estrForward6m || `${(estrBase + 0.15).toFixed(2)}% (+15bps)`;
                 const fwd12m = bce.estrForward12m || `${(estrBase + 0.25).toFixed(2)}% (+25bps)`;
