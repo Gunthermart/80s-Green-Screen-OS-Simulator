@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Microsoft Word Web - Éditeur de documents</title>
+  <meta name="description" content="Clone professionnel de Microsoft Word en Vanilla JS avec ruban complet, import/export DOCX, mise en page A4, gestion des styles et historique." />
+  <meta property="og:title" content="Microsoft Word Web - Éditeur de documents" />
+  <meta property="og:description" content="Clone professionnel de Microsoft Word en Vanilla JS avec ruban complet, import/export DOCX, mise en page A4, gestion des styles et historique." />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary_large_image" />
+
+  <!-- Icône Word -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'><rect width='48' height='48' rx='8' fill='%23185abd'/><path d='M10 13l6 22h6l4-14 4 14h6l6-22h-6l-3.5 15-4-15h-5.5l-4 15-3.5-15z' fill='%23fff'/></svg>" />
+
+  <!-- Bibliothèques CDN tierces pour la gestion native des fichiers .docx -->
+  <!-- Mammoth.js : Convertisseur DOCX vers HTML fidèle -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
+  <!-- FileSaver.js : Sauvegarde de Blob de fichiers natifs -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+  <!-- html-docx-js : Export HTML vers fichier DOCX natif (Word XML standard) -->
+  <script src="https://cdn.jsdelivr.net/npm/html-docx-js@0.3.1/dist/html-docx.js"></script>
+
+  <!-- Feuille de style principale -->
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div id="app-container">
+    
+    <!-- 1. BARRE DE TITRE & ACCÈS RAPIDE -->
+    <header class="titlebar" role="banner">
+      <div class="titlebar-left">
+        <div class="app-brand" title="Microsoft Word Clone">
+          <svg class="app-brand-icon" viewBox="0 0 24 24">
+            <rect width="24" height="24" rx="4" fill="#ffffff" />
+            <path d="M5 6.5L8 18H11L13 10.5L15 18H18L21 6.5H18L16 14.5L14 6.5H11.5L9.5 14.5L7.5 6.5H5Z" fill="#185abd" />
+          </svg>
+          <span>Word</span>
+        </div>
+
+        <nav class="quick-access-toolbar" aria-label="Accès Rapide">
+          <button id="qa-save" class="quick-btn" title="Enregistrer (Ctrl+S)">
+            <svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+          </button>
+          <button id="qa-undo" class="quick-btn" title="Annuler (Ctrl+Z)">
+            <svg viewBox="0 0 24 24"><path d="M3 7v6h6"></path><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path></svg>
+          </button>
+          <button id="qa-redo" class="quick-btn" title="Rétablir (Ctrl+Y)">
+            <svg viewBox="0 0 24 24"><path d="M21 7v6h-6"></path><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13"></path></svg>
+          </button>
+          <button id="qa-print" class="quick-btn" title="Imprimer / Exporter PDF (Ctrl+P)">
+            <svg viewBox="0 0 24 24"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+          </button>
+        </nav>
+
+        <label class="autosave-pill" title="Enregistrement automatique dans le navigateur">
+          <input type="checkbox" id="autosave-toggle" checked />
+          <span>Enreg. auto</span>
+        </label>
+      </div>
+
+      <div class="titlebar-center">
+        <input type="text" id="doc-title-input" class="doc-title-input" value="Document 1 - Word" title="Cliquer pour renommer le document" spellcheck="false" />
+      </div>
+
+      <div class="titlebar-right">
+        <button id="btn-toggle-dark" class="titlebar-action-btn" title="Basculer le mode sombre">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+          <span class="btn-text">Thème</span>
+        </button>
+        <button id="btn-shortcuts" class="titlebar-action-btn" title="Raccourcis clavier & Aide">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+          <span class="btn-text">Aide</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- 2. LE RUBAN (RIBBON BAR) -->
+    <div class="ribbon-container">
+      
+      <!-- Onglets du Ruban -->
+      <nav class="ribbon-tabs" role="tablist">
+        <button id="tab-file-btn" class="ribbon-tab tab-file" role="tab" aria-selected="false">Fichier</button>
+        <button class="ribbon-tab active" data-tab="panel-home" role="tab" aria-selected="true">Accueil</button>
+        <button class="ribbon-tab" data-tab="panel-insert" role="tab" aria-selected="false">Insertion</button>
+        <button class="ribbon-tab" data-tab="panel-view" role="tab" aria-selected="false">Affichage</button>
+      </nav>
+
+      <!-- Panneaux du Ruban -->
+      <div class="ribbon-panels">
+        
+        <!-- ONGLET ACCUEIL -->
+        <div id="panel-home" class="ribbon-panel active" role="tabpanel">
+          
+          <!-- Groupe Presse-papiers -->
+          <div class="ribbon-group">
+            <div class="ribbon-group-content">
+              <button id="btn-paste" class="r-btn r-btn-large" title="Coller (Ctrl+V)">
+                <svg viewBox="0 0 24 24"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+                <span>Coller</span>
+              </button>
+              <div class="ribbon-col">
+                <button id="btn-cut" class="r-btn r-btn-small" title="Couper (Ctrl+X)">
+                  <svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><line x1="20" y1="4" x2="8.12" y2="15.88"></line><line x1="14.47" y1="14.48" x2="20" y2="20"></line><line x1="8.12" y1="8.12" x2="12" y2="12"></line></svg>
+                </button>
+                <button id="btn-copy" class="r-btn r-btn-small" title="Copier (Ctrl+C)">
+                  <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </button>
+              </div>
+            </div>
+            <div class="ribbon-group-title">Presse-papiers</div>
+          </div>
+
+          <!-- Groupe Police -->
+          <div class="ribbon-group">
+            <div class="ribbon-group-content">
+              <div class="ribbon-col">
+                <!-- Ligne supérieure Police -->
+                <div class="ribbon-row">
+                  <select id="font-family-select" class="r-select r-select-font" title="Police de caractères">
+                    <option value="Calibri" selected>Calibri</option>
+                    <option value="Aptos">Aptos</option>
+                    <option value="Arial">Arial</option>
+                    <option value="'Segoe UI', sans-serif">Segoe UI</option>
+                    <option value="'Times New Roman', serif">Times New Roman</option>
+                    <option value="Georgia, serif">Georgia</option>
+                    <option value="Verdana, sans-serif">Verdana</option>
+                    <option value="'Courier New', monospace">Courier New</option>
+                    <option value="'Comic Sans MS', cursive">Comic Sans MS</option>
+                    <option value="Trebuchet MS">Trebuchet MS</option>
+                  </select>
+
+                  <select id="font-size-select" class="r-select r-select-size" title="Taille de police">
+                    <option value="8">8</option>
+                    <option value="9">9</option>
+                    <option value="10">10</option>
+                    <option value="11" selected>11</option>
+                    <option value="12">12</option>
+                    <option value="14">14</option>
+                    <option value="16">16</option>
+                    <option value="18">18</option>
+                    <option value="20">20</option>
+                    <option value="24">24</option>
+                    <option value="28">28</option>
+                    <option value="36">36</option>
+                    <option value="48">48</option>
+                    <option value="72">72</option>
+                  </select>
+
+                  <button id="btn-font-grow" class="r-btn r-btn-small" title="Agrandir la police (Ctrl+Shift+>)">
+                    <span style="font-weight: 700; font-size: 13px;">A<sup>+</sup></span>
+                  </button>
+                  <button id="btn-font-shrink" class="r-btn r-btn-small" title="Réduire la police (Ctrl+Shift+<)">
+                    <span style="font-weight: 700; font-size: 11px;">A<sup>-</sup></span>
+                  </button>
+                  <div class="r-divider"></div>
+                  <button id="btn-clear-format" class="r-btn r-btn-small" title="Effacer toute la mise en forme">
+                    <svg viewBox="0 0 24 24"><path d="M4 7h16"></path><path d="M9 7v10"></path><path d="M15 7v10"></path><line x1="2" y1="2" x2="22" y2="22"></line></svg>
+                  </button>
+                </div>
+
+                <!-- Ligne inférieure Police -->
+                <div class="ribbon-row">
+                  <button id="btn-bold" class="r-btn r-btn-small" title="Gras (Ctrl+B)">
+                    <span style="font-weight: 800; font-size: 13px;">G</span>
+                  </button>
+                  <button id="btn-italic" class="r-btn r-btn-small" title="Italique (Ctrl+I)">
+                    <span style="font-style: italic; font-weight: 700; font-size: 13px;">I</span>
+                  </button>
+                  <button id="btn-underline" class="r-btn r-btn-small" title="Souligné (Ctrl+U)">
+                    <span style="text-decoration: underline; font-weight: 700; font-size: 13px;">S</span>
+                  </button>
+                  <button id="btn-strikethrough" class="r-btn r-btn-small" title="Barré">
+                    <span style="text-decoration: line-through; font-weight: 600; font-size: 13px;">ab</span>
+                  </button>
+                  <button id="btn-subscript" class="r-btn r-btn-small" title="Indice">
+                    <span>x<sub>2</sub></span>
+                  </button>
+                  <button id="btn-superscript" class="r-btn r-btn-small" title="Exposant">
+                    <span>x<sup>2</sup></span>
+                  </button>
+
+                  <div class="r-divider"></div>
+
+                  <!-- Sélecteur Couleur Surlignage -->
+                  <div class="color-picker-wrapper">
+                    <button id="btn-highlight-color" class="r-btn r-btn-small" title="Couleur de surbrillance du texte">
+                      <span style="position: relative; font-weight: bold;">
+                        <svg viewBox="0 0 24 24" style="width:13px;height:13px;"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                        <span id="highlight-bar" class="color-indicator-bar" style="background-color: #ffff00;"></span>
+                      </span>
+                    </button>
+                    <!-- Menu palette surbrillance -->
+                    <div id="highlight-palette" class="color-dropdown-menu">
+                      <div class="color-grid" style="grid-template-columns: repeat(5, 1fr); gap: 6px;">
+                        <div class="color-swatch" data-color="#ffff00" style="background-color: #ffff00;" title="Jaune fluo"></div>
+                        <div class="color-swatch" data-color="#00ff00" style="background-color: #00ff00;" title="Vert fluo"></div>
+                        <div class="color-swatch" data-color="#00ffff" style="background-color: #00ffff;" title="Cyan fluo"></div>
+                        <div class="color-swatch" data-color="#ff00ff" style="background-color: #ff00ff;" title="Magenta fluo"></div>
+                        <div class="color-swatch" data-color="#0000ff" style="background-color: #0000ff;" title="Bleu"></div>
+                        <div class="color-swatch" data-color="#ff0000" style="background-color: #ff0000;" title="Rouge"></div>
+                        <div class="color-swatch" data-color="#000080" style="background-color: #000080;" title="Bleu marine"></div>
+                        <div class="color-swatch" data-color="#008080" style="background-color: #008080;" title="Sarcelle"></div>
+                        <div class="color-swatch" data-color="#008000" style="background-color: #008000;" title="Vert foncé"></div>
+                        <div class="color-swatch" data-color="#800080" style="background-color: #800080;" title="Violet"></div>
+                        <div class="color-swatch" data-color="#800000" style="background-color: #800000;" title="Marron"></div>
+                        <div class="color-swatch" data-color="#808000" style="background-color: #808000;" title="Olive"></div>
+                        <div class="color-swatch" data-color="#808080" style="background-color: #808080;" title="Gris 50%"></div>
+                        <div class="color-swatch" data-color="#c0c0c0" style="background-color: #c0c0c0;" title="Gris 25%"></div>
+                        <div class="color-swatch" data-color="transparent" style="background-color: #ffffff; border: 1px dashed #d00;" title="Aucune couleur"></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Sélecteur Couleur Police -->
+                  <div class="color-picker-wrapper">
+                    <button id="btn-font-color" class="r-btn r-btn-small" title="Couleur de police">
+                      <span style="position: relative; font-weight: bold; font-size: 13px;">A
+                        <span id="font-color-bar" class="color-indicator-bar" style="background-color: #e81123;"></span>
+                      </span>
+                    </button>
+                    <!-- Menu palette police Word -->
+                    <div id="font-color-palette" class="color-dropdown-menu">
+                      <div style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px;">Couleurs de thème</div>
+                      <div class="color-grid" id="theme-colors-grid">
+                        <!-- Couleurs thématiques injectées ou standard Word -->
+                      </div>
+                      <div style="font-size: 10px; color: var(--text-muted); margin: 6px 0 4px 0;">Couleurs standard</div>
+                      <div class="color-grid" style="grid-template-columns: repeat(10, 1fr);">
+                        <div class="color-swatch" data-color="#c00000" style="background:#c00000"></div>
+                        <div class="color-swatch" data-color="#ff0000" style="background:#ff0000"></div>
+                        <div class="color-swatch" data-color="#ffc000" style="background:#ffc000"></div>
+                        <div class="color-swatch" data-color="#ffff00" style="background:#ffff00"></div>
+                        <div class="color-swatch" data-color="#92d050" style="background:#92d050"></div>
+                        <div class="color-swatch" data-color="#00b050" style="background:#00b050"></div>
+                        <div class="color-swatch" data-color="#00b0f0" style="background:#00b0f0"></div>
+                        <div class="color-swatch" data-color="#0070c0" style="background:#0070c0"></div>
+                        <div class="color-swatch" data-color="#002060" style="background:#002060"></div>
+                        <div class="color-swatch" data-color="#7030a0" style="background:#7030a0"></div>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+            <div class="ribbon-group-title">Police</div>
+          </div>
+
+          <!-- Groupe Paragraphe -->
+          <div class="ribbon-group">
+            <div class="ribbon-group-content">
+              <div class="ribbon-col">
+                <!-- Ligne supérieure Paragraphe -->
+                <div class="ribbon-row">
+                  <button id="btn-bullet-list" class="r-btn r-btn-small" title="Puces">
+                    <svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                  </button>
+                  <button id="btn-number-list" class="r-btn r-btn-small" title="Numérotation">
+                    <svg viewBox="0 0 24 24"><line x1="10" y1="6" x2="21" y2="6"></line><line x1="10" y1="12" x2="21" y2="12"></line><line x1="10" y1="18" x2="21" y2="18"></line><path d="M4 6h1v4"></path><path d="M4 10h2"></path><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"></path></svg>
+                  </button>
+                  <div class="r-divider"></div>
+                  <button id="btn-outdent" class="r-btn r-btn-small" title="Diminuer le retrait (Shift+Tab)">
+                    <svg viewBox="0 0 24 24"><polyline points="7 8 3 12 7 16"></polyline><line x1="21" y1="12" x2="11" y2="12"></line><line x1="21" y1="6" x2="11" y2="6"></line><line x1="21" y1="18" x2="11" y2="18"></line></svg>
+                  </button>
+                  <button id="btn-indent" class="r-btn r-btn-small" title="Augmenter le retrait (Tab)">
+                    <svg viewBox="0 0 24 24"><polyline points="7 8 11 12 7 16"></polyline><line x1="21" y1="12" x2="15" y2="12"></line><line x1="21" y1="6" x2="3" y2="6"></line><line x1="21" y1="18" x2="3" y2="18"></line></svg>
+                  </button>
+                  <div class="r-divider"></div>
+                  <select id="line-height-select" class="r-select" style="width: 58px;" title="Interligne">
+                    <option value="1.0">1.0</option>
+                    <option value="1.15">1.15</option>
+                    <option value="1.45" selected>1.45</option>
+                    <option value="1.5">1.5</option>
+                    <option value="2.0">2.0</option>
+                  </select>
+                </div>
+
+                <!-- Ligne inférieure Paragraphe : Alignements -->
+                <div class="ribbon-row">
+                  <button id="btn-align-left" class="r-btn r-btn-small active" title="Aligner à gauche (Ctrl+L)">
+                    <svg viewBox="0 0 24 24"><line x1="17" y1="10" x2="3" y2="10"></line><line x1="21" y1="6" x2="3" y2="6"></line><line x1="21" y1="14" x2="3" y2="14"></line><line x1="17" y1="18" x2="3" y2="18"></line></svg>
+                  </button>
+                  <button id="btn-align-center" class="r-btn r-btn-small" title="Centrer (Ctrl+E)">
+                    <svg viewBox="0 0 24 24"><line x1="18" y1="10" x2="6" y2="10"></line><line x1="21" y1="6" x2="3" y2="6"></line><line x1="21" y1="14" x2="3" y2="14"></line><line x1="18" y1="18" x2="6" y2="18"></line></svg>
+                  </button>
+                  <button id="btn-align-right" class="r-btn r-btn-small" title="Aligner à droite (Ctrl+R)">
+                    <svg viewBox="0 0 24 24"><line x1="21" y1="10" x2="7" y2="10"></line><line x1="21" y1="6" x2="3" y2="6"></line><line x1="21" y1="14" x2="3" y2="14"></line><line x1="21" y1="18" x2="7" y2="18"></line></svg>
+                  </button>
+                  <button id="btn-align-justify" class="r-btn r-btn-small" title="Justifier (Ctrl+J)">
+                    <svg viewBox="0 0 24 24"><line x1="21" y1="10" x2="3" y2="10"></line><line x1="21" y1="6" x2="3" y2="6"></line><line x1="21" y1="14" x2="3" y2="14"></line><line x1="21" y1="18" x2="3" y2="18"></line></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="ribbon-group-title">Paragraphe</div>
+          </div>
+
+          <!-- Groupe Galerie de Styles Rapides -->
+          <div class="ribbon-group">
+            <div class="ribbon-group-content">
+              <div class="styles-gallery">
+                <div class="style-box active" data-style="p">
+                  <div class="style-box-sample" style="font-size: 13px; font-weight: normal;">AaBbCc</div>
+                  <div class="style-box-name">Normal</div>
+                </div>
+                <div class="style-box" data-style="h1">
+                  <div class="style-box-sample" style="font-size: 15px; font-weight: 600; color: #1f4e79;">AaBbCc</div>
+                  <div class="style-box-name">Titre 1</div>
+                </div>
+                <div class="style-box" data-style="h2">
+                  <div class="style-box-sample" style="font-size: 13px; font-weight: 600; color: #2e75b6;">AaBbCc</div>
+                  <div class="style-box-name">Titre 2</div>
+                </div>
+                <div class="style-box" data-style="h3">
+                  <div class="style-box-sample" style="font-size: 12px; font-weight: 600; color: #1f4e79;">AaBbCc</div>
+                  <div class="style-box-name">Titre 3</div>
+                </div>
+                <div class="style-box" data-style="blockquote">
+                  <div class="style-box-sample" style="font-size: 12px; font-style: italic; color: #595959;">« AaBb »</div>
+                  <div class="style-box-name">Citation</div>
+                </div>
+                <div class="style-box" data-style="pre">
+                  <div class="style-box-sample" style="font-size: 11px; font-family: monospace;">&lt;code&gt;</div>
+                  <div class="style-box-name">Code</div>
+                </div>
+              </div>
+            </div>
+            <div class="ribbon-group-title">Styles</div>
+          </div>
+
+          <!-- Groupe Édition (Rechercher / Remplacer) -->
+          <div class="ribbon-group">
+            <div class="ribbon-group-content">
+              <div class="ribbon-col">
+                <button id="btn-open-search" class="r-btn r-btn-small" style="width: auto; padding: 0 6px; justify-content: flex-start; gap: 6px;" title="Rechercher (Ctrl+F)">
+                  <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                  <span style="font-size: 11px;">Rechercher</span>
+                </button>
+                <button id="btn-open-replace" class="r-btn r-btn-small" style="width: auto; padding: 0 6px; justify-content: flex-start; gap: 6px;" title="Remplacer (Ctrl+H)">
+                  <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                  <span style="font-size: 11px;">Remplacer</span>
+                </button>
+              </div>
+            </div>
+            <div class="ribbon-group-title">Édition</div>
+          </div>
+
+          <!-- Groupe Voix & Révision (Dicter et Orthographe) -->
+          <div class="ribbon-group">
+            <div class="ribbon-group-content">
+              <button id="btn-dictate" class="r-btn r-btn-large" title="Dicter du texte à la voix (Web Speech API)">
+                <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+                <span id="dictate-btn-label">Dicter</span>
+              </button>
+              <div class="ribbon-col">
+                <button id="btn-spellcheck" class="r-btn r-btn-small" style="width: auto; padding: 0 8px; gap: 4px;" title="Vérifier l'orthographe et la grammaire (F7)">
+                  <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline><path d="M13 19l4-4"></path></svg>
+                  <span style="font-size: 11px;">Vérifier</span>
+                </button>
+                <label style="display: flex; align-items: center; gap: 4px; font-size: 10px; cursor: pointer; color: var(--text-muted); margin-top: 2px;">
+                  <input type="checkbox" id="toggle-realtime-spellcheck" checked />
+                  <span>En direct</span>
+                </label>
+              </div>
+            </div>
+            <div class="ribbon-group-title">Voix & Révision</div>
+          </div>
+
+        </div>
+
+        <!-- ONGLET INSERTION -->
+        <div id="panel-insert" class="ribbon-panel" role="tabpanel">
+          
+          <!-- Pages -->
+          <div class="ribbon-group">
+            <div class="ribbon-group-content">
+              <button id="btn-insert-pagebreak" class="r-btn r-btn-large" title="Insérer un saut de page (Ctrl+Entrée)">
+                <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><line x1="3" y1="12" x2="21" y2="12" stroke-dasharray="3 3"></line></svg>
+                <span>Saut de page</span>
+              </button>
+            </div>
+            <div class="ribbon-group-title">Pages</div>
+          </div>
+
+          <!-- Tableaux -->
+          <div class="ribbon-group">
+            <div class="ribbon-group-content" style="position: relative;">
+              <button id="btn-table-menu" class="r-btn r-btn-large" title="Insérer un tableau">
+                <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line></svg>
+                <span>Tableau ▾</span>
+              </button>
+
+              <!-- Sélecteur interactif de grille de tableau -->
+              <div id="table-grid-picker" class="table-grid-picker">
+                <div class="table-grid-label" id="table-grid-status">Insérer un tableau (1×1)</div>
+                <div class="table-grid-cells" id="table-grid-cells"></div>
+                <button id="btn-custom-table-modal" class="btn-secondary" style="width: 100%; margin-top: 6px; padding: 4px; font-size: 11px;">Tableau personnalisé...</button>
+              </div>
+            </div>
+            <div class="ribbon-group-title">Tableaux</div>
+          </div>
+
+          <!-- Illustrations -->
+          <div class="ribbon-group">
+            <div class="ribbon-group-content">
+              <button id="btn-insert-image" class="r-btn r-btn-large" title="Insérer une image">
+                <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                <span>Image</span>
+              </button>
+              <div class="ribbon-col">
+                <button id="btn-insert-hr" class="r-btn r-btn-small" style="width: auto; padding: 0 8px; gap: 4px;" title="Ligne horizontale de séparation">
+                  <svg viewBox="0 0 24 24"><line x1="3" y1="12" x2="21" y2="12"></line></svg>
+                  <span style="font-size: 11px;">Ligne</span>
+                </button>
+                <button id="btn-insert-callout" class="r-btn r-btn-small" style="width: auto; padding: 0 8px; gap: 4px;" title="Encadré d'information">
+                  <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                  <span style="font-size: 11px;">Encadré</span>
+                </button>
+              </div>
+            </div>
+            <div class="ribbon-group-title">Illustrations</div>
+          </div>
+
+          <!-- Liens & Éléments -->
+          <div class="ribbon-group">
+            <div class="ribbon-group-content">
+              <button id="btn-insert-link" class="r-btn r-btn-large" title="Insérer un lien hypertexte (Ctrl+K)">
+                <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                <span>Lien</span>
+              </button>
+              <div class="ribbon-col">
+                <button id="btn-insert-datetime" class="r-btn r-btn-small" style="width: auto; padding: 0 8px; gap: 4px;" title="Date et heure actuelle">
+                  <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                  <span style="font-size: 11px;">Date & Heure</span>
+                </button>
+                <button id="btn-insert-symbol" class="r-btn r-btn-small" style="width: auto; padding: 0 8px; gap: 4px;" title="Insérer un symbole ou caractère spécial">
+                  <span style="font-weight: 700; font-size: 13px;">Ω</span>
+                  <span style="font-size: 11px;">Symbole</span>
+                </button>
+              </div>
+            </div>
+            <div class="ribbon-group-title">Liens & Texte</div>
+          </div>
+
+        </div>
+
+        <!-- ONGLET AFFICHAGE -->
+        <div id="panel-view" class="ribbon-panel" role="tabpanel">
+          
+          <!-- Afficher / Masquer -->
+          <div class="ribbon-group">
+            <div class="ribbon-group-content">
+              <div class="ribbon-col" style="gap: 8px;">
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12px;">
+                  <input type="checkbox" id="toggle-ruler" checked />
+                  <span>Règle graduée</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12px;">
+                  <input type="checkbox" id="toggle-white-sheet" />
+                  <span>Feuille blanche en sombre</span>
+                </label>
+              </div>
+            </div>
+            <div class="ribbon-group-title">Afficher</div>
+          </div>
+
+          <!-- Zoom -->
+          <div class="ribbon-group">
+            <div class="ribbon-group-content">
+              <button id="btn-zoom-100" class="r-btn r-btn-large" title="Zoom 100%">
+                <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><text x="7" y="14" font-size="7" font-weight="bold">100</text></svg>
+                <span>100 %</span>
+              </button>
+              <div class="ribbon-col">
+                <button id="btn-ribbon-zoom-in" class="r-btn r-btn-small" style="width: auto; padding: 0 8px; gap: 4px;" title="Zoom avant">
+                  <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+                  <span style="font-size: 11px;">Zoom +</span>
+                </button>
+                <button id="btn-ribbon-zoom-out" class="r-btn r-btn-small" style="width: auto; padding: 0 8px; gap: 4px;" title="Zoom arrière">
+                  <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+                  <span style="font-size: 11px;">Zoom -</span>
+                </button>
+              </div>
+            </div>
+            <div class="ribbon-group-title">Zoom</div>
+          </div>
+
+          <!-- Mode Plein Écran -->
+          <div class="ribbon-group">
+            <div class="ribbon-group-content">
+              <button id="btn-fullscreen" class="r-btn r-btn-large" title="Mode plein écran (F11)">
+                <svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
+                <span>Plein écran</span>
+              </button>
+            </div>
+            <div class="ribbon-group-title">Fenêtre</div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- 3. RÈGLE GRADUÉE (HORIZONTAL RULER) -->
+    <div class="ruler-container" id="ruler-container">
+      <div class="ruler-track" id="ruler-track">
+        <div class="ruler-ticks" id="ruler-ticks"></div>
+        <div class="ruler-marker ruler-marker-left" id="ruler-left-marker" title="Marge gauche (Déplaçable)"></div>
+        <div class="ruler-marker ruler-marker-right" id="ruler-right-marker" title="Marge droite (Déplaçable)"></div>
+      </div>
+    </div>
+
+    <!-- 4. ESPACE DE TRAVAIL & FEUILLE A4 -->
+    <main class="canvas-wrapper" id="canvas-wrapper">
+      <div class="zoom-container" id="zoom-container">
+        <article class="document-page" id="document-page">
+          <!-- Éditeur WYSIWYG -->
+          <div class="word-editor" id="word-editor" contenteditable="true" spellcheck="false" role="textbox" aria-multiline="true">
+            <h1>Bienvenue dans Microsoft Word pour le Web</h1>
+            <p>Ce clone haute fidélité reproduit l'expérience de <strong>Microsoft Word</strong> directement dans votre navigateur en HTML5, CSS3 et JavaScript vanille.</p>
+            
+            <h2>Fonctionnalités disponibles</h2>
+            <ul>
+              <li><strong>Ruban complet :</strong> Onglets Accueil, Insertion, Affichage avec commandes de mise en forme (Gras, Italique, Couleurs, Interlignes).</li>
+              <li><strong>Compatibilité DOCX totale :</strong> Importez vos fichiers Word réels (.docx) via <em>Mammoth.js</em> et exportez vos documents au format natif <em>.docx</em> ou <em>.html</em>.</li>
+              <li><strong>Format A4 centré :</strong> Règle graduée interactive, gestion des marges et insertion de sauts de page.</li>
+              <li><strong>Outils avancés :</strong> Insertion de tableaux dynamiques, images, liens, recherche et remplacement complet.</li>
+              <li><strong>Moteur d'historique :</strong> Annuler / Rétablir illimité (Ctrl+Z / Ctrl+Y) et sauvegarde automatique locale.</li>
+            </ul>
+
+            <blockquote>
+              « La simplicité est la sophistication suprême. » — Léonard de Vinci
+            </blockquote>
+
+            <p>Commencez à rédiger dès maintenant en modifiant ce texte ou en ouvrant un fichier existant dans le menu <strong>Fichier</strong> !</p>
+          </div>
+        </article>
+      </div>
+    </main>
+
+    <!-- 5. BARRE D'ÉTAT (STATUS BAR - PIED DE PAGE) -->
+    <footer class="statusbar" role="contentinfo">
+      <div class="statusbar-left">
+        <div class="status-item" id="status-page-count">Page 1 sur 1</div>
+        <div class="status-item clickable" id="status-words" title="Cliquer pour afficher les statistiques détaillées">0 mots</div>
+        <div class="status-item" id="status-chars">0 caractères</div>
+        <div class="status-item clickable" id="status-lang" title="Langue : Français (France) (Détection automatique - Cliquer pour basculer)">Français (France)</div>
+        <div class="status-item clickable" id="status-spellcheck" title="Vérification orthographique (F7)">
+          <span id="spellcheck-status-icon">✓</span>
+          <span id="spellcheck-status-text">Orthographe</span>
+        </div>
+        <div class="status-item" id="status-save">
+          <span class="status-save-icon" id="save-indicator"></span>
+          <span id="save-status-text">Enregistré</span>
+        </div>
+      </div>
+
+      <div class="statusbar-right">
+        <div class="zoom-controls">
+          <button id="sb-zoom-out" class="zoom-btn" title="Zoom arrière">-</button>
+          <input type="range" id="sb-zoom-slider" class="zoom-slider" min="50" max="200" value="100" step="5" title="Ajuster le niveau de zoom" />
+          <button id="sb-zoom-in" class="zoom-btn" title="Zoom avant">+</button>
+          <span id="sb-zoom-val" class="zoom-percentage" title="Réinitialiser à 100%">100 %</span>
+        </div>
+      </div>
+    </footer>
+
+    <!-- ======================================================================
+         MODALES & PANNEAUX AVANCÉS
+         ====================================================================== -->
+
+    <!-- Panneau Flottant de Recherche et Remplacement -->
+    <aside id="search-replace-panel" class="search-replace-panel" aria-label="Rechercher et remplacer">
+      <div class="sr-header">
+        <span id="sr-title">Rechercher et remplacer</span>
+        <button id="btn-sr-close" class="modal-close-btn" style="color:#fff;" title="Fermer (Échap)">✕</button>
+      </div>
+      <div class="sr-body">
+        <div class="form-group" style="margin-bottom: 8px;">
+          <div class="sr-input-wrap">
+            <input type="text" id="sr-find-input" class="sr-input" placeholder="Rechercher dans le document..." />
+            <span id="sr-match-counter" class="sr-match-badge">0/0</span>
+          </div>
+        </div>
+        <div class="form-group" id="sr-replace-group" style="margin-bottom: 10px;">
+          <input type="text" id="sr-replace-input" class="sr-input" placeholder="Remplacer par..." />
+        </div>
+        <div class="sr-actions-row">
+          <button id="btn-sr-prev" class="sr-btn" title="Précédent (Shift+F3)">▲ Précédent</button>
+          <button id="btn-sr-next" class="sr-btn" title="Suivant (F3)">▼ Suivant</button>
+        </div>
+        <div class="sr-actions-row">
+          <button id="btn-sr-replace" class="sr-btn" title="Remplacer l'occurrence sélectionnée">Remplacer</button>
+          <button id="btn-sr-replace-all" class="sr-btn" title="Remplacer toutes les occurrences">Tout remplacer</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Volet Latéral du Correcteur Orthographique (F7) -->
+    <aside id="spellcheck-panel" class="spellcheck-panel" aria-label="Vérification orthographique">
+      <div class="sp-header">
+        <span>Correcteur orthographique</span>
+        <button id="btn-sp-close" class="modal-close-btn" style="color:#fff;" title="Fermer (Échap)">✕</button>
+      </div>
+      <div class="sp-body" id="sp-body-content">
+        <!-- Rempli dynamiquement -->
+      </div>
+    </aside>
+
+    <!-- Menu Contextuel de Suggestions Orthographiques (Clic droit / Clic sur mot souligné) -->
+    <div id="spellcheck-context-menu" class="spellcheck-menu" role="menu">
+      <div class="spellcheck-menu-header">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+        <span>Suggestions d'orthographe</span>
+      </div>
+      <div id="spellcheck-suggestions-container"></div>
+      <div class="spellcheck-menu-divider"></div>
+      <div class="spellcheck-action-item" id="spellcheck-ignore-once">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"></path></svg>
+        <span>Ignorer une fois</span>
+      </div>
+      <div class="spellcheck-action-item" id="spellcheck-ignore-all">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline><path d="M13 19l4-4"></path></svg>
+        <span>Ignorer tout</span>
+      </div>
+      <div class="spellcheck-action-item" id="spellcheck-add-dict">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"></path></svg>
+        <span>Ajouter au dictionnaire</span>
+      </div>
+    </div>
+
+    <!-- Menu Backstage Plein Écran (Onglet Fichier) -->
+    <div id="backstage-overlay" class="backstage-overlay" role="dialog" aria-modal="true">
+      <nav class="backstage-sidebar">
+        <button id="btn-backstage-back" class="backstage-back-btn" title="Retourner au document">
+          <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" fill="none" stroke-width="2.5"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+          <span>Retour</span>
+        </button>
+        <button class="backstage-menu-item active" data-view="bs-new">Nouveau</button>
+        <button class="backstage-menu-item" data-view="bs-open">Ouvrir</button>
+        <button class="backstage-menu-item" data-view="bs-save">Enregistrer</button>
+        <button class="backstage-menu-item" data-view="bs-export">Exporter</button>
+        <button class="backstage-menu-item" data-view="bs-print">Imprimer / PDF</button>
+        <button class="backstage-menu-item" data-view="bs-info">Informations</button>
+      </nav>
+
+      <div class="backstage-content">
+        
+        <!-- Vue Nouveau -->
+        <div id="bs-new" class="backstage-view active">
+          <h2 class="backstage-title">Nouveau document</h2>
+          <div class="template-cards-grid">
+            <div class="template-card" id="tmpl-blank">
+              <div class="template-preview-box" style="display:flex;align-items:center;justify-content:center;color:#aaa;">
+                <span>Page vierge</span>
+              </div>
+              <div class="template-card-name">Document vierge</div>
+            </div>
+
+            <div class="template-card" id="tmpl-report">
+              <div class="template-preview-box">
+                <div style="font-weight:bold;color:#1f4e79;margin-bottom:4px;font-size:9px;">RAPPORT ANNUEL</div>
+                <div style="height:3px;background:#2e75b6;width:50%;margin-bottom:6px;"></div>
+                <p>Synthèse exécutive et résultats stratégiques du trimestre...</p>
+              </div>
+              <div class="template-card-name">Rapport d'activité</div>
+            </div>
+
+            <div class="template-card" id="tmpl-letter">
+              <div class="template-preview-box">
+                <div style="text-align:right;color:#666;font-size:7px;">Le 29 Septembre 2026</div>
+                <div style="font-weight:bold;margin:8px 0 4px 0;">Madame, Monsieur,</div>
+                <p>Je vous adresse ma candidature au poste de responsable...</p>
+              </div>
+              <div class="template-card-name">Lettre formelle</div>
+            </div>
+
+            <div class="template-card" id="tmpl-meeting">
+              <div class="template-preview-box">
+                <div style="font-weight:bold;color:#1f4e79;font-size:9px;">COMPTE-RENDU</div>
+                <div style="margin:4px 0;font-size:7px;color:#666;">Ordre du jour & Décisions</div>
+                <p>1. Validation des livrables<br>2. Prochaines étapes</p>
+              </div>
+              <div class="template-card-name">Compte-rendu de réunion</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Vue Ouvrir -->
+        <div id="bs-open" class="backstage-view">
+          <h2 class="backstage-title">Ouvrir un document</h2>
+          <div style="display:flex; flex-direction:column; gap:16px; max-width: 500px;">
+            <div style="border: 2px dashed var(--border-strong); padding: 30px; text-align: center; border-radius: 6px; cursor: pointer; background: var(--bg-paper);" id="docx-drop-zone">
+              <svg viewBox="0 0 24 24" width="48" height="48" stroke="var(--word-primary)" fill="none" stroke-width="1.5" style="margin:0 auto 10px auto;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="12" y2="12"></line><line x1="15" y1="15" x2="12" y2="12"></line></svg>
+              <div style="font-weight:600; font-size:14px; margin-bottom: 4px;">Importer un fichier Microsoft Word (.docx)</div>
+              <p style="color:var(--text-muted); font-size:12px;">Glissez-déposez votre fichier ici ou cliquez pour parcourir</p>
+              <button class="btn-primary" style="margin-top: 14px;" id="btn-browse-docx">Parcourir (.docx)</button>
+            </div>
+
+            <div style="display: flex; gap: 10px;">
+              <button class="btn-secondary" style="flex:1;" id="btn-browse-html">Ouvrir fichier HTML</button>
+              <button class="btn-secondary" style="flex:1;" id="btn-browse-json">Ouvrir projet JSON</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Vue Enregistrer -->
+        <div id="bs-save" class="backstage-view">
+          <h2 class="backstage-title">Enregistrement</h2>
+          <p style="margin-bottom: 16px; color: var(--text-muted);">Vos modifications sont continuellement enregistrées localement dans votre navigateur.</p>
+          <div style="background: var(--bg-paper); border: 1px solid var(--border-subtle); padding: 18px; border-radius: 6px; max-width: 480px;">
+            <div style="font-weight: 600; margin-bottom: 8px;">Stockage local (Auto-save)</div>
+            <div id="bs-save-status" style="font-size: 13px; color: #107c41; margin-bottom: 14px;">✓ Document synchronisé dans le navigateur.</div>
+            <button class="btn-primary" id="btn-force-save">Forcer l'enregistrement maintenant</button>
+          </div>
+        </div>
+
+        <!-- Vue Exporter -->
+        <div id="bs-export" class="backstage-view">
+          <h2 class="backstage-title">Exporter le document</h2>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; max-width: 700px;">
+            
+            <div style="border: 1px solid var(--border-subtle); border-radius: 6px; padding: 18px; background: var(--bg-paper); display:flex; flex-direction:column; justify-content:space-between;">
+              <div>
+                <div style="font-weight: 600; font-size: 15px; color: var(--word-primary); margin-bottom: 6px;">Microsoft Word (.docx)</div>
+                <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 14px;">Format natif Microsoft Word compatible Office 365, Word 2016+ et Google Docs.</p>
+              </div>
+              <button class="btn-primary" id="btn-export-docx">Télécharger .docx</button>
+            </div>
+
+            <div style="border: 1px solid var(--border-subtle); border-radius: 6px; padding: 18px; background: var(--bg-paper); display:flex; flex-direction:column; justify-content:space-between;">
+              <div>
+                <div style="font-weight: 600; font-size: 15px; color: var(--word-primary); margin-bottom: 6px;">Page Web (.html)</div>
+                <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 14px;">Code HTML complet autonome avec styles Word embarqués.</p>
+              </div>
+              <button class="btn-secondary" id="btn-export-html">Télécharger .html</button>
+            </div>
+
+            <div style="border: 1px solid var(--border-subtle); border-radius: 6px; padding: 18px; background: var(--bg-paper); display:flex; flex-direction:column; justify-content:space-between;">
+              <div>
+                <div style="font-weight: 600; font-size: 15px; color: var(--word-primary); margin-bottom: 6px;">Sauvegarde JSON (.json)</div>
+                <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 14px;">Structure complète avec historique et métadonnées du document.</p>
+              </div>
+              <button class="btn-secondary" id="btn-export-json">Télécharger .json</button>
+            </div>
+
+            <div style="border: 1px solid var(--border-subtle); border-radius: 6px; padding: 18px; background: var(--bg-paper); display:flex; flex-direction:column; justify-content:space-between;">
+              <div>
+                <div style="font-weight: 600; font-size: 15px; color: var(--word-primary); margin-bottom: 6px;">Texte brut (.txt)</div>
+                <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 14px;">Contenu épuré sans mise en forme.</p>
+              </div>
+              <button class="btn-secondary" id="btn-export-txt">Télécharger .txt</button>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Vue Imprimer -->
+        <div id="bs-print" class="backstage-view">
+          <h2 class="backstage-title">Imprimer / Exporter en PDF</h2>
+          <p style="margin-bottom: 18px; color: var(--text-muted);">Générez un PDF professionnel ou envoyez le document à votre imprimante physique.</p>
+          <button class="btn-primary" id="btn-backstage-print" style="padding: 10px 24px; font-size: 14px;">Lancer l'impression (Ctrl+P)</button>
+        </div>
+
+        <!-- Vue Informations -->
+        <div id="bs-info" class="backstage-view">
+          <h2 class="backstage-title">Propriétés du document</h2>
+          <div style="background: var(--bg-paper); border: 1px solid var(--border-subtle); padding: 18px; border-radius: 6px; max-width: 500px; display:flex; flex-direction:column; gap:10px;">
+            <div style="display:flex; justify-content:space-between;">
+              <span style="color:var(--text-muted);">Titre :</span>
+              <strong id="info-doc-title">Document 1</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between;">
+              <span style="color:var(--text-muted);">Pages estimées :</span>
+              <strong id="info-doc-pages">1</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between;">
+              <span style="color:var(--text-muted);">Nombre de mots :</span>
+              <strong id="info-doc-words">0</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between;">
+              <span style="color:var(--text-muted);">Nombre de caractères :</span>
+              <strong id="info-doc-chars">0</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between;">
+              <span style="color:var(--text-muted);">Dernière modification :</span>
+              <strong id="info-doc-date">Aujourd'hui</strong>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Modale Insertion d'Image -->
+    <div id="modal-image" class="modal-overlay" role="dialog" aria-modal="true">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h3 class="modal-title">Insérer une image</h3>
+          <button class="modal-close-btn" data-close="modal-image">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Importer un fichier image local</label>
+            <input type="file" id="modal-img-file" class="form-input" accept="image/*" />
+          </div>
+          <div style="text-align: center; margin: 10px 0; color: var(--text-muted); font-size: 11px;">— OU —</div>
+          <div class="form-group">
+            <label class="form-label">Adresse URL de l'image (Web)</label>
+            <input type="url" id="modal-img-url" class="form-input" placeholder="https://exemple.com/image.jpg" />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" data-close="modal-image">Annuler</button>
+          <button class="btn-primary" id="btn-confirm-insert-img">Insérer</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modale Insertion de Lien -->
+    <div id="modal-link" class="modal-overlay" role="dialog" aria-modal="true">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h3 class="modal-title">Insérer un lien hypertexte</h3>
+          <button class="modal-close-btn" data-close="modal-link">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Texte à afficher</label>
+            <input type="text" id="modal-link-text" class="form-input" placeholder="Texte du lien" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Adresse URL cible</label>
+            <input type="url" id="modal-link-url" class="form-input" placeholder="https://exemple.com" />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" data-close="modal-link">Annuler</button>
+          <button class="btn-primary" id="btn-confirm-insert-link">Insérer</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modale Tableau Personnalisé -->
+    <div id="modal-table" class="modal-overlay" role="dialog" aria-modal="true">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h3 class="modal-title">Insérer un tableau personnalisé</h3>
+          <button class="modal-close-btn" data-close="modal-table">✕</button>
+        </div>
+        <div class="modal-body">
+          <div style="display:flex; gap:12px;">
+            <div class="form-group" style="flex:1;">
+              <label class="form-label">Nombre de colonnes</label>
+              <input type="number" id="modal-table-cols" class="form-input" min="1" max="15" value="3" />
+            </div>
+            <div class="form-group" style="flex:1;">
+              <label class="form-label">Nombre de lignes</label>
+              <input type="number" id="modal-table-rows" class="form-input" min="1" max="50" value="4" />
+            </div>
+          </div>
+          <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer;">
+            <input type="checkbox" id="modal-table-header" checked />
+            <span>Inclure une ligne d'en-tête stylisée Word</span>
+          </label>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" data-close="modal-table">Annuler</button>
+          <button class="btn-primary" id="btn-confirm-insert-table">Créer le tableau</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modale Statistiques Détaillées -->
+    <div id="modal-stats" class="modal-overlay" role="dialog" aria-modal="true">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h3 class="modal-title">Statistiques du document</h3>
+          <button class="modal-close-btn" data-close="modal-stats">✕</button>
+        </div>
+        <div class="modal-body" id="modal-stats-content">
+          <!-- Injecté dynamiquement -->
+        </div>
+        <div class="modal-footer">
+          <button class="btn-primary" data-close="modal-stats">Fermer</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modale Aide & Raccourcis Clavier -->
+    <div id="modal-shortcuts" class="modal-overlay" role="dialog" aria-modal="true">
+      <div class="modal-dialog" style="max-width: 540px;">
+        <div class="modal-header">
+          <h3 class="modal-title">Raccourcis clavier Microsoft Word</h3>
+          <button class="modal-close-btn" data-close="modal-shortcuts">✕</button>
+        </div>
+        <div class="modal-body" style="max-height: 400px; overflow-y: auto;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+            <tbody>
+              <tr style="border-bottom: 1px solid var(--border-subtle);"><td style="padding: 6px;"><strong>Ctrl + S</strong></td><td>Enregistrer le document</td></tr>
+              <tr style="border-bottom: 1px solid var(--border-subtle);"><td style="padding: 6px;"><strong>Ctrl + Z</strong></td><td>Annuler la dernière action</td></tr>
+              <tr style="border-bottom: 1px solid var(--border-subtle);"><td style="padding: 6px;"><strong>Ctrl + Y</strong></td><td>Rétablir l'action annulée</td></tr>
+              <tr style="border-bottom: 1px solid var(--border-subtle);"><td style="padding: 6px;"><strong>Ctrl + B</strong></td><td>Mettre en gras</td></tr>
+              <tr style="border-bottom: 1px solid var(--border-subtle);"><td style="padding: 6px;"><strong>Ctrl + I</strong></td><td>Mettre en italique</td></tr>
+              <tr style="border-bottom: 1px solid var(--border-subtle);"><td style="padding: 6px;"><strong>Ctrl + U</strong></td><td>Souligner le texte</td></tr>
+              <tr style="border-bottom: 1px solid var(--border-subtle);"><td style="padding: 6px;"><strong>Ctrl + L / E / R / J</strong></td><td>Aligner Gauche / Centre / Droite / Justifié</td></tr>
+              <tr style="border-bottom: 1px solid var(--border-subtle);"><td style="padding: 6px;"><strong>Ctrl + F</strong></td><td>Rechercher dans le document</td></tr>
+              <tr style="border-bottom: 1px solid var(--border-subtle);"><td style="padding: 6px;"><strong>Ctrl + H</strong></td><td>Rechercher et remplacer</td></tr>
+              <tr style="border-bottom: 1px solid var(--border-subtle);"><td style="padding: 6px;"><strong>Ctrl + Entrée</strong></td><td>Insérer un saut de page</td></tr>
+              <tr style="border-bottom: 1px solid var(--border-subtle);"><td style="padding: 6px;"><strong>Ctrl + P</strong></td><td>Imprimer / Exporter en PDF</td></tr>
+              <tr style="border-bottom: 1px solid var(--border-subtle);"><td style="padding: 6px;"><strong>Tab / Shift+Tab</strong></td><td>Augmenter / Diminuer le retrait</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-primary" data-close="modal-shortcuts">Compris</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Inputs fichiers cachés pour imports universels -->
+    <input type="file" id="hidden-docx-input" accept=".docx,.doc" style="display: none;" />
+    <input type="file" id="hidden-html-input" accept=".html,.htm" style="display: none;" />
+    <input type="file" id="hidden-json-input" accept=".json" style="display: none;" />
+
+    <!-- Conteneur de Notifications Toasts -->
+    <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+  </div>
+
+  <!-- Script d'orchestration JavaScript Vanilla (POO Moderne) -->
+  <script type="module" src="/script.js"></script>
+</body>
+</html>
