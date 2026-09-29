@@ -1,0 +1,1199 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>AquaLab 3D - Simulation d'Aquarium Vivant</title>
+  <meta name="description" content="Simulateur d'écosystème marin interactif 3D avec boids autonomes, chaîne trophique, prédateurs, cycle de vie et tableau de bord scientifique." />
+  <meta property="og:title" content="AquaLab 3D - Simulation d'Aquarium Vivant" />
+  <meta property="og:description" content="Simulateur d'écosystème marin interactif 3D avec boids autonomes, chaîne trophique, prédateurs, cycle de vie et tableau de bord scientifique." />
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --bg-dark: #040d1a;
+      --glass-bg: rgba(6, 20, 38, 0.72);
+      --glass-border: rgba(56, 189, 248, 0.2);
+      --glass-glow: rgba(14, 165, 233, 0.25);
+      --primary: #0ea5e9;
+      --primary-accent: #38bdf8;
+      --emerald: #10b981;
+      --amber: #f59e0b;
+      --rose: #f43f5e;
+      --purple: #a855f7;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: var(--bg-dark);
+      color: #f1f5f9;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+    }
+    #simulation-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      outline: none;
+    }
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .glass-panel {
+      background: var(--glass-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--glass-border);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+    .glass-btn {
+      background: rgba(15, 35, 60, 0.65);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      color: #e2e8f0;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      cursor: pointer;
+    }
+    .glass-btn:hover:not(:disabled) {
+      background: rgba(14, 165, 233, 0.3);
+      border-color: rgba(56, 189, 248, 0.6);
+      color: #fff;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 15px var(--glass-glow);
+    }
+    .glass-btn:active:not(:disabled) {
+      transform: translateY(1px);
+    }
+    .glass-btn.active {
+      background: linear-gradient(135deg, #0284c7, #0369a1);
+      border-color: #38bdf8;
+      color: white;
+      box-shadow: 0 0 16px rgba(14, 165, 233, 0.6);
+    }
+    .custom-scroll::-webkit-scrollbar {
+      width: 5px;
+    }
+    .custom-scroll::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.2);
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: rgba(56, 189, 248, 0.3);
+      border-radius: 4px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb:hover {
+      background: rgba(56, 189, 248, 0.6);
+    }
+    input[type=range] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 6px;
+      border-radius: 4px;
+      background: rgba(15, 23, 42, 0.8);
+      outline: none;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #38bdf8;
+      cursor: pointer;
+      box-shadow: 0 0 8px rgba(56, 189, 248, 0.8);
+      border: 2px solid #0f172a;
+      transition: transform 0.15s ease;
+    }
+    input[type=range]::-webkit-slider-thumb:hover {
+      transform: scale(1.2);
+    }
+    .sidebar {
+      position: absolute;
+      top: 76px;
+      left: 16px;
+      bottom: 20px;
+      width: 380px;
+      max-width: calc(100vw - 32px);
+      border-radius: 18px;
+      z-index: 30;
+      transform: translateX(-420px);
+      transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      flex-direction: column;
+    }
+    .sidebar.open {
+      transform: translateX(0);
+    }
+    .hud-top {
+      position: absolute;
+      top: 14px;
+      left: 16px;
+      right: 16px;
+      height: 52px;
+      border-radius: 16px;
+      z-index: 35;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      gap: 12px;
+    }
+    .hud-bottom-bar {
+      position: absolute;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      border-radius: 40px;
+      z-index: 25;
+      display: flex;
+      align-items: center;
+      padding: 6px 14px;
+      gap: 8px;
+      max-width: 95vw;
+      overflow-x: auto;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 8px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .accordion-header {
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 14px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #94a3b8;
+      background: rgba(15, 23, 42, 0.4);
+      margin-bottom: 6px;
+      transition: all 0.2s ease;
+    }
+    .accordion-header:hover {
+      color: #f8fafc;
+      background: rgba(14, 165, 233, 0.15);
+    }
+    .accordion-header.active {
+      color: #38bdf8;
+      background: rgba(14, 165, 233, 0.2);
+    }
+    .accordion-body {
+      display: none;
+      padding: 10px 4px 16px;
+    }
+    .accordion-body.open {
+      display: block;
+    }
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      box-shadow: 0 0 8px currentColor;
+      animation: pulseAnim 2s infinite ease-in-out;
+    }
+    @keyframes pulseAnim {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.4); opacity: 0.6; }
+    }
+    #fish-inspector {
+      position: absolute;
+      bottom: 76px;
+      left: 20px;
+      width: 290px;
+      border-radius: 14px;
+      padding: 14px;
+      z-index: 25;
+      display: none;
+    }
+    #notification-toast {
+      position: absolute;
+      top: 76px;
+      right: 16px;
+      max-width: 360px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 12px;
+      z-index: 45;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      opacity: 0;
+      transform: translateY(-8px);
+      transition: all 0.3s ease;
+      pointer-events: none;
+    }
+    #notification-toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    #event-log-drawer {
+      position: absolute;
+      bottom: 76px;
+      right: 16px;
+      width: 320px;
+      height: 240px;
+      border-radius: 14px;
+      z-index: 25;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transform: translateY(280px);
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    #event-log-drawer.open {
+      transform: translateY(0);
+    }
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(3, 10, 20, 0.85);
+      backdrop-filter: blur(8px);
+      z-index: 60;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .water-caustics {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at 50% 10%, rgba(56, 189, 248, 0.12) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 2;
+    }
+    #camera-flash-overlay {
+      position: fixed;
+      inset: 0;
+      background: #ffffff;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 95;
+      transition: opacity 0.25s ease-out;
+    }
+    #camera-flash-overlay.flash {
+      opacity: 0.95;
+      transition: none;
+    }
+    .cockpit-overlay {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 20;
+      display: none;
+      background: radial-gradient(ellipse at center, transparent 58%, rgba(2, 6, 23, 0.55) 86%, rgba(2, 6, 23, 0.95) 100%);
+      box-shadow: inset 0 0 100px rgba(6, 182, 212, 0.18);
+      border: 22px solid rgba(15, 23, 42, 0.88);
+      border-radius: 28px;
+    }
+    .cockpit-overlay.active {
+      display: block;
+    }
+    .cockpit-crosshair {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 64px;
+      height: 64px;
+      transform: translate(-50%, -50%);
+      border: 1.5px dashed rgba(56, 189, 248, 0.55);
+      border-radius: 50%;
+      pointer-events: none;
+    }
+    .cockpit-crosshair::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: -14px;
+      width: 10px;
+      height: 2px;
+      background: #22c55e;
+      transform: translateY(-50%);
+      box-shadow: 0 0 6px #22c55e;
+    }
+    .cockpit-crosshair::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      right: -14px;
+      width: 10px;
+      height: 2px;
+      background: #22c55e;
+      transform: translateY(-50%);
+      box-shadow: 0 0 6px #22c55e;
+    }
+    .laser-scale-label {
+      position: absolute;
+      bottom: -18px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 8px;
+      color: #22c55e;
+      font-family: monospace;
+      letter-spacing: 1px;
+    }
+    .rov-hud-pointer {
+      pointer-events: auto !important;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Fullscreen Camera Flash Overlay -->
+  <div id="camera-flash-overlay"></div>
+
+  <div class="water-caustics"></div>
+  <canvas id="simulation-canvas"></canvas>
+
+  <!-- Cockpit HUD for submarine view (Haute Fidélité Océanographique) -->
+  <div id="cockpit-hud" class="cockpit-overlay">
+    <!-- Reticule Central avec Lasers 10cm et Horizon Artificiel -->
+    <div class="cockpit-crosshair">
+      <span class="laser-scale-label">LASER 10cm</span>
+    </div>
+
+    <!-- Bannière d'Alerte Proximité Sol / Parois -->
+    <div id="rov-proximity-alert" style="display: none; position: absolute; top: 88px; left: 50%; transform: translateX(-50%); background: rgba(239, 68, 68, 0.35); border: 1px solid rgba(239, 68, 68, 0.7); backdrop-filter: blur(8px); padding: 5px 14px; border-radius: 20px; color: #fee2e2; font-size: 11px; font-weight: 700; align-items: center; gap: 8px; box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);" class="mono">
+      <i class="fa-solid fa-triangle-exclamation" style="color: #fca5a5;"></i>
+      <span>AVERTISSEMENT PROXIMITÉ OBSTACLE: <strong id="rov-prox-dist">12</strong>m</span>
+    </div>
+
+    <!-- Top Telemetry Ribbon (Affichage Tête Haute) -->
+    <div style="position: absolute; top: 28px; left: 32px; right: 32px; display: flex; justify-content: space-between; align-items: center;" class="mono rov-hud-pointer">
+      <div style="display: flex; align-items: center; gap: 14px; background: rgba(2, 6, 23, 0.75); padding: 7px 16px; border-radius: 14px; border: 1px solid rgba(56, 189, 248, 0.25); backdrop-filter: blur(6px);">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <i class="fa-solid fa-water-ladder" style="color: #38bdf8; font-size: 14px;"></i>
+          <span style="font-size: 12px; font-weight: 700; color: #38bdf8;">TRITON-X ROV</span>
+        </div>
+        <div style="width: 1px; height: 16px; background: rgba(255,255,255,0.15);"></div>
+        <div style="font-size: 11px; color: #cbd5e1;">
+          PROF: <strong id="rov-depth" style="color: #38bdf8;">142</strong>m
+        </div>
+        <div style="font-size: 11px; color: #cbd5e1;">
+          CAP: <strong id="rov-heading" style="color: #f8fafc;">245° [SO]</strong>
+        </div>
+        <div style="font-size: 11px; color: #cbd5e1;">
+          VIT: <strong id="rov-speed" style="color: #38bdf8;">2.4 kts</strong>
+        </div>
+        <div style="font-size: 11px; color: #94a3b8;">
+          P: <span id="rov-pressure">2.7 bar</span> | T: <span id="rov-temp">24.5°C</span>
+        </div>
+      </div>
+
+      <!-- Statuts Modes & Sortie rapide -->
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span id="rov-mode-badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); padding: 5px 12px; border-radius: 12px; font-size: 10px; font-weight: 700;">AUTONOME 🧭</span>
+        <span id="rov-lights-badge" style="background: rgba(14, 165, 233, 0.2); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); padding: 5px 12px; border-radius: 12px; font-size: 10px; font-weight: 700;">LED 5600K ☀️</span>
+        <button id="btn-sub-exit" class="glass-btn" style="padding: 5px 12px; border-radius: 12px; font-size: 11px; color: #f87171; border-color: rgba(248, 113, 113, 0.35);" title="Quitter la vue sous-marine">
+          <i class="fa-solid fa-arrow-right-from-bracket mr-1"></i> Quitter ROV
+        </button>
+      </div>
+    </div>
+
+    <!-- Left Sonar Radar Panel (Mini-Radar Acoustique 360°) -->
+    <div style="position: absolute; bottom: 84px; left: 32px; background: rgba(2, 6, 23, 0.85); padding: 12px; border-radius: 16px; border: 1px solid rgba(56, 189, 248, 0.3); backdrop-filter: blur(8px); display: flex; flex-direction: column; align-items: center; gap: 8px; width: 154px;" class="rov-hud-pointer">
+      <div style="display: flex; justify-content: space-between; width: 100%; align-items: center; font-size: 10px; color: #38bdf8; font-weight: 700;" class="mono">
+        <span><i class="fa-solid fa-radar fa-spin mr-1"></i> SONAR 360°</span>
+        <span id="rov-radar-range" style="font-size: 9px; color: #94a3b8;">120m</span>
+      </div>
+      <canvas id="rov-radar-canvas" width="130" height="130" style="border-radius: 50%; box-shadow: 0 0 14px rgba(6, 182, 212, 0.25);"></canvas>
+      <div style="display: flex; width: 100%; gap: 4px;">
+        <button id="btn-sub-sonar" class="glass-btn" style="flex: 1; padding: 4px; border-radius: 6px; font-size: 9px; font-weight: 700; color: #38bdf8;">
+          <i class="fa-solid fa-tower-broadcast mr-1"></i> Ping [C]
+        </button>
+        <button id="btn-sub-range" class="glass-btn" style="padding: 4px 6px; border-radius: 6px; font-size: 9px; color: #cbd5e1;" title="Changer la portée radar">
+          Portée
+        </button>
+      </div>
+    </div>
+
+    <!-- Right Bio-Scanner Card (Analyse Biométrique & Verrouillage Cible) -->
+    <div id="rov-bio-card" style="display: none; position: absolute; bottom: 84px; right: 32px; background: rgba(2, 6, 23, 0.85); padding: 12px 14px; border-radius: 16px; border: 1px solid rgba(56, 189, 248, 0.3); backdrop-filter: blur(8px); width: 220px;" class="rov-hud-pointer mono">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 4px;">
+        <span style="font-size: 10px; color: #22c55e; font-weight: 700;"><i class="fa-solid fa-crosshairs mr-1"></i> BIO-SCANNER LOCK</span>
+        <span id="rov-bio-dist" style="font-size: 10px; color: #38bdf8;">45 m</span>
+      </div>
+      <div style="font-size: 12px; font-weight: 800; color: #f8fafc;" id="rov-bio-name">Mégalodon</div>
+      <div style="font-size: 9px; color: #94a3b8; font-style: italic; margin-bottom: 6px;" id="rov-bio-scientific">Otodus megalodon</div>
+      <div style="display: flex; flex-direction: column; gap: 3px; font-size: 10px; color: #cbd5e1;">
+        <div style="display: flex; justify-content: space-between;">
+          <span style="color: #94a3b8;">Niveau Trophique:</span>
+          <strong id="rov-bio-type" style="color: #ef4444;">SUPER-PRÉDATEUR</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between;">
+          <span style="color: #94a3b8;">Vélocité Cible:</span>
+          <span id="rov-bio-speed">3.8 kts</span>
+        </div>
+        <div style="display: flex; justify-content: space-between;">
+          <span style="color: #94a3b8;">État:</span>
+          <span id="rov-bio-state" style="color: #f59e0b;">Chasse active</span>
+        </div>
+      </div>
+      <button id="btn-sub-lock-target" class="glass-btn" style="margin-top: 8px; width: 100%; padding: 5px; border-radius: 8px; font-size: 10px; font-weight: 700; color: #38bdf8; background: rgba(56, 189, 248, 0.15);">
+        <i class="fa-solid fa-anchor mr-1"></i> Escorter / Suivre [M]
+      </button>
+    </div>
+
+    <!-- Bottom Interactive Control Dock (Console Flottante du Pilote) -->
+    <div id="rov-control-dock" style="position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 6px; background: rgba(2, 6, 23, 0.88); padding: 8px 14px; border-radius: 24px; border: 1px solid rgba(56, 189, 248, 0.35); box-shadow: 0 4px 24px rgba(0,0,0,0.6); backdrop-filter: blur(10px);" class="rov-hud-pointer">
+      <button id="btn-sub-pilot-mode" class="glass-btn" style="padding: 7px 12px; border-radius: 16px; font-size: 11px; display: flex; align-items: center; gap: 6px;" title="Changer le mode de pilotage (Manuel WASD / Auto)">
+        <i class="fa-solid fa-gamepad" style="color: #10b981;"></i>
+        <span>Auto</span>
+      </button>
+      <button id="btn-sub-lights" class="glass-btn" style="padding: 7px 12px; border-radius: 16px; font-size: 11px; display: flex; align-items: center; gap: 6px;" title="Cycle des projecteurs : LED 5600K -> UV Fluo 395nm -> Rouge Furtif 660nm -> Éteint">
+        <i class="fa-solid fa-lightbulb" style="color: #f59e0b;"></i>
+        <span>Phares</span>
+      </button>
+      <button id="btn-sub-turbo" class="glass-btn" style="padding: 7px 12px; border-radius: 16px; font-size: 11px; display: flex; align-items: center; gap: 6px; color: #f59e0b;" title="Accélérateur Turbo Boost (Touche T)">
+        <i class="fa-solid fa-bolt"></i>
+        <span>Turbo [T]</span>
+      </button>
+      <button id="btn-sub-photo" class="glass-btn" style="padding: 7px 12px; border-radius: 16px; font-size: 11px; display: flex; align-items: center; gap: 6px; color: #38bdf8;" title="Prendre un cliché photo scientifique haute définition (Touche P)">
+        <i class="fa-solid fa-camera"></i>
+        <span>Photo [P]</span>
+      </button>
+      <button id="btn-sub-bait" class="glass-btn" style="padding: 7px 12px; border-radius: 16px; font-size: 11px; display: flex; align-items: center; gap: 6px;" title="Déployer des appâts nutritifs par le bras mécanique (Touche E)">
+        <i class="fa-solid fa-cookie-bite" style="color: #f59e0b;"></i>
+        <span>Appâts [E]</span>
+      </button>
+      <button id="btn-sub-escort" class="glass-btn" style="padding: 7px 12px; border-radius: 16px; font-size: 11px; display: flex; align-items: center; gap: 6px; color: #ef4444;" title="Verrouiller l'escorte sur un Titan Super-Prédateur">
+        <i class="fa-solid fa-crosshairs"></i>
+        <span>Suivre Titan</span>
+      </button>
+      <button id="btn-sub-cam" class="glass-btn" style="padding: 7px 12px; border-radius: 16px; font-size: 11px; display: flex; align-items: center; gap: 6px;" title="Basculer entre vue Cockpit 1ère personne et vue Poursuite 3ème personne (Touche V)">
+        <i class="fa-solid fa-video" style="color: #a855f7;"></i>
+        <span id="rov-view-btn-label">Vue 1P</span>
+      </button>
+      <button id="btn-sub-gallery" class="glass-btn" style="padding: 7px 12px; border-radius: 16px; font-size: 11px; display: flex; align-items: center; gap: 6px;" title="Consulter la galerie des clichés photographiques de mission">
+        <i class="fa-solid fa-images" style="color: #38bdf8;"></i>
+        <span>Clichés</span>
+        <span id="rov-photos-count" class="mono" style="font-size: 9px; padding: 1px 6px; border-radius: 10px; background: rgba(56, 189, 248, 0.3); color: #38bdf8;">0</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Top Main Bar -->
+  <header class="hud-top glass-panel">
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <button id="toggle-sidebar-btn" class="glass-btn" style="width: 38px; height: 38px; border-radius: 10px; font-size: 16px;">
+        <i class="fa-solid fa-bars"></i>
+      </button>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <i class="fa-solid fa-water text-primary-accent" style="font-size: 20px; color: #38bdf8;"></i>
+        <div>
+          <h1 style="font-size: 15px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1;">AquaLab <span style="color: #38bdf8; font-weight: 400;">3D</span></h1>
+          <span style="font-size: 10px; color: #64748b;" class="mono">Écosystème Marin V4.2</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Stat Badges -->
+    <div style="display: flex; align-items: center; gap: 14px; overflow-x: auto;" class="custom-scroll">
+      <div class="badge" style="background: rgba(14, 165, 233, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3);">
+        <i class="fa-solid fa-fish"></i>
+        <span>Proies:</span>
+        <strong id="stat-prey" class="mono">0</strong>
+      </div>
+      <div class="badge" style="background: rgba(244, 63, 94, 0.15); color: #fb7185; border: 1px solid rgba(244, 63, 94, 0.3);">
+        <i class="fa-solid fa-skull"></i>
+        <span>Prédateurs:</span>
+        <strong id="stat-predators" class="mono">0</strong>
+      </div>
+      <div class="badge" style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);">
+        <i class="fa-solid fa-egg"></i>
+        <span>Naissances:</span>
+        <strong id="stat-births" class="mono">0</strong>
+      </div>
+      <div class="badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3);">
+        <i class="fa-solid fa-scale-balanced"></i>
+        <span>Ratio:</span>
+        <strong id="stat-ratio" class="mono">0.0</strong>
+      </div>
+      <!-- Day / Night Cycle Interactive Widget -->
+      <div id="daynight-widget" class="badge glass-btn" style="padding: 5px 12px; gap: 8px; border-radius: 20px; cursor: pointer; border: 1px solid rgba(245, 158, 11, 0.35);" title="Cycle Jour/Nuit - Cliquer pour changer de phase">
+        <i id="daynight-icon" class="fa-solid fa-sun" style="color: #f59e0b; font-size: 13px;"></i>
+        <span id="daynight-clock" class="mono" style="font-weight: 700; color: #f8fafc;">12:00</span>
+        <span id="daynight-phase" style="font-size: 10px; padding: 2px 7px; border-radius: 10px; background: rgba(245, 158, 11, 0.25); color: #fbbf24; font-weight: 700;">Jour</span>
+      </div>
+      <!-- Biome Interactive Badge -->
+      <div id="hud-biome-widget" class="badge glass-btn" style="padding: 5px 12px; gap: 8px; border-radius: 20px; cursor: pointer; border: 1px solid rgba(244, 63, 94, 0.35);" title="Biome marin actuel - Cliquer pour alterner de biome">
+        <i id="hud-biome-icon" class="fa-solid fa-shapes" style="color: #f43f5e; font-size: 13px;"></i>
+        <span id="hud-biome-name" style="font-weight: 700; color: #f8fafc; font-size: 11px;">Tropical</span>
+      </div>
+    </div>
+
+    <!-- Right Utility Buttons -->
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <button id="toggle-chart-btn" class="glass-btn active" style="padding: 0 10px; height: 36px; border-radius: 10px; display: flex; align-items: center; gap: 6px; color: #38bdf8;" title="Ouvrir le graphique scientifique de dynamique des populations">
+        <i class="fa-solid fa-chart-line"></i>
+        <span style="font-size: 11px; font-weight: 600;" class="hidden sm:inline">Graphique</span>
+      </button>
+      <button id="sound-btn" class="glass-btn" style="width: 36px; height: 36px; border-radius: 10px;" title="Audio Ambiant">
+        <i class="fa-solid fa-volume-high"></i>
+      </button>
+      <button id="toggle-log-btn" class="glass-btn" style="width: 36px; height: 36px; border-radius: 10px;" title="Journal d'événements">
+        <i class="fa-solid fa-bell"></i>
+      </button>
+      <button id="help-btn" class="glass-btn" style="width: 36px; height: 36px; border-radius: 10px;" title="Aide & Présentation">
+        <i class="fa-solid fa-circle-question"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- Left Sidebar Controls -->
+  <aside id="controls-sidebar" class="sidebar glass-panel">
+    <div style="padding: 16px 18px; border-bottom: 1px solid var(--glass-border); display: flex; justify-content: space-between; align-items: center;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <i class="fa-solid fa-sliders" style="color: #38bdf8;"></i>
+        <span style="font-weight: 700; font-size: 14px;">Paramètres de la Biosphère</span>
+      </div>
+      <button id="close-sidebar-btn" class="glass-btn" style="width: 28px; height: 28px; border-radius: 8px; font-size: 12px;">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+
+    <div class="custom-scroll" style="flex: 1; overflow-y: auto; padding: 14px;">
+      <!-- Presets Section -->
+      <div>
+        <div class="accordion-header active" data-target="sec-presets">
+          <span><i class="fa-solid fa-wand-magic-sparkles mr-2" style="color:#f59e0b; margin-right:6px;"></i> Préréglages d'Écosystème</span>
+          <i class="fa-solid fa-chevron-down"></i>
+        </div>
+        <div id="sec-presets" class="accordion-body open">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <button class="glass-btn preset-btn" data-preset="balanced" style="padding: 8px; border-radius: 8px; font-size: 12px; text-align: left;">
+              <div style="font-weight: 600; color: #38bdf8;">Équilibré</div>
+              <div style="font-size: 10px; color: #94a3b8;">Bassin tempéré classique</div>
+            </button>
+            <button class="glass-btn preset-btn" data-preset="amazon" style="padding: 8px; border-radius: 8px; font-size: 12px; text-align: left;">
+              <div style="font-weight: 600; color: #10b981;">Amazone Dense</div>
+              <div style="font-size: 10px; color: #94a3b8;">Bancs denses & plantes</div>
+            </button>
+            <button class="glass-btn preset-btn" data-preset="frenzy" style="padding: 8px; border-radius: 8px; font-size: 12px; text-align: left;">
+              <div style="font-weight: 600; color: #f43f5e;">Chasseurs Apex</div>
+              <div style="font-size: 10px; color: #94a3b8;">Surpression prédatrice</div>
+            </button>
+            <button class="glass-btn preset-btn" data-preset="deep" style="padding: 8px; border-radius: 8px; font-size: 12px; text-align: left;">
+              <div style="font-weight: 600; color: #a855f7;">Abysses Noirs</div>
+              <div style="font-size: 10px; color: #94a3b8;">Eau sombre & mystérieuse</div>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Species Customization -->
+      <div style="margin-top: 8px;">
+        <div class="accordion-header" data-target="sec-species">
+          <span><i class="fa-solid fa-fish-fins mr-2" style="color:#0ea5e9; margin-right:6px;"></i> Espèces & Populations</span>
+          <i class="fa-solid fa-chevron-down"></i>
+        </div>
+        <div id="sec-species" class="accordion-body" id="species-controls-container">
+          <!-- Dynamically populated species cards -->
+        </div>
+      </div>
+
+      <!-- Flocking Physics -->
+      <div style="margin-top: 8px;">
+        <div class="accordion-header" data-target="sec-flocking">
+          <span><i class="fa-solid fa-arrows-spin mr-2" style="color:#10b981; margin-right:6px;"></i> Dynamique de Banc (Boids)</span>
+          <i class="fa-solid fa-chevron-down"></i>
+        </div>
+        <div id="sec-flocking" class="accordion-body">
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <div>
+              <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;">
+                <span>Séparation (Collision)</span>
+                <span id="val-sep" class="mono text-primary-accent" style="color: #38bdf8;">1.4</span>
+              </div>
+              <input type="range" id="slider-sep" min="0.2" max="3.0" step="0.1" value="1.4" />
+            </div>
+            <div>
+              <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;">
+                <span>Alignement (Vélocité)</span>
+                <span id="val-ali" class="mono text-primary-accent" style="color: #38bdf8;">0.6</span>
+              </div>
+              <input type="range" id="slider-ali" min="0.1" max="2.5" step="0.1" value="0.6" />
+            </div>
+            <div>
+              <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;">
+                <span>Cohésion (Attraction)</span>
+                <span id="val-coh" class="mono text-primary-accent" style="color: #38bdf8;">0.4</span>
+              </div>
+              <input type="range" id="slider-coh" min="0.1" max="2.0" step="0.1" value="0.4" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Day / Night Cycle Section -->
+      <div style="margin-top: 8px;">
+        <div class="accordion-header" data-target="sec-daynight">
+          <span><i class="fa-solid fa-circle-half-stroke mr-2" style="color:#f59e0b; margin-right:6px;"></i> Cycle Jour / Nuit & Éclairage</span>
+          <i class="fa-solid fa-chevron-down"></i>
+        </div>
+        <div id="sec-daynight" class="accordion-body">
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <!-- Modes rapides -->
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;">
+              <button class="glass-btn daynight-btn active" data-phase="auto" style="padding: 6px 2px; border-radius: 8px; font-size: 10px; text-align: center;">
+                <i class="fa-solid fa-rotate mr-1"></i> Auto
+              </button>
+              <button class="glass-btn daynight-btn" data-phase="day" style="padding: 6px 2px; border-radius: 8px; font-size: 10px; text-align: center; color: #f59e0b;">
+                <i class="fa-solid fa-sun mr-1"></i> Jour
+              </button>
+              <button class="glass-btn daynight-btn" data-phase="sunset" style="padding: 6px 2px; border-radius: 8px; font-size: 10px; text-align: center; color: #f43f5e;">
+                <i class="fa-solid fa-cloud-sun mr-1"></i> Crépuscule
+              </button>
+              <button class="glass-btn daynight-btn" data-phase="night" style="padding: 6px 2px; border-radius: 8px; font-size: 10px; text-align: center; color: #38bdf8;">
+                <i class="fa-solid fa-moon mr-1"></i> Nuit
+              </button>
+            </div>
+
+            <!-- Heure slider -->
+            <div>
+              <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;">
+                <span>Heure virtuelle</span>
+                <span id="val-daynight-time" class="mono text-primary-accent" style="color: #38bdf8;">12:00</span>
+              </div>
+              <input type="range" id="slider-daynight-time" min="0" max="24" step="0.25" value="12" />
+            </div>
+
+            <!-- Vitesse du cycle -->
+            <div>
+              <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;">
+                <span>Vitesse du cycle</span>
+                <span id="val-daynight-speed" class="mono" style="color: #cbd5e1;">Normale</span>
+              </div>
+              <input type="range" id="slider-daynight-speed" min="0" max="1.0" step="0.05" value="0.2" />
+            </div>
+
+            <!-- Info impact biologique -->
+            <div style="background: rgba(15, 23, 42, 0.6); padding: 8px 10px; border-radius: 8px; font-size: 11px; color: #94a3b8; border: 1px solid rgba(56, 189, 248, 0.15); line-height: 1.4;">
+              <strong style="color: #38bdf8;"><i class="fa-solid fa-dna mr-1"></i> Impact biologique :</strong>
+              <div style="margin-top: 3px;">• <strong>Nuit :</strong> Repos des proies près du fond/plantes, métabolisme ralenti.</div>
+              <div>• <strong>Nocturne :</strong> Chasse amplifiée du Poisson-Lanterne et du Léviathan.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Biomes & Récifs Coralliens Procéduraux -->
+      <div style="margin-top: 8px;">
+        <div class="accordion-header active" data-target="sec-corals">
+          <span><i class="fa-solid fa-shapes mr-2" style="color:#f43f5e; margin-right:6px;"></i> Biomes & Récifs Coralliens</span>
+          <i class="fa-solid fa-chevron-down"></i>
+        </div>
+        <div id="sec-corals" class="accordion-body open">
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <!-- Sélecteur de Biome -->
+            <div>
+              <div style="font-size: 11px; color: #94a3b8; margin-bottom: 6px; font-weight: 600;">Choix du Biome & Nuancier :</div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                <button class="glass-btn biome-btn active" data-biome="tropical" style="padding: 7px 6px; border-radius: 8px; font-size: 11px; text-align: left;">
+                  <div style="font-weight: 700; color: #f43f5e;"><i class="fa-solid fa-sun mr-1"></i> Tropical</div>
+                  <div style="font-size: 9px; color: #94a3b8;">Barrière corallienne vive</div>
+                </button>
+                <button class="glass-btn biome-btn" data-biome="amazon" style="padding: 7px 6px; border-radius: 8px; font-size: 11px; text-align: left;">
+                  <div style="font-weight: 700; color: #10b981;"><i class="fa-solid fa-leaf mr-1"></i> Amazone</div>
+                  <div style="font-size: 9px; color: #94a3b8;">Lagune & mousse jade</div>
+                </button>
+                <button class="glass-btn biome-btn" data-biome="abyssal" style="padding: 7px 6px; border-radius: 8px; font-size: 11px; text-align: left;">
+                  <div style="font-weight: 700; color: #a855f7;"><i class="fa-solid fa-gem mr-1"></i> Abyssal</div>
+                  <div style="font-size: 9px; color: #94a3b8;">Néon bioluminescent</div>
+                </button>
+                <button class="glass-btn biome-btn" data-biome="volcanic" style="padding: 7px 6px; border-radius: 8px; font-size: 11px; text-align: left;">
+                  <div style="font-weight: 700; color: #ef4444;"><i class="fa-solid fa-fire-flame-curved mr-1"></i> Volcanique</div>
+                  <div style="font-size: 9px; color: #94a3b8;">Atoll magma & basalte</div>
+                </button>
+              </div>
+            </div>
+
+            <!-- Densité du récif -->
+            <div>
+              <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;">
+                <span>Densité du récif (Colonies)</span>
+                <span id="val-coral-density" class="mono text-primary-accent" style="color: #f43f5e;">26</span>
+              </div>
+              <input type="range" id="slider-coral-density" min="6" max="60" step="2" value="26" />
+            </div>
+
+            <!-- Bouton Régénération Procédurale -->
+            <button id="regen-corals-btn" class="glass-btn" style="padding: 9px; border-radius: 10px; font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 8px; background: rgba(244, 63, 94, 0.2); border-color: rgba(244, 63, 94, 0.4); color: #fff;">
+              <i class="fa-solid fa-wand-magic-sparkles" style="color: #f43f5e;"></i>
+              <span style="font-weight: 600;">Régénérer le Récif Procédural</span>
+            </button>
+
+            <!-- Types de coraux présents -->
+            <div style="background: rgba(15, 23, 42, 0.6); padding: 8px 10px; border-radius: 8px; font-size: 11px; color: #94a3b8; border: 1px solid rgba(244, 63, 94, 0.2); line-height: 1.4;">
+              <strong style="color: #f43f5e;"><i class="fa-solid fa-circle-nodes mr-1"></i> Morphologies coralliennes :</strong>
+              <div style="margin-top: 3px;">• <strong>Branchus (Acropora) :</strong> Ramifications à pointes fluorescentes.</div>
+              <div>• <strong>Plateaux (Montipora) :</strong> Terrasses étagées abritant les poissons.</div>
+              <div>• <strong>Cerveaux (Diploria) :</strong> Dômes cannelés et denses.</div>
+              <div>• <strong>Gorgones & Anémones :</strong> Ondulation souple avec le courant marin.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3 Super-Prédateurs Titans Section -->
+      <div style="margin-top: 8px;">
+        <div class="accordion-header active" data-target="sec-superpredators">
+          <span><i class="fa-solid fa-skull-crossbones mr-2" style="color:#ef4444; margin-right:6px;"></i> 3 Super-Prédateurs Titans</span>
+          <i class="fa-solid fa-chevron-down"></i>
+        </div>
+        <div id="sec-superpredators" class="accordion-body open">
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <!-- Actions Globales Titans -->
+            <div style="display: flex; gap: 6px;">
+              <button id="btn-spawn-all-titans" class="glass-btn" style="flex: 1; padding: 7px 6px; border-radius: 8px; font-size: 11px; background: rgba(239, 68, 68, 0.25); border-color: rgba(239, 68, 68, 0.45); color: #fff; font-weight: 700;">
+                <i class="fa-solid fa-bolt mr-1" style="color: #fca5a5;"></i> Déchaîner les 3
+              </button>
+              <button id="btn-recall-all-titans" class="glass-btn" style="flex: 1; padding: 7px 6px; border-radius: 8px; font-size: 11px; color: #94a3b8;">
+                <i class="fa-solid fa-moon mr-1"></i> Endormir tous
+              </button>
+            </div>
+
+            <!-- Carte 1: Mégalodon Préhistorique -->
+            <div style="background: rgba(15, 23, 42, 0.5); padding: 10px; border-radius: 10px; border-left: 3px solid #38bdf8; border: 1px solid rgba(56, 189, 248, 0.25);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <span style="font-size: 18px;">🦈</span>
+                  <div>
+                    <strong style="font-size: 12px; color: #38bdf8;">Mégalodon Préhistorique</strong>
+                    <div style="font-size: 9px; color: #94a3b8; font-style: italic;">Otodus megalodon</div>
+                  </div>
+                </div>
+                <span id="status-badge-megalodon" class="mono" style="font-size: 10px; color: #64748b;">En sommeil</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: #cbd5e1; margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.06);">
+                <span id="kills-megalodon" class="mono" style="color: #94a3b8;">0 proie</span>
+                <div style="display: flex; gap: 4px;">
+                  <button id="follow-megalodon-btn" class="glass-btn" style="padding: 4px 7px; border-radius: 6px; font-size: 10px;" title="Verrouiller la caméra sur le Mégalodon">
+                    <i class="fa-solid fa-crosshairs"></i> Suivre
+                  </button>
+                  <button id="btn-toggle-megalodon" class="glass-btn" style="padding: 4px 10px; border-radius: 6px; font-size: 10px; font-weight: 600;">
+                    Déchaîner
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Carte 2: Mosasaure Titanesque -->
+            <div style="background: rgba(15, 23, 42, 0.5); padding: 10px; border-radius: 10px; border-left: 3px solid #10b981; border: 1px solid rgba(16, 185, 129, 0.25);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <span style="font-size: 18px;">🐊</span>
+                  <div>
+                    <strong style="font-size: 12px; color: #10b981;">Mosasaure Titanesque</strong>
+                    <div style="font-size: 9px; color: #94a3b8; font-style: italic;">Mosasaurus hoffmannii</div>
+                  </div>
+                </div>
+                <span id="status-badge-mosasaur" class="mono" style="font-size: 10px; color: #64748b;">En sommeil</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: #cbd5e1; margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.06);">
+                <span id="kills-mosasaur" class="mono" style="color: #94a3b8;">0 proie</span>
+                <div style="display: flex; gap: 4px;">
+                  <button id="follow-mosasaur-btn" class="glass-btn" style="padding: 4px 7px; border-radius: 6px; font-size: 10px;" title="Verrouiller la caméra sur le Mosasaure">
+                    <i class="fa-solid fa-crosshairs"></i> Suivre
+                  </button>
+                  <button id="btn-toggle-mosasaur" class="glass-btn" style="padding: 4px 10px; border-radius: 6px; font-size: 10px; font-weight: 600;">
+                    Déchaîner
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Carte 3: Kraken Colossal des Abysses -->
+            <div style="background: rgba(15, 23, 42, 0.5); padding: 10px; border-radius: 10px; border-left: 3px solid #f43f5e; border: 1px solid rgba(244, 63, 94, 0.25);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <span style="font-size: 18px;">🦑</span>
+                  <div>
+                    <strong style="font-size: 12px; color: #f43f5e;">Kraken Colossal</strong>
+                    <div style="font-size: 9px; color: #94a3b8; font-style: italic;">Architeuthis dux</div>
+                  </div>
+                </div>
+                <span id="status-badge-kraken" class="mono" style="font-size: 10px; color: #64748b;">En sommeil</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: #cbd5e1; margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.06);">
+                <span id="kills-kraken" class="mono" style="color: #94a3b8;">0 proie</span>
+                <div style="display: flex; gap: 4px;">
+                  <button id="follow-kraken-btn" class="glass-btn" style="padding: 4px 7px; border-radius: 6px; font-size: 10px;" title="Verrouiller la caméra sur le Kraken">
+                    <i class="fa-solid fa-crosshairs"></i> Suivre
+                  </button>
+                  <button id="btn-toggle-kraken" class="glass-btn" style="padding: 4px 10px; border-radius: 6px; font-size: 10px; font-weight: 600;">
+                    Déchaîner
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Info Tactique -->
+            <div style="background: rgba(15, 23, 42, 0.6); padding: 8px 10px; border-radius: 8px; font-size: 10px; color: #94a3b8; border: 1px solid rgba(239, 68, 68, 0.2); line-height: 1.4;">
+              <strong style="color: #ef4444;"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Comportement des Titans :</strong>
+              <div style="margin-top: 2px;">• <strong>🦈 Mégalodon :</strong> Charges en eau libre, sillage de bulles et mâchoire broyeuse.</div>
+              <div>• <strong>🐊 Mosasaure :</strong> Nage serpentine des fonds rocheux et embuscades fulgurantes.</div>
+              <div>• <strong>🦑 Kraken :</strong> Tentacules raptoriales élastiques, bioluminescence et nuages d'encre.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sous-Marin ROV Océanographique Section -->
+      <div style="margin-top: 8px;">
+        <div class="accordion-header active" data-target="sec-submarine">
+          <span><i class="fa-solid fa-water-ladder mr-2" style="color:#38bdf8; margin-right:6px;"></i> Sous-Marin ROV Océanographique</span>
+          <i class="fa-solid fa-chevron-down"></i>
+        </div>
+        <div id="sec-submarine" class="accordion-body open">
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <!-- Carte Statut Submersible -->
+            <div style="background: rgba(15, 23, 42, 0.6); padding: 10px; border-radius: 10px; border: 1px solid rgba(56, 189, 248, 0.3);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <span style="font-size: 16px;">🛸</span>
+                  <div>
+                    <strong style="font-size: 12px; color: #38bdf8;">Triton-X Explorer MK-IV</strong>
+                    <div style="font-size: 9px; color: #94a3b8;">Bathyscaphe de Recherche Profonde</div>
+                  </div>
+                </div>
+                <span id="side-sub-status" class="mono" style="font-size: 10px; color: #34d399;">Opérationnel</span>
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 10px; color: #cbd5e1; margin-bottom: 8px;" class="mono">
+                <div>Coque: <span style="color:#38bdf8;">Titane 2000m</span></div>
+                <div>Propulsion: <span style="color:#f59e0b;">4x Kort Vect.</span></div>
+                <div>Bras: <span style="color:#34d399;">Pince + CTD</span></div>
+                <div>Lasers: <span style="color:#22c55e;">10cm NOAA</span></div>
+              </div>
+              <!-- Bouton Embarquement ROV -->
+              <button id="side-sub-enter-btn" class="glass-btn" style="width: 100%; padding: 8px; border-radius: 8px; font-size: 12px; font-weight: 700; color: #fff; background: linear-gradient(135deg, rgba(2, 132, 199, 0.4), rgba(14, 165, 233, 0.3)); border-color: rgba(56, 189, 248, 0.5); display: flex; align-items: center; justify-content: center; gap: 8px;">
+                <i class="fa-solid fa-gamepad" style="color: #38bdf8;"></i>
+                <span id="side-sub-enter-label">Embarquer à Bord (Vue ROV)</span>
+              </button>
+            </div>
+
+            <!-- Mode de pilotage -->
+            <div>
+              <div style="font-size: 11px; color: #94a3b8; margin-bottom: 5px; font-weight: 600;">Mode de Navigation :</div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                <button id="side-pilot-manual" class="glass-btn" style="padding: 6px; border-radius: 8px; font-size: 11px; text-align: center;">
+                  <i class="fa-solid fa-keyboard mr-1" style="color: #f59e0b;"></i> Manuel [WASD]
+                </button>
+                <button id="side-pilot-auto" class="glass-btn active" style="padding: 6px; border-radius: 8px; font-size: 11px; text-align: center;">
+                  <i class="fa-solid fa-compass mr-1" style="color: #10b981;"></i> Auto-Patrouille
+                </button>
+              </div>
+            </div>
+
+            <!-- Escorte de Titan -->
+            <div>
+              <div style="font-size: 11px; color: #94a3b8; margin-bottom: 5px; font-weight: 600;">Escorte & Traçage Scientifique de Titan :</div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
+                <button class="glass-btn side-escort-btn" data-target="megalodon" style="padding: 5px; border-radius: 6px; font-size: 10px;">
+                  🦈 Mégalodon
+                </button>
+                <button class="glass-btn side-escort-btn" data-target="mosasaur" style="padding: 5px; border-radius: 6px; font-size: 10px;">
+                  🐊 Mosasaure
+                </button>
+                <button class="glass-btn side-escort-btn" data-target="kraken" style="padding: 5px; border-radius: 6px; font-size: 10px;">
+                  🦑 Kraken
+                </button>
+                <button class="glass-btn side-escort-btn" data-target="leviathan" style="padding: 5px; border-radius: 6px; font-size: 10px;">
+                  🐉 Léviathan
+                </button>
+              </div>
+            </div>
+
+            <!-- Contrôles rapides des systèmes de bord -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+              <button id="side-sub-lights-btn" class="glass-btn" style="padding: 6px; border-radius: 8px; font-size: 10px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                <i class="fa-solid fa-lightbulb" style="color: #f59e0b;"></i>
+                <span>Phares (LED/UV)</span>
+              </button>
+              <button id="side-sub-sonar-btn" class="glass-btn" style="padding: 6px; border-radius: 8px; font-size: 10px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                <i class="fa-solid fa-radar" style="color: #38bdf8;"></i>
+                <span>Ping Sonar [C]</span>
+              </button>
+              <button id="side-sub-photo-btn" class="glass-btn" style="padding: 6px; border-radius: 8px; font-size: 10px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                <i class="fa-solid fa-camera" style="color: #38bdf8;"></i>
+                <span>Photo Cliché [P]</span>
+              </button>
+              <button id="side-sub-bait-btn" class="glass-btn" style="padding: 6px; border-radius: 8px; font-size: 10px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                <i class="fa-solid fa-cookie-bite" style="color: #f59e0b;"></i>
+                <span>Appâts Bras [E]</span>
+              </button>
+            </div>
+
+            <!-- Bouton Galerie de mission -->
+            <button id="side-open-gallery-btn" class="glass-btn" style="padding: 7px; border-radius: 8px; font-size: 11px; display: flex; align-items: center; justify-content: center; gap: 6px; color: #38bdf8;">
+              <i class="fa-solid fa-images"></i>
+              <span>Consulter le Journal Photographique</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Environment -->
+      <div style="margin-top: 8px;">
+        <div class="accordion-header" data-target="sec-env">
+          <span><i class="fa-solid fa-mountain-sun mr-2" style="color:#eab308; margin-right:6px;"></i> Environnement & Eau</span>
+          <i class="fa-solid fa-chevron-down"></i>
+        </div>
+        <div id="sec-env" class="accordion-body">
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <div>
+              <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;">
+                <span>Rochers du fond</span>
+                <span id="val-rocks" class="mono" style="color: #38bdf8;">16</span>
+              </div>
+              <input type="range" id="slider-rocks" min="4" max="40" step="1" value="16" />
+            </div>
+            <div>
+              <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;">
+                <span>Plantes aquatiques</span>
+                <span id="val-plants" class="mono" style="color: #38bdf8;">50</span>
+              </div>
+              <input type="range" id="slider-plants" min="10" max="120" step="5" value="50" />
+            </div>
+            <div>
+              <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;">
+                <span>Courant marin (Force)</span>
+                <span id="val-current" class="mono" style="color: #38bdf8;">0.2</span>
+              </div>
+              <input type="range" id="slider-current" min="0" max="1.0" step="0.05" value="0.2" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Backup / Import / Export -->
+      <div style="margin-top: 8px;">
+        <div class="accordion-header" data-target="sec-data">
+          <span><i class="fa-solid fa-database mr-2" style="color:#a855f7; margin-right:6px;"></i> Sauvegarde & Fichiers JSON</span>
+          <i class="fa-solid fa-chevron-down"></i>
+        </div>
+        <div id="sec-data" class="accordion-body">
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="display: flex; gap: 8px;">
+              <button id="save-local-btn" class="glass-btn" style="flex: 1; padding: 8px; border-radius: 8px; font-size: 12px;">
+                <i class="fa-solid fa-floppy-disk mr-1"></i> Sauvegarder
+              </button>
+              <button id="load-local-btn" class="glass-btn" style="flex: 1; padding: 8px; border-radius: 8px; font-size: 12px;">
+                <i class="fa-solid fa-rotate-left mr-1"></i> Charger
+              </button>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button id="export-json-btn" class="glass-btn" style="flex: 1; padding: 8px; border-radius: 8px; font-size: 12px;">
+                <i class="fa-solid fa-file-export mr-1"></i> Exporter JSON
+              </button>
+              <label class="glass-btn" style="flex: 1; padding: 8px; border-radius: 8px; font-size: 12px; text-align: center; cursor: pointer;">
+                <i class="fa-solid fa-file-import mr-1"></i> Importer JSON
+                <input type="file" id="import-json-input" accept=".json" style="display: none;" />
+              </label>
+            </div>
+            <button id="reset-sim-btn" class="glass-btn" style="padding: 8px; border-radius: 8px; font-size: 12px; color: #f87171;">
+              <i class="fa-solid fa-trash-can mr-1"></i> Réinitialiser l'Écosystème
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Bottom Interactive Quick Actions -->
+  <nav class="hud-bottom-bar glass-panel">
+    <button id="feed-action-btn" class="glass-btn" style="padding: 8px 14px; border-radius: 20px; font-size: 12px; display: flex; align-items: center; gap: 6px;">
+      <i class="fa-solid fa-cookie-bite" style="color: #f59e0b;"></i>
+      <span>Nourrir</span>
+    </button>
+    <button id="tap-glass-btn" class="glass-btn" style="padding: 8px 14px; border-radius: 20px; font-size: 12px; display: flex; align-items: center; gap: 6px;">
+      <i class="fa-solid fa-hand-fist" style="color: #38bdf8;"></i>
+      <span>Frapper la vitre</span>
+    </button>
+    <button id="bottom-coral-btn" class="glass-btn" style="padding: 8px 14px; border-radius: 20px; font-size: 12px; display: flex; align-items: center; gap: 6px;" title="Générer un nouveau récif corallien procédural">
+      <i class="fa-solid fa-shapes" style="color: #f43f5e;"></i>
+      <span>Récif</span>
+    </button>
+    <button id="ropefish-btn" class="glass-btn" style="padding: 8px 14px; border-radius: 20px; font-size: 12px; display: flex; align-items: center; gap: 6px;" title="Déchaîner ou endormir les 3 Super-Prédateurs Titans">
+      <i class="fa-solid fa-skull-crossbones" style="color: #ef4444;"></i>
+      <span id="ropefish-label">Super-Prédateurs</span>
+      <span id="superpredator-count-badge" class="mono" style="display:none; font-size:10px; padding:1px 6px; border-radius:10px; background:rgba(239,68,68,0.3); color:#fca5a5; border:1px solid rgba(239,68,68,0.5);">0/3</span>
+    </button>
+    <button id="camera-mode-btn" class="glass-btn" style="padding: 8px 14px; border-radius: 20px; font-size: 12px; display: flex; align-items: center; gap: 6px;">
+      <i class="fa-solid fa-video" style="color: #a855f7;"></i>
+      <span id="cam-mode-label">Vue ROV</span>
+    </button>
+    <button id="bottom-chart-btn" class="glass-btn" style="padding: 8px 14px; border-radius: 20px; font-size: 12px; display: flex; align-items: center; gap: 6px;">
+      <i class="fa-solid fa-chart-line" style="color: #38bdf8;"></i>
+      <span>Graphique</span>
+    </button>
+    <div style="width: 1px; height: 20px; background: rgba(56, 189, 248, 0.3);"></div>
+    <!-- Speed buttons -->
+    <div style="display: flex; gap: 4px;">
+      <button class="glass-btn speed-btn active" data-speed="1" style="padding: 6px 10px; border-radius: 12px; font-size: 11px;">1x</button>
+      <button class="glass-btn speed-btn" data-speed="2" style="padding: 6px 10px; border-radius: 12px; font-size: 11px;">2x</button>
+      <button class="glass-btn speed-btn" data-speed="0" style="padding: 6px 10px; border-radius: 12px; font-size: 11px;"><i class="fa-solid fa-pause"></i></button>
+    </div>
+  </nav>
+
+  <!-- Fish Inspector Tooltip -->
+  <div id="fish-inspector" class="glass-panel">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <span id="inspector-dot" class="pulse-dot" style="background-color: #38bdf8; color: #38bdf8;"></span>
+        <strong id="inspector-species" style="font-size: 13px;">Tetra</strong>
+      </div>
+      <button id="close-inspector-btn" style="background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 12px;">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+    <div style="font-size: 11px; display: flex; flex-direction: column; gap: 4px;" class="mono text-slate-300">
+      <div style="display: flex; justify-content: space-between;">
+        <span>Génération:</span> <span id="inspector-gen" style="color: #38bdf8;">G1</span>
+      </div>
+      <div style="display: flex; justify-content: space-between;">
+        <span>Âge:</span> <span id="inspector-age">124s</span>
+      </div>
+      <div style="display: flex; justify-content: space-between;">
+        <span>Énergie / Faim:</span> <span id="inspector-energy" style="color: #34d399;">88%</span>
+      </div>
+      <div style="display: flex; justify-content: space-between;">
+        <span>Statut:</span> <span id="inspector-status" style="color: #f59e0b;">Banc</span>
+      </div>
+      <button id="follow-fish-btn" class="glass-btn" style="margin-top: 6px; padding: 4px; border-radius: 6px; font-size: 10px; text-align: center;">
+        <i class="fa-solid fa-crosshairs mr-1"></i> Suivre la caméra
+      </button>
+    </div>
+  </div>
+
+  <!-- Notification Toast -->
+  <div id="notification-toast" class="glass-panel">
+    <span id="toast-icon" style="font-size: 16px;">🌊</span>
+    <span id="toast-text" style="color: #f1f5f9; line-height: 1.3;">Bienvenue dans AquaLab 3D</span>
+  </div>
+
+  <!-- Event Log Drawer -->
+  <div id="event-log-drawer" class="glass-panel">
+    <div style="padding: 10px 14px; border-bottom: 1px solid var(--glass-border); display: flex; justify-content: space-between; align-items: center;">
+      <span style="font-size: 12px; font-weight: 700; color: #38bdf8;"><i class="fa-solid fa-clock-rotate-left mr-2"></i> Journal des Événements</span>
+      <button id="close-log-btn" class="glass-btn" style="width: 22px; height: 22px; border-radius: 6px; font-size: 10px;">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+    <div id="log-list" class="custom-scroll mono" style="flex: 1; overflow-y: auto; padding: 10px; font-size: 11px; display: flex; flex-direction: column; gap: 6px;"></div>
+  </div>
+
+  <!-- Welcome / Info Modal -->
+  <div id="welcome-modal" class="modal-overlay">
+    <div class="glass-panel" style="max-width: 580px; width: 100%; border-radius: 20px; padding: 24px; position: relative;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <i class="fa-solid fa-water" style="font-size: 24px; color: #38bdf8;"></i>
+          <h2 style="font-size: 18px; font-weight: 800;">AquaLab 3D - Simulation Vivante</h2>
+        </div>
+        <button id="modal-close-icon" class="glass-btn" style="width: 28px; height: 28px; border-radius: 8px;">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <p style="font-size: 13px; color: #cbd5e1; line-height: 1.5; margin-bottom: 16px;">
+        Plongez dans un écosystème aquatique autonome en temps réel. Observez l'émergence des comportements d'essaim (algorithme de Craig Reynolds), la chaîne trophique prédateurs/proies, la reproduction, l'infection épidémique et la survie.
+      </p>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+        <div style="background: rgba(15, 23, 42, 0.5); padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(56, 189, 248, 0.15);">
+          <div style="color: #38bdf8; font-weight: 700; font-size: 12px; margin-bottom: 4px;"><i class="fa-solid fa-mouse mr-1"></i> Interaction 3D</div>
+          <p style="font-size: 11px; color: #94a3b8;">Clic gauche pour pivoter, molette pour zoomer, clic droit pour panoramique. Cliquez sur un poisson pour l'examiner.</p>
+        </div>
+        <div style="background: rgba(15, 23, 42, 0.5); padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(56, 189, 248, 0.15);">
+          <div style="color: #10b981; font-weight: 700; font-size: 12px; margin-bottom: 4px;"><i class="fa-solid fa-cookie-bite mr-1"></i> Actions & Nourriture</div>
+          <p style="font-size: 11px; color: #94a3b8;">Double-cliquez dans l'eau pour lâcher des flocons nutritifs, ou frappez la vitre pour créer une onde de choc.</p>
+        </div>
+      </div>
+
+      <div style="background: rgba(15, 23, 42, 0.6); padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(239, 68, 68, 0.25); margin-bottom: 16px;">
+        <div style="color: #ef4444; font-weight: 700; font-size: 12px; margin-bottom: 4px;"><i class="fa-solid fa-skull-crossbones mr-1"></i> 3 Super-Prédateurs Titans</div>
+        <p style="font-size: 11px; color: #cbd5e1; line-height: 1.4;">
+          Déchaînez les 3 titans des mers : le <strong>Mégalodon 🦈</strong> (charges en eau libre), le <strong>Mosasaure 🐊</strong> (embuscades du fond) et le <strong>Kraken Colossal 🦑</strong> (tentacules & encre abyssale). Verrouillez la caméra sur chacun pour assister à leurs chasses spectaculaires !
+        </p>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--glass-border); padding-top: 14px;">
+        <div style="display: flex; gap: 4px;">
+          <button class="glass-btn lang-btn active" data-lang="fr" style="padding: 4px 8px; border-radius: 6px; font-size: 11px;">FR</button>
+          <button class="glass-btn lang-btn" data-lang="en" style="padding: 4px 8px; border-radius: 6px; font-size: 11px;">EN</button>
+          <button class="glass-btn lang-btn" data-lang="es" style="padding: 4px 8px; border-radius: 6px; font-size: 11px;">ES</button>
+        </div>
+        <button id="modal-start-btn" class="glass-btn" style="background: linear-gradient(135deg, #0284c7, #0ea5e9); color: white; padding: 8px 18px; border-radius: 10px; font-weight: 600; font-size: 13px;">
+          Lancer l'Immersion <i class="fa-solid fa-arrow-right ml-1"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- React root for Recharts Scientific Dashboard & UI overlay -->
+  <div id="root"></div>
+
+  <!-- Modal: Journal Photographique & Mission ROV -->
+  <div id="sub-photos-modal" class="modal-overlay">
+    <div class="glass-panel" style="max-width: 680px; width: 100%; max-height: 85vh; border-radius: 20px; padding: 22px; display: flex; flex-direction: column; gap: 14px; position: relative;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: 12px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div style="width: 36px; height: 36px; border-radius: 10px; background: rgba(56, 189, 248, 0.2); display: flex; align-items: center; justify-content: center; color: #38bdf8; font-size: 18px;">
+            <i class="fa-solid fa-camera"></i>
+          </div>
+          <div>
+            <h2 style="font-size: 16px; font-weight: 800; color: #f8fafc;">Journal Photographique & Mission ROV</h2>
+            <span style="font-size: 11px; color: #94a3b8;">Clichés scientifiques in situ - Bathyscaphe Triton-X MK-IV</span>
+          </div>
+        </div>
+        <button id="modal-photos-close-icon" class="glass-btn" style="width: 28px; height: 28px; border-radius: 8px;">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- Action bar for photos -->
+      <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px;" class="mono">
+        <span style="color: #cbd5e1;"><i class="fa-solid fa-film mr-1" style="color: #38bdf8;"></i> Clichés capturés: <strong id="gallery-total-count" style="color: #38bdf8;">0</strong></span>
+        <button id="btn-clear-photos" class="glass-btn" style="padding: 4px 10px; border-radius: 6px; font-size: 10px; color: #f87171;">
+          <i class="fa-solid fa-trash-can mr-1"></i> Vider la galerie
+        </button>
+      </div>
+
+      <!-- Container scrollable des photos -->
+      <div id="sub-photos-grid" class="custom-scroll" style="flex: 1; overflow-y: auto; max-height: 480px; display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; padding: 4px;">
+        <!-- Injecté dynamiquement par JS -->
+      </div>
+    </div>
+  </div>
+
+  <script src="/src/aquarium-graphics.js"></script>
+  <script src="/src/aquarium-engine.js"></script>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+</html>
