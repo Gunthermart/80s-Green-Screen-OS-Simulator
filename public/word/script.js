@@ -268,32 +268,41 @@ class EditorEngine {
 
   insertPageBreak() {
     this.editor.focus();
-    const pageBreak = document.createElement('div');
-    pageBreak.className = 'page-break';
-    pageBreak.setAttribute('contenteditable', 'false');
-    pageBreak.innerHTML = '<span class="page-break-badge">Saut de page</span>';
-
-    const pAfter = document.createElement('p');
-    pAfter.innerHTML = '<br>';
-
-    const sel = window.getSelection();
-    if (sel && sel.rangeCount > 0) {
-      const range = sel.getRangeAt(0);
-      range.collapse(false);
-      range.insertNode(pAfter);
-      range.insertNode(pageBreak);
-
-      // Déplacer le curseur après le saut de page
-      const newRange = document.createRange();
-      newRange.setStart(pAfter, 0);
-      newRange.collapse(true);
-      sel.removeAllRanges();
-      sel.addRange(newRange);
+    if (window.wordApp && window.wordApp.pagination) {
+      window.wordApp.pagination.insertManualBreak();
     } else {
-      this.editor.appendChild(pageBreak);
-      this.editor.appendChild(pAfter);
+      const pageBreak = document.createElement('div');
+      pageBreak.className = 'word-page-break';
+      pageBreak.setAttribute('contenteditable', 'false');
+      pageBreak.dataset.manual = 'true';
+      pageBreak.innerHTML = `
+        <div class="page-break-inner">
+          <div class="page-break-end"><span class="page-break-end-label">Page 1</span></div>
+          <div class="page-break-gap"><div class="page-break-line"></div><span class="page-break-badge">Page 2 (Saut manuel)</span><div class="page-break-line"></div></div>
+          <div class="page-break-start"><span class="page-break-start-label">Microsoft Word</span></div>
+        </div>`;
+
+      const pAfter = document.createElement('p');
+      pAfter.innerHTML = '<br>';
+
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0) {
+        const range = sel.getRangeAt(0);
+        range.collapse(false);
+        range.insertNode(pAfter);
+        range.insertNode(pageBreak);
+
+        const newRange = document.createRange();
+        newRange.setStart(pAfter, 0);
+        newRange.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(newRange);
+      } else {
+        this.editor.appendChild(pageBreak);
+        this.editor.appendChild(pAfter);
+      }
+      this.history.pushState(true);
     }
-    this.history.pushState(true);
   }
 
   insertTable(cols, rows, withHeader = true) {
@@ -667,22 +676,39 @@ class RulerManager {
     this.page = pageElement;
     this.leftMarker = leftMarker;
     this.rightMarker = rightMarker;
+    this.topMarker = document.getElementById('ruler-top-marker');
+    this.bottomMarker = document.getElementById('ruler-bottom-marker');
+
     this.ticksContainer = document.getElementById('ruler-ticks');
     this.rulerContainer = document.getElementById('ruler-container');
+    this.rulerTrack = document.getElementById('ruler-track');
+
+    this.rulerVerticalContainer = document.getElementById('ruler-vertical-container');
+    this.rulerVerticalTrack = document.getElementById('ruler-vertical-track');
+    this.rulerVerticalTicks = document.getElementById('ruler-vertical-ticks');
+
+    this.trackerH = document.getElementById('ruler-caret-tracker-h');
+    this.trackerV = document.getElementById('ruler-caret-tracker-v');
+
+    this.cmInPixels = 37.8;
+    this.pageHeight = 1056;
+    this.pageWidth = 816;
+    this.pageGap = 28;
 
     this.renderRulerTicks();
+    this.renderVerticalTicks(1);
     this.initDraggableMarkers();
+    this.initCaretTracking();
   }
 
   renderRulerTicks() {
     if (!this.ticksContainer) return;
     this.ticksContainer.innerHTML = '';
-    // A4 à 96 DPI fait 816px de large (environ 21.6 cm)
-    const cmInPixels = 37.8;
     const totalCm = 21;
 
     for (let i = 1; i <= totalCm; i++) {
-      const pos = i * cmInPixels;
+      const pos = i * this.cmInPixels;
+      if (pos > this.pageWidth - 10) break;
       const tickNum = document.createElement('div');
       tickNum.className = 'ruler-tick-num';
       tickNum.style.left = `${pos}px`;
@@ -691,33 +717,135 @@ class RulerManager {
     }
   }
 
+  renderVerticalTicks(totalPages = 1) {
+    if (!this.rulerVerticalTrack) return;
+    this.rulerVerticalTrack.innerHTML = '';
+    const cmInVerticalPixels = 35.55; // 1056px / 29.7cm
+    const totalVerticalCm = 29;
+
+    for (let p = 1; p <= totalPages; p++) {
+      const pageSection = document.createElement('div');
+      pageSection.className = 'ruler-vertical-page-section';
+      pageSection.dataset.page = String(p);
+
+      // Marge haute ombrée (76px)
+      const topMarginDiv = document.createElement('div');
+      topMarginDiv.className = 'ruler-vertical-margin-top';
+      pageSection.appendChild(topMarginDiv);
+
+      // Marge basse ombrée (76px)
+      const bottomMarginDiv = document.createElement('div');
+      bottomMarginDiv.className = 'ruler-vertical-margin-bottom';
+      pageSection.appendChild(bottomMarginDiv);
+
+      // Conteneur de graduations
+      const ticks = document.createElement('div');
+      ticks.className = 'ruler-vertical-ticks';
+
+      for (let i = 1; i <= totalVerticalCm; i++) {
+        const yPos = i * cmInVerticalPixels;
+        if (yPos > this.pageHeight - 8) break;
+
+        const tick = document.createElement('div');
+        tick.className = 'ruler-vertical-tick';
+        tick.style.top = `${yPos}px`;
+        ticks.appendChild(tick);
+
+        const subTick = document.createElement('div');
+        subTick.className = 'ruler-vertical-tick sub';
+        subTick.style.top = `${yPos - cmInVerticalPixels / 2}px`;
+        ticks.appendChild(subTick);
+
+        const num = document.createElement('div');
+        num.className = 'ruler-vertical-tick-num';
+        num.style.top = `${yPos}px`;
+        num.textContent = String(i);
+        ticks.appendChild(num);
+      }
+
+      pageSection.appendChild(ticks);
+
+      // Placer les marqueurs sur la première page
+      if (p === 1) {
+        if (this.topMarker) pageSection.appendChild(this.topMarker);
+        if (this.bottomMarker) pageSection.appendChild(this.bottomMarker);
+        if (this.trackerV) pageSection.appendChild(this.trackerV);
+      }
+
+      this.rulerVerticalTrack.appendChild(pageSection);
+    }
+  }
+
   initDraggableMarkers() {
     let isDragging = null;
 
-    this.leftMarker.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      isDragging = 'left';
-    });
+    if (this.leftMarker) {
+      this.leftMarker.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        isDragging = 'left';
+      });
+    }
 
-    this.rightMarker.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      isDragging = 'right';
-    });
+    if (this.rightMarker) {
+      this.rightMarker.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        isDragging = 'right';
+      });
+    }
+
+    if (this.topMarker) {
+      this.topMarker.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        isDragging = 'top';
+      });
+    }
+
+    if (this.bottomMarker) {
+      this.bottomMarker.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        isDragging = 'bottom';
+      });
+    }
 
     window.addEventListener('mousemove', (e) => {
       if (!isDragging) return;
-      const trackRect = document.getElementById('ruler-track').getBoundingClientRect();
-      const relativeX = e.clientX - trackRect.left;
 
-      if (isDragging === 'left') {
-        const clampedX = Math.max(20, Math.min(200, relativeX));
+      if (isDragging === 'left' && this.horizontalTrack) {
+        const trackRect = this.horizontalTrack.getBoundingClientRect();
+        const relativeX = e.clientX - trackRect.left;
+        const clampedX = Math.max(20, Math.min(220, relativeX));
         this.leftMarker.style.left = `${clampedX}px`;
-        this.page.style.paddingLeft = `${clampedX}px`;
-      } else if (isDragging === 'right') {
+        this.page.style.setProperty('--page-margin-left', `${clampedX}px`);
+      } else if (isDragging === 'right' && this.horizontalTrack) {
+        const trackRect = this.horizontalTrack.getBoundingClientRect();
+        const relativeX = e.clientX - trackRect.left;
         const fromRight = trackRect.width - relativeX;
-        const clampedRight = Math.max(20, Math.min(200, fromRight));
+        const clampedRight = Math.max(20, Math.min(220, fromRight));
         this.rightMarker.style.right = `${clampedRight}px`;
-        this.page.style.paddingRight = `${clampedRight}px`;
+        this.page.style.setProperty('--page-margin-right', `${clampedRight}px`);
+      } else if (isDragging === 'top' && this.rulerVerticalTrack) {
+        const firstSection = this.rulerVerticalTrack.querySelector('.ruler-vertical-page-section');
+        if (firstSection) {
+          const rect = firstSection.getBoundingClientRect();
+          const relativeY = e.clientY - rect.top;
+          const clampedY = Math.max(25, Math.min(180, relativeY));
+          if (this.topMarker) this.topMarker.style.top = `${clampedY}px`;
+          this.page.style.setProperty('--page-margin-top', `${clampedY}px`);
+          const topMarginDiv = firstSection.querySelector('.ruler-vertical-margin-top');
+          if (topMarginDiv) topMarginDiv.style.height = `${clampedY}px`;
+        }
+      } else if (isDragging === 'bottom' && this.rulerVerticalTrack) {
+        const firstSection = this.rulerVerticalTrack.querySelector('.ruler-vertical-page-section');
+        if (firstSection) {
+          const rect = firstSection.getBoundingClientRect();
+          const relativeY = e.clientY - rect.top;
+          const clampedY = Math.max(850, Math.min(1020, relativeY));
+          if (this.bottomMarker) this.bottomMarker.style.top = `${clampedY}px`;
+          const bottomMarginH = this.pageHeight - clampedY;
+          this.page.style.setProperty('--page-margin-bottom', `${bottomMarginH}px`);
+          const bottomMarginDiv = firstSection.querySelector('.ruler-vertical-margin-bottom');
+          if (bottomMarginDiv) bottomMarginDiv.style.height = `${bottomMarginH}px`;
+        }
       }
     });
 
@@ -726,9 +854,61 @@ class RulerManager {
     });
   }
 
+  initCaretTracking() {
+    const editor = document.getElementById('word-editor');
+    if (!editor) return;
+
+    const updateTracker = () => {
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0 || !editor.contains(sel.anchorNode)) {
+        if (this.trackerH) this.trackerH.style.display = 'none';
+        if (this.trackerV) this.trackerV.style.display = 'none';
+        return;
+      }
+
+      const range = sel.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+
+      // Tracker horizontal
+      if (this.trackerH && this.horizontalTrack) {
+        const trackRect = this.horizontalTrack.getBoundingClientRect();
+        const relX = rect.left - trackRect.left;
+        if (relX >= 0 && relX <= this.pageWidth) {
+          this.trackerH.style.display = 'block';
+          this.trackerH.style.left = `${relX}px`;
+        } else {
+          this.trackerH.style.display = 'none';
+        }
+      }
+
+      // Tracker vertical
+      if (this.trackerV && this.rulerVerticalTrack) {
+        const trackRect = this.rulerVerticalTrack.getBoundingClientRect();
+        const relY = rect.top - trackRect.top;
+        if (relY >= 0) {
+          this.trackerV.style.display = 'block';
+          this.trackerV.style.top = `${relY}px`;
+        } else {
+          this.trackerV.style.display = 'none';
+        }
+      }
+    };
+
+    document.addEventListener('selectionchange', updateTracker);
+    editor.addEventListener('input', updateTracker);
+    editor.addEventListener('click', updateTracker);
+    editor.addEventListener('keyup', updateTracker);
+  }
+
   toggle(visible) {
     if (this.rulerContainer) {
       this.rulerContainer.style.display = visible ? 'flex' : 'none';
+    }
+    if (this.rulerVerticalContainer) {
+      this.rulerVerticalContainer.style.display = visible ? 'block' : 'none';
+    }
+    if (this.rulerTrack) {
+      this.rulerTrack.style.marginLeft = visible ? '34px' : '0';
     }
   }
 }
@@ -772,6 +952,13 @@ class FileManager {
       const textNode = document.createTextNode(mark.textContent);
       mark.parentNode.replaceChild(textNode, mark);
     });
+    // Nettoyer les éléments de pagination dynamiques et convertir les sauts de page
+    temp.querySelectorAll('.page-last-spacer, .page-last-footer').forEach((el) => el.remove());
+    temp.querySelectorAll('.word-page-break, .page-break').forEach((wb) => {
+      const pb = document.createElement('div');
+      pb.setAttribute('style', 'page-break-after: always; mso-break-type: page-break;');
+      wb.parentNode.replaceChild(pb, wb);
+    });
     return temp.innerHTML;
   }
 
@@ -788,6 +975,7 @@ class FileManager {
       title: this.getDocumentTitle(),
       content: this.getCleanHtml(),
       savedAt: new Date().toISOString(),
+      headerFooter: window.wordApp && window.wordApp.headerFooter ? window.wordApp.headerFooter.data : null,
     };
 
     try {
@@ -835,9 +1023,15 @@ class FileManager {
       if (raw) {
         const data = JSON.parse(raw);
         if (data.content && data.content.trim().length > 0) {
-          this.editor.innerHTML = data.content;
+          const temp = document.createElement('div');
+          temp.innerHTML = data.content;
+          temp.querySelectorAll('.page-last-spacer, .page-last-footer, .page-break-spacer, .page-break-end, .page-break-start').forEach((el) => el.remove());
+          this.editor.innerHTML = temp.innerHTML;
           if (data.title) {
             this.titleInput.value = `${data.title} - Word`;
+          }
+          if (data.headerFooter && window.wordApp && window.wordApp.headerFooter) {
+            window.wordApp.headerFooter.data = Object.assign(window.wordApp.headerFooter.data, data.headerFooter);
           }
           this.toasts.show('Dernière session restaurée avec succès', 'success');
           if (data.savedAt) {
@@ -940,6 +1134,14 @@ class FileManager {
 
             this.saveToStorage();
             this.toasts.show('Document .docx importé avec succès !', 'success');
+
+            if (window.wordApp) {
+              if (window.wordApp.history) window.wordApp.history.pushState(true);
+              setTimeout(() => {
+                if (window.wordApp.pagination) window.wordApp.pagination.updatePagination();
+                if (window.wordApp.spellCheck) window.wordApp.spellCheck.scanEditor();
+              }, 60);
+            }
 
             if (result.messages.length > 0) {
               console.info('Mammoth info:', result.messages);
@@ -1933,7 +2135,7 @@ class SpellCheckEngine {
     all.forEach((b) => {
       // Exclure les conteneurs parents si leurs enfants sont déjà des blocs, et exclure les sauts de page
       const hasChildBlock = b.querySelector(selector);
-      if (!hasChildBlock && !b.closest('.page-break')) {
+      if (!hasChildBlock && !b.closest('.page-break') && !b.closest('.word-page-break')) {
         blocks.push(b);
       }
     });
@@ -1946,7 +2148,7 @@ class SpellCheckEngine {
     for (let c = this.editor.firstChild; c; c = c.nextSibling) {
       if (c.nodeType === Node.TEXT_NODE && c.nodeValue.trim().length > 0) {
         blocks.push(c);
-      } else if (c.nodeType === Node.ELEMENT_NODE && !c.matches(selector) && !c.querySelector(selector) && !c.classList.contains('page-break')) {
+      } else if (c.nodeType === Node.ELEMENT_NODE && !c.matches(selector) && !c.querySelector(selector) && !c.classList.contains('page-break') && !c.classList.contains('word-page-break')) {
         blocks.push(c);
       }
     }
@@ -1968,7 +2170,7 @@ class SpellCheckEngine {
           fullText += val[i];
         }
       } else if (node.nodeType === Node.ELEMENT_NODE) {
-        if (node.classList && node.classList.contains('page-break')) {
+        if (node.classList && (node.classList.contains('page-break') || node.classList.contains('word-page-break'))) {
           return;
         }
         // Les sauts de ligne <br> créent une frontière stricte entre les mots
@@ -2273,7 +2475,705 @@ class SpellCheckEngine {
 
 /**
  * ------------------------------------------------------------------------------
- * 9. BARRE D'ÉTAT & STATISTIQUES EN TEMPS RÉEL (STATUS BAR MANAGER)
+ * 8.5 GESTIONNAIRE D'EN-TÊTE ET PIED DE PAGE INTERACTIF (HEADER & FOOTER MANAGER)
+ * Permet l'édition interactive par double-clic sur les marges haute et basse,
+ * l'insertion de champs dynamiques et la gestion de la première page différente.
+ * ------------------------------------------------------------------------------
+ */
+class HeaderFooterManager {
+  constructor(editor, docPage, toastManager) {
+    this.editor = editor;
+    this.docPage = docPage;
+    this.toasts = toastManager;
+
+    this.isActive = false;
+    this.activeType = 'header'; // 'header' ou 'footer'
+    this.activePage = 1;
+    this.activeField = null;
+
+    // Modèle de données persisté
+    this.data = {
+      headerLeft: '',
+      headerCenter: '',
+      headerRight: 'Format A4',
+      footerLeft: 'Microsoft Word',
+      footerCenter: '',
+      footerRight: 'Page {page} sur {total}',
+      differentFirstPage: false
+    };
+
+    this.tabHeaderFooter = document.getElementById('tab-header-footer');
+    this.panelHeaderFooter = document.getElementById('panel-header-footer');
+    this.chkDifferentFirst = document.getElementById('chk-different-first-page');
+
+    this.initEvents();
+  }
+
+  initEvents() {
+    // 1. Détection du double-clic sur le document pour entrer en mode en-tête / pied de page
+    this.docPage.addEventListener('dblclick', (e) => {
+      const sheet = e.target.closest('.page-sheet');
+      const pageNum = sheet ? parseInt(sheet.dataset.page || '1', 10) : 1;
+      
+      const docPageRect = this.docPage.getBoundingClientRect();
+      const sheetRect = sheet ? sheet.getBoundingClientRect() : docPageRect;
+      const relativeY = e.clientY - sheetRect.top;
+      
+      const pageMarginTop = parseInt(getComputedStyle(this.docPage).getPropertyValue('--page-margin-top') || '76', 10);
+      const pageMarginBottom = parseInt(getComputedStyle(this.docPage).getPropertyValue('--page-margin-bottom') || '76', 10);
+      const pageHeight = 1056;
+
+      if (relativeY <= pageMarginTop + 14) {
+        // Double-clic dans la marge supérieure (En-tête)
+        e.preventDefault();
+        e.stopPropagation();
+        this.open('header', pageNum);
+      } else if (relativeY >= pageHeight - pageMarginBottom - 14) {
+        // Double-clic dans la marge inférieure (Pied de page)
+        e.preventDefault();
+        e.stopPropagation();
+        this.open('footer', pageNum);
+      } else if (this.isActive) {
+        // Double-clic dans le corps de texte -> quitter l'en-tête/pied
+        e.preventDefault();
+        e.stopPropagation();
+        this.close();
+      }
+    });
+
+    // 2. Touche Échap pour quitter le mode
+    window.addEventListener('keydown', (e) => {
+      if (this.isActive && e.key === 'Escape') {
+        this.close();
+      }
+    });
+
+    // 3. Bouton Fermer du ruban
+    const btnClose = document.getElementById('btn-hf-close');
+    if (btnClose) {
+      btnClose.addEventListener('click', () => this.close());
+    }
+
+    // 4. Bouton Basculer entre En-tête et Pied de page
+    const btnToggle = document.getElementById('btn-hf-toggle-section');
+    if (btnToggle) {
+      btnToggle.addEventListener('click', () => {
+        const nextType = this.activeType === 'header' ? 'footer' : 'header';
+        this.open(nextType, this.activePage);
+      });
+    }
+
+    // 5. Première page différente
+    if (this.chkDifferentFirst) {
+      this.chkDifferentFirst.addEventListener('change', (e) => {
+        this.data.differentFirstPage = e.target.checked;
+        if (window.wordApp && window.wordApp.pagination) {
+          window.wordApp.pagination.renderPageSheets(window.wordApp.pagination.totalPages);
+        }
+        if (window.wordApp && window.wordApp.fileManager) {
+          window.wordApp.fileManager.scheduleDebouncedSave();
+        }
+        this.toasts.show(this.data.differentFirstPage ? 'Première page différente activée' : 'Même en-tête sur toutes les pages', 'info', 2000);
+      });
+    }
+
+    // 6. Insérer la date du jour
+    const btnDate = document.getElementById('btn-hf-insert-date');
+    if (btnDate) {
+      btnDate.addEventListener('click', () => {
+        const todayStr = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        this.insertIntoActiveField(todayStr);
+      });
+    }
+
+    // 7. Insérer le numéro de page
+    const btnPageNum = document.getElementById('btn-hf-insert-pagenum');
+    if (btnPageNum) {
+      btnPageNum.addEventListener('click', () => {
+        this.insertIntoActiveField('{page}');
+      });
+    }
+
+    // 8. Insérer le titre du document
+    const btnTitle = document.getElementById('btn-hf-insert-title');
+    if (btnTitle) {
+      btnTitle.addEventListener('click', () => {
+        const title = window.wordApp ? window.wordApp.fileManager.getDocumentTitle() : 'Document';
+        this.insertIntoActiveField(title);
+      });
+    }
+
+    // 9. Alignements rapides
+    const btnLeft = document.getElementById('btn-hf-align-left');
+    const btnCenter = document.getElementById('btn-hf-align-center');
+    const btnRight = document.getElementById('btn-hf-align-right');
+    if (btnLeft) btnLeft.addEventListener('click', () => this.focusField(this.activeType, 'left'));
+    if (btnCenter) btnCenter.addEventListener('click', () => this.focusField(this.activeType, 'center'));
+    if (btnRight) btnRight.addEventListener('click', () => this.focusField(this.activeType, 'right'));
+  }
+
+  insertIntoActiveField(text) {
+    if (this.activeField) {
+      this.activeField.focus();
+      document.execCommand('insertText', false, text);
+      this.syncFieldData(this.activeField);
+    } else {
+      const targetField = this.activeType === 'header' ? 'header-left' : 'footer-right';
+      const el = document.querySelector(`.page-sheet[data-page="${this.activePage}"] [data-field="${targetField}"]`);
+      if (el) {
+        el.focus();
+        el.textContent = text;
+        this.syncFieldData(el);
+      }
+    }
+  }
+
+  syncFieldData(el) {
+    const field = el.dataset.field;
+    const val = el.textContent.trim();
+    if (field === 'header-left') this.data.headerLeft = val;
+    else if (field === 'header-center') this.data.headerCenter = val;
+    else if (field === 'header-right') this.data.headerRight = val;
+    else if (field === 'footer-left') this.data.footerLeft = val;
+    else if (field === 'footer-center') this.data.footerCenter = val;
+    else if (field === 'footer-right') this.data.footerRight = val;
+
+    // Répercuter sur toutes les pages correspondantes
+    if (window.wordApp && window.wordApp.pagination) {
+      const totalPages = window.wordApp.pagination.totalPages;
+      for (let p = 1; p <= totalPages; p++) {
+        if (p === 1 && this.data.differentFirstPage) continue;
+        if (p === this.activePage) continue;
+        const otherEl = document.querySelector(`.page-sheet[data-page="${p}"] [data-field="${field}"]`);
+        if (otherEl) {
+          otherEl.textContent = this.formatFieldValue(field, val, p, totalPages);
+        }
+      }
+    }
+
+    if (window.wordApp && window.wordApp.fileManager) {
+      window.wordApp.fileManager.scheduleDebouncedSave();
+    }
+  }
+
+  formatFieldValue(field, rawVal, pageNum, totalPages) {
+    if (!rawVal) return '';
+    const title = window.wordApp ? window.wordApp.fileManager.getDocumentTitle() : 'Document';
+    return rawVal
+      .replace(/{page}/g, String(pageNum))
+      .replace(/{total}/g, String(totalPages))
+      .replace(/{title}/g, title);
+  }
+
+  open(type = 'header', pageNum = 1) {
+    this.isActive = true;
+    this.activeType = type;
+    this.activePage = pageNum;
+    document.body.classList.add('header-footer-active');
+
+    // Afficher l'onglet contextuel du ruban
+    if (this.tabHeaderFooter) {
+      this.tabHeaderFooter.style.display = 'inline-block';
+      this.tabHeaderFooter.click();
+    }
+
+    if (this.chkDifferentFirst) {
+      this.chkDifferentFirst.checked = !!this.data.differentFirstPage;
+    }
+
+    // Activer visuellement la zone
+    document.querySelectorAll('.page-sheet-header, .page-sheet-footer').forEach((el) => {
+      el.classList.remove('hf-active');
+    });
+
+    const selector = type === 'header' ? '.page-sheet-header' : '.page-sheet-footer';
+    const targetEl = document.querySelector(`.page-sheet[data-page="${pageNum}"] ${selector}`);
+    if (targetEl) {
+      targetEl.classList.add('hf-active');
+      targetEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+      // Rendre les champs éditables
+      targetEl.querySelectorAll('.hf-editable').forEach((span) => {
+        span.setAttribute('contenteditable', 'true');
+        span.onblur = () => this.syncFieldData(span);
+        span.onfocus = () => {
+          this.activeField = span;
+        };
+      });
+
+      // Mettre le focus
+      const defaultField = type === 'header' 
+        ? targetEl.querySelector('.hf-item-left .hf-editable')
+        : targetEl.querySelector('.hf-item-right .hf-editable');
+      if (defaultField) {
+        defaultField.focus();
+        this.activeField = defaultField;
+      }
+    }
+
+    this.toasts.show(type === 'header' ? 'Édition de l\'en-tête (Échap pour fermer)' : 'Édition du pied de page (Échap pour fermer)', 'info', 2200);
+  }
+
+  close() {
+    if (!this.isActive) return;
+    this.isActive = false;
+    document.body.classList.remove('header-footer-active');
+
+    // Désactiver l'édition
+    document.querySelectorAll('.hf-active').forEach((el) => el.classList.remove('hf-active'));
+    document.querySelectorAll('.hf-editable').forEach((el) => el.removeAttribute('contenteditable'));
+
+    // Masquer l'onglet contextuel et revenir sur Accueil
+    if (this.tabHeaderFooter) {
+      this.tabHeaderFooter.style.display = 'none';
+      const homeTab = document.querySelector('.ribbon-tab[data-tab="panel-home"]');
+      if (homeTab) homeTab.click();
+    }
+
+    // Rendre le focus à l'éditeur
+    this.editor.focus();
+
+    // Régénérer les affichages
+    if (window.wordApp && window.wordApp.pagination) {
+      window.wordApp.pagination.renderPageSheets(window.wordApp.pagination.totalPages);
+    }
+
+    this.toasts.show('En-têtes et pieds de page enregistrés', 'success', 1800);
+  }
+
+  focusField(type, align = 'left') {
+    const selector = type === 'header' ? '.page-sheet-header' : '.page-sheet-footer';
+    const alignClass = `.hf-item-${align} .hf-editable`;
+    const target = document.querySelector(`.page-sheet[data-page="${this.activePage}"] ${selector} ${alignClass}`);
+    if (target) {
+      target.focus();
+      this.activeField = target;
+    }
+  }
+
+  renderHeader(sheet, pageNum, totalPages) {
+    const docTitle = window.wordApp ? window.wordApp.fileManager.getDocumentTitle() : 'Document Word';
+    const isFirst = pageNum === 1;
+
+    if (isFirst && this.data.differentFirstPage) {
+      sheet.innerHTML += `
+        <div class="page-sheet-header" data-page="${pageNum}">
+          <div class="page-sheet-header-content">
+            <span class="hf-item-left"><span class="hf-editable" data-field="header-left"></span></span>
+            <span class="hf-item-center"><span class="hf-editable" data-field="header-center"></span></span>
+            <span class="hf-item-right"><span class="hf-editable" data-field="header-right"></span></span>
+          </div>
+          <div class="hf-tag-badge">Première page - En-tête</div>
+        </div>
+      `;
+      return;
+    }
+
+    const left = this.data.headerLeft ? this.formatFieldValue('header-left', this.data.headerLeft, pageNum, totalPages) : docTitle;
+    const center = this.formatFieldValue('header-center', this.data.headerCenter, pageNum, totalPages);
+    const right = this.data.headerRight ? this.formatFieldValue('header-right', this.data.headerRight, pageNum, totalPages) : 'Format A4';
+
+    sheet.innerHTML += `
+      <div class="page-sheet-header" data-page="${pageNum}">
+        <div class="page-sheet-header-content">
+          <span class="hf-item-left"><span class="hf-editable" data-field="header-left">${left}</span></span>
+          <span class="hf-item-center"><span class="hf-editable" data-field="header-center">${center}</span></span>
+          <span class="hf-item-right"><span class="hf-editable" data-field="header-right">${right}</span></span>
+        </div>
+        <div class="hf-tag-badge">En-tête - Page ${pageNum}</div>
+      </div>
+    `;
+  }
+
+  renderFooter(sheet, pageNum, totalPages) {
+    const isFirst = pageNum === 1;
+
+    if (isFirst && this.data.differentFirstPage) {
+      sheet.innerHTML += `
+        <div class="page-sheet-footer" data-page="${pageNum}">
+          <div class="page-sheet-footer-content">
+            <span class="hf-item-left"><span class="hf-editable" data-field="footer-left"></span></span>
+            <span class="hf-item-center"><span class="hf-editable" data-field="footer-center"></span></span>
+            <span class="hf-item-right"><span class="hf-editable" data-field="footer-right"></span></span>
+          </div>
+          <div class="hf-tag-badge">Première page - Pied</div>
+        </div>
+      `;
+      return;
+    }
+
+    const left = this.data.footerLeft ? this.formatFieldValue('footer-left', this.data.footerLeft, pageNum, totalPages) : 'Microsoft Word';
+    const center = this.formatFieldValue('footer-center', this.data.footerCenter, pageNum, totalPages);
+    const right = this.data.footerRight ? this.formatFieldValue('footer-right', this.data.footerRight, pageNum, totalPages) : `Page ${pageNum} sur ${totalPages}`;
+
+    sheet.innerHTML += `
+      <div class="page-sheet-footer" data-page="${pageNum}">
+        <div class="page-sheet-footer-content">
+          <span class="hf-item-left"><span class="hf-editable" data-field="footer-left">${left}</span></span>
+          <span class="hf-item-center"><span class="hf-editable" data-field="footer-center">${center}</span></span>
+          <span class="hf-item-right"><span class="hf-editable" data-field="footer-right">${right}</span></span>
+        </div>
+        <div class="hf-tag-badge">Pied de page - Page ${pageNum}</div>
+      </div>
+    `;
+  }
+}
+
+/**
+ * ------------------------------------------------------------------------------
+ * 9. GESTIONNAIRE DE PAGINATION & AFFICHAGE MULTI-PAGES A4 (PAGINATION MANAGER)
+ * Permet d'afficher correctement toutes les pages sous forme de feuilles A4
+ * distinctes avec marges, en-têtes, pieds de page et espacement réaliste.
+ * ------------------------------------------------------------------------------
+ */
+class PaginationManager {
+  constructor(editor, pageElement, statusBarManager) {
+    this.editor = editor;
+    this.pageElement = pageElement;
+    this.pagesLayer = document.getElementById('pages-layer');
+    this.statusBar = statusBarManager;
+
+    // Hauteur standard d'une page A4 (1056px à 96dpi, proportion 210mm x 297mm)
+    this.pageHeight = 1056;
+    this.pagePaddingY = 152; // 76px marge haute + 76px marge basse
+    this.pageGap = 28; // Interstice réaliste entre pages A4 (28px de bureau gris)
+    this.usablePageHeight = this.pageHeight - this.pagePaddingY; // 904px de hauteur imprimable utile
+
+    this.totalPages = 1;
+    this.currentPage = 1;
+    this.debounceTimer = null;
+    this.isUpdating = false;
+
+    this.initEvents();
+  }
+
+  initEvents() {
+    // Recalculer la pagination lors de la frappe (debounced)
+    this.editor.addEventListener('input', () => {
+      if (this.debounceTimer) clearTimeout(this.debounceTimer);
+      this.debounceTimer = setTimeout(() => this.updatePagination(), 280);
+    });
+
+    // Détecter la page active au défilement
+    const canvas = document.getElementById('canvas-wrapper');
+    if (canvas) {
+      canvas.addEventListener('scroll', () => this.detectCurrentPage());
+    }
+
+    // Gestion ergonomique de la suppression des sauts de page avec Backspace et Delete
+    this.editor.addEventListener('keydown', (e) => {
+      if (e.key === 'Backspace') {
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) return;
+        const range = sel.getRangeAt(0);
+        if (range.collapsed && range.startOffset === 0) {
+          let node = range.startContainer;
+          if (node.nodeType === Node.TEXT_NODE) node = node.parentNode;
+          // Si le nœud précédent ou son parent est un saut de page
+          const prev = node.previousElementSibling;
+          if (prev && prev.classList.contains('word-page-break')) {
+            e.preventDefault();
+            prev.remove();
+            this.updatePagination();
+            return;
+          }
+        }
+      } else if (e.key === 'Delete') {
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) return;
+        const range = sel.getRangeAt(0);
+        if (range.collapsed) {
+          let node = range.startContainer;
+          if (node.nodeType === Node.TEXT_NODE) node = node.parentNode;
+          const next = node.nextElementSibling;
+          if (next && next.classList.contains('word-page-break')) {
+            e.preventDefault();
+            next.remove();
+            this.updatePagination();
+            return;
+          }
+        }
+      }
+    });
+
+    // Mise à jour initiale après chargement
+    setTimeout(() => this.updatePagination(), 400);
+  }
+
+  getDocumentTitle() {
+    if (window.wordApp && window.wordApp.fileManager) {
+      return window.wordApp.fileManager.getDocumentTitle();
+    }
+    const input = document.getElementById('doc-title-input');
+    if (input && input.value) {
+      return input.value.trim().replace(/\s*-\s*Word$/i, '') || 'Document Word';
+    }
+    return 'Document Word';
+  }
+
+  renderPageSheets(totalPages) {
+    if (!this.pagesLayer) {
+      this.pagesLayer = document.getElementById('pages-layer');
+    }
+    if (!this.pagesLayer) return;
+
+    this.pagesLayer.innerHTML = '';
+
+    for (let i = 1; i <= totalPages; i++) {
+      const sheet = document.createElement('div');
+      sheet.className = 'page-sheet';
+      sheet.dataset.page = String(i);
+
+      if (window.wordApp && window.wordApp.headerFooter) {
+        window.wordApp.headerFooter.renderHeader(sheet, i, totalPages);
+        window.wordApp.headerFooter.renderFooter(sheet, i, totalPages);
+      } else {
+        const docTitle = this.getDocumentTitle();
+        sheet.innerHTML = `
+          <div class="page-sheet-header">
+            <div class="page-sheet-header-content">
+              <span class="hf-item-left"><span class="hf-editable" data-field="header-left">${docTitle}</span></span>
+              <span class="hf-item-center"><span class="hf-editable" data-field="header-center"></span></span>
+              <span class="hf-item-right"><span class="hf-editable" data-field="header-right">Format A4</span></span>
+            </div>
+            <div class="hf-tag-badge">En-tête - Page ${i}</div>
+          </div>
+          <div class="page-sheet-footer">
+            <div class="page-sheet-footer-content">
+              <span class="hf-item-left"><span class="hf-editable" data-field="footer-left">Microsoft Word</span></span>
+              <span class="hf-item-center"><span class="hf-editable" data-field="footer-center"></span></span>
+              <span class="hf-item-right"><span class="hf-editable" data-field="footer-right">Page ${i} sur ${totalPages}</span></span>
+            </div>
+            <div class="hf-tag-badge">Pied de page - Page ${i}</div>
+          </div>
+        `;
+      }
+      this.pagesLayer.appendChild(sheet);
+    }
+
+    // Ajuster la hauteur globale du document
+    const totalHeight = totalPages * this.pageHeight + (totalPages - 1) * this.pageGap;
+    this.pageElement.style.minHeight = `${totalHeight}px`;
+
+    // Mettre à jour la règle verticale si elle existe
+    if (window.wordApp && window.wordApp.ruler) {
+      window.wordApp.ruler.renderVerticalTicks(totalPages);
+    }
+  }
+
+  createPageBreakElement(nextPageNum, isManual = false, breakHeight = 180, remaining = 0) {
+    const pBreak = document.createElement('div');
+    pBreak.className = 'word-page-break';
+    pBreak.setAttribute('contenteditable', 'false');
+    pBreak.dataset.manual = isManual ? 'true' : 'false';
+    pBreak.dataset.page = String(nextPageNum);
+    pBreak.style.height = `${Math.round(breakHeight)}px`;
+
+    // L'indicateur visuel se positionne pile dans l'interstice gris de 28px
+    const indicatorTop = Math.round(remaining + 76);
+
+    pBreak.innerHTML = `
+      <div class="page-break-gap-visual" style="top: ${indicatorTop}px;">
+        <div class="page-break-gap-line"></div>
+        <span class="page-break-badge">Page ${nextPageNum}${isManual ? ' (Saut manuel)' : ''}</span>
+        <div class="page-break-gap-line"></div>
+      </div>
+    `;
+
+    return pBreak;
+  }
+
+  insertManualBreak() {
+    this.editor.focus();
+    const sel = window.getSelection();
+    const prevPage = this.currentPage || 1;
+    const nextPage = prevPage + 1;
+
+    // Hauteur par défaut d'un saut de page manuel
+    const breakEl = this.createPageBreakElement(nextPage, true, 180, 0);
+    const pAfter = document.createElement('p');
+    pAfter.innerHTML = '<br>';
+
+    if (sel && sel.rangeCount > 0 && this.editor.contains(sel.anchorNode)) {
+      const range = sel.getRangeAt(0);
+      range.collapse(false);
+      range.insertNode(pAfter);
+      range.insertNode(breakEl);
+
+      const newRange = document.createRange();
+      newRange.setStart(pAfter, 0);
+      newRange.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(newRange);
+    } else {
+      this.editor.appendChild(breakEl);
+      this.editor.appendChild(pAfter);
+    }
+
+    if (window.wordApp && window.wordApp.history) {
+      window.wordApp.history.pushState(true);
+    }
+    this.updatePagination();
+  }
+
+  updatePagination() {
+    if (this.isUpdating) return;
+    this.isUpdating = true;
+
+    try {
+      // 1. Sauvegarder la sélection utilisateur
+      const sel = window.getSelection();
+      let activeRange = null;
+      if (sel && sel.rangeCount > 0 && this.editor.contains(sel.anchorNode)) {
+        activeRange = sel.getRangeAt(0).cloneRange();
+      }
+
+      // 2. Nettoyer les anciens sauts automatiques et anciens résidus de pagination
+      const autoBreaks = this.editor.querySelectorAll('.word-page-break[data-manual="false"]');
+      autoBreaks.forEach((b) => b.remove());
+
+      const oldArtifacts = this.editor.querySelectorAll('.page-last-spacer, .page-last-footer, .page-break-spacer, .page-break-end, .page-break-start');
+      oldArtifacts.forEach((el) => el.remove());
+
+      // 3. Normaliser les nœuds texte racine orphelins éventuels
+      Array.from(this.editor.childNodes).forEach((node) => {
+        if (node.nodeType === Node.TEXT_NODE && node.textContent.trim().length > 0) {
+          const p = document.createElement('p');
+          p.textContent = node.textContent;
+          this.editor.replaceChild(p, node);
+        }
+      });
+
+      // 4. Parcourir les éléments blocs enfants directs
+      const children = Array.from(this.editor.children);
+      let pageNum = 1;
+      let currentHeight = 0;
+
+      for (let i = 0; i < children.length; i++) {
+        const child = children[i];
+
+        // Si c'est un saut manuel
+        if (child.classList && child.classList.contains('word-page-break') && child.dataset.manual === 'true') {
+          const remaining = Math.max(0, this.usablePageHeight - currentHeight);
+          const breakHeight = remaining + this.pagePaddingY + this.pageGap;
+          child.style.height = `${Math.round(breakHeight)}px`;
+          child.dataset.page = String(pageNum + 1);
+
+          const visual = child.querySelector('.page-break-gap-visual');
+          if (visual) {
+            visual.style.top = `${Math.round(remaining + 76)}px`;
+            const badge = visual.querySelector('.page-break-badge');
+            if (badge) badge.textContent = `Page ${pageNum + 1} (Saut manuel)`;
+          }
+
+          pageNum++;
+          currentHeight = 0;
+          continue;
+        }
+
+        // Mesurer la hauteur du bloc
+        const rect = child.getBoundingClientRect();
+        const style = window.getComputedStyle(child);
+        const marginY = parseFloat(style.marginTop || 0) + parseFloat(style.marginBottom || 0);
+        const blockHeight = Math.max(20, (rect.height || child.offsetHeight || 24) + marginY);
+
+        // Si le bloc fait déborder la page courante
+        if (currentHeight > 0 && (currentHeight + blockHeight > this.usablePageHeight)) {
+          const remaining = Math.max(0, this.usablePageHeight - currentHeight);
+          const breakHeight = remaining + this.pagePaddingY + this.pageGap;
+          pageNum++;
+          const breakEl = this.createPageBreakElement(pageNum, false, breakHeight, remaining);
+          this.editor.insertBefore(breakEl, child);
+          currentHeight = blockHeight;
+        } else {
+          currentHeight += blockHeight;
+        }
+      }
+
+      this.totalPages = Math.max(1, pageNum);
+
+      // 5. Générer les feuilles A4 blanches d'arrière-plan avec leurs ombres portées
+      this.renderPageSheets(this.totalPages);
+
+      // 6. Mettre à jour les badges de page
+      const allBreaks = this.editor.querySelectorAll('.word-page-break');
+      allBreaks.forEach((br) => {
+        const pNum = parseInt(br.dataset.page || '2', 10);
+        const badgeLbl = br.querySelector('.page-break-badge');
+        if (badgeLbl) {
+          const isMan = br.dataset.manual === 'true';
+          badgeLbl.textContent = `Page ${pNum}${isMan ? ' (Saut manuel)' : ''}`;
+        }
+      });
+
+      // 7. Notifier la barre d'état
+      if (this.statusBar) {
+        this.statusBar.updatePageCount(this.currentPage, this.totalPages);
+      }
+
+      // 8. Restaurer la sélection si possible
+      if (activeRange && sel) {
+        try {
+          sel.removeAllRanges();
+          sel.addRange(activeRange);
+        } catch (e) {
+          // ignore
+        }
+      }
+    } catch (e) {
+      console.warn('Erreur mise à jour pagination', e);
+    } finally {
+      this.isUpdating = false;
+    }
+  }
+
+  detectCurrentPage() {
+    const canvas = document.getElementById('canvas-wrapper');
+    if (!canvas) return;
+
+    const scrollTop = canvas.scrollTop;
+    const pagePitch = this.pageHeight + this.pageGap;
+    const detected = Math.min(this.totalPages, Math.max(1, Math.floor((scrollTop + 280) / pagePitch) + 1));
+
+    if (detected !== this.currentPage) {
+      this.currentPage = detected;
+      if (this.statusBar) {
+        this.statusBar.updatePageCount(this.currentPage, this.totalPages);
+      }
+    }
+  }
+
+  scrollToPage(pageNum) {
+    const canvas = document.getElementById('canvas-wrapper');
+    if (!canvas) return;
+
+    pageNum = Math.max(1, Math.min(this.totalPages, pageNum));
+    this.currentPage = pageNum;
+
+    const pagePitch = this.pageHeight + this.pageGap;
+    canvas.scrollTo({ top: (pageNum - 1) * pagePitch, behavior: 'smooth' });
+
+    if (this.statusBar) {
+      this.statusBar.updatePageCount(this.currentPage, this.totalPages);
+    }
+  }
+
+  nextPage() {
+    if (this.currentPage < this.totalPages) {
+      this.scrollToPage(this.currentPage + 1);
+    }
+  }
+
+  prevPage() {
+    if (this.currentPage > 1) {
+      this.scrollToPage(this.currentPage - 1);
+    }
+  }
+}
+
+/**
+ * ------------------------------------------------------------------------------
+ * 10. BARRE D'ÉTAT & STATISTIQUES EN TEMPS RÉEL (STATUS BAR MANAGER)
  * ------------------------------------------------------------------------------
  */
 class StatusBarManager {
@@ -2281,6 +3181,8 @@ class StatusBarManager {
     this.editor = editor;
     this.zoomContainer = zoomContainer;
     this.zoom = 100;
+    this.currentPage = 1;
+    this.totalPages = 1;
 
     this.lblWords = document.getElementById('status-words');
     this.lblChars = document.getElementById('status-chars');
@@ -2316,6 +3218,18 @@ class StatusBarManager {
     if (this.lblWords && typeof onStatsClick === 'function') {
       this.lblWords.addEventListener('click', onStatsClick);
     }
+
+    // Clic sur l'indicateur de page pour naviguer entre les pages
+    if (this.lblPages) {
+      this.lblPages.classList.add('clickable');
+      this.lblPages.title = 'Page active (cliquer pour aller à la page suivante)';
+      this.lblPages.addEventListener('click', () => {
+        if (window.wordApp && window.wordApp.pagination) {
+          const next = (window.wordApp.pagination.currentPage % window.wordApp.pagination.totalPages) + 1;
+          window.wordApp.pagination.scrollToPage(next);
+        }
+      });
+    }
   }
 
   setZoom(val) {
@@ -2333,19 +3247,26 @@ class StatusBarManager {
     const charsNoSpaces = rawText.replace(/\s/g, '').length;
     const paragraphs = rawText.split(/\n+/).filter((p) => p.trim().length > 0).length;
 
-    // Estimation pages A4 (environ 1056px de hauteur par page ou sauts de page explicites)
-    const pageBreaks = this.editor.querySelectorAll('.page-break').length;
-    const totalHeight = this.editor.scrollHeight;
-    const calculatedPages = Math.max(1, Math.ceil(totalHeight / 1000) + pageBreaks);
+    return { words, charsWithSpaces, charsNoSpaces, paragraphs, pages: this.totalPages || 1 };
+  }
 
-    return { words, charsWithSpaces, charsNoSpaces, paragraphs, pages: calculatedPages };
+  updatePageCount(current, total) {
+    this.currentPage = current;
+    this.totalPages = total;
+    if (this.lblPages) {
+      this.lblPages.textContent = `Page ${current} sur ${total}`;
+    }
+    const infoPages = document.getElementById('info-doc-pages');
+    if (infoPages) infoPages.textContent = String(total);
   }
 
   updateStats() {
     const stats = this.getDetailedStats();
     if (this.lblWords) this.lblWords.textContent = `${stats.words} mot${stats.words > 1 ? 's' : ''}`;
     if (this.lblChars) this.lblChars.textContent = `${stats.charsWithSpaces} caractères`;
-    if (this.lblPages) this.lblPages.textContent = `Page 1 sur ${stats.pages}`;
+    if (this.lblPages && !this.lblPages.textContent.includes('sur')) {
+      this.lblPages.textContent = `Page ${this.currentPage} sur ${stats.pages}`;
+    }
 
     // Mise à jour de la vue informations Backstage
     const infoWords = document.getElementById('info-doc-words');
@@ -2445,6 +3366,53 @@ class RibbonManager {
     document.getElementById('btn-insert-callout').addEventListener('click', () => this.engine.insertCallout());
     document.getElementById('btn-insert-datetime').addEventListener('click', () => this.engine.insertDateTime());
     document.getElementById('btn-insert-symbol').addEventListener('click', () => this.engine.insertSymbol('©'));
+
+    const btnHeader = document.getElementById('btn-insert-header');
+    if (btnHeader) {
+      btnHeader.addEventListener('click', () => {
+        if (window.wordApp && window.wordApp.headerFooter) {
+          window.wordApp.headerFooter.open('header', 1);
+        }
+      });
+    }
+
+    const btnFooter = document.getElementById('btn-insert-footer');
+    if (btnFooter) {
+      btnFooter.addEventListener('click', () => {
+        if (window.wordApp && window.wordApp.headerFooter) {
+          window.wordApp.headerFooter.open('footer', 1);
+        }
+      });
+    }
+
+    // Affichage des pages A4
+    const btnMulti = document.getElementById('btn-view-multipage');
+    if (btnMulti) {
+      btnMulti.addEventListener('click', () => {
+        if (window.wordApp && window.wordApp.pagination) {
+          window.wordApp.pagination.updatePagination();
+          window.wordApp.toasts.show('Affichage de toutes les pages A4 actif', 'info');
+        }
+      });
+    }
+
+    const btnPrev = document.getElementById('btn-page-prev');
+    if (btnPrev) {
+      btnPrev.addEventListener('click', () => {
+        if (window.wordApp && window.wordApp.pagination) {
+          window.wordApp.pagination.prevPage();
+        }
+      });
+    }
+
+    const btnNext = document.getElementById('btn-page-next');
+    if (btnNext) {
+      btnNext.addEventListener('click', () => {
+        if (window.wordApp && window.wordApp.pagination) {
+          window.wordApp.pagination.nextPage();
+        }
+      });
+    }
   }
 
   initColorPalettes() {
@@ -2622,6 +3590,9 @@ class WordApp {
       document.getElementById('ruler-right-marker')
     );
     this.statusBar = new StatusBarManager(this.editorElement, this.zoomContainer, () => this.showStatsModal());
+    this.headerFooter = new HeaderFooterManager(this.editorElement, this.docPageElement, this.toasts);
+    this.pagination = new PaginationManager(this.editorElement, this.docPageElement, this.statusBar);
+    window.wordApp = this;
 
     this.initGlobalEvents();
     this.initBackstageMenu();
@@ -2630,8 +3601,11 @@ class WordApp {
 
     // Restauration de la session précédente si disponible
     this.fileManager.loadFromStorage();
-    // Analyse orthographique initiale
-    setTimeout(() => this.spellCheck.scanEditor(), 800);
+    // Analyse orthographique et pagination initiales
+    setTimeout(() => {
+      this.pagination.updatePagination();
+      this.spellCheck.scanEditor();
+    }, 600);
   }
 
   initGlobalEvents() {
@@ -2685,13 +3659,23 @@ class WordApp {
           this.engine.insertPageBreak();
         }
       }
+
+      // Raccourcis de navigation entre pages
+      if (e.altKey && e.key === 'PageDown') {
+        e.preventDefault();
+        this.pagination.nextPage();
+      } else if (e.altKey && e.key === 'PageUp') {
+        e.preventDefault();
+        this.pagination.prevPage();
+      }
     });
 
-    // Synchroniser le titre du document dans l'en-tête HTML
+    // Synchroniser le titre du document dans l'en-tête HTML et sur les en-têtes de pages
     this.docTitleInput.addEventListener('input', () => {
       document.title = `${this.fileManager.getDocumentTitle()} - Microsoft Word`;
       const infoTitle = document.getElementById('info-doc-title');
       if (infoTitle) infoTitle.textContent = this.fileManager.getDocumentTitle();
+      this.pagination.updatePagination();
     });
 
     // Boutons de recherche dans le ruban
@@ -2748,6 +3732,7 @@ class WordApp {
       this.history.pushState(true);
       backstage.classList.remove('active');
       this.toasts.show('Nouveau document vierge créé', 'info');
+      this.pagination.updatePagination();
       this.spellCheck.scanEditor();
     });
 
@@ -2776,6 +3761,7 @@ class WordApp {
       this.history.pushState(true);
       backstage.classList.remove('active');
       this.toasts.show('Modèle de rapport chargé', 'info');
+      this.pagination.updatePagination();
       this.spellCheck.scanEditor();
     });
 
@@ -2795,6 +3781,7 @@ class WordApp {
       this.history.pushState(true);
       backstage.classList.remove('active');
       this.toasts.show('Modèle de lettre chargé', 'info');
+      this.pagination.updatePagination();
       this.spellCheck.scanEditor();
     });
 
@@ -2821,6 +3808,7 @@ class WordApp {
       this.history.pushState(true);
       backstage.classList.remove('active');
       this.toasts.show('Modèle de compte-rendu chargé', 'info');
+      this.pagination.updatePagination();
       this.spellCheck.scanEditor();
     });
 
@@ -2892,6 +3880,10 @@ class WordApp {
           this.history.pushState(true);
           backstage.classList.remove('active');
           this.toasts.show('Fichier HTML importé', 'success');
+          setTimeout(() => {
+            this.pagination.updatePagination();
+            this.spellCheck.scanEditor();
+          }, 60);
         };
         reader.readAsText(file);
       }
@@ -2911,6 +3903,10 @@ class WordApp {
               this.history.pushState(true);
               backstage.classList.remove('active');
               this.toasts.show('Projet JSON restauré', 'success');
+              setTimeout(() => {
+                this.pagination.updatePagination();
+                this.spellCheck.scanEditor();
+              }, 60);
             }
           } catch {
             this.toasts.show('Fichier JSON invalide', 'error');
