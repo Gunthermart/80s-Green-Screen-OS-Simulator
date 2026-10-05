@@ -1,3 +1,7 @@
+import { marked } from 'marked';
+import TurndownService from 'turndown';
+import { gfm } from 'joplin-turndown-plugin-gfm';
+
 /**
  * ==============================================================================
  * MICROSOFT WORD WEB CLONE - MOTEUR PRINCIPAL D'APPLICATION (VANILLA JS / POO)
@@ -971,6 +975,17 @@ class FileManager {
       this.debounceTimer = null;
     }
 
+    if (window.wordApp && window.wordApp.multiDoc) {
+      window.wordApp.multiDoc.saveCurrentActiveDocState();
+      window.wordApp.multiDoc.markActiveDocSaved();
+      window.wordApp.multiDoc.saveToStorage();
+      this.isDirty = false;
+      this.isSaving = false;
+      const timeStr = new Date().toLocaleTimeString('fr-FR');
+      this.updateSaveIndicator(`Enregistré à ${timeStr}`, 'saved');
+      return;
+    }
+
     const data = {
       title: this.getDocumentTitle(),
       content: this.getCleanHtml(),
@@ -1008,6 +1023,10 @@ class FileManager {
     this.isDirty = true;
     this.updateSaveIndicator('Modifications...', 'pending');
 
+    if (window.wordApp && window.wordApp.multiDoc) {
+      window.wordApp.multiDoc.markActiveDocDirty();
+    }
+
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
     }
@@ -1018,6 +1037,10 @@ class FileManager {
   }
 
   loadFromStorage() {
+    if (window.wordApp && window.wordApp.multiDoc) {
+      return window.wordApp.multiDoc.loadFromStorage();
+    }
+
     try {
       const raw = localStorage.getItem(this.storageKey);
       if (raw) {
@@ -1130,17 +1153,20 @@ class FileManager {
             this.editor.innerHTML = html;
 
             const nameWithoutExt = file.name.replace(/\.[^/.]+$/, '');
-            this.titleInput.value = `${nameWithoutExt} - Word`;
-
-            this.saveToStorage();
-            this.toasts.show('Document .docx importé avec succès !', 'success');
-
-            if (window.wordApp) {
-              if (window.wordApp.history) window.wordApp.history.pushState(true);
-              setTimeout(() => {
-                if (window.wordApp.pagination) window.wordApp.pagination.updatePagination();
-                if (window.wordApp.spellCheck) window.wordApp.spellCheck.scanEditor();
-              }, 60);
+            if (window.wordApp && window.wordApp.multiDoc) {
+              window.wordApp.multiDoc.openFileAsDocument(nameWithoutExt, html);
+            } else {
+              this.editor.innerHTML = html;
+              this.titleInput.value = `${nameWithoutExt} - Word`;
+              this.saveToStorage();
+              this.toasts.show('Document .docx importé avec succès !', 'success');
+              if (window.wordApp) {
+                if (window.wordApp.history) window.wordApp.history.pushState(true);
+                setTimeout(() => {
+                  if (window.wordApp.pagination) window.wordApp.pagination.updatePagination();
+                  if (window.wordApp.spellCheck) window.wordApp.spellCheck.scanEditor();
+                }, 60);
+              }
             }
 
             if (result.messages.length > 0) {
@@ -1156,6 +1182,135 @@ class FileManager {
       }
     };
     reader.readAsArrayBuffer(file);
+  }
+
+  escapeHtml(str) {
+    if (!str) return '';
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  // [CRUCIAL] IMPORTATION ET CONVERSION DE FICHIER PDF VERS WORD
+  async importPdf(file) {
+    if (!file) return;
+    this.toasts.show(`Conversion du document PDF "${file.name}" en cours...`, 'info', 3000);
+
+    try {
+      if (!window.pdfjsLib) {
+        this.toasts.show('Chargement du convertisseur PDF...', 'info');
+        await new Promise((resolve, reject) => {
+          const s = document.createElement('script');
+          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+          s.onload = resolve;
+          s.onerror = reject;
+          document.head.appendChild(s);
+        });
+      }
+
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const numPages = pdf.numPages;
+
+      let extractedHtml = '';
+
+      for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+        const page = await pdf.getPage(pageNum);
+        const textContent = await page.getTextContent();
+        const items = textContent.items;
+
+        if (!items || items.length === 0) continue;
+
+        // Tri vertical (haut en bas) puis horizontal (gauche à droite)
+        items.sort((a, b) => {
+          const yA = a.transform[5];
+          const yB = b.transform[5];
+          if (Math.abs(yA - yB) > 4) {
+            return yB - yA;
+          }
+          return a.transform[4] - b.transform[4];
+        });
+
+        let currentLineY = null;
+        let currentLineText = '';
+        let pageLines = [];
+        let maxFontSizeOnLine = 0;
+
+        for (const item of items) {
+          const text = item.str;
+          if (!text) continue;
+
+          const y = item.transform[5];
+          const fontSize = Math.abs(item.transform[0] || item.transform[3] || 12);
+
+          if (currentLineY === null || Math.abs(y - currentLineY) > 4) {
+            if (currentLineText.trim().length > 0) {
+              pageLines.push({ text: currentLineText.trim(), fontSize: maxFontSizeOnLine });
+            }
+            currentLineY = y;
+            currentLineText = text;
+            maxFontSizeOnLine = fontSize;
+          } else {
+            const needsSpace = !currentLineText.endsWith(' ') && !text.startsWith(' ');
+            currentLineText += (needsSpace ? ' ' : '') + text;
+            if (fontSize > maxFontSizeOnLine) maxFontSizeOnLine = fontSize;
+          }
+        }
+        if (currentLineText.trim().length > 0) {
+          pageLines.push({ text: currentLineText.trim(), fontSize: maxFontSizeOnLine });
+        }
+
+        // Générer la structure typographique du document Word
+        let pageHtml = '';
+        for (const line of pageLines) {
+          const t = line.text;
+          if (!t) continue;
+          if (line.fontSize >= 18) {
+            pageHtml += `<h1>${this.escapeHtml(t)}</h1>`;
+          } else if (line.fontSize >= 14) {
+            pageHtml += `<h2>${this.escapeHtml(t)}</h2>`;
+          } else if (line.fontSize >= 12.5) {
+            pageHtml += `<h3>${this.escapeHtml(t)}</h3>`;
+          } else {
+            pageHtml += `<p>${this.escapeHtml(t)}</p>`;
+          }
+        }
+
+        if (pageNum > 1) {
+          extractedHtml += `<div class="word-page-break" data-manual="true" data-page="${pageNum}"><div class="page-break-gap-visual"><div class="page-break-gap-line"></div><span class="page-break-badge">Page ${pageNum} (PDF)</span><div class="page-break-gap-line"></div></div></div>`;
+        }
+        extractedHtml += pageHtml;
+      }
+
+      if (!extractedHtml.trim()) {
+        extractedHtml = '<p>Le document PDF a été importé mais ne contient aucun texte vectoriel sélectionnable (il s\'agit probablement d\'un document scanné sous forme d\'image pure).</p>';
+      }
+
+      const nameWithoutExt = file.name.replace(/\.[^/.]+$/, '');
+      if (window.wordApp && window.wordApp.multiDoc) {
+        window.wordApp.multiDoc.openFileAsDocument(nameWithoutExt, extractedHtml);
+      } else {
+        this.editor.innerHTML = extractedHtml;
+        this.titleInput.value = `${nameWithoutExt} - Word`;
+        this.saveToStorage();
+        this.toasts.show(`PDF "${file.name}" converti avec succès (${numPages} page${numPages > 1 ? 's' : ''}) !`, 'success', 3500);
+        if (window.wordApp) {
+          if (window.wordApp.history) window.wordApp.history.pushState(true);
+          setTimeout(() => {
+            if (window.wordApp.pagination) window.wordApp.pagination.updatePagination();
+            if (window.wordApp.spellCheck) window.wordApp.spellCheck.scanEditor();
+          }, 120);
+        }
+      }
+    } catch (err) {
+      console.error('Erreur importation PDF:', err);
+      this.toasts.show('Erreur lors du décodage du fichier PDF.', 'error');
+    }
   }
 
   // [CRUCIAL] EXPORT DOCX NATIF VIA HTML-DOCX-JS (OU OPENXML FALLBACK)
@@ -1294,6 +1449,20 @@ ${this.getCleanHtml()}
     this.toasts.show(`Fichier texte exporté !`, 'success');
   }
 
+  // [CRUCIAL] EXPORTATION AU FORMAT MARKDOWN (.MD)
+  exportMarkdown() {
+    if (window.wordApp && window.wordApp.markdown) {
+      window.wordApp.markdown.exportMarkdownFile();
+    }
+  }
+
+  // [CRUCIAL] IMPORTATION D'UN FICHIER MARKDOWN (.MD)
+  importMarkdown(file) {
+    if (window.wordApp && window.wordApp.markdown) {
+      window.wordApp.markdown.importMarkdownFile(file);
+    }
+  }
+
   triggerDownload(blob, filename) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -1303,6 +1472,530 @@ ${this.getCleanHtml()}
     link.click();
     document.body.removeChild(link);
     setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+}
+
+/**
+ * ------------------------------------------------------------------------------
+ * 6.5 GESTIONNAIRE DU MODE MARKDOWN & IMPORT/EXPORT (MARKDOWN MANAGER)
+ * Permet l'édition directe en Markdown (GFM), la conversion bidirectionnelle
+ * WYSIWYG <-> Markdown, l'aperçu temps réel et l'import/export de fichiers .md
+ * ------------------------------------------------------------------------------
+ */
+class MarkdownManager {
+  constructor(editorElement, docTitleInput, toastManager) {
+    this.editor = editorElement;
+    this.titleInput = docTitleInput;
+    this.toasts = toastManager;
+    this.isMarkdownMode = false;
+    this.isSplitView = true;
+
+    // Initialisation du parseur Markdown (marked)
+    marked.setOptions({
+      gfm: true,
+      breaks: true
+    });
+
+    // Initialisation du convertisseur HTML vers Markdown (Turndown + GFM)
+    this.turndown = new TurndownService({
+      headingStyle: 'atx',
+      hr: '---',
+      bulletListMarker: '-',
+      codeBlockStyle: 'fenced',
+      emDelimiter: '*'
+    });
+    this.turndown.use(gfm);
+
+    // Règles spécifiques pour préserver les composants Word
+    this.turndown.addRule('wordCallout', {
+      filter: (node) => node.classList && node.classList.contains('word-callout'),
+      replacement: (content) => `\n\n> 💡 **NOTE :**\n> ${content.trim().replace(/\n/g, '\n> ')}\n\n`
+    });
+
+    this.turndown.addRule('cleanBreaks', {
+      filter: (node) => node.classList && (node.classList.contains('word-page-break') || node.classList.contains('page-sheet-header') || node.classList.contains('page-sheet-footer')),
+      replacement: () => '\n\n---\n\n'
+    });
+
+    // Éléments du DOM
+    this.workspace = document.getElementById('markdown-workspace');
+    this.textarea = document.getElementById('markdown-source-input');
+    this.previewPane = document.getElementById('markdown-preview-pane');
+    this.previewContent = document.getElementById('markdown-preview-content');
+    this.panesContainer = document.getElementById('markdown-panes');
+    this.statsBadge = document.getElementById('md-stats-badge');
+    this.hiddenMdInput = document.getElementById('hidden-md-input');
+
+    // Éléments de numérotation des lignes
+    this.codeContainer = document.getElementById('markdown-code-container');
+    this.lineNumbers = document.getElementById('markdown-line-numbers');
+    this.lineCountBadge = document.getElementById('md-line-count-badge');
+    this.btnToggleLineNums = document.getElementById('md-btn-toggle-linenums');
+    this.btnToggleWrap = document.getElementById('md-btn-toggle-wrap');
+    this.showLineNumbers = true;
+    this.isWordWrap = false;
+    this.lastLineCount = 0;
+
+    this.btnViewMarkdown = document.getElementById('btn-view-markdown');
+    this.btnViewWysiwyg = document.getElementById('btn-view-multipage');
+    this.sbToggleMode = document.getElementById('sb-toggle-mode');
+    this.sbModeLabel = document.getElementById('sb-mode-label');
+    this.sbModeIcon = document.getElementById('sb-mode-icon');
+
+    this.initEvents();
+  }
+
+  getDocumentTitle() {
+    let title = this.titleInput.value.trim();
+    return title.replace(/\s*-\s*Word$/i, '') || 'Document';
+  }
+
+  htmlToMarkdown(html) {
+    if (!html) return '';
+    const temp = document.createElement('div');
+    temp.innerHTML = html;
+    
+    // Supprimer les surbrillances orthographiques et décorations
+    temp.querySelectorAll('.spell-error').forEach((s) => {
+      const text = document.createTextNode(s.textContent);
+      s.parentNode.replaceChild(text, s);
+    });
+    temp.querySelectorAll('mark.search-highlight').forEach((m) => {
+      const text = document.createTextNode(m.textContent);
+      m.parentNode.replaceChild(text, m);
+    });
+    temp.querySelectorAll('.page-last-spacer, .page-last-footer, .page-break-gap-visual').forEach((e) => e.remove());
+
+    return this.turndown.turndown(temp.innerHTML).trim();
+  }
+
+  markdownToHtml(md) {
+    if (!md) return '';
+    return marked.parse(md);
+  }
+
+  toggleMarkdownMode(forceState = null) {
+    const nextState = forceState !== null ? forceState : !this.isMarkdownMode;
+    if (this.isMarkdownMode === nextState) return;
+
+    if (nextState) {
+      // Entrée dans le Mode Markdown
+      this.isMarkdownMode = true;
+      document.body.classList.add('markdown-mode-active');
+
+      // Convertir le contenu WYSIWYG en Markdown
+      const currentHtml = window.wordApp && window.wordApp.fileManager 
+        ? window.wordApp.fileManager.getCleanHtml() 
+        : this.editor.innerHTML;
+      
+      const mdContent = this.htmlToMarkdown(currentHtml);
+      if (this.textarea) {
+        this.textarea.value = mdContent;
+      }
+
+      this.updatePreview();
+      this.updateStats();
+      this.updateLineNumbers(true);
+      this.updateUI();
+
+      if (this.textarea) {
+        setTimeout(() => this.textarea.focus(), 80);
+      }
+      this.toasts.show('Mode Markdown activé (Code source .md)', 'info');
+    } else {
+      // Sortie du Mode Markdown -> retour vers Pages A4 WYSIWYG
+      this.isMarkdownMode = false;
+      document.body.classList.remove('markdown-mode-active');
+
+      if (this.textarea) {
+        const mdText = this.textarea.value;
+        const html = this.markdownToHtml(mdText);
+        this.editor.innerHTML = html;
+      }
+
+      this.updateUI();
+
+      if (window.wordApp) {
+        if (window.wordApp.pagination) window.wordApp.pagination.updatePagination();
+        if (window.wordApp.spellCheck) window.wordApp.spellCheck.scanEditor();
+        if (window.wordApp.history) window.wordApp.history.pushState(true);
+        if (window.wordApp.fileManager) window.wordApp.fileManager.scheduleDebouncedSave();
+      }
+
+      this.toasts.show('Document synchronisé et converti en pages A4 !', 'success');
+    }
+  }
+
+  updatePreview() {
+    if (!this.textarea || !this.previewContent) return;
+    const md = this.textarea.value;
+    const html = this.markdownToHtml(md);
+    this.previewContent.innerHTML = html;
+  }
+
+  updateStats() {
+    if (!this.textarea || !this.statsBadge) return;
+    const text = this.textarea.value;
+    const lines = text ? text.split('\n').length : 0;
+    const words = text ? (text.match(/[\w\u00C0-\u017F]+/g) || []).length : 0;
+    const chars = text.length;
+
+    this.statsBadge.textContent = `${lines} ligne${lines > 1 ? 's' : ''} | ${words} mot${words > 1 ? 's' : ''} | ${chars} car.`;
+  }
+
+  updateLineNumbers(force = false) {
+    if (!this.textarea || !this.lineNumbers) return;
+    const text = this.textarea.value;
+    const lines = text.split('\n');
+    const count = Math.max(1, lines.length);
+
+    // Ajuster dynamiquement la largeur du gutter si nécessaire (ex: > 999 lignes)
+    const digits = String(count).length;
+    const neededWidth = Math.max(52, digits * 10 + 20);
+    this.lineNumbers.style.width = `${neededWidth}px`;
+    this.lineNumbers.style.minWidth = `${neededWidth}px`;
+
+    // Si le nombre de lignes a changé, ou régénération forcée demandée
+    if (force || count !== this.lastLineCount || this.lineNumbers.children.length !== count) {
+      let numsHtml = '';
+      for (let i = 1; i <= count; i++) {
+        numsHtml += `<div class="md-line-num" data-line="${i}">${i}</div>`;
+      }
+      this.lineNumbers.innerHTML = numsHtml;
+      this.lastLineCount = count;
+    }
+
+    if (this.lineCountBadge) {
+      this.lineCountBadge.textContent = `${count} ligne${count > 1 ? 's' : ''}`;
+    }
+
+    this.updateActiveLineHighlight();
+    this.lineNumbers.scrollTop = this.textarea.scrollTop;
+  }
+
+  updateActiveLineHighlight() {
+    if (!this.textarea) return;
+    const cursorPos = this.textarea.selectionStart || 0;
+    const textBefore = this.textarea.value.substring(0, cursorPos);
+    const linesBefore = textBefore.split('\n');
+    const currentLine = linesBefore.length;
+    const currentCol = linesBefore[linesBefore.length - 1].length + 1;
+
+    if (this.showLineNumbers && this.lineNumbers) {
+      const prevActive = this.lineNumbers.querySelector('.md-line-num.active');
+      if (prevActive && parseInt(prevActive.dataset.line, 10) !== currentLine) {
+        prevActive.classList.remove('active');
+      }
+      const newActive = this.lineNumbers.querySelector(`.md-line-num[data-line="${currentLine}"]`);
+      if (newActive && !newActive.classList.contains('active')) {
+        newActive.classList.add('active');
+      }
+    }
+
+    if (this.statsBadge) {
+      const text = this.textarea.value;
+      const totalLines = text ? text.split('\n').length : 1;
+      const words = text ? (text.match(/[\w\u00C0-\u017F]+/g) || []).length : 0;
+      const chars = text.length;
+      this.statsBadge.textContent = `Ligne ${currentLine}, Col ${currentCol} | ${totalLines} ligne${totalLines > 1 ? 's' : ''} | ${words} mot${words > 1 ? 's' : ''} | ${chars} car.`;
+    }
+  }
+
+  toggleLineNumbers(force = null) {
+    this.showLineNumbers = force !== null ? force : !this.showLineNumbers;
+    if (this.lineNumbers) {
+      this.lineNumbers.classList.toggle('hidden', !this.showLineNumbers);
+    }
+    if (this.btnToggleLineNums) {
+      this.btnToggleLineNums.classList.toggle('active', this.showLineNumbers);
+    }
+    this.toasts.show(this.showLineNumbers ? 'Numérotation des lignes activée' : 'Numérotation des lignes masquée', 'info');
+  }
+
+  toggleWordWrap(force = null) {
+    this.isWordWrap = force !== null ? force : !this.isWordWrap;
+    if (this.codeContainer) {
+      this.codeContainer.classList.toggle('word-wrap-enabled', this.isWordWrap);
+    }
+    if (this.textarea) {
+      this.textarea.setAttribute('wrap', this.isWordWrap ? 'soft' : 'off');
+    }
+    if (this.btnToggleWrap) {
+      this.btnToggleWrap.classList.toggle('active', this.isWordWrap);
+    }
+    this.toasts.show(this.isWordWrap ? 'Retour automatique à la ligne activé' : 'Retour automatique à la ligne désactivé (Mode Code)', 'info');
+  }
+
+  updateUI() {
+    if (this.btnViewMarkdown && this.btnViewWysiwyg) {
+      if (this.isMarkdownMode) {
+        this.btnViewMarkdown.classList.add('active');
+        this.btnViewWysiwyg.classList.remove('active');
+      } else {
+        this.btnViewMarkdown.classList.remove('active');
+        this.btnViewWysiwyg.classList.add('active');
+      }
+    }
+
+    if (this.sbModeLabel && this.sbModeIcon) {
+      if (this.isMarkdownMode) {
+        this.sbModeLabel.textContent = 'Mode Markdown';
+        this.sbModeIcon.textContent = 'ℳ';
+        if (this.sbToggleMode) this.sbToggleMode.style.backgroundColor = 'var(--btn-selected)';
+      } else {
+        this.sbModeLabel.textContent = 'Pages A4';
+        this.sbModeIcon.textContent = '☷';
+        if (this.sbToggleMode) this.sbToggleMode.style.backgroundColor = 'transparent';
+      }
+    }
+  }
+
+  exportMarkdownFile() {
+    const filename = `${this.getDocumentTitle()}.md`;
+    let md = '';
+
+    if (this.isMarkdownMode && this.textarea) {
+      md = this.textarea.value;
+    } else {
+      const cleanHtml = window.wordApp && window.wordApp.fileManager 
+        ? window.wordApp.fileManager.getCleanHtml() 
+        : this.editor.innerHTML;
+      md = this.htmlToMarkdown(cleanHtml);
+    }
+
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+
+    this.toasts.show(`Document Markdown "${filename}" exporté !`, 'success');
+  }
+
+  importMarkdownFile(file) {
+    if (!file) return;
+    this.toasts.show(`Chargement de "${file.name}"...`, 'info');
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const mdContent = e.target.result;
+      const html = this.markdownToHtml(mdContent);
+
+      const nameWithoutExt = file.name.replace(/\.(md|markdown|txt)$/i, '');
+
+      if (window.wordApp && window.wordApp.multiDoc) {
+        window.wordApp.multiDoc.openFileAsDocument(file.name, html);
+      } else {
+        // Si on est en Mode Markdown, mettre à jour le textarea directement
+        if (this.textarea) {
+          this.textarea.value = mdContent;
+          this.updatePreview();
+          this.updateStats();
+        }
+
+        // Mettre à jour l'éditeur Word WYSIWYG
+        this.editor.innerHTML = html;
+
+        if (this.titleInput) {
+          this.titleInput.value = `${nameWithoutExt} - Word`;
+        }
+
+        if (window.wordApp) {
+          if (window.wordApp.history) window.wordApp.history.pushState(true);
+          setTimeout(() => {
+            if (window.wordApp.pagination) window.wordApp.pagination.updatePagination();
+            if (window.wordApp.spellCheck) window.wordApp.spellCheck.scanEditor();
+            if (window.wordApp.fileManager) window.wordApp.fileManager.saveToStorage();
+          }, 100);
+        }
+
+        this.toasts.show(`Fichier Markdown "${file.name}" importé avec succès !`, 'success');
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  initEvents() {
+    // Boutons de bascule de mode
+    this.btnViewMarkdown?.addEventListener('click', () => this.toggleMarkdownMode(true));
+    this.btnViewWysiwyg?.addEventListener('click', () => this.toggleMarkdownMode(false));
+    this.sbToggleMode?.addEventListener('click', () => this.toggleMarkdownMode());
+
+    // Bouton retour dans la barre d'outils Markdown
+    document.getElementById('md-btn-apply-exit')?.addEventListener('click', () => {
+      this.toggleMarkdownMode(false);
+    });
+
+    // Bascule de la vue fractionnée (Aperçu en direct)
+    document.getElementById('md-btn-toggle-split')?.addEventListener('click', () => {
+      this.isSplitView = !this.isSplitView;
+      if (this.panesContainer) {
+        if (this.isSplitView) {
+          this.panesContainer.classList.remove('single-pane');
+        } else {
+          this.panesContainer.classList.add('single-pane');
+        }
+      }
+    });
+
+    // Copier le Markdown
+    document.getElementById('md-btn-copy')?.addEventListener('click', async () => {
+      if (!this.textarea) return;
+      try {
+        await navigator.clipboard.writeText(this.textarea.value);
+        this.toasts.show('Code Markdown copié dans le presse-papiers !', 'success');
+      } catch (err) {
+        this.textarea.select();
+        document.execCommand('copy');
+        this.toasts.show('Code Markdown copié !', 'success');
+      }
+    });
+
+    // Exportation
+    document.getElementById('md-btn-export')?.addEventListener('click', () => this.exportMarkdownFile());
+    document.getElementById('btn-export-markdown')?.addEventListener('click', () => {
+      const backstage = document.getElementById('backstage-overlay');
+      if (backstage) backstage.classList.remove('active');
+      this.exportMarkdownFile();
+    });
+
+    // Importation
+    const triggerFileImport = () => {
+      if (this.hiddenMdInput) {
+        this.hiddenMdInput.value = '';
+        this.hiddenMdInput.click();
+      }
+    };
+
+    document.getElementById('md-btn-import')?.addEventListener('click', triggerFileImport);
+    document.getElementById('btn-insert-markdown')?.addEventListener('click', triggerFileImport);
+    document.getElementById('btn-browse-markdown')?.addEventListener('click', () => {
+      const backstage = document.getElementById('backstage-overlay');
+      if (backstage) backstage.classList.remove('active');
+      triggerFileImport();
+    });
+
+    this.hiddenMdInput?.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files[0]) {
+        this.importMarkdownFile(e.target.files[0]);
+      }
+    });
+
+    // Défilement synchronisé entre le textarea et le gutter de numérotation
+    this.textarea?.addEventListener('scroll', () => {
+      if (this.lineNumbers) {
+        this.lineNumbers.scrollTop = this.textarea.scrollTop;
+      }
+    });
+
+    this.lineNumbers?.addEventListener('wheel', (e) => {
+      if (this.textarea && e.deltaY !== 0) {
+        this.textarea.scrollTop += e.deltaY;
+        this.lineNumbers.scrollTop = this.textarea.scrollTop;
+        e.preventDefault();
+      }
+    }, { passive: false });
+
+    // Clic sur un numéro de ligne pour sélectionner toute la ligne dans l'éditeur
+    this.lineNumbers?.addEventListener('click', (e) => {
+      const lineEl = e.target.closest('.md-line-num');
+      if (!lineEl || !this.textarea) return;
+      const targetLine = parseInt(lineEl.dataset.line, 10);
+      if (!targetLine) return;
+      const lines = this.textarea.value.split('\n');
+      let startIdx = 0;
+      for (let i = 0; i < targetLine - 1 && i < lines.length; i++) {
+        startIdx += lines[i].length + 1;
+      }
+      const lineLen = lines[targetLine - 1] ? lines[targetLine - 1].length : 0;
+      this.textarea.focus();
+      this.textarea.setSelectionRange(startIdx, startIdx + lineLen);
+      this.updateActiveLineHighlight();
+    });
+
+    // Saisie en direct dans le textarea avec debounce pour l'aperçu et mise à jour de la numérotation
+    let previewDebounce = null;
+    this.textarea?.addEventListener('input', () => {
+      this.updateStats();
+      this.updateLineNumbers();
+      clearTimeout(previewDebounce);
+      previewDebounce = setTimeout(() => this.updatePreview(), 100);
+    });
+
+    this.textarea?.addEventListener('keyup', () => this.updateActiveLineHighlight());
+    this.textarea?.addEventListener('click', () => this.updateActiveLineHighlight());
+    this.textarea?.addEventListener('mouseup', () => this.updateActiveLineHighlight());
+    this.textarea?.addEventListener('select', () => this.updateActiveLineHighlight());
+    this.textarea?.addEventListener('focus', () => this.updateActiveLineHighlight());
+
+    // Boutons de bascule de la barre d'outils Markdown
+    this.btnToggleLineNums?.addEventListener('click', () => this.toggleLineNumbers());
+    this.btnToggleWrap?.addEventListener('click', () => this.toggleWordWrap());
+
+    // Support de la touche Tab (indente de 2 espaces) et raccourcis clavier dans le textarea
+    this.textarea?.addEventListener('keydown', (e) => {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const start = this.textarea.selectionStart;
+        const end = this.textarea.selectionEnd;
+        this.textarea.value = this.textarea.value.substring(0, start) + '  ' + this.textarea.value.substring(end);
+        this.textarea.selectionStart = this.textarea.selectionEnd = start + 2;
+        this.updatePreview();
+        this.updateLineNumbers();
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        this.exportMarkdownFile();
+      }
+    });
+
+    // Raccourcis d'insertion dans la barre d'outils Markdown
+    this.bindAction('md-action-bold', '**', '**', 'texte en gras');
+    this.bindAction('md-action-italic', '*', '*', 'texte en italique');
+    this.bindAction('md-action-h1', '# ', '', 'Titre 1');
+    this.bindAction('md-action-h2', '## ', '', 'Titre 2');
+    this.bindAction('md-action-list', '- ', '', 'Élément de liste');
+    this.bindAction('md-action-quote', '> ', '', 'Citation');
+    this.bindAction('md-action-code', '```\n', '\n```', 'code');
+    this.bindAction('md-action-table', '\n| Colonne 1 | Colonne 2 |\n| --- | --- |\n| Donnée 1 | Donnée 2 |\n', '', '');
+    this.bindAction('md-action-link', '[', '](https://exemple.com)', 'texte du lien');
+
+    // Drag and drop universel de fichiers .md sur l'application
+    window.addEventListener('dragover', (e) => e.preventDefault());
+    window.addEventListener('drop', (e) => {
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
+        const file = e.dataTransfer.files[0];
+        if (file.name.match(/\.(md|markdown)$/i)) {
+          e.preventDefault();
+          this.importMarkdownFile(file);
+        }
+      }
+    });
+  }
+
+  bindAction(btnId, before, after, defaultText) {
+    const btn = document.getElementById(btnId);
+    if (!btn || !this.textarea) return;
+
+    btn.addEventListener('click', () => {
+      const start = this.textarea.selectionStart;
+      const end = this.textarea.selectionEnd;
+      const selected = this.textarea.value.substring(start, end) || defaultText;
+
+      const replacement = before + selected + after;
+      this.textarea.value = this.textarea.value.substring(0, start) + replacement + this.textarea.value.substring(end);
+
+      this.textarea.selectionStart = start + before.length;
+      this.textarea.selectionEnd = start + before.length + selected.length;
+      this.textarea.focus();
+
+      this.updatePreview();
+      this.updateStats();
+      this.updateLineNumbers();
+    });
   }
 }
 
@@ -1448,6 +2141,47 @@ class SpellCheckEngine {
 
     this.buildDictionary();
     this.initEvents();
+    this.loadFullDictionaries();
+  }
+
+  async loadFullDictionaries() {
+    try {
+      // 1. Charger le dictionnaire complet français de référence (~336 000 mots Gutenberg/OpenLexicon)
+      const resFr = await fetch('/dict-fr.txt');
+      if (resFr.ok) {
+        const text = await resFr.text();
+        const words = text.split('\n');
+        for (let i = 0; i < words.length; i++) {
+          const w = words[i].trim().toLowerCase();
+          if (w) this.dictionary.add(w);
+        }
+        console.log(`Dictionnaire français complet chargé : ${this.dictionary.size} mots.`);
+      }
+    } catch (e) {
+      console.warn('Impossible de charger /dict-fr.txt, dictionnaire interne utilisé.', e);
+    }
+
+    try {
+      // 2. Charger le dictionnaire complet anglais (~370 000 mots)
+      const resEn = await fetch('/dict-en.txt');
+      if (resEn.ok) {
+        const text = await resEn.text();
+        const words = text.split('\n');
+        for (let i = 0; i < words.length; i++) {
+          const w = words[i].trim().toLowerCase();
+          if (w) this.englishDictionary.add(w);
+        }
+        console.log(`Dictionnaire anglais complet chargé : ${this.englishDictionary.size} mots.`);
+      }
+    } catch (e) {
+      console.warn('Impossible de charger /dict-en.txt, dictionnaire interne utilisé.', e);
+    }
+
+    this.isFullDictionaryLoaded = true;
+    if (this.statusItem) {
+      this.statusItem.title = `Vérification orthographique : Dictionnaire exhaustif de ${this.dictionary.size.toLocaleString('fr-FR')} mots actifs`;
+    }
+    this.scanEditor();
   }
 
   loadCustomDictionary() {
@@ -1629,7 +2363,93 @@ class SpellCheckEngine {
       'chère', 'chers', 'chères', 'direction', 'équipe', 'cadre', 'client', 'clients', 'responsable',
       'projet', 'réussi', 'succès', 'optimisation', 'déploiement', 'fonction', 'fonctions', 'accord',
       'sécurité', 'donnée', 'données', 'base', 'bases', 'gestion', 'outil', 'outils', 'élément', 'éléments',
-      'contenu', 'contenus', 'structure', 'structures', 'modèle', 'modèles', 'information', 'informations'
+      'contenu', 'contenus', 'structure', 'structures', 'modèle', 'modèles', 'information', 'informations',
+
+      // --- Vocabulaire étendu supplémentaire (qualificatifs, actions, vie quotidienne, grammaire) ---
+      'correct', 'corrects', 'correcte', 'correctes', 'correctement', 'correction', 'corrections',
+      'correcteur', 'correctrice', 'correcteurs', 'correctrices', 'orthographe', 'orthographique',
+      'orthographiques', 'grammaire', 'grammatical', 'grammaticale', 'grammaticaux', 'grammaticales',
+      'faute', 'fautes', 'souligner', 'souligné', 'soulignée', 'soulignés', 'soulignées', 'soulignement',
+      'soulignements', 'mot', 'mots', 'phrase', 'phrases', 'vocabulaire', 'langue', 'langues',
+      'dictionnaire', 'dictionnaires', 'suggestion', 'suggestions', 'proposer', 'proposition', 'propositions',
+      'souhaiter', 'souhaite', 'souhaites', 'souhaitons', 'souhaitez', 'souhaitent', 'souhaité',
+      'écouter', 'écoute', 'regarder', 'regarde', 'chercher', 'cherche', 'trouver', 'trouve',
+      'demander', 'demande', 'répondre', 'répond', 'répondu', 'réponse', 'réponses', 'question', 'questions',
+      'expliquer', 'explique', 'explication', 'explications', 'comprendre', 'compris', 'compréhension',
+      'apprendre', 'appris', 'apprentissage', 'enseigner', 'enseignant', 'formation', 'cours',
+      'travailler', 'travaille', 'fonctionner', 'fonctionne', 'fonctionnement', 'opération', 'opérations',
+      'changer', 'change', 'changement', 'changements', 'améliorer', 'améliore', 'amélioration', 'améliorations',
+      'corriger', 'corrige', 'corrigé', 'corrigée', 'corrigés', 'corrigées', 'corrigent', 'corrigera',
+      'ajuster', 'ajuste', 'ajustement', 'ajustements', 'régler', 'règle', 'règlement',
+      'arriver', 'arrive', 'partir', 'part', 'parti', 'sortie', 'sortir', 'entre', 'entrer',
+      'monter', 'descendre', 'tomber', 'vivre', 'vie', 'vécue', 'présent', 'présente', 'présents', 'présentes',
+      'passé', 'passée', 'futur', 'future', 'futurs', 'futures', 'temps', 'période', 'périodes',
+      'durée', 'délai', 'délais', 'date', 'dates', 'calendrier', 'calendriers', 'rendez-vous',
+      'bon', 'bonne', 'bons', 'bonnes', 'mauvais', 'mauvaise', 'mauvaises', 'excellent', 'excellente',
+      'excellents', 'excellentes', 'parfait', 'parfaite', 'parfaits', 'parfaites', 'juste', 'justes',
+      'vrai', 'vraie', 'vrais', 'vraies', 'faux', 'fausse', 'fausses', 'vérité', 'réalité',
+      'rapide', 'rapides', 'rapidement', 'lent', 'lente', 'lents', 'lentes', 'lentement',
+      'lourd', 'lourde', 'lourds', 'lourdes', 'léger', 'légère', 'légers', 'légères', 'légèrement',
+      'fort', 'forte', 'forts', 'fortes', 'faible', 'faibles', 'faiblesse', 'force',
+      'chaud', 'chaude', 'chauds', 'chaudes', 'froid', 'froide', 'froids', 'froides',
+      'beau', 'belle', 'beaux', 'belles', 'beauté', 'joli', 'jolie', 'jolis', 'jolies',
+      'grand', 'grande', 'grands', 'grandes', 'grandeur', 'petit', 'petite', 'petits', 'petites',
+      'nouveau', 'nouvelle', 'nouveaux', 'nouvelles', 'ancien', 'ancienne', 'anciens', 'anciennes',
+      'jeune', 'jeunes', 'jeunesse', 'vieux', 'vieille', 'vieilles', 'âge', 'âgé',
+      'heureux', 'heureuse', 'heureuses', 'malheureux', 'malheureuse', 'joie', 'tristesse',
+      'content', 'contente', 'contents', 'contentes', 'satisfait', 'satisfaite', 'satisfaction',
+      'calme', 'calmes', 'tranquille', 'tranquilles', 'serein', 'sereine', 'confiance',
+      'sûr', 'sûre', 'sûrs', 'sûres', 'sûrement', 'certain', 'certaine', 'certains', 'certaines', 'certitude',
+      'possible', 'possibles', 'possibilité', 'possibilités', 'impossible', 'impossibles',
+      'probable', 'probables', 'probablement', 'improbable', 'capacité', 'capacités',
+      'utile', 'utiles', 'utilité', 'inutile', 'inutiles', 'pratique', 'pratiques',
+      'essentiel', 'essentielle', 'essentiels', 'essentielles', 'fondamental', 'fondamentale',
+      'naturel', 'naturelle', 'naturels', 'naturelles', 'naturellement', 'général', 'générale', 'généraux',
+      'spécial', 'spéciale', 'spéciaux', 'spéciales', 'particulier', 'particulière', 'particuliers',
+      'principal', 'principale', 'principaux', 'principales', 'majeur', 'majeure', 'majeurs', 'majeures',
+      'mineur', 'mineure', 'mineurs', 'mineures', 'unique', 'uniques', 'seul', 'seule', 'seuls', 'seules',
+      'propre', 'propres', 'propreté', 'sale', 'sales', 'plein', 'pleine', 'pleins', 'pleines',
+      'vide', 'vides', 'entier', 'entière', 'entiers', 'entières', 'entièrement', 'total', 'totale',
+      'totaux', 'totales', 'totalement', 'partiel', 'partielle', 'partiels', 'partielles',
+      'direct', 'directe', 'directs', 'directes', 'indirect', 'indirecte', 'indirects', 'indirectes',
+      'personnel', 'personnelle', 'personnels', 'personnelles', 'professionnel', 'professionnelle',
+      'collectif', 'collective', 'collectifs', 'collectives', 'commun', 'commune', 'communs', 'communes',
+      'ami', 'amie', 'amis', 'amies', 'amitié', 'collègue', 'collègues', 'collaborateur', 'collaborateurs',
+      'partenaire', 'partenaires', 'société', 'entreprise', 'organisation', 'association', 'fédération',
+      'maison', 'maisons', 'appartement', 'appartements', 'bâtiment', 'bâtiments', 'immeuble', 'immeubles',
+      'chambre', 'chambres', 'salle', 'salles', 'pièce', 'pièces', 'bureau', 'bureaux',
+      'ville', 'villes', 'village', 'villages', 'pays', 'région', 'régions', 'territoire', 'territoires',
+      'département', 'départements', 'monde', 'terre', 'ciel', 'mer', 'océan', 'fleuve', 'rivière',
+      'nature', 'animal', 'animaux', 'arbre', 'arbres', 'plante', 'plantes', 'fleur', 'fleurs',
+      'soleil', 'lune', 'étoile', 'étoiles', 'pluie', 'vent', 'neige', 'lumière', 'ombre',
+      'couleur', 'rouge', 'bleu', 'vert', 'jaune', 'noir', 'blanc', 'gris', 'orange', 'rose', 'violet',
+      'ordinateur', 'ordinateurs', 'clavier', 'claviers', 'souris', 'écran', 'écrans', 'fenêtre', 'fenêtres',
+      'bouton', 'boutons', 'menu', 'menus', 'onglet', 'onglets', 'volet', 'volets', 'panneau', 'panneaux',
+      'logiciel', 'logiciels', 'application', 'applications', 'navigateur', 'navigateurs', 'internet', 'web',
+      'réseau', 'réseaux', 'serveur', 'serveurs', 'site', 'sites', 'lien', 'liens', 'adresse', 'adresses',
+      'fichier', 'fichiers', 'dossier', 'dossiers', 'document', 'documents', 'page', 'pages', 'feuille',
+      'titre', 'titres', 'sous-titre', 'chapitre', 'chapitres', 'section', 'sections', 'partie', 'parties',
+      'paragraphe', 'paragraphes', 'ligne', 'lignes', 'colonne', 'colonnes', 'tableau', 'tableaux',
+      'cellule', 'cellules', 'marge', 'marges', 'retrait', 'retraits', 'bordure', 'bordures', 'cadre',
+      'police', 'polices', 'taille', 'tailles', 'style', 'styles', 'format', 'formats', 'formatage',
+      'gras', 'italique', 'souligné', 'barré', 'indice', 'exposant', 'alignement', 'gauche', 'droite',
+      'centre', 'justifié', 'interligne', 'espacement', 'puce', 'puces', 'numéro', 'numéros', 'numérotation',
+      'recherche', 'rechercher', 'remplace', 'remplacer', 'sélection', 'sélectionner', 'copier', 'coller',
+      'couper', 'annuler', 'rétablir', 'sauvegarder', 'enregistrer', 'ouvrir', 'fermer', 'imprimer', 'export',
+      'aide', 'raccourci', 'raccourcis', 'option', 'options', 'paramètre', 'paramètres', 'préférence',
+      'contact', 'contacts', 'message', 'messages', 'courriel', 'lettre', 'lettres', 'note', 'notes',
+      'avis', 'opinion', 'remarque', 'remarques', 'commentaire', 'commentaires', 'critique', 'critiques',
+      'conseil', 'conseils', 'recommandation', 'recommandations', 'décision', 'décisions', 'choix',
+      'objectif', 'objectifs', 'but', 'buts', 'finalité', 'cible', 'cibles', 'stratégie', 'stratégies',
+      'plan', 'plans', 'action', 'actions', 'étape', 'étapes', 'phase', 'phases', 'jalon', 'jalons',
+      'résultat', 'résultats', 'succès', 'réussite', 'performance', 'performances', 'progrès',
+      'erreur', 'erreurs', 'faute', 'fautes', 'défaut', 'défauts', 'anomalie', 'anomalies', 'problème',
+      'solution', 'solutions', 'résolution', 'réponse', 'réponses', 'issue', 'issues',
+      'terme', 'termes', 'notion', 'notions', 'concept', 'concepts', 'principe', 'principes',
+      'règle', 'règles', 'loi', 'lois', 'norme', 'normes', 'standard', 'standards', 'critère', 'critères',
+      'valeur', 'valeurs', 'quantité', 'quantités', 'mesure', 'mesures', 'taux', 'pourcentage', 'chiffre',
+      'nombre', 'nombres', 'total', 'somme', 'différence', 'moyenne', 'maximum', 'minimum',
+      'début', 'commencement', 'milieu', 'fin', 'terme', 'conclusion', 'introduction', 'sommaire'
     ];
 
     this.dictionary = new Set(commonFrenchWords.map((w) => w.toLowerCase()));
@@ -1789,6 +2609,59 @@ class SpellCheckEngine {
     document.getElementById('spellcheck-ignore-once')?.addEventListener('click', () => this.ignoreOnce());
     document.getElementById('spellcheck-ignore-all')?.addEventListener('click', () => this.ignoreAll());
     document.getElementById('spellcheck-add-dict')?.addEventListener('click', () => this.addToDictionary());
+    document.getElementById('spellcheck-manage-dict')?.addEventListener('click', () => {
+      this.closeContextMenu();
+      this.openUserDictModal();
+    });
+
+    // Bouton Dictionnaire dans le ruban
+    document.getElementById('btn-open-user-dict')?.addEventListener('click', () => this.openUserDictModal());
+
+    // Événements de la modale de dictionnaire utilisateur
+    const addBtn = document.getElementById('btn-user-dict-add');
+    const addInput = document.getElementById('user-dict-new-word');
+    if (addBtn && addInput) {
+      addBtn.addEventListener('click', () => {
+        if (this.addCustomWord(addInput.value)) {
+          addInput.value = '';
+          addInput.focus();
+        }
+      });
+      addInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (this.addCustomWord(addInput.value)) {
+            addInput.value = '';
+            addInput.focus();
+          }
+        }
+      });
+    }
+
+    const searchInput = document.getElementById('user-dict-search');
+    if (searchInput) {
+      searchInput.addEventListener('input', () => this.renderUserDictModal(searchInput.value));
+    }
+
+    document.getElementById('btn-user-dict-clear')?.addEventListener('click', () => this.clearCustomDictionary());
+    document.getElementById('btn-user-dict-export')?.addEventListener('click', () => this.exportCustomDictionary());
+
+    const importBtn = document.getElementById('btn-user-dict-import');
+    const fileInput = document.getElementById('user-dict-file-input');
+    if (importBtn && fileInput) {
+      importBtn.addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', () => {
+        if (fileInput.files && fileInput.files[0]) {
+          const file = fileInput.files[0];
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            this.importCustomWords(e.target.result);
+            fileInput.value = '';
+          };
+          reader.readAsText(file);
+        }
+      });
+    }
 
     // Bouton Fermer du volet latéral
     document.getElementById('btn-sp-close')?.addEventListener('click', () => this.closePanel());
@@ -1921,7 +2794,15 @@ class SpellCheckEngine {
 
   isWordCorrect(rawWord) {
     if (!rawWord) return true;
-    let word = rawWord.trim().toLowerCase();
+    const trimmedRaw = rawWord.trim();
+
+    // 1. Acronymes, sigles et termes tout en majuscules (ex: PDF, HTML, CSS, TGV, SNCF, IA, ONU, FAQ)
+    // Comme dans Microsoft Word, les mots entièrement en majuscules (2+ lettres) ne sont pas soulignés
+    if (/^[A-ZÀ-ÖØ-ß0-9_-]{2,}$/.test(trimmedRaw)) {
+      return true;
+    }
+
+    let word = trimmedRaw.toLowerCase();
 
     // Nettoyer les apostrophes aux extrémités
     word = word.replace(/^['’]+|['’]+$/g, '');
@@ -1955,29 +2836,101 @@ class SpellCheckEngine {
   }
 
   isFrenchWordCorrect(word) {
-    // Nettoyer les élisions courantes (ex: "l'", "d'", "qu'", "j'", "c'", "m'", "t'", "s'", "n'")
-    const cleaned = word.replace(/^(d|l|qu|j|c|m|t|s|n)['’]/i, '');
+    // Nettoyer les élisions courantes (l', d', qu', j', c', m', t', s', n', jusqu', lorsqu', puisqu', quoiqu')
+    const cleaned = word.replace(/^(d|l|qu|j|c|m|t|s|n|jusqu|lorsqu|puisqu|quoiqu)['’]/i, '');
     if (this.dictionary.has(cleaned) || this.dictionary.has(word)) return true;
+
+    // Mots composés avec apostrophe spécifiques
+    if (word === "aujourd'hui" || cleaned === "aujourd'hui") return true;
+    if (word.startsWith("quelqu'")) return true;
 
     // 1. Pluriel régulier en 's' ou 'x'
     if (cleaned.endsWith('s') && (this.dictionary.has(cleaned.slice(0, -1)) || this.customDictionary.includes(cleaned.slice(0, -1)))) return true;
     if (cleaned.endsWith('x') && (this.dictionary.has(cleaned.slice(0, -1)) || this.customDictionary.includes(cleaned.slice(0, -1)))) return true;
 
-    // 2. Adverbes réguliers en 'ment' (ex: directement, facilement, rapidement)
-    if (cleaned.endsWith('ment')) {
-      const stem = cleaned.slice(0, -4);
-      if (this.dictionary.has(stem) || this.dictionary.has(stem + 'e')) return true;
+    // 2. Pluriels en -aux (ex: national -> nationaux, journal -> journaux, cheval -> chevaux, travail -> travaux)
+    if (cleaned.endsWith('aux')) {
+      const stem = cleaned.slice(0, -3);
+      if (this.dictionary.has(stem + 'al') || this.dictionary.has(stem + 'ail')) return true;
     }
 
-    // 3. Féminin régulier en 'e' ou pluriel féminin en 'es'
-    if (cleaned.endsWith('es') && this.dictionary.has(cleaned.slice(0, -2))) return true;
+    // 3. Féminin régulier en 'e' ou pluriel féminin en 'es' (ex: correct -> correcte, correctes ; grand -> grande, grandes)
+    if (cleaned.endsWith('es')) {
+      const stem = cleaned.slice(0, -2);
+      if (this.dictionary.has(stem) || this.dictionary.has(stem + 'e')) return true;
+    }
     if (cleaned.endsWith('e') && this.dictionary.has(cleaned.slice(0, -1))) return true;
 
-    // 4. Formes participes passés réguliers (ex: -é, -és, -ée, -ées)
-    if (cleaned.endsWith('ée') && this.dictionary.has(cleaned.slice(0, -2) + 'er')) return true;
-    if (cleaned.endsWith('ées') && this.dictionary.has(cleaned.slice(0, -3) + 'er')) return true;
-    if (cleaned.endsWith('és') && this.dictionary.has(cleaned.slice(0, -2) + 'er')) return true;
-    if (cleaned.endsWith('é') && this.dictionary.has(cleaned.slice(0, -1) + 'er')) return true;
+    // 4. Adverbes réguliers en 'ment' (ex: directement, facilement, rapidement, grandement)
+    if (cleaned.endsWith('ment')) {
+      const stem = cleaned.slice(0, -4);
+      if (this.dictionary.has(stem) || this.dictionary.has(stem + 'e') || this.dictionary.has(stem + 'é')) return true;
+    }
+    // Adverbes en -amment, -emment (ex: constamment -> constant, prudemment -> prudent)
+    if (cleaned.endsWith('amment') && this.dictionary.has(cleaned.slice(0, -6) + 'ant')) return true;
+    if (cleaned.endsWith('emment') && this.dictionary.has(cleaned.slice(0, -6) + 'ent')) return true;
+
+    // 5. Féminins en -trice / -trices dérivés de -teur (ex: directeur -> directrice)
+    if (cleaned.endsWith('trices') && this.dictionary.has(cleaned.slice(0, -6) + 'teur')) return true;
+    if (cleaned.endsWith('trice') && this.dictionary.has(cleaned.slice(0, -5) + 'teur')) return true;
+
+    // 6. Féminins en -euse / -euses dérivés de -eur (ex: chercheur -> chercheuse)
+    if (cleaned.endsWith('euses') && this.dictionary.has(cleaned.slice(0, -5) + 'eur')) return true;
+    if (cleaned.endsWith('euse') && this.dictionary.has(cleaned.slice(0, -4) + 'eur')) return true;
+
+    // 7. Féminins en -ière / -ières dérivés de -ier (ex: premier -> première, dernier -> dernière)
+    if (cleaned.endsWith('ières') && this.dictionary.has(cleaned.slice(0, -5) + 'ier')) return true;
+    if (cleaned.endsWith('ière') && this.dictionary.has(cleaned.slice(0, -4) + 'ier')) return true;
+
+    // 8. Féminins en -ienne / -iennes dérivés de -ien (ex: ancien -> ancienne, parisien -> parisienne)
+    if (cleaned.endsWith('iennes') && this.dictionary.has(cleaned.slice(0, -6) + 'ien')) return true;
+    if (cleaned.endsWith('ienne') && this.dictionary.has(cleaned.slice(0, -5) + 'ien')) return true;
+
+    // 9. Conjugaison morphologique des verbes du 1er groupe (-er)
+    // Associe les flexions verbales courantes au verbe infinitif présent dans le dictionnaire
+    const erSuffixes = [
+      { suffix: 'erons', len: 5 }, { suffix: 'erez', len: 4 }, { suffix: 'eront', len: 5 },
+      { suffix: 'erais', len: 5 }, { suffix: 'erait', len: 5 }, { suffix: 'eriez', len: 5 }, { suffix: 'erions', len: 6 }, { suffix: 'eraient', len: 7 },
+      { suffix: 'era', len: 3 }, { suffix: 'eras', len: 4 },
+      { suffix: 'aient', len: 5 }, { suffix: 'ions', len: 4 }, { suffix: 'iez', len: 3 }, { suffix: 'ait', len: 3 }, { suffix: 'ais', len: 3 },
+      { suffix: 'ons', len: 3 }, { suffix: 'ez', len: 2 }, { suffix: 'ent', len: 3 },
+      { suffix: 'ant', len: 3 },
+      { suffix: 'ées', len: 3 }, { suffix: 'ée', len: 2 }, { suffix: 'és', len: 2 }, { suffix: 'é', len: 1 }
+    ];
+
+    for (let i = 0; i < erSuffixes.length; i++) {
+      const rule = erSuffixes[i];
+      if (cleaned.endsWith(rule.suffix)) {
+        const root = cleaned.slice(0, -rule.len);
+        if (root.length >= 2) {
+          if (this.dictionary.has(root + 'er')) return true;
+          // Cas particuliers -cer (ex: commençons -> commencer) et -ger (ex: partageons -> partager)
+          if (rule.suffix === 'ons') {
+            if (cleaned.endsWith('çons') && this.dictionary.has(root.slice(0, -1) + 'cer')) return true;
+            if (cleaned.endsWith('geons') && this.dictionary.has(root.slice(0, -1) + 'ger')) return true;
+          }
+        }
+      }
+    }
+
+    // 10. Conjugaison morphologique des verbes du 2e groupe (-ir)
+    // (ex: choisir -> choisis, choisit, choisissons, choisissez, choisissent, choisissant, choisi)
+    const irSuffixes = [
+      { suffix: 'issons', len: 6 }, { suffix: 'issez', len: 5 }, { suffix: 'issent', len: 6 },
+      { suffix: 'issait', len: 6 }, { suffix: 'issaient', len: 8 }, { suffix: 'issiez', len: 6 }, { suffix: 'issions', len: 7 },
+      { suffix: 'issant', len: 6 },
+      { suffix: 'ira', len: 3 }, { suffix: 'irons', len: 5 }, { suffix: 'irez', len: 4 }, { suffix: 'iront', len: 5 },
+      { suffix: 'irait', len: 5 }, { suffix: 'iraient', len: 7 },
+      { suffix: 'is', len: 2 }, { suffix: 'it', len: 2 }, { suffix: 'ie', len: 2 }, { suffix: 'ies', len: 3 }, { suffix: 'i', len: 1 }
+    ];
+
+    for (let i = 0; i < irSuffixes.length; i++) {
+      const rule = irSuffixes[i];
+      if (cleaned.endsWith(rule.suffix)) {
+        const root = cleaned.slice(0, -rule.len);
+        if (root.length >= 2 && this.dictionary.has(root + 'ir')) return true;
+      }
+    }
 
     return false;
   }
@@ -2048,15 +3001,20 @@ class SpellCheckEngine {
 
     const activeDict = isEn ? this.englishDictionary : this.dictionary;
     const candidates = [];
+    const firstChar = target.charAt(0);
 
     // Chercher les correspondances proches dans le dictionnaire actif
-    activeDict.forEach((dictWord) => {
-      if (Math.abs(dictWord.length - target.length) > 2) return;
+    // Priorité aux mots ayant la même première lettre pour un temps de réponse instantané (<5ms)
+    for (const dictWord of activeDict) {
+      if (Math.abs(dictWord.length - target.length) > 2) continue;
+      if (dictWord.charAt(0) !== firstChar && candidates.length >= 8) continue;
+
       const dist = this.levenshtein(target, dictWord);
       if (dist <= 2) {
         candidates.push({ word: dictWord, distance: dist });
+        if (candidates.length >= 30) break;
       }
-    });
+    }
 
     candidates.sort((a, b) => a.distance - b.distance);
 
@@ -2273,16 +3231,18 @@ class SpellCheckEngine {
 
   updateStatusBar(errorCount) {
     if (!this.statusItem) return;
+    const totalWords = (this.dictionary ? this.dictionary.size : 0);
+    const dictBadge = totalWords > 10000 ? ` (${Math.round(totalWords / 1000)}k)` : '';
     if (errorCount === 0) {
       this.statusIcon.textContent = '✓';
       this.statusIcon.style.color = '#ffffff';
-      this.statusText.textContent = 'Orthographe';
-      this.statusItem.title = 'Vérification orthographique : Aucune erreur';
+      this.statusText.textContent = `Orthographe${dictBadge}`;
+      this.statusItem.title = `Vérification orthographique : Aucune erreur (${totalWords.toLocaleString('fr-FR')} mots chargés dans le dictionnaire)`;
     } else {
       this.statusIcon.textContent = '⚠';
       this.statusIcon.style.color = '#ffdd57';
       this.statusText.textContent = `${errorCount} faute${errorCount > 1 ? 's' : ''}`;
-      this.statusItem.title = `Vérification orthographique : ${errorCount} erreur(s) détectée(s) (F7 pour ouvrir le correcteur)`;
+      this.statusItem.title = `Vérification orthographique : ${errorCount} erreur(s) détectée(s) (${totalWords.toLocaleString('fr-FR')} mots dans le dictionnaire - F7 pour ouvrir le volet)`;
     }
   }
 
@@ -2349,13 +3309,178 @@ class SpellCheckEngine {
   addToDictionary() {
     if (!this.activeErrorSpan) return;
     const word = (this.activeErrorSpan.dataset.word || this.activeErrorSpan.textContent).toLowerCase();
-    if (!this.customDictionary.includes(word)) {
-      this.customDictionary.push(word);
-      this.saveCustomDictionary();
-    }
     this.closeContextMenu();
-    this.toasts.show(`"${word}" ajouté à votre dictionnaire personnel !`, 'success');
+    this.addCustomWord(word, true);
+  }
+
+  addCustomWord(rawWord, notify = true) {
+    if (!rawWord) return false;
+    const word = rawWord.trim().toLowerCase().replace(/^['’.,;!?]+|['’.,;!?]+$/g, '');
+    if (!word || word.length < 1) return false;
+
+    if (this.customDictionary.includes(word)) {
+      if (notify) this.toasts.show(`« ${word} » figure déjà dans votre dictionnaire personnel.`, 'info');
+      return false;
+    }
+
+    this.customDictionary.push(word);
+    this.customDictionary.sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' }));
+    this.saveCustomDictionary();
     this.scanEditor();
+    this.renderUserDictModal();
+
+    if (notify) {
+      this.toasts.show(`« ${word} » a été ajouté à votre dictionnaire personnel !`, 'success');
+    }
+    return true;
+  }
+
+  removeCustomWord(rawWord) {
+    if (!rawWord) return false;
+    const word = rawWord.trim().toLowerCase();
+    const index = this.customDictionary.indexOf(word);
+    if (index === -1) return false;
+
+    this.customDictionary.splice(index, 1);
+    this.saveCustomDictionary();
+    this.scanEditor();
+    this.renderUserDictModal();
+    this.toasts.show(`« ${word} » a été retiré du dictionnaire personnel.`, 'info');
+    return true;
+  }
+
+  clearCustomDictionary() {
+    if (this.customDictionary.length === 0) {
+      this.toasts.show('Votre dictionnaire personnel est déjà vide.', 'info');
+      return;
+    }
+    const count = this.customDictionary.length;
+    if (confirm(`Voulez-vous vraiment effacer la totalité des ${count} mot(s) de votre dictionnaire personnel ?`)) {
+      this.customDictionary = [];
+      this.saveCustomDictionary();
+      this.scanEditor();
+      this.renderUserDictModal();
+      this.toasts.show('Le dictionnaire personnel a été réinitialisé.', 'info');
+    }
+  }
+
+  importCustomWords(fileOrText) {
+    if (!fileOrText || typeof fileOrText !== 'string') return;
+    const tokens = fileOrText.split(/[\r\n,; \t]+/).map((w) => w.trim().toLowerCase().replace(/^['’.,;!?]+|['’.,;!?]+$/g, '')).filter((w) => w.length > 0);
+    let added = 0;
+    tokens.forEach((w) => {
+      if (!this.customDictionary.includes(w)) {
+        this.customDictionary.push(w);
+        added++;
+      }
+    });
+
+    if (added > 0) {
+      this.customDictionary.sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' }));
+      this.saveCustomDictionary();
+      this.scanEditor();
+      this.renderUserDictModal();
+      this.toasts.show(`${added} mot(s) importé(s) dans votre dictionnaire personnel !`, 'success');
+    } else {
+      this.toasts.show('Aucun nouveau mot détecté à importer.', 'info');
+    }
+  }
+
+  exportCustomDictionary() {
+    if (this.customDictionary.length === 0) {
+      this.toasts.show('Votre dictionnaire personnel est vide.', 'info');
+      return;
+    }
+    const content = this.customDictionary.join('\n');
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'dictionnaire_personnel_word.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    this.toasts.show('Dictionnaire personnel exporté (.txt)', 'success');
+  }
+
+  openUserDictModal() {
+    const modal = document.getElementById('modal-user-dict');
+    if (modal) {
+      modal.classList.add('active');
+      const input = document.getElementById('user-dict-new-word');
+      if (input) {
+        input.value = '';
+        setTimeout(() => input.focus(), 80);
+      }
+      const search = document.getElementById('user-dict-search');
+      if (search) search.value = '';
+      this.renderUserDictModal('');
+    }
+  }
+
+  closeUserDictModal() {
+    const modal = document.getElementById('modal-user-dict');
+    if (modal) modal.classList.remove('active');
+  }
+
+  renderUserDictModal(searchFilter = '') {
+    const listContainer = document.getElementById('user-dict-list');
+    const badge = document.getElementById('user-dict-count-badge');
+    if (!listContainer) return;
+
+    const totalCount = this.customDictionary.length;
+    if (badge) {
+      badge.textContent = `${totalCount} mot${totalCount > 1 ? 's' : ''} enregistré${totalCount > 1 ? 's' : ''}`;
+    }
+
+    const q = (searchFilter || '').trim().toLowerCase();
+    const filtered = q
+      ? this.customDictionary.filter((w) => w.toLowerCase().includes(q))
+      : this.customDictionary;
+
+    listContainer.innerHTML = '';
+
+    if (totalCount === 0) {
+      listContainer.innerHTML = `
+        <div class="user-dict-empty">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" style="margin: 0 auto 8px auto; opacity: 0.6; display: block;"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+          <div>Votre dictionnaire personnel est actuellement vide.</div>
+          <div style="font-size: 11px; margin-top: 4px; color: var(--text-muted);">Ajoutez des noms propres, termes métiers ou acronymes ci-dessus.</div>
+        </div>
+      `;
+      return;
+    }
+
+    if (filtered.length === 0) {
+      listContainer.innerHTML = `
+        <div class="user-dict-empty">
+          <div>Aucun mot ne correspond à votre recherche « ${searchFilter} ».</div>
+        </div>
+      `;
+      return;
+    }
+
+    filtered.forEach((word) => {
+      const item = document.createElement('div');
+      item.className = 'user-dict-item';
+      item.innerHTML = `
+        <div class="user-dict-item-word">
+          <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--word-primary);"></span>
+          <span>${word}</span>
+        </div>
+        <button class="user-dict-item-del" title="Supprimer « ${word} » du dictionnaire">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"></path></svg>
+        </button>
+      `;
+
+      item.querySelector('.user-dict-item-del').addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.removeCustomWord(word);
+      });
+
+      listContainer.appendChild(item);
+    });
   }
 
   togglePanel() {
@@ -2390,11 +3515,13 @@ class SpellCheckEngine {
     if (errorSpans.length === 0) {
       this.spBody.innerHTML = `
         <div style="text-align: center; padding: 30px 10px; color: var(--text-muted);">
-          <svg viewBox="0 0 24 24" width="42" height="42" stroke="#107c41" fill="none" stroke-width="2" style="margin: 0 auto 10px auto;"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          <svg viewBox="0 0 24 24" width="42" height="42" stroke="#107c41" fill="none" stroke-width="2" style="margin: 0 auto 10px auto; display: block;"><polyline points="20 6 9 17 4 12"></polyline></svg>
           <div style="font-weight: 600; font-size: 14px; color: #107c41; margin-bottom: 4px;">Document impeccable !</div>
-          <p style="font-size: 12px;">Aucune faute d'orthographe n'a été détectée.</p>
+          <p style="font-size: 12px; margin-bottom: 16px;">Aucune faute d'orthographe n'a été détectée.</p>
+          <button id="btn-sp-open-dict" class="btn-secondary" style="font-size: 12px; padding: 6px 12px;">📚 Dictionnaire personnel (${this.customDictionary.length})</button>
         </div>
       `;
+      document.getElementById('btn-sp-open-dict')?.addEventListener('click', () => this.openUserDictModal());
       return;
     }
 
@@ -2456,12 +3583,7 @@ class SpellCheckEngine {
       addBtn.className = 'sr-btn';
       addBtn.textContent = 'Ajouter au dict.';
       addBtn.addEventListener('click', () => {
-        if (!this.customDictionary.includes(word.toLowerCase())) {
-          this.customDictionary.push(word.toLowerCase());
-          this.saveCustomDictionary();
-        }
-        this.toasts.show(`"${word}" ajouté au dictionnaire personnel !`, 'success');
-        this.scanEditor();
+        this.addCustomWord(word, true);
       });
 
       actionsRow.appendChild(ignoreBtn);
@@ -2470,6 +3592,26 @@ class SpellCheckEngine {
 
       this.spBody.appendChild(card);
     });
+
+    // Pied de page du volet latéral avec accès direct au dictionnaire personnel
+    const panelFooter = document.createElement('div');
+    panelFooter.style.marginTop = '16px';
+    panelFooter.style.paddingTop = '12px';
+    panelFooter.style.borderTop = '1px solid var(--border-subtle)';
+    panelFooter.style.textAlign = 'center';
+
+    const manageBtn = document.createElement('button');
+    manageBtn.className = 'btn-secondary';
+    manageBtn.style.fontSize = '12px';
+    manageBtn.style.width = '100%';
+    manageBtn.style.padding = '7px 10px';
+    manageBtn.innerHTML = `📚 Gérer le dictionnaire personnel (${this.customDictionary.length})`;
+    manageBtn.addEventListener('click', () => {
+      this.openUserDictModal();
+    });
+
+    panelFooter.appendChild(manageBtn);
+    this.spBody.appendChild(panelFooter);
   }
 }
 
@@ -2586,11 +3728,11 @@ class HeaderFooterManager {
       });
     }
 
-    // 7. Insérer le numéro de page
+    // 7. Insérer le numéro de page (ouvre la modale personnalisable)
     const btnPageNum = document.getElementById('btn-hf-insert-pagenum');
     if (btnPageNum) {
       btnPageNum.addEventListener('click', () => {
-        this.insertIntoActiveField('{page}');
+        this.openPageNumberModal();
       });
     }
 
@@ -2610,6 +3752,63 @@ class HeaderFooterManager {
     if (btnLeft) btnLeft.addEventListener('click', () => this.focusField(this.activeType, 'left'));
     if (btnCenter) btnCenter.addEventListener('click', () => this.focusField(this.activeType, 'center'));
     if (btnRight) btnRight.addEventListener('click', () => this.focusField(this.activeType, 'right'));
+
+    // 10. Bouton Numéro de page dans le ruban Insertion
+    document.getElementById('btn-insert-pagenumber')?.addEventListener('click', () => {
+      this.openPageNumberModal();
+    });
+
+    // 11. Événements de la modale Numérotation de Pages
+    document.querySelectorAll('input[name="pagenum-pos"]').forEach((radio) => {
+      radio.addEventListener('change', () => this.updatePageNumPreview());
+    });
+
+    document.querySelectorAll('input[name="pagenum-align"]').forEach((radio) => {
+      radio.addEventListener('change', () => this.updatePageNumPreview());
+    });
+
+    const formatSelect = document.getElementById('pagenum-format-select');
+    const customFormatRow = document.getElementById('pagenum-custom-format-row');
+    const customFormatInput = document.getElementById('pagenum-custom-format-input');
+
+    if (formatSelect) {
+      formatSelect.addEventListener('change', () => {
+        if (customFormatRow) {
+          customFormatRow.style.display = formatSelect.value === 'custom' ? 'block' : 'none';
+        }
+        this.updatePageNumPreview();
+      });
+    }
+
+    if (customFormatInput) {
+      customFormatInput.addEventListener('input', () => this.updatePageNumPreview());
+    }
+
+    document.getElementById('pagenum-show-first-page')?.addEventListener('change', () => {
+      this.updatePageNumPreview();
+    });
+
+    // Bouton Appliquer de la modale
+    document.getElementById('btn-pagenum-apply')?.addEventListener('click', () => {
+      const position = document.querySelector('input[name="pagenum-pos"]:checked')?.value || 'footer';
+      const alignment = document.querySelector('input[name="pagenum-align"]:checked')?.value || 'right';
+      
+      let format = formatSelect ? formatSelect.value : 'Page {page} sur {total}';
+      if (format === 'custom') {
+        format = (customFormatInput && customFormatInput.value.trim()) ? customFormatInput.value.trim() : '{page}';
+      }
+      
+      const showOnFirstPage = document.getElementById('pagenum-show-first-page')?.checked ?? true;
+
+      this.applyPageNumbering({ position, alignment, format, showOnFirstPage });
+      this.closePageNumberModal();
+    });
+
+    // Bouton Supprimer les numéros
+    document.getElementById('btn-pagenum-remove')?.addEventListener('click', () => {
+      this.removePageNumbering();
+      this.closePageNumberModal();
+    });
   }
 
   insertIntoActiveField(text) {
@@ -2751,6 +3950,227 @@ class HeaderFooterManager {
     }
   }
 
+  openPageNumberModal() {
+    const modal = document.getElementById('modal-pagenumber');
+    if (!modal) return;
+
+    // Détecter où se trouve actuellement une numérotation pour pré-remplir la modale
+    let detectedPos = 'footer';
+    let detectedAlign = 'right';
+    let detectedFormat = 'Page {page} sur {total}';
+
+    const checkSlot = (slotVal, pos, align) => {
+      if (typeof slotVal === 'string' && slotVal.includes('{page}')) {
+        detectedPos = pos;
+        detectedAlign = align;
+        detectedFormat = slotVal;
+      }
+    };
+
+    checkSlot(this.data.headerLeft, 'header', 'left');
+    checkSlot(this.data.headerCenter, 'header', 'center');
+    checkSlot(this.data.headerRight, 'header', 'right');
+    checkSlot(this.data.footerLeft, 'footer', 'left');
+    checkSlot(this.data.footerCenter, 'footer', 'center');
+    checkSlot(this.data.footerRight, 'footer', 'right');
+
+    const radioPos = document.querySelector(`input[name="pagenum-pos"][value="${detectedPos}"]`);
+    if (radioPos) radioPos.checked = true;
+
+    const radioAlign = document.querySelector(`input[name="pagenum-align"][value="${detectedAlign}"]`);
+    if (radioAlign) radioAlign.checked = true;
+
+    const formatSelect = document.getElementById('pagenum-format-select');
+    const customRow = document.getElementById('pagenum-custom-format-row');
+    const customInput = document.getElementById('pagenum-custom-format-input');
+
+    if (formatSelect) {
+      let matched = false;
+      for (let i = 0; i < formatSelect.options.length; i++) {
+        if (formatSelect.options[i].value === detectedFormat) {
+          formatSelect.selectedIndex = i;
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) {
+        formatSelect.value = 'custom';
+        if (customRow) customRow.style.display = 'block';
+        if (customInput) customInput.value = detectedFormat;
+      } else {
+        if (customRow) customRow.style.display = 'none';
+      }
+    }
+
+    const chkFirst = document.getElementById('pagenum-show-first-page');
+    if (chkFirst) {
+      chkFirst.checked = !this.data.differentFirstPage;
+    }
+
+    this.updatePageNumPreview();
+    modal.classList.add('active');
+  }
+
+  closePageNumberModal() {
+    const modal = document.getElementById('modal-pagenumber');
+    if (modal) modal.classList.remove('active');
+  }
+
+  updatePageNumPreview() {
+    const pos = document.querySelector('input[name="pagenum-pos"]:checked')?.value || 'footer';
+    const align = document.querySelector('input[name="pagenum-align"]:checked')?.value || 'right';
+    const formatSelect = document.getElementById('pagenum-format-select');
+    let template = formatSelect ? formatSelect.value : 'Page {page} sur {total}';
+    if (template === 'custom') {
+      const customInput = document.getElementById('pagenum-custom-format-input');
+      template = (customInput && customInput.value.trim()) ? customInput.value.trim() : '{page}';
+    }
+
+    const rendered = template.replace(/{page}/g, '1').replace(/{total}/g, '3');
+
+    // Mettre à jour les emplacements de l'aperçu
+    const hLeft = document.getElementById('prev-h-left');
+    const hCenter = document.getElementById('prev-h-center');
+    const hRight = document.getElementById('prev-h-right');
+    const fLeft = document.getElementById('prev-f-left');
+    const fCenter = document.getElementById('prev-f-center');
+    const fRight = document.getElementById('prev-f-right');
+
+    const slots = [hLeft, hCenter, hRight, fLeft, fCenter, fRight];
+    slots.forEach((s) => {
+      if (s) {
+        s.textContent = '';
+        s.className = 'preview-hf-slot';
+      }
+    });
+
+    if (pos === 'header') {
+      if (hLeft) hLeft.textContent = this.data.headerLeft ? this.formatFieldValue('header-left', this.data.headerLeft, 1, 3) : 'Document';
+      if (hRight) hRight.textContent = (this.data.headerRight && !this.data.headerRight.includes('{page}')) ? this.data.headerRight : '';
+      
+      let activeTarget = hRight;
+      if (align === 'left') activeTarget = hLeft;
+      else if (align === 'center') activeTarget = hCenter;
+      
+      if (activeTarget) {
+        activeTarget.textContent = rendered;
+        activeTarget.className = 'preview-hf-slot preview-active-slot';
+      }
+      if (fLeft) fLeft.textContent = this.data.footerLeft || 'Microsoft Word';
+      if (fRight) fRight.textContent = this.data.footerRight && !this.data.footerRight.includes('{page}') ? this.data.footerRight : '';
+    } else {
+      if (hLeft) hLeft.textContent = this.data.headerLeft || 'Document';
+      if (hRight) hRight.textContent = this.data.headerRight || 'Format A4';
+      if (fLeft) fLeft.textContent = this.data.footerLeft || 'Microsoft Word';
+      
+      let activeTarget = fRight;
+      if (align === 'left') activeTarget = fLeft;
+      else if (align === 'center') activeTarget = fCenter;
+
+      if (activeTarget) {
+        activeTarget.textContent = rendered;
+        activeTarget.className = 'preview-hf-slot preview-active-slot';
+      }
+    }
+
+    // Mise à jour visuelle des cartes de sélection
+    const cardHeader = document.getElementById('card-pos-header');
+    const cardFooter = document.getElementById('card-pos-footer');
+    if (cardHeader && cardFooter) {
+      if (pos === 'header') {
+        cardHeader.style.borderColor = 'var(--word-primary)';
+        cardHeader.style.backgroundColor = 'var(--btn-selected)';
+        cardFooter.style.borderColor = 'var(--border-subtle)';
+        cardFooter.style.backgroundColor = 'var(--bg-paper)';
+      } else {
+        cardFooter.style.borderColor = 'var(--word-primary)';
+        cardFooter.style.backgroundColor = 'var(--btn-selected)';
+        cardHeader.style.borderColor = 'var(--border-subtle)';
+        cardHeader.style.backgroundColor = 'var(--bg-paper)';
+      }
+    }
+
+    ['left', 'center', 'right'].forEach((a) => {
+      const card = document.getElementById(`card-align-${a}`);
+      if (card) {
+        if (a === align) {
+          card.style.borderColor = 'var(--word-primary)';
+          card.style.backgroundColor = 'var(--btn-selected)';
+        } else {
+          card.style.borderColor = 'var(--border-subtle)';
+          card.style.backgroundColor = 'var(--bg-paper)';
+        }
+      }
+    });
+  }
+
+  applyPageNumbering(options) {
+    const { position, alignment, format, showOnFirstPage } = options;
+
+    // 1. Déterminer le champ cible
+    let targetFieldKey = '';
+    if (position === 'header') {
+      targetFieldKey = alignment === 'left' ? 'headerLeft' : (alignment === 'center' ? 'headerCenter' : 'headerRight');
+    } else {
+      targetFieldKey = alignment === 'left' ? 'footerLeft' : (alignment === 'center' ? 'footerCenter' : 'footerRight');
+    }
+
+    // 2. Nettoyer les anciens champs de numérotation pour éviter les doublons accidentels
+    const fieldKeys = ['headerLeft', 'headerCenter', 'headerRight', 'footerLeft', 'footerCenter', 'footerRight'];
+    fieldKeys.forEach((k) => {
+      if (k !== targetFieldKey && typeof this.data[k] === 'string' && this.data[k].includes('{page}')) {
+        this.data[k] = '';
+      }
+    });
+
+    // 3. Définir le nouveau modèle de champ dynamique
+    this.data[targetFieldKey] = format;
+
+    // 4. Gérer la première page différente
+    this.data.differentFirstPage = !showOnFirstPage;
+    if (this.chkDifferentFirst) {
+      this.chkDifferentFirst.checked = this.data.differentFirstPage;
+    }
+
+    // 5. Mettre à jour l'affichage sur toutes les pages A4 du document
+    if (window.wordApp && window.wordApp.pagination) {
+      window.wordApp.pagination.renderPageSheets(window.wordApp.pagination.totalPages);
+    }
+
+    // 6. Sauvegarder
+    if (window.wordApp && window.wordApp.fileManager) {
+      window.wordApp.fileManager.scheduleDebouncedSave();
+    }
+
+    const posLabel = position === 'header' ? 'Haut de page (En-tête)' : 'Bas de page (Pied de page)';
+    const alignLabel = alignment === 'left' ? 'Gauche' : (alignment === 'center' ? 'Centré' : 'Droite');
+    this.toasts.show(`Numéros de page appliqués : ${posLabel}, alignement ${alignLabel}`, 'success');
+  }
+
+  removePageNumbering() {
+    const fieldKeys = ['headerLeft', 'headerCenter', 'headerRight', 'footerLeft', 'footerCenter', 'footerRight'];
+    let removed = false;
+    fieldKeys.forEach((k) => {
+      if (typeof this.data[k] === 'string' && this.data[k].includes('{page}')) {
+        this.data[k] = '';
+        removed = true;
+      }
+    });
+
+    if (window.wordApp && window.wordApp.pagination) {
+      window.wordApp.pagination.renderPageSheets(window.wordApp.pagination.totalPages);
+    }
+    if (window.wordApp && window.wordApp.fileManager) {
+      window.wordApp.fileManager.scheduleDebouncedSave();
+    }
+
+    if (removed) {
+      this.toasts.show('Numéros de page supprimés du document', 'info');
+    } else {
+      this.toasts.show('Aucun numéro de page à supprimer', 'info');
+    }
+  }
+
   renderHeader(sheet, pageNum, totalPages) {
     const docTitle = window.wordApp ? window.wordApp.fileManager.getDocumentTitle() : 'Document Word';
     const isFirst = pageNum === 1;
@@ -2769,9 +4189,13 @@ class HeaderFooterManager {
       return;
     }
 
-    const left = this.data.headerLeft ? this.formatFieldValue('header-left', this.data.headerLeft, pageNum, totalPages) : docTitle;
-    const center = this.formatFieldValue('header-center', this.data.headerCenter, pageNum, totalPages);
-    const right = this.data.headerRight ? this.formatFieldValue('header-right', this.data.headerRight, pageNum, totalPages) : 'Format A4';
+    const left = (this.data.headerLeft !== undefined && this.data.headerLeft !== null)
+      ? this.formatFieldValue('header-left', this.data.headerLeft, pageNum, totalPages)
+      : docTitle;
+    const center = this.formatFieldValue('header-center', this.data.headerCenter || '', pageNum, totalPages);
+    const right = (this.data.headerRight !== undefined && this.data.headerRight !== null)
+      ? this.formatFieldValue('header-right', this.data.headerRight, pageNum, totalPages)
+      : 'Format A4';
 
     sheet.innerHTML += `
       <div class="page-sheet-header" data-page="${pageNum}">
@@ -2802,9 +4226,13 @@ class HeaderFooterManager {
       return;
     }
 
-    const left = this.data.footerLeft ? this.formatFieldValue('footer-left', this.data.footerLeft, pageNum, totalPages) : 'Microsoft Word';
-    const center = this.formatFieldValue('footer-center', this.data.footerCenter, pageNum, totalPages);
-    const right = this.data.footerRight ? this.formatFieldValue('footer-right', this.data.footerRight, pageNum, totalPages) : `Page ${pageNum} sur ${totalPages}`;
+    const left = (this.data.footerLeft !== undefined && this.data.footerLeft !== null)
+      ? this.formatFieldValue('footer-left', this.data.footerLeft, pageNum, totalPages)
+      : 'Microsoft Word';
+    const center = this.formatFieldValue('footer-center', this.data.footerCenter || '', pageNum, totalPages);
+    const right = (this.data.footerRight !== undefined && this.data.footerRight !== null)
+      ? this.formatFieldValue('footer-right', this.data.footerRight, pageNum, totalPages)
+      : `Page ${pageNum} sur ${totalPages}`;
 
     sheet.innerHTML += `
       <div class="page-sheet-footer" data-page="${pageNum}">
@@ -2816,6 +4244,235 @@ class HeaderFooterManager {
         <div class="hf-tag-badge">Pied de page - Page ${pageNum}</div>
       </div>
     `;
+  }
+}
+
+/**
+ * ------------------------------------------------------------------------------
+ * 8.6 GESTIONNAIRE DE FILIGRANE DE DOCUMENT (WATERMARK MANAGER)
+ * Permet l'application d'un filigrane textuel fantôme sur l'ensemble des pages A4
+ * avec personnalisation du texte (ex: Confidentiel, Brouillon), de l'opacité et de l'angle.
+ * ------------------------------------------------------------------------------
+ */
+class WatermarkManager {
+  constructor(toasts) {
+    this.toasts = toasts;
+    this.storageKey = 'ms_word_watermark';
+
+    // Configuration par défaut
+    this.state = {
+      enabled: false,
+      text: 'CONFIDENTIEL',
+      opacity: 0.15,
+      angle: 'diagonal', // 'diagonal' (-45deg) ou 'horizontal' (0deg)
+      color: '#6b7280'
+    };
+
+    this.modal = document.getElementById('modal-watermark');
+    this.textInput = document.getElementById('watermark-text-input');
+    this.opacitySlider = document.getElementById('watermark-opacity-slider');
+    this.opacityVal = document.getElementById('watermark-opacity-val');
+    this.colorSelect = document.getElementById('watermark-color-select');
+    this.previewBox = document.getElementById('watermark-preview-box');
+    this.previewText = document.getElementById('watermark-preview-text');
+    this.applyBtn = document.getElementById('btn-watermark-apply');
+    this.removeBtn = document.getElementById('btn-watermark-remove');
+
+    this.loadState();
+    this.initEvents();
+    this.applyToDOM();
+  }
+
+  loadState() {
+    try {
+      const raw = localStorage.getItem(this.storageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        this.state = Object.assign(this.state, parsed);
+      }
+    } catch (e) {
+      console.warn('Impossible de charger le filigrane', e);
+    }
+  }
+
+  saveState() {
+    try {
+      localStorage.setItem(this.storageKey, JSON.stringify(this.state));
+    } catch (e) {
+      console.warn('Impossible de sauvegarder le filigrane', e);
+    }
+  }
+
+  initEvents() {
+    // Bouton Insertion > Filigrane dans le ruban
+    document.getElementById('btn-insert-watermark')?.addEventListener('click', () => {
+      this.openModal();
+    });
+
+    // Modèles prédéfinis (Presets)
+    document.querySelectorAll('.watermark-preset-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const preset = btn.dataset.preset;
+        if (preset && this.textInput) {
+          this.textInput.value = preset;
+          this.updatePreview();
+        }
+      });
+    });
+
+    // Mise à jour de l'aperçu en direct
+    this.textInput?.addEventListener('input', () => this.updatePreview());
+    this.opacitySlider?.addEventListener('input', (e) => {
+      const val = parseInt(e.target.value, 10) || 15;
+      if (this.opacityVal) this.opacityVal.textContent = `${val} %`;
+      this.updatePreview();
+    });
+    this.colorSelect?.addEventListener('change', () => this.updatePreview());
+
+    document.querySelectorAll('input[name="watermark-angle"]').forEach((radio) => {
+      radio.addEventListener('change', () => this.updatePreview());
+    });
+
+    // Bouton Appliquer
+    this.applyBtn?.addEventListener('click', () => {
+      const text = (this.textInput?.value || '').trim() || 'CONFIDENTIEL';
+      const opacity = (parseInt(this.opacitySlider?.value, 10) || 15) / 100;
+      const angle = document.querySelector('input[name="watermark-angle"]:checked')?.value || 'diagonal';
+      const color = this.colorSelect?.value || '#6b7280';
+
+      this.state = {
+        enabled: true,
+        text,
+        opacity,
+        angle,
+        color
+      };
+
+      this.saveState();
+      this.applyToDOM();
+      this.closeModal();
+      this.toasts.show(`Filigrane « ${text} » appliqué à toutes les pages`, 'success');
+    });
+
+    // Bouton Supprimer
+    this.removeBtn?.addEventListener('click', () => {
+      this.state.enabled = false;
+      this.saveState();
+      this.applyToDOM();
+      this.closeModal();
+      this.toasts.show('Le filigrane a été supprimé du document', 'info');
+    });
+  }
+
+  openModal() {
+    if (!this.modal) return;
+    if (this.textInput) this.textInput.value = this.state.text || 'CONFIDENTIEL';
+    if (this.opacitySlider) {
+      const pct = Math.round((this.state.opacity || 0.15) * 100);
+      this.opacitySlider.value = String(pct);
+      if (this.opacityVal) this.opacityVal.textContent = `${pct} %`;
+    }
+    if (this.colorSelect) this.colorSelect.value = this.state.color || '#6b7280';
+
+    const diagRadio = document.getElementById('wm-angle-diag');
+    const horizRadio = document.getElementById('wm-angle-horiz');
+    if (this.state.angle === 'horizontal') {
+      if (horizRadio) horizRadio.checked = true;
+    } else {
+      if (diagRadio) diagRadio.checked = true;
+    }
+
+    if (this.removeBtn) {
+      this.removeBtn.style.display = this.state.enabled ? 'inline-block' : 'none';
+    }
+
+    this.updatePreview();
+    this.modal.classList.add('active');
+    setTimeout(() => this.textInput?.focus(), 80);
+  }
+
+  closeModal() {
+    if (this.modal) this.modal.classList.remove('active');
+  }
+
+  updatePreview() {
+    if (!this.previewText) return;
+    const text = (this.textInput?.value || '').trim() || 'CONFIDENTIEL';
+    const pct = parseInt(this.opacitySlider?.value, 10) || 15;
+    const color = this.colorSelect?.value || '#6b7280';
+    const angle = document.querySelector('input[name="watermark-angle"]:checked')?.value || 'diagonal';
+
+    this.previewText.textContent = text;
+    this.previewText.style.opacity = String(pct / 100);
+    this.previewText.style.color = color;
+    this.previewText.style.transform = angle === 'horizontal' ? 'rotate(0deg)' : 'rotate(-25deg)';
+  }
+
+  applyToDOM() {
+    // Mettre à jour les variables pour @media print
+    if (this.state.enabled) {
+      document.body.classList.add('has-watermark');
+      document.body.style.setProperty('--print-watermark-text', `"${this.state.text.replace(/"/g, '\\"')}"`);
+      document.body.style.setProperty('--print-watermark-opacity', String(this.state.opacity));
+      document.body.style.setProperty('--print-watermark-angle', this.state.angle === 'horizontal' ? '0deg' : '-45deg');
+      document.body.style.setProperty('--print-watermark-color', this.state.color);
+    } else {
+      document.body.classList.remove('has-watermark');
+      document.body.style.removeProperty('--print-watermark-text');
+      document.body.style.removeProperty('--print-watermark-opacity');
+      document.body.style.removeProperty('--print-watermark-angle');
+      document.body.style.removeProperty('--print-watermark-color');
+    }
+
+    // Mettre à jour chaque feuille A4 (.page-sheet)
+    const sheets = document.querySelectorAll('.page-sheet');
+    sheets.forEach((sheet) => this.renderSheetWatermark(sheet));
+
+    // Mettre à jour l'apparence active du bouton dans le ruban
+    const ribbonBtn = document.getElementById('btn-insert-watermark');
+    if (ribbonBtn) {
+      if (this.state.enabled) {
+        ribbonBtn.classList.add('active');
+        ribbonBtn.title = `Filigrane actif : « ${this.state.text} » (Cliquer pour modifier ou supprimer)`;
+      } else {
+        ribbonBtn.classList.remove('active');
+        ribbonBtn.title = "Ajouter ou modifier un filigrane de page (ex: Confidentiel, Brouillon)";
+      }
+    }
+  }
+
+  renderSheetWatermark(sheet) {
+    if (!sheet) return;
+    let wm = sheet.querySelector('.page-sheet-watermark');
+
+    if (!this.state.enabled) {
+      if (wm) wm.remove();
+      return;
+    }
+
+    if (!wm) {
+      wm = document.createElement('div');
+      wm.className = 'page-sheet-watermark';
+      wm.setAttribute('aria-hidden', 'true');
+      sheet.insertBefore(wm, sheet.firstChild);
+    }
+
+    const angleDeg = this.state.angle === 'horizontal' ? '0deg' : '-45deg';
+    let fontSize = 76;
+    if (this.state.text.length > 12) fontSize = 54;
+    if (this.state.text.length > 20) fontSize = 38;
+
+    wm.innerHTML = `
+      <div class="watermark-content" style="opacity: ${this.state.opacity}; transform: rotate(${angleDeg}); color: ${this.state.color}; font-size: ${fontSize}px;">
+        ${this.escapeHtml(this.state.text)}
+      </div>
+    `;
+  }
+
+  escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
   }
 }
 
@@ -2947,6 +4604,9 @@ class PaginationManager {
             <div class="hf-tag-badge">Pied de page - Page ${i}</div>
           </div>
         `;
+      }
+      if (window.wordApp && window.wordApp.watermark) {
+        window.wordApp.watermark.renderSheetWatermark(sheet);
       }
       this.pagesLayer.appendChild(sheet);
     }
@@ -3560,6 +5220,976 @@ class RibbonManager {
 
 /**
  * ------------------------------------------------------------------------------
+ * 8.8 GESTIONNAIRE DU MODE MULTI-DOCUMENTS (MULTI-DOCUMENT MANAGER)
+ * Permet l'édition de multiples documents dans des onglets indépendants avec :
+ * - Barre d'onglets dynamique style Office / Fluent (icône, titre, dirty indicator, fermeture)
+ * - Création, renommage inline, duplication, fermeture avec invite de sauvegarde
+ * - Mode Côte à côte (Split View) pour afficher et comparer 2 documents simultanément
+ * - Synchronisation bidirectionnelle avec l'éditeur, l'historique et les paramètres (filigrane/en-têtes)
+ * - Persistance complète en localStorage avec restauration de session
+ * ------------------------------------------------------------------------------
+ */
+class MultiDocumentManager {
+  constructor(editor, titleInput, toastManager) {
+    this.editor = editor;
+    this.titleInput = titleInput;
+    this.toasts = toastManager;
+    this.storageKey = 'ms_word_multi_docs_v1';
+
+    this.documents = [];
+    this.activeDocId = null;
+    this.isSplitMode = false;
+    this.splitDocId = null;
+    this.pendingCloseDocId = null;
+    this.pendingRenameDocId = null;
+
+    // Éléments du DOM
+    this.tabsBar = document.getElementById('doc-tabs-bar');
+    this.tabsScroll = document.getElementById('doc-tabs-scroll');
+    this.btnAddDoc = document.getElementById('btn-add-document');
+    this.btnSplitToggle = document.getElementById('btn-split-screen-toggle');
+    this.btnSplitViewRibbon = document.getElementById('btn-multi-split-view');
+    this.btnNewDocRibbon = document.getElementById('btn-multi-new-doc');
+    this.btnSwitchDocRibbon = document.getElementById('btn-multi-switch');
+    this.btnDocsMenu = document.getElementById('btn-docs-list-menu');
+    this.docsDropdown = document.getElementById('docs-list-dropdown');
+    this.docsDropdownItems = document.getElementById('docs-list-items');
+    this.btnDropdownNewDoc = document.getElementById('btn-dropdown-new-doc');
+    this.docsCountBadge = document.getElementById('docs-count-badge');
+    this.sbDocsCount = document.getElementById('sb-docs-count');
+    this.statusMultiDocs = document.getElementById('status-multi-docs');
+    this.contextMenu = document.getElementById('tab-context-menu');
+    this.contextTargetDocId = null;
+
+    // Modales de confirmation et de renommage (remplacent window.confirm/prompt bloqués en iframe)
+    this.modalCloseConfirm = document.getElementById('modal-close-confirm');
+    this.modalCloseMessage = document.getElementById('modal-close-message');
+    this.btnCloseConfirmSave = document.getElementById('btn-close-confirm-save');
+    this.btnCloseConfirmDiscard = document.getElementById('btn-close-confirm-discard');
+    this.modalRename = document.getElementById('modal-rename-doc');
+    this.modalRenameInput = document.getElementById('modal-rename-input');
+    this.btnModalRenameApply = document.getElementById('btn-modal-rename-apply');
+
+    // Volet Scindé (Côte à côte)
+    this.splitPane = document.getElementById('split-workspace-pane');
+    this.splitDocSelect = document.getElementById('split-doc-select');
+    this.splitEditorContent = document.getElementById('split-editor-content');
+    this.btnSplitSwap = document.getElementById('btn-split-swap');
+    this.btnSplitClose = document.getElementById('btn-split-close');
+
+    this.initEvents();
+  }
+
+  initEvents() {
+    // Bouton "+" pour nouveau document
+    this.btnAddDoc?.addEventListener('click', () => this.createDocument());
+    this.btnNewDocRibbon?.addEventListener('click', () => this.createDocument());
+    this.btnDropdownNewDoc?.addEventListener('click', () => {
+      this.closeDocsDropdown();
+      this.createDocument();
+    });
+
+    // Bascule mode Côte à côte
+    this.btnSplitToggle?.addEventListener('click', () => this.toggleSplitView());
+    this.btnSplitViewRibbon?.addEventListener('click', () => this.toggleSplitView());
+    this.btnSplitClose?.addEventListener('click', () => this.toggleSplitView(false));
+    this.btnSplitSwap?.addEventListener('click', () => this.swapSplitDocuments());
+
+    this.splitDocSelect?.addEventListener('change', (e) => {
+      this.splitDocId = e.target.value;
+      this.updateSplitViewContent();
+    });
+
+    // Sauvegarde en direct si l'utilisateur édite le volet de comparaison secondaire
+    this.splitEditorContent?.addEventListener('input', () => {
+      if (!this.splitDocId) return;
+      const doc = this.documents.find((d) => d.id === this.splitDocId);
+      if (doc) {
+        doc.content = this.cleanHtmlForStorage(this.splitEditorContent.innerHTML);
+        if (!doc.isDirty) {
+          doc.isDirty = true;
+          this.renderTabs();
+        }
+        this.saveToStorage();
+      }
+    });
+
+    // Bascule document suivant dans le ruban
+    this.btnSwitchDocRibbon?.addEventListener('click', () => this.cycleDocument(1));
+
+    // Menu déroulant de la liste des documents
+    this.btnDocsMenu?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.toggleDocsDropdown();
+    });
+
+    this.statusMultiDocs?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.toggleDocsDropdown();
+    });
+
+    // Fermer le menu déroulant et le menu contextuel lors d'un clic extérieur
+    document.addEventListener('click', (e) => {
+      if (!this.docsDropdown?.contains(e.target) && e.target !== this.btnDocsMenu) {
+        this.closeDocsDropdown();
+      }
+      if (this.contextMenu && !this.contextMenu.contains(e.target)) {
+        this.closeContextMenu();
+      }
+    });
+
+    // Défilement horizontal des onglets à la molette
+    this.tabsScroll?.addEventListener('wheel', (e) => {
+      if (e.deltaY !== 0) {
+        e.preventDefault();
+        this.tabsScroll.scrollLeft += e.deltaY;
+      }
+    }, { passive: false });
+
+    // Actions du menu contextuel
+    document.getElementById('tab-ctx-rename')?.addEventListener('click', () => {
+      const docId = this.contextTargetDocId;
+      this.closeContextMenu();
+      if (docId) this.promptRenameDocument(docId);
+    });
+
+    document.getElementById('tab-ctx-duplicate')?.addEventListener('click', () => {
+      const docId = this.contextTargetDocId;
+      this.closeContextMenu();
+      if (docId) this.duplicateDocument(docId);
+    });
+
+    document.getElementById('tab-ctx-save')?.addEventListener('click', () => {
+      const docId = this.contextTargetDocId;
+      this.closeContextMenu();
+      if (docId) {
+        if (docId === this.activeDocId) {
+          window.wordApp?.fileManager?.saveToStorage();
+        } else {
+          const doc = this.documents.find((d) => d.id === docId);
+          if (doc) {
+            doc.isDirty = false;
+            this.saveToStorage();
+            this.renderTabs();
+            this.toasts.show(`Document « ${doc.title} » enregistré`, 'success');
+          }
+        }
+      }
+    });
+
+    document.getElementById('tab-ctx-export-docx')?.addEventListener('click', () => {
+      const docId = this.contextTargetDocId;
+      this.closeContextMenu();
+      if (docId) this.exportDocumentAs(docId, 'docx');
+    });
+
+    document.getElementById('tab-ctx-export-md')?.addEventListener('click', () => {
+      const docId = this.contextTargetDocId;
+      this.closeContextMenu();
+      if (docId) this.exportDocumentAs(docId, 'md');
+    });
+
+    document.getElementById('tab-ctx-close')?.addEventListener('click', () => {
+      const docId = this.contextTargetDocId;
+      this.closeContextMenu();
+      if (docId) this.closeDocument(docId);
+    });
+
+    document.getElementById('tab-ctx-close-others')?.addEventListener('click', () => {
+      const docId = this.contextTargetDocId;
+      this.closeContextMenu();
+      if (docId) this.closeOtherDocuments(docId);
+    });
+
+    // Modale de confirmation de fermeture de document non enregistré
+    this.btnCloseConfirmSave?.addEventListener('click', () => {
+      const docId = this.pendingCloseDocId;
+      this.modalCloseConfirm?.classList.remove('active');
+      this.pendingCloseDocId = null;
+      if (docId) {
+        if (docId === this.activeDocId) {
+          window.wordApp?.fileManager?.saveToStorage();
+        } else {
+          const doc = this.documents.find((d) => d.id === docId);
+          if (doc) {
+            doc.isDirty = false;
+            this.saveToStorage();
+          }
+        }
+        this.closeDocument(docId, true);
+      }
+    });
+
+    this.btnCloseConfirmDiscard?.addEventListener('click', () => {
+      const docId = this.pendingCloseDocId;
+      this.modalCloseConfirm?.classList.remove('active');
+      this.pendingCloseDocId = null;
+      if (docId) {
+        this.closeDocument(docId, true);
+      }
+    });
+
+    // Modale de renommage de document
+    const applyRenameModal = () => {
+      const docId = this.pendingRenameDocId;
+      const val = this.modalRenameInput?.value?.trim();
+      this.modalRename?.classList.remove('active');
+      this.pendingRenameDocId = null;
+      if (docId && val) {
+        this.renameDocument(docId, val);
+      }
+    };
+
+    this.btnModalRenameApply?.addEventListener('click', applyRenameModal);
+    this.modalRenameInput?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        applyRenameModal();
+      }
+    });
+
+    // Raccourcis clavier globaux
+    window.addEventListener('keydown', (e) => {
+      // Ctrl+Alt+N : Nouveau document
+      if ((e.ctrlKey || e.metaKey) && e.altKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        this.createDocument();
+      }
+      // Ctrl+Alt+W : Fermer document actif
+      else if ((e.ctrlKey || e.metaKey) && e.altKey && e.key.toLowerCase() === 'w') {
+        e.preventDefault();
+        if (this.activeDocId) this.closeDocument(this.activeDocId);
+      }
+      // Ctrl+Alt+PageDown ou Ctrl+Alt+ArrowRight : Document suivant
+      else if ((e.ctrlKey || e.metaKey) && e.altKey && (e.key === 'PageDown' || e.key === 'ArrowRight')) {
+        e.preventDefault();
+        this.cycleDocument(1);
+      }
+      // Ctrl+Alt+PageUp ou Ctrl+Alt+ArrowLeft : Document précédent
+      else if ((e.ctrlKey || e.metaKey) && e.altKey && (e.key === 'PageUp' || e.key === 'ArrowLeft')) {
+        e.preventDefault();
+        this.cycleDocument(-1);
+      }
+    });
+  }
+
+  /**
+   * Nettoie le code HTML d'un document avant sauvegarde en mémoire ou localStorage
+   * Ne supprime PAS les sauts manuels, supprime uniquement les sauts auto et résidus
+   */
+  cleanHtmlForStorage(rawHtml) {
+    if (!rawHtml || !rawHtml.trim()) return '<p><br></p>';
+    const temp = document.createElement('div');
+    temp.innerHTML = rawHtml;
+
+    // Supprimer les sauts automatiques créés par PaginationManager
+    temp.querySelectorAll('.word-page-break[data-manual="false"]').forEach((b) => b.remove());
+
+    // Supprimer les résidus et diviseurs vides corrompus
+    temp.querySelectorAll('.page-last-spacer, .page-last-footer, .page-break-spacer, .page-break-end, .page-break-start').forEach((el) => el.remove());
+    temp.querySelectorAll('div[style*="page-break-after"]').forEach((el) => {
+      if (!el.textContent.trim() && !el.querySelector('img, table, svg')) {
+        el.remove();
+      }
+    });
+
+    // Déballer les erreurs d'orthographe et marques de recherche
+    temp.querySelectorAll('.spell-error').forEach((span) => {
+      const textNode = document.createTextNode(span.textContent);
+      span.parentNode.replaceChild(textNode, span);
+    });
+    temp.querySelectorAll('mark.search-highlight').forEach((mark) => {
+      const textNode = document.createTextNode(mark.textContent);
+      mark.parentNode.replaceChild(textNode, mark);
+    });
+
+    const res = temp.innerHTML.trim();
+    return res || '<p><br></p>';
+  }
+
+  loadFromStorage() {
+    try {
+      const raw = localStorage.getItem(this.storageKey);
+      if (raw) {
+        const data = JSON.parse(raw);
+        if (Array.isArray(data.documents) && data.documents.length > 0) {
+          this.documents = data.documents.map((d, index) => ({
+            id: d.id || 'doc_' + Date.now() + '_' + index,
+            title: d.title || `Document ${index + 1}`,
+            content: this.cleanHtmlForStorage(d.content || '<p><br></p>'),
+            isDirty: false,
+            createdAt: d.createdAt || new Date().toISOString(),
+            updatedAt: d.updatedAt || new Date().toISOString(),
+            headerFooter: d.headerFooter || null,
+            watermark: d.watermark || null,
+            history: d.history || { undoStack: [d.content || '<p><br></p>'], redoStack: [] },
+            zoom: d.zoom || 100,
+          }));
+
+          const activeId = data.activeDocId;
+          const exists = this.documents.some((d) => d.id === activeId);
+          this.activeDocId = exists ? activeId : this.documents[0].id;
+          this.switchDocument(this.activeDocId, false);
+          return true;
+        }
+      }
+
+      // Migration de la session mono-document existante si présente
+      const legacyRaw = localStorage.getItem('ms_word_clone_autosave_v1');
+      if (legacyRaw) {
+        try {
+          const legacy = JSON.parse(legacyRaw);
+          if (legacy.content && legacy.content.trim().length > 0) {
+            const initialDoc = {
+              id: 'doc_' + Date.now(),
+              title: legacy.title || 'Document 1',
+              content: this.cleanHtmlForStorage(legacy.content),
+              isDirty: false,
+              createdAt: legacy.savedAt || new Date().toISOString(),
+              updatedAt: legacy.savedAt || new Date().toISOString(),
+              headerFooter: legacy.headerFooter || null,
+              watermark: null,
+              history: { undoStack: [legacy.content], redoStack: [] },
+              zoom: 100,
+            };
+            this.documents = [initialDoc];
+            this.activeDocId = initialDoc.id;
+            this.switchDocument(initialDoc.id, false);
+            this.saveToStorage();
+            return true;
+          }
+        } catch (e) {
+          console.warn('Erreur migration legacy doc', e);
+        }
+      }
+
+      // Document initial par défaut avec contenu actuel
+      const defaultDoc = {
+        id: 'doc_default_1',
+        title: 'Document 1',
+        content: this.cleanHtmlForStorage(this.editor.innerHTML),
+        isDirty: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        headerFooter: null,
+        watermark: null,
+        history: { undoStack: [this.editor.innerHTML], redoStack: [] },
+        zoom: 100,
+      };
+      this.documents = [defaultDoc];
+      this.activeDocId = defaultDoc.id;
+      this.renderTabs();
+      this.saveToStorage();
+      return true;
+    } catch (err) {
+      console.error('Erreur chargement multi-documents', err);
+      return false;
+    }
+  }
+
+  saveToStorage() {
+    try {
+      const payload = {
+        documents: this.documents,
+        activeDocId: this.activeDocId,
+        savedAt: new Date().toISOString(),
+      };
+      localStorage.setItem(this.storageKey, JSON.stringify(payload));
+    } catch (err) {
+      console.warn('Erreur sauvegarde multi-documents', err);
+    }
+  }
+
+  saveCurrentActiveDocState() {
+    if (!this.activeDocId) return;
+    const doc = this.documents.find((d) => d.id === this.activeDocId);
+    if (!doc) return;
+
+    if (window.wordApp?.markdown?.isMarkdownMode && window.wordApp.markdown.textarea) {
+      doc.content = window.wordApp.markdown.markdownToHtml(window.wordApp.markdown.textarea.value);
+    } else {
+      doc.content = this.cleanHtmlForStorage(this.editor.innerHTML);
+    }
+
+    if (this.titleInput && this.titleInput.value.trim()) {
+      const parsed = this.titleInput.value.replace(/\s*-\s*Word$/i, '').trim();
+      if (parsed) doc.title = parsed;
+    }
+
+    if (window.wordApp?.headerFooter) {
+      doc.headerFooter = JSON.parse(JSON.stringify(window.wordApp.headerFooter.data));
+    }
+    if (window.wordApp?.watermark) {
+      doc.watermark = JSON.parse(JSON.stringify(window.wordApp.watermark.state));
+    }
+    if (window.wordApp?.history) {
+      doc.history = {
+        undoStack: [...window.wordApp.history.undoStack],
+        redoStack: [...window.wordApp.history.redoStack],
+      };
+    }
+    doc.updatedAt = new Date().toISOString();
+  }
+
+  createDocument(title = null, content = '<p><br></p>', activate = true, headerFooter = null, watermark = null) {
+    if (!title) {
+      let maxNum = 0;
+      this.documents.forEach((d) => {
+        const m = d.title.match(/^Document\s+(\d+)$/i);
+        if (m) {
+          const num = parseInt(m[1], 10);
+          if (num > maxNum) maxNum = num;
+        }
+      });
+      title = `Document ${maxNum + 1}`;
+    }
+
+    if (activate && this.activeDocId) {
+      this.saveCurrentActiveDocState();
+    }
+
+    const cleanContent = this.cleanHtmlForStorage(content);
+
+    const newDoc = {
+      id: 'doc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+      title: title,
+      content: cleanContent,
+      isDirty: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      headerFooter: headerFooter || (window.wordApp?.headerFooter ? JSON.parse(JSON.stringify(window.wordApp.headerFooter.data)) : null),
+      watermark: watermark || (window.wordApp?.watermark ? JSON.parse(JSON.stringify(window.wordApp.watermark.state)) : null),
+      history: { undoStack: [cleanContent], redoStack: [] },
+      zoom: 100,
+    };
+
+    this.documents.push(newDoc);
+
+    if (activate) {
+      this.switchDocument(newDoc.id, false);
+    } else {
+      this.renderTabs();
+      this.saveToStorage();
+    }
+
+    this.toasts.show(`Nouveau document « ${title} » créé`, 'info');
+    return newDoc;
+  }
+
+  switchDocument(docId, saveCurrent = true) {
+    if (saveCurrent && this.activeDocId) {
+      this.saveCurrentActiveDocState();
+    }
+
+    const target = this.documents.find((d) => d.id === docId);
+    if (!target) return;
+
+    this.activeDocId = docId;
+
+    // 1. Injecter le contenu nettoyé dans l'éditeur
+    const cleanContent = this.cleanHtmlForStorage(target.content || '<p><br></p>');
+    this.editor.innerHTML = cleanContent;
+
+    // 2. Mettre à jour les titres
+    this.titleInput.value = `${target.title} - Word`;
+    document.title = `${target.title} - Microsoft Word`;
+    const infoTitle = document.getElementById('info-doc-title');
+    if (infoTitle) infoTitle.textContent = target.title;
+
+    // 3. Restaurer en-tête et pied de page
+    if (window.wordApp?.headerFooter) {
+      if (target.headerFooter) {
+        window.wordApp.headerFooter.data = Object.assign(window.wordApp.headerFooter.data, target.headerFooter);
+      }
+    }
+
+    // 4. Restaurer le filigrane
+    if (window.wordApp?.watermark) {
+      if (target.watermark) {
+        window.wordApp.watermark.state = Object.assign(window.wordApp.watermark.state, target.watermark);
+      } else {
+        window.wordApp.watermark.state.enabled = false;
+      }
+      window.wordApp.watermark.applyToDOM();
+    }
+
+    // 5. Restaurer l'historique Annuler / Rétablir
+    if (window.wordApp?.history) {
+      window.wordApp.history.undoStack = target.history?.undoStack?.length ? [...target.history.undoStack] : [this.editor.innerHTML];
+      window.wordApp.history.redoStack = target.history?.redoStack?.length ? [...target.history.redoStack] : [];
+      window.wordApp.history.updateButtons();
+    }
+
+    // 6. Si on est en Mode Markdown, synchroniser la source et rafraîchir la numérotation des lignes
+    if (window.wordApp?.markdown?.isMarkdownMode) {
+      if (window.wordApp.markdown.textarea) {
+        window.wordApp.markdown.textarea.value = window.wordApp.markdown.htmlToMarkdown(cleanContent);
+        window.wordApp.markdown.updatePreview();
+        window.wordApp.markdown.updateStats();
+        window.wordApp.markdown.updateLineNumbers(true);
+        window.wordApp.markdown.updateActiveLineHighlight();
+      }
+    } else {
+      setTimeout(() => this.editor.focus(), 60);
+    }
+
+    // 7. Annuler tout enregistrement automatique en attente pour ne pas écraser les documents
+    if (window.wordApp?.fileManager?.debounceTimer) {
+      clearTimeout(window.wordApp.fileManager.debounceTimer);
+      window.wordApp.fileManager.debounceTimer = null;
+    }
+
+    // 8. Rendu des onglets & rafraîchissement
+    this.renderTabs();
+    this.saveToStorage();
+
+    setTimeout(() => {
+      if (window.wordApp?.pagination) window.wordApp.pagination.updatePagination();
+      if (window.wordApp?.spellCheck) window.wordApp.spellCheck.scanEditor();
+      if (window.wordApp?.statusBar) window.wordApp.statusBar.updateStats();
+      if (this.isSplitMode) this.updateSplitView();
+    }, 40);
+  }
+
+  closeDocument(docId, force = false) {
+    const doc = this.documents.find((d) => d.id === docId);
+    if (!doc) return;
+
+    if (!force && doc.isDirty) {
+      this.pendingCloseDocId = docId;
+      if (this.modalCloseConfirm) {
+        if (this.modalCloseMessage) {
+          this.modalCloseMessage.textContent = `Le document « ${doc.title} » contient des modifications non enregistrées. Voulez-vous l'enregistrer avant de le fermer ?`;
+        }
+        this.modalCloseConfirm.classList.add('active');
+        return;
+      }
+    }
+
+    const title = doc.title;
+
+    if (this.documents.length <= 1) {
+      // Si c'est le seul document, on le réinitialise à vierge "Document 1"
+      doc.title = 'Document 1';
+      doc.content = '<p><br></p>';
+      doc.isDirty = false;
+      doc.updatedAt = new Date().toISOString();
+      this.switchDocument(doc.id, false);
+      this.toasts.show('Document réinitialisé', 'info');
+      return;
+    }
+
+    const idx = this.documents.findIndex((d) => d.id === docId);
+    this.documents.splice(idx, 1);
+
+    if (this.splitDocId === docId) {
+      const other = this.documents.find((d) => d.id !== this.activeDocId);
+      this.splitDocId = other ? other.id : (this.documents[0]?.id || null);
+    }
+
+    if (this.activeDocId === docId) {
+      const nextIdx = Math.max(0, idx - 1);
+      const nextDoc = this.documents[nextIdx];
+      this.switchDocument(nextDoc.id, false);
+    } else {
+      this.renderTabs();
+      this.saveToStorage();
+      if (this.isSplitMode) this.updateSplitView();
+    }
+
+    this.toasts.show(`Document « ${title} » fermé`, 'info');
+  }
+
+  closeOtherDocuments(keepDocId) {
+    const keepDoc = this.documents.find((d) => d.id === keepDocId);
+    if (!keepDoc) return;
+
+    this.documents = [keepDoc];
+    this.switchDocument(keepDoc.id, false);
+    this.toasts.show('Tous les autres documents ont été fermés', 'info');
+  }
+
+  duplicateDocument(docId) {
+    const doc = this.documents.find((d) => d.id === docId);
+    if (!doc) return;
+
+    if (docId === this.activeDocId) {
+      this.saveCurrentActiveDocState();
+    }
+
+    const copyTitle = `${doc.title} (Copie)`;
+    this.createDocument(copyTitle, doc.content, true, doc.headerFooter, doc.watermark);
+  }
+
+  promptRenameDocument(docId) {
+    const doc = this.documents.find((d) => d.id === docId);
+    if (!doc) return;
+
+    this.pendingRenameDocId = docId;
+    if (this.modalRename && this.modalRenameInput) {
+      this.modalRenameInput.value = doc.title;
+      this.modalRename.classList.add('active');
+      setTimeout(() => {
+        this.modalRenameInput.focus();
+        this.modalRenameInput.select();
+      }, 50);
+    } else {
+      const tabEl = this.tabsScroll?.querySelector(`[data-doc-id="${docId}"]`);
+      const titleSpan = tabEl?.querySelector('.doc-tab-title');
+      if (tabEl && titleSpan) {
+        this.startInlineRename(docId, tabEl, titleSpan);
+      }
+    }
+  }
+
+  renameDocument(docId, newTitle) {
+    const doc = this.documents.find((d) => d.id === docId);
+    if (!doc) return;
+
+    const cleanTitle = newTitle.replace(/\s*-\s*Word$/i, '').trim() || 'Document';
+    doc.title = cleanTitle;
+
+    if (docId === this.activeDocId) {
+      this.titleInput.value = `${cleanTitle} - Word`;
+      document.title = `${cleanTitle} - Microsoft Word`;
+      const infoTitle = document.getElementById('info-doc-title');
+      if (infoTitle) infoTitle.textContent = cleanTitle;
+    }
+
+    this.renderTabs();
+    this.saveToStorage();
+    if (this.isSplitMode) this.updateSplitView();
+  }
+
+  startInlineRename(docId, tabEl, titleEl) {
+    const doc = this.documents.find((d) => d.id === docId);
+    if (!doc) return;
+
+    const currentTitle = doc.title;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'doc-tab-rename-input';
+    input.value = currentTitle;
+
+    titleEl.replaceWith(input);
+    input.focus();
+    input.select();
+
+    const commit = () => {
+      const val = input.value.trim();
+      if (val && val !== currentTitle) {
+        this.renameDocument(docId, val);
+      } else {
+        this.renderTabs();
+      }
+    };
+
+    input.addEventListener('blur', commit);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        input.removeEventListener('blur', commit);
+        commit();
+      } else if (e.key === 'Escape') {
+        input.removeEventListener('blur', commit);
+        this.renderTabs();
+      }
+    });
+  }
+
+  renderTabs() {
+    if (!this.tabsScroll) return;
+    this.tabsScroll.innerHTML = '';
+
+    this.documents.forEach((doc) => {
+      const isActive = doc.id === this.activeDocId;
+      const tab = document.createElement('div');
+      tab.className = `doc-tab ${isActive ? 'active' : ''}`;
+      tab.dataset.docId = doc.id;
+      tab.setAttribute('role', 'tab');
+      tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+
+      // Icône Word ou Markdown
+      const isMd = doc.title.toLowerCase().endsWith('.md');
+      const iconSvg = isMd
+        ? `<svg class="doc-tab-icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M7 15V9l2.5 3L12 9v6"></path><path d="M16 11l2 2 2-2"></path><path d="M18 9v4"></path></svg>`
+        : `<svg class="doc-tab-icon" viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" fill="#185abd"/><path d="M14 2v6h6" fill="#103f7e"/><text x="7" y="18" font-size="8" font-weight="bold" fill="#ffffff">W</text></svg>`;
+
+      tab.innerHTML = `
+        ${iconSvg}
+        <span class="doc-tab-title" title="${doc.title} (Double-cliquer pour renommer)">${doc.title}</span>
+        ${doc.isDirty ? '<span class="doc-tab-dirty" title="Modifications non enregistrées"></span>' : ''}
+        <button class="doc-tab-close" title="Fermer ce document (Ctrl+Alt+W)">✕</button>
+      `;
+
+      // Clic pour activer
+      tab.addEventListener('click', (e) => {
+        if (!e.target.closest('.doc-tab-close') && !e.target.closest('.doc-tab-rename-input')) {
+          this.switchDocument(doc.id);
+        }
+      });
+
+      // Fermeture par la croix
+      const closeBtn = tab.querySelector('.doc-tab-close');
+      closeBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.closeDocument(doc.id);
+      });
+
+      // Double-clic sur le titre pour renommer en ligne
+      const titleSpan = tab.querySelector('.doc-tab-title');
+      titleSpan?.addEventListener('dblclick', (e) => {
+        e.stopPropagation();
+        this.startInlineRename(doc.id, tab, titleSpan);
+      });
+
+      // Clic droit pour afficher le menu contextuel
+      tab.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        this.openContextMenu(doc.id, e.clientX, e.clientY);
+      });
+
+      this.tabsScroll.appendChild(tab);
+
+      if (isActive) {
+        tab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+      }
+    });
+
+    // Mettre à jour les compteurs
+    const count = this.documents.length;
+    if (this.docsCountBadge) this.docsCountBadge.textContent = String(count);
+    if (this.sbDocsCount) this.sbDocsCount.textContent = `${count} document${count > 1 ? 's' : ''}`;
+
+    // Mettre à jour la liste dans le dropdown
+    this.updateDropdownList();
+  }
+
+  updateActiveDocTitle(title) {
+    if (!this.activeDocId) return;
+    const doc = this.documents.find((d) => d.id === this.activeDocId);
+    if (doc) {
+      doc.title = title;
+      const tab = this.tabsScroll?.querySelector(`[data-doc-id="${doc.id}"] .doc-tab-title`);
+      if (tab) tab.textContent = title;
+      this.updateDropdownList();
+    }
+  }
+
+  markActiveDocDirty() {
+    if (!this.activeDocId) return;
+    const doc = this.documents.find((d) => d.id === this.activeDocId);
+    if (doc) {
+      doc.isDirty = true;
+      const tab = this.tabsScroll?.querySelector(`[data-doc-id="${doc.id}"]`);
+      if (tab && !tab.querySelector('.doc-tab-dirty')) {
+        const dirtySpan = document.createElement('span');
+        dirtySpan.className = 'doc-tab-dirty';
+        dirtySpan.title = 'Modifications non enregistrées';
+        const closeBtn = tab.querySelector('.doc-tab-close');
+        tab.insertBefore(dirtySpan, closeBtn);
+      }
+    }
+  }
+
+  markActiveDocSaved() {
+    if (!this.activeDocId) return;
+    const doc = this.documents.find((d) => d.id === this.activeDocId);
+    if (doc) {
+      doc.isDirty = false;
+      const tab = this.tabsScroll?.querySelector(`[data-doc-id="${doc.id}"]`);
+      tab?.querySelector('.doc-tab-dirty')?.remove();
+    }
+  }
+
+  toggleDocsDropdown() {
+    if (!this.docsDropdown) return;
+    const isVisible = this.docsDropdown.style.display !== 'none';
+    if (isVisible) {
+      this.closeDocsDropdown();
+    } else {
+      this.updateDropdownList();
+      this.docsDropdown.style.display = 'flex';
+    }
+  }
+
+  closeDocsDropdown() {
+    if (this.docsDropdown) this.docsDropdown.style.display = 'none';
+  }
+
+  updateDropdownList() {
+    if (!this.docsDropdownItems) return;
+    this.docsDropdownItems.innerHTML = '';
+
+    this.documents.forEach((doc) => {
+      const isActive = doc.id === this.activeDocId;
+      const item = document.createElement('div');
+      item.className = `docs-list-item ${isActive ? 'active' : ''}`;
+      item.innerHTML = `
+        <div class="docs-list-item-left">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="${isActive ? '#185abd' : 'currentColor'}"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path></svg>
+          <span class="docs-list-item-title">${doc.title}</span>
+          ${doc.isDirty ? '<span style="color:#d83b01; font-size:10px;">●</span>' : ''}
+        </div>
+        <span class="docs-list-item-badge">${isActive ? 'Actif' : 'Ouvrir'}</span>
+      `;
+      item.addEventListener('click', () => {
+        this.switchDocument(doc.id);
+        this.closeDocsDropdown();
+      });
+      this.docsDropdownItems.appendChild(item);
+    });
+  }
+
+  openContextMenu(docId, x, y) {
+    if (!this.contextMenu) return;
+    this.contextTargetDocId = docId;
+
+    this.contextMenu.style.left = `${Math.min(x, window.innerWidth - 220)}px`;
+    this.contextMenu.style.top = `${Math.min(y, window.innerHeight - 250)}px`;
+    this.contextMenu.style.display = 'block';
+  }
+
+  closeContextMenu() {
+    if (this.contextMenu) {
+      this.contextMenu.style.display = 'none';
+      this.contextTargetDocId = null;
+    }
+  }
+
+  exportDocumentAs(docId, format) {
+    if (docId !== this.activeDocId) {
+      this.switchDocument(docId);
+      setTimeout(() => {
+        if (format === 'docx') window.wordApp?.fileManager?.exportDocx();
+        else if (format === 'md') window.wordApp?.fileManager?.exportMarkdown();
+      }, 150);
+    } else {
+      if (format === 'docx') window.wordApp?.fileManager?.exportDocx();
+      else if (format === 'md') window.wordApp?.fileManager?.exportMarkdown();
+    }
+  }
+
+  cycleDocument(step = 1) {
+    if (this.documents.length <= 1) {
+      this.toasts.show('Un seul document est ouvert actuellement. Créez-en un nouveau avec le bouton « + ».', 'info');
+      return;
+    }
+    const currentIdx = this.documents.findIndex((d) => d.id === this.activeDocId);
+    let nextIdx = (currentIdx + step) % this.documents.length;
+    if (nextIdx < 0) nextIdx = this.documents.length - 1;
+    this.switchDocument(this.documents[nextIdx].id);
+  }
+
+  openFileAsDocument(title, content) {
+    const cleanContent = this.cleanHtmlForStorage(content);
+    const activeDoc = this.documents.find((d) => d.id === this.activeDocId);
+    const isCurrentVirgin =
+      this.documents.length === 1 &&
+      activeDoc &&
+      !activeDoc.isDirty &&
+      (!this.editor.textContent || !this.editor.textContent.trim() || this.editor.textContent.trim().startsWith('Bienvenue dans Microsoft Word pour le Web'));
+
+    if (isCurrentVirgin) {
+      activeDoc.title = title;
+      activeDoc.content = cleanContent;
+      activeDoc.isDirty = false;
+      this.switchDocument(activeDoc.id, false);
+      this.toasts.show(`Fichier « ${title} » ouvert avec succès !`, 'success');
+    } else {
+      this.createDocument(title, cleanContent, true);
+      this.toasts.show(`Fichier « ${title} » ouvert dans un nouvel onglet !`, 'success');
+    }
+  }
+
+  // ==================== MODE CÔTE À CÔTE (SPLIT VIEW) ====================
+
+  toggleSplitView(force = null) {
+    this.isSplitMode = force !== null ? force : !this.isSplitMode;
+
+    document.body.classList.toggle('split-mode-active', this.isSplitMode);
+    this.btnSplitToggle?.classList.toggle('active', this.isSplitMode);
+    this.btnSplitViewRibbon?.classList.toggle('active', this.isSplitMode);
+
+    if (this.isSplitMode) {
+      this.saveCurrentActiveDocState();
+
+      if (this.documents.length < 2) {
+        const active = this.documents[0];
+        const newDoc = {
+          id: 'doc_' + Date.now(),
+          title: `${active.title} (Copie comparaison)`,
+          content: active.content,
+          isDirty: false,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          headerFooter: active.headerFooter,
+          watermark: active.watermark,
+          history: { undoStack: [active.content], redoStack: [] },
+          zoom: 100,
+        };
+        this.documents.push(newDoc);
+        this.renderTabs();
+        this.splitDocId = newDoc.id;
+      } else {
+        const otherDoc = this.documents.find((d) => d.id !== this.activeDocId);
+        this.splitDocId = otherDoc ? otherDoc.id : this.documents[0].id;
+      }
+
+      if (this.splitPane) this.splitPane.style.display = 'flex';
+      this.updateSplitView();
+      this.toasts.show('Mode côte à côte activé (Édition & comparaison multi-documents)', 'info');
+    } else {
+      if (this.splitPane) this.splitPane.style.display = 'none';
+      this.toasts.show('Mode côte à côte désactivé', 'info');
+    }
+
+    setTimeout(() => {
+      if (window.wordApp?.pagination) window.wordApp.pagination.updatePagination();
+    }, 80);
+  }
+
+  updateSplitView() {
+    if (!this.isSplitMode || !this.splitDocSelect) return;
+
+    this.splitDocSelect.innerHTML = '';
+    this.documents.forEach((doc) => {
+      const opt = document.createElement('option');
+      opt.value = doc.id;
+      opt.textContent = doc.title + (doc.id === this.activeDocId ? ' (Actif)' : '');
+      if (doc.id === this.splitDocId) opt.selected = true;
+      this.splitDocSelect.appendChild(opt);
+    });
+
+    this.updateSplitViewContent();
+  }
+
+  updateSplitViewContent() {
+    if (!this.splitEditorContent || !this.splitDocId) return;
+
+    if (this.splitDocId === this.activeDocId) {
+      this.saveCurrentActiveDocState();
+    }
+
+    const doc = this.documents.find((d) => d.id === this.splitDocId);
+    if (doc) {
+      this.splitEditorContent.innerHTML = doc.content || '<p><br></p>';
+    }
+  }
+
+  swapSplitDocuments() {
+    if (!this.isSplitMode || !this.splitDocId || this.splitDocId === this.activeDocId) return;
+    const oldActiveId = this.activeDocId;
+    const targetId = this.splitDocId;
+
+    this.saveCurrentActiveDocState();
+    this.splitDocId = oldActiveId;
+    this.switchDocument(targetId, false);
+    this.toasts.show('Documents permutés', 'info');
+  }
+}
+
+/**
+ * ------------------------------------------------------------------------------
  * 9. ORCHESTRATEUR PRINCIPAL DE L'APPLICATION (WORD APP)
  * ------------------------------------------------------------------------------
  */
@@ -3591,7 +6221,10 @@ class WordApp {
     );
     this.statusBar = new StatusBarManager(this.editorElement, this.zoomContainer, () => this.showStatsModal());
     this.headerFooter = new HeaderFooterManager(this.editorElement, this.docPageElement, this.toasts);
+    this.watermark = new WatermarkManager(this.toasts);
     this.pagination = new PaginationManager(this.editorElement, this.docPageElement, this.statusBar);
+    this.markdown = new MarkdownManager(this.editorElement, this.docTitleInput, this.toasts);
+    this.multiDoc = new MultiDocumentManager(this.editorElement, this.docTitleInput, this.toasts);
     window.wordApp = this;
 
     this.initGlobalEvents();
@@ -3599,8 +6232,8 @@ class WordApp {
     this.initModals();
     this.initThemeToggle();
 
-    // Restauration de la session précédente si disponible
-    this.fileManager.loadFromStorage();
+    // Restauration de la session multi-documents précédente
+    this.multiDoc.loadFromStorage();
     // Analyse orthographique et pagination initiales
     setTimeout(() => {
       this.pagination.updatePagination();
@@ -3670,11 +6303,13 @@ class WordApp {
       }
     });
 
-    // Synchroniser le titre du document dans l'en-tête HTML et sur les en-têtes de pages
+    // Synchroniser le titre du document dans l'en-tête HTML et sur les onglets multi-documents
     this.docTitleInput.addEventListener('input', () => {
-      document.title = `${this.fileManager.getDocumentTitle()} - Microsoft Word`;
+      const currentTitle = this.fileManager.getDocumentTitle();
+      document.title = `${currentTitle} - Microsoft Word`;
       const infoTitle = document.getElementById('info-doc-title');
-      if (infoTitle) infoTitle.textContent = this.fileManager.getDocumentTitle();
+      if (infoTitle) infoTitle.textContent = currentTitle;
+      if (this.multiDoc) this.multiDoc.updateActiveDocTitle(currentTitle);
       this.pagination.updatePagination();
     });
 
@@ -3727,17 +6362,18 @@ class WordApp {
 
     // Modèles prédéfinis
     document.getElementById('tmpl-blank').addEventListener('click', () => {
-      this.editorElement.innerHTML = '<p><br></p>';
-      this.docTitleInput.value = 'Nouveau Document - Word';
-      this.history.pushState(true);
+      if (this.multiDoc) {
+        this.multiDoc.createDocument();
+      } else {
+        this.editorElement.innerHTML = '<p><br></p>';
+        this.docTitleInput.value = 'Document 1 - Word';
+        this.history.pushState(true);
+      }
       backstage.classList.remove('active');
-      this.toasts.show('Nouveau document vierge créé', 'info');
-      this.pagination.updatePagination();
-      this.spellCheck.scanEditor();
     });
 
     document.getElementById('tmpl-report').addEventListener('click', () => {
-      this.editorElement.innerHTML = `
+      const reportHtml = `
         <h1>RAPPORT D'ACTIVITÉ STRATÉGIQUE</h1>
         <p><strong>Date :</strong> 29 Septembre 2026 | <strong>Auteur :</strong> Direction Générale</p>
         <hr>
@@ -3757,16 +6393,18 @@ class WordApp {
         <h2>3. Conclusion et recommandations</h2>
         <blockquote>Poursuivre l'optimisation continue et le déploiement des fonctionnalités RIA de nouvelle génération.</blockquote>
       `;
-      this.docTitleInput.value = "Rapport d'activité - Word";
-      this.history.pushState(true);
+      if (this.multiDoc) {
+        this.multiDoc.createDocument("Rapport d'activité", reportHtml, true);
+      } else {
+        this.editorElement.innerHTML = reportHtml;
+        this.docTitleInput.value = "Rapport d'activité - Word";
+        this.history.pushState(true);
+      }
       backstage.classList.remove('active');
-      this.toasts.show('Modèle de rapport chargé', 'info');
-      this.pagination.updatePagination();
-      this.spellCheck.scanEditor();
     });
 
     document.getElementById('tmpl-letter').addEventListener('click', () => {
-      this.editorElement.innerHTML = `
+      const letterHtml = `
         <p style="text-align: right;">Paris, le 29 septembre 2026</p>
         <p><strong>Expéditeur :</strong><br>Jean Dupont<br>75008 Paris</p>
         <p style="margin-top: 20px;"><strong>Destinataire :</strong><br>Direction des Ressources Humaines</p>
@@ -3777,16 +6415,18 @@ class WordApp {
         <p>Restant à votre entière disposition pour tout entretien, je vous prie d'agréer mes salutations distinguées.</p>
         <p style="margin-top: 30px;"><em>Jean Dupont</em></p>
       `;
-      this.docTitleInput.value = 'Lettre formelle - Word';
-      this.history.pushState(true);
+      if (this.multiDoc) {
+        this.multiDoc.createDocument('Lettre formelle', letterHtml, true);
+      } else {
+        this.editorElement.innerHTML = letterHtml;
+        this.docTitleInput.value = 'Lettre formelle - Word';
+        this.history.pushState(true);
+      }
       backstage.classList.remove('active');
-      this.toasts.show('Modèle de lettre chargé', 'info');
-      this.pagination.updatePagination();
-      this.spellCheck.scanEditor();
     });
 
     document.getElementById('tmpl-meeting').addEventListener('click', () => {
-      this.editorElement.innerHTML = `
+      const meetingHtml = `
         <h1>COMPTE-RENDU DE RÉUNION</h1>
         <p><strong>Projet :</strong> Déploiement Microsoft Word Clone | <strong>Date :</strong> 29 Septembre 2026</p>
         <h2>Ordre du jour</h2>
@@ -3804,12 +6444,14 @@ class WordApp {
           </tbody>
         </table>
       `;
-      this.docTitleInput.value = 'Compte-rendu - Word';
-      this.history.pushState(true);
+      if (this.multiDoc) {
+        this.multiDoc.createDocument('Compte-rendu', meetingHtml, true);
+      } else {
+        this.editorElement.innerHTML = meetingHtml;
+        this.docTitleInput.value = 'Compte-rendu - Word';
+        this.history.pushState(true);
+      }
       backstage.classList.remove('active');
-      this.toasts.show('Modèle de compte-rendu chargé', 'info');
-      this.pagination.updatePagination();
-      this.spellCheck.scanEditor();
     });
 
     // Actions d'export & d'import
@@ -3875,15 +6517,20 @@ class WordApp {
       if (file) {
         const reader = new FileReader();
         reader.onload = (ev) => {
-          this.editorElement.innerHTML = ev.target.result;
-          this.docTitleInput.value = `${file.name.replace(/\.[^/.]+$/, '')} - Word`;
-          this.history.pushState(true);
+          const docName = file.name.replace(/\.[^/.]+$/, '');
+          if (this.multiDoc) {
+            this.multiDoc.openFileAsDocument(docName, ev.target.result);
+          } else {
+            this.editorElement.innerHTML = ev.target.result;
+            this.docTitleInput.value = `${docName} - Word`;
+            this.history.pushState(true);
+            this.toasts.show('Fichier HTML importé', 'success');
+            setTimeout(() => {
+              this.pagination.updatePagination();
+              this.spellCheck.scanEditor();
+            }, 60);
+          }
           backstage.classList.remove('active');
-          this.toasts.show('Fichier HTML importé', 'success');
-          setTimeout(() => {
-            this.pagination.updatePagination();
-            this.spellCheck.scanEditor();
-          }, 60);
         };
         reader.readAsText(file);
       }
@@ -3898,21 +6545,52 @@ class WordApp {
           try {
             const data = JSON.parse(ev.target.result);
             if (data.htmlContent) {
-              this.editorElement.innerHTML = data.htmlContent;
-              if (data.title) this.docTitleInput.value = `${data.title} - Word`;
-              this.history.pushState(true);
+              const docName = data.title || file.name.replace(/\.[^/.]+$/, '');
+              if (this.multiDoc) {
+                this.multiDoc.openFileAsDocument(docName, data.htmlContent);
+              } else {
+                this.editorElement.innerHTML = data.htmlContent;
+                this.docTitleInput.value = `${docName} - Word`;
+                this.history.pushState(true);
+                this.toasts.show('Projet JSON restauré', 'success');
+                setTimeout(() => {
+                  this.pagination.updatePagination();
+                  this.spellCheck.scanEditor();
+                }, 60);
+              }
               backstage.classList.remove('active');
-              this.toasts.show('Projet JSON restauré', 'success');
-              setTimeout(() => {
-                this.pagination.updatePagination();
-                this.spellCheck.scanEditor();
-              }, 60);
             }
           } catch {
             this.toasts.show('Fichier JSON invalide', 'error');
           }
         };
         reader.readAsText(file);
+      }
+    });
+
+    // Parcourir PDF (.pdf)
+    const hiddenPdfInput = document.getElementById('hidden-pdf-input');
+    const browsePdfBtn = document.getElementById('btn-browse-pdf');
+    browsePdfBtn?.addEventListener('click', () => hiddenPdfInput?.click());
+    hiddenPdfInput?.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        this.fileManager.importPdf(file);
+        backstage.classList.remove('active');
+        hiddenPdfInput.value = '';
+      }
+    });
+
+    // Parcourir Markdown (.md)
+    const hiddenMdInput = document.getElementById('hidden-md-input');
+    const browseMdBtn = document.getElementById('btn-browse-markdown');
+    browseMdBtn?.addEventListener('click', () => hiddenMdInput?.click());
+    hiddenMdInput?.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        this.markdown.importMarkdownFile(file);
+        backstage.classList.remove('active');
+        hiddenMdInput.value = '';
       }
     });
   }
