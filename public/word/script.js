@@ -1,7 +1,3 @@
-import { marked } from 'marked';
-import TurndownService from 'turndown';
-import { gfm } from 'joplin-turndown-plugin-gfm';
-
 /**
  * ==============================================================================
  * MICROSOFT WORD WEB CLONE - MOTEUR PRINCIPAL D'APPLICATION (VANILLA JS / POO)
@@ -1425,20 +1421,6 @@ ${this.getCleanHtml()}
     this.toasts.show(`Fichier texte exporté !`, 'success');
   }
 
-  // [CRUCIAL] EXPORTATION AU FORMAT MARKDOWN (.MD)
-  exportMarkdown() {
-    if (window.wordApp && window.wordApp.markdown) {
-      window.wordApp.markdown.exportMarkdownFile();
-    }
-  }
-
-  // [CRUCIAL] IMPORTATION D'UN FICHIER MARKDOWN (.MD)
-  importMarkdown(file) {
-    if (window.wordApp && window.wordApp.markdown) {
-      window.wordApp.markdown.importMarkdownFile(file);
-    }
-  }
-
   triggerDownload(blob, filename) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -1448,387 +1430,6 @@ ${this.getCleanHtml()}
     link.click();
     document.body.removeChild(link);
     setTimeout(() => URL.revokeObjectURL(url), 2000);
-  }
-}
-
-/**
- * ------------------------------------------------------------------------------
- * 6.5 GESTIONNAIRE DU MODE MARKDOWN & IMPORT/EXPORT (MARKDOWN MANAGER)
- * Permet l'édition directe en Markdown (GFM), la conversion bidirectionnelle
- * WYSIWYG <-> Markdown, l'aperçu temps réel et l'import/export de fichiers .md
- * ------------------------------------------------------------------------------
- */
-class MarkdownManager {
-  constructor(editorElement, docTitleInput, toastManager) {
-    this.editor = editorElement;
-    this.titleInput = docTitleInput;
-    this.toasts = toastManager;
-    this.isMarkdownMode = false;
-    this.isSplitView = true;
-
-    // Initialisation du parseur Markdown (marked)
-    marked.setOptions({
-      gfm: true,
-      breaks: true
-    });
-
-    // Initialisation du convertisseur HTML vers Markdown (Turndown + GFM)
-    this.turndown = new TurndownService({
-      headingStyle: 'atx',
-      hr: '---',
-      bulletListMarker: '-',
-      codeBlockStyle: 'fenced',
-      emDelimiter: '*'
-    });
-    this.turndown.use(gfm);
-
-    // Règles spécifiques pour préserver les composants Word
-    this.turndown.addRule('wordCallout', {
-      filter: (node) => node.classList && node.classList.contains('word-callout'),
-      replacement: (content) => `\n\n> 💡 **NOTE :**\n> ${content.trim().replace(/\n/g, '\n> ')}\n\n`
-    });
-
-    this.turndown.addRule('cleanBreaks', {
-      filter: (node) => node.classList && (node.classList.contains('word-page-break') || node.classList.contains('page-sheet-header') || node.classList.contains('page-sheet-footer')),
-      replacement: () => '\n\n---\n\n'
-    });
-
-    // Éléments du DOM
-    this.workspace = document.getElementById('markdown-workspace');
-    this.textarea = document.getElementById('markdown-source-input');
-    this.previewPane = document.getElementById('markdown-preview-pane');
-    this.previewContent = document.getElementById('markdown-preview-content');
-    this.panesContainer = document.getElementById('markdown-panes');
-    this.statsBadge = document.getElementById('md-stats-badge');
-    this.hiddenMdInput = document.getElementById('hidden-md-input');
-
-    this.btnViewMarkdown = document.getElementById('btn-view-markdown');
-    this.btnViewWysiwyg = document.getElementById('btn-view-multipage');
-    this.sbToggleMode = document.getElementById('sb-toggle-mode');
-    this.sbModeLabel = document.getElementById('sb-mode-label');
-    this.sbModeIcon = document.getElementById('sb-mode-icon');
-
-    this.initEvents();
-  }
-
-  getDocumentTitle() {
-    let title = this.titleInput.value.trim();
-    return title.replace(/\s*-\s*Word$/i, '') || 'Document';
-  }
-
-  htmlToMarkdown(html) {
-    if (!html) return '';
-    const temp = document.createElement('div');
-    temp.innerHTML = html;
-    
-    // Supprimer les surbrillances orthographiques et décorations
-    temp.querySelectorAll('.spell-error').forEach((s) => {
-      const text = document.createTextNode(s.textContent);
-      s.parentNode.replaceChild(text, s);
-    });
-    temp.querySelectorAll('mark.search-highlight').forEach((m) => {
-      const text = document.createTextNode(m.textContent);
-      m.parentNode.replaceChild(text, m);
-    });
-    temp.querySelectorAll('.page-last-spacer, .page-last-footer, .page-break-gap-visual').forEach((e) => e.remove());
-
-    return this.turndown.turndown(temp.innerHTML).trim();
-  }
-
-  markdownToHtml(md) {
-    if (!md) return '';
-    return marked.parse(md);
-  }
-
-  toggleMarkdownMode(forceState = null) {
-    const nextState = forceState !== null ? forceState : !this.isMarkdownMode;
-    if (this.isMarkdownMode === nextState) return;
-
-    if (nextState) {
-      // Entrée dans le Mode Markdown
-      this.isMarkdownMode = true;
-      document.body.classList.add('markdown-mode-active');
-
-      // Convertir le contenu WYSIWYG en Markdown
-      const currentHtml = window.wordApp && window.wordApp.fileManager 
-        ? window.wordApp.fileManager.getCleanHtml() 
-        : this.editor.innerHTML;
-      
-      const mdContent = this.htmlToMarkdown(currentHtml);
-      if (this.textarea) {
-        this.textarea.value = mdContent;
-      }
-
-      this.updatePreview();
-      this.updateStats();
-      this.updateUI();
-
-      if (this.textarea) {
-        setTimeout(() => this.textarea.focus(), 80);
-      }
-      this.toasts.show('Mode Markdown activé (Code source .md)', 'info');
-    } else {
-      // Sortie du Mode Markdown -> retour vers Pages A4 WYSIWYG
-      this.isMarkdownMode = false;
-      document.body.classList.remove('markdown-mode-active');
-
-      if (this.textarea) {
-        const mdText = this.textarea.value;
-        const html = this.markdownToHtml(mdText);
-        this.editor.innerHTML = html;
-      }
-
-      this.updateUI();
-
-      if (window.wordApp) {
-        if (window.wordApp.pagination) window.wordApp.pagination.updatePagination();
-        if (window.wordApp.spellCheck) window.wordApp.spellCheck.scanEditor();
-        if (window.wordApp.history) window.wordApp.history.pushState(true);
-        if (window.wordApp.fileManager) window.wordApp.fileManager.scheduleDebouncedSave();
-      }
-
-      this.toasts.show('Document synchronisé et converti en pages A4 !', 'success');
-    }
-  }
-
-  updatePreview() {
-    if (!this.textarea || !this.previewContent) return;
-    const md = this.textarea.value;
-    const html = this.markdownToHtml(md);
-    this.previewContent.innerHTML = html;
-  }
-
-  updateStats() {
-    if (!this.textarea || !this.statsBadge) return;
-    const text = this.textarea.value;
-    const lines = text ? text.split('\n').length : 0;
-    const words = text ? (text.match(/[\w\u00C0-\u017F]+/g) || []).length : 0;
-    const chars = text.length;
-
-    this.statsBadge.textContent = `${lines} ligne${lines > 1 ? 's' : ''} | ${words} mot${words > 1 ? 's' : ''} | ${chars} car.`;
-  }
-
-  updateUI() {
-    if (this.btnViewMarkdown && this.btnViewWysiwyg) {
-      if (this.isMarkdownMode) {
-        this.btnViewMarkdown.classList.add('active');
-        this.btnViewWysiwyg.classList.remove('active');
-      } else {
-        this.btnViewMarkdown.classList.remove('active');
-        this.btnViewWysiwyg.classList.add('active');
-      }
-    }
-
-    if (this.sbModeLabel && this.sbModeIcon) {
-      if (this.isMarkdownMode) {
-        this.sbModeLabel.textContent = 'Mode Markdown';
-        this.sbModeIcon.textContent = 'ℳ';
-        if (this.sbToggleMode) this.sbToggleMode.style.backgroundColor = 'var(--btn-selected)';
-      } else {
-        this.sbModeLabel.textContent = 'Pages A4';
-        this.sbModeIcon.textContent = '☷';
-        if (this.sbToggleMode) this.sbToggleMode.style.backgroundColor = 'transparent';
-      }
-    }
-  }
-
-  exportMarkdownFile() {
-    const filename = `${this.getDocumentTitle()}.md`;
-    let md = '';
-
-    if (this.isMarkdownMode && this.textarea) {
-      md = this.textarea.value;
-    } else {
-      const cleanHtml = window.wordApp && window.wordApp.fileManager 
-        ? window.wordApp.fileManager.getCleanHtml() 
-        : this.editor.innerHTML;
-      md = this.htmlToMarkdown(cleanHtml);
-    }
-
-    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
-
-    this.toasts.show(`Document Markdown "${filename}" exporté !`, 'success');
-  }
-
-  importMarkdownFile(file) {
-    if (!file) return;
-    this.toasts.show(`Chargement de "${file.name}"...`, 'info');
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const mdContent = e.target.result;
-      const html = this.markdownToHtml(mdContent);
-
-      // Si on est en Mode Markdown, mettre à jour le textarea directement
-      if (this.textarea) {
-        this.textarea.value = mdContent;
-        this.updatePreview();
-        this.updateStats();
-      }
-
-      // Mettre à jour l'éditeur Word WYSIWYG
-      this.editor.innerHTML = html;
-
-      // Extraire le nom de fichier sans extension
-      const nameWithoutExt = file.name.replace(/\.(md|markdown|txt)$/i, '');
-      if (this.titleInput) {
-        this.titleInput.value = `${nameWithoutExt} - Word`;
-      }
-
-      if (window.wordApp) {
-        if (window.wordApp.history) window.wordApp.history.pushState(true);
-        setTimeout(() => {
-          if (window.wordApp.pagination) window.wordApp.pagination.updatePagination();
-          if (window.wordApp.spellCheck) window.wordApp.spellCheck.scanEditor();
-          if (window.wordApp.fileManager) window.wordApp.fileManager.saveToStorage();
-        }, 100);
-      }
-
-      this.toasts.show(`Fichier Markdown "${file.name}" importé avec succès !`, 'success');
-    };
-    reader.readAsText(file);
-  }
-
-  initEvents() {
-    // Boutons de bascule de mode
-    this.btnViewMarkdown?.addEventListener('click', () => this.toggleMarkdownMode(true));
-    this.btnViewWysiwyg?.addEventListener('click', () => this.toggleMarkdownMode(false));
-    this.sbToggleMode?.addEventListener('click', () => this.toggleMarkdownMode());
-
-    // Bouton retour dans la barre d'outils Markdown
-    document.getElementById('md-btn-apply-exit')?.addEventListener('click', () => {
-      this.toggleMarkdownMode(false);
-    });
-
-    // Bascule de la vue fractionnée (Aperçu en direct)
-    document.getElementById('md-btn-toggle-split')?.addEventListener('click', () => {
-      this.isSplitView = !this.isSplitView;
-      if (this.panesContainer) {
-        if (this.isSplitView) {
-          this.panesContainer.classList.remove('single-pane');
-        } else {
-          this.panesContainer.classList.add('single-pane');
-        }
-      }
-    });
-
-    // Copier le Markdown
-    document.getElementById('md-btn-copy')?.addEventListener('click', async () => {
-      if (!this.textarea) return;
-      try {
-        await navigator.clipboard.writeText(this.textarea.value);
-        this.toasts.show('Code Markdown copié dans le presse-papiers !', 'success');
-      } catch (err) {
-        this.textarea.select();
-        document.execCommand('copy');
-        this.toasts.show('Code Markdown copié !', 'success');
-      }
-    });
-
-    // Exportation
-    document.getElementById('md-btn-export')?.addEventListener('click', () => this.exportMarkdownFile());
-    document.getElementById('btn-export-markdown')?.addEventListener('click', () => {
-      const backstage = document.getElementById('backstage-overlay');
-      if (backstage) backstage.classList.remove('active');
-      this.exportMarkdownFile();
-    });
-
-    // Importation
-    const triggerFileImport = () => {
-      if (this.hiddenMdInput) {
-        this.hiddenMdInput.value = '';
-        this.hiddenMdInput.click();
-      }
-    };
-
-    document.getElementById('md-btn-import')?.addEventListener('click', triggerFileImport);
-    document.getElementById('btn-insert-markdown')?.addEventListener('click', triggerFileImport);
-    document.getElementById('btn-browse-markdown')?.addEventListener('click', () => {
-      const backstage = document.getElementById('backstage-overlay');
-      if (backstage) backstage.classList.remove('active');
-      triggerFileImport();
-    });
-
-    this.hiddenMdInput?.addEventListener('change', (e) => {
-      if (e.target.files && e.target.files[0]) {
-        this.importMarkdownFile(e.target.files[0]);
-      }
-    });
-
-    // Saisie en direct dans le textarea avec debounce pour l'aperçu
-    let previewDebounce = null;
-    this.textarea?.addEventListener('input', () => {
-      this.updateStats();
-      clearTimeout(previewDebounce);
-      previewDebounce = setTimeout(() => this.updatePreview(), 100);
-    });
-
-    // Support de la touche Tab (indente de 2 espaces) et raccourcis clavier dans le textarea
-    this.textarea?.addEventListener('keydown', (e) => {
-      if (e.key === 'Tab') {
-        e.preventDefault();
-        const start = this.textarea.selectionStart;
-        const end = this.textarea.selectionEnd;
-        this.textarea.value = this.textarea.value.substring(0, start) + '  ' + this.textarea.value.substring(end);
-        this.textarea.selectionStart = this.textarea.selectionEnd = start + 2;
-        this.updatePreview();
-      } else if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-        e.preventDefault();
-        this.exportMarkdownFile();
-      }
-    });
-
-    // Raccourcis d'insertion dans la barre d'outils Markdown
-    this.bindAction('md-action-bold', '**', '**', 'texte en gras');
-    this.bindAction('md-action-italic', '*', '*', 'texte en italique');
-    this.bindAction('md-action-h1', '# ', '', 'Titre 1');
-    this.bindAction('md-action-h2', '## ', '', 'Titre 2');
-    this.bindAction('md-action-list', '- ', '', 'Élément de liste');
-    this.bindAction('md-action-quote', '> ', '', 'Citation');
-    this.bindAction('md-action-code', '```\n', '\n```', 'code');
-    this.bindAction('md-action-table', '\n| Colonne 1 | Colonne 2 |\n| --- | --- |\n| Donnée 1 | Donnée 2 |\n', '', '');
-    this.bindAction('md-action-link', '[', '](https://exemple.com)', 'texte du lien');
-
-    // Drag and drop universel de fichiers .md sur l'application
-    window.addEventListener('dragover', (e) => e.preventDefault());
-    window.addEventListener('drop', (e) => {
-      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
-        const file = e.dataTransfer.files[0];
-        if (file.name.match(/\.(md|markdown)$/i)) {
-          e.preventDefault();
-          this.importMarkdownFile(file);
-        }
-      }
-    });
-  }
-
-  bindAction(btnId, before, after, defaultText) {
-    const btn = document.getElementById(btnId);
-    if (!btn || !this.textarea) return;
-
-    btn.addEventListener('click', () => {
-      const start = this.textarea.selectionStart;
-      const end = this.textarea.selectionEnd;
-      const selected = this.textarea.value.substring(start, end) || defaultText;
-
-      const replacement = before + selected + after;
-      this.textarea.value = this.textarea.value.substring(0, start) + replacement + this.textarea.value.substring(end);
-
-      this.textarea.selectionStart = start + before.length;
-      this.textarea.selectionEnd = start + before.length + selected.length;
-      this.textarea.focus();
-
-      this.updatePreview();
-      this.updateStats();
-    });
   }
 }
 
@@ -2442,59 +2043,6 @@ class SpellCheckEngine {
     document.getElementById('spellcheck-ignore-once')?.addEventListener('click', () => this.ignoreOnce());
     document.getElementById('spellcheck-ignore-all')?.addEventListener('click', () => this.ignoreAll());
     document.getElementById('spellcheck-add-dict')?.addEventListener('click', () => this.addToDictionary());
-    document.getElementById('spellcheck-manage-dict')?.addEventListener('click', () => {
-      this.closeContextMenu();
-      this.openUserDictModal();
-    });
-
-    // Bouton Dictionnaire dans le ruban
-    document.getElementById('btn-open-user-dict')?.addEventListener('click', () => this.openUserDictModal());
-
-    // Événements de la modale de dictionnaire utilisateur
-    const addBtn = document.getElementById('btn-user-dict-add');
-    const addInput = document.getElementById('user-dict-new-word');
-    if (addBtn && addInput) {
-      addBtn.addEventListener('click', () => {
-        if (this.addCustomWord(addInput.value)) {
-          addInput.value = '';
-          addInput.focus();
-        }
-      });
-      addInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          if (this.addCustomWord(addInput.value)) {
-            addInput.value = '';
-            addInput.focus();
-          }
-        }
-      });
-    }
-
-    const searchInput = document.getElementById('user-dict-search');
-    if (searchInput) {
-      searchInput.addEventListener('input', () => this.renderUserDictModal(searchInput.value));
-    }
-
-    document.getElementById('btn-user-dict-clear')?.addEventListener('click', () => this.clearCustomDictionary());
-    document.getElementById('btn-user-dict-export')?.addEventListener('click', () => this.exportCustomDictionary());
-
-    const importBtn = document.getElementById('btn-user-dict-import');
-    const fileInput = document.getElementById('user-dict-file-input');
-    if (importBtn && fileInput) {
-      importBtn.addEventListener('click', () => fileInput.click());
-      fileInput.addEventListener('change', () => {
-        if (fileInput.files && fileInput.files[0]) {
-          const file = fileInput.files[0];
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            this.importCustomWords(e.target.result);
-            fileInput.value = '';
-          };
-          reader.readAsText(file);
-        }
-      });
-    }
 
     // Bouton Fermer du volet latéral
     document.getElementById('btn-sp-close')?.addEventListener('click', () => this.closePanel());
@@ -3142,178 +2690,13 @@ class SpellCheckEngine {
   addToDictionary() {
     if (!this.activeErrorSpan) return;
     const word = (this.activeErrorSpan.dataset.word || this.activeErrorSpan.textContent).toLowerCase();
+    if (!this.customDictionary.includes(word)) {
+      this.customDictionary.push(word);
+      this.saveCustomDictionary();
+    }
     this.closeContextMenu();
-    this.addCustomWord(word, true);
-  }
-
-  addCustomWord(rawWord, notify = true) {
-    if (!rawWord) return false;
-    const word = rawWord.trim().toLowerCase().replace(/^['’.,;!?]+|['’.,;!?]+$/g, '');
-    if (!word || word.length < 1) return false;
-
-    if (this.customDictionary.includes(word)) {
-      if (notify) this.toasts.show(`« ${word} » figure déjà dans votre dictionnaire personnel.`, 'info');
-      return false;
-    }
-
-    this.customDictionary.push(word);
-    this.customDictionary.sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' }));
-    this.saveCustomDictionary();
+    this.toasts.show(`"${word}" ajouté à votre dictionnaire personnel !`, 'success');
     this.scanEditor();
-    this.renderUserDictModal();
-
-    if (notify) {
-      this.toasts.show(`« ${word} » a été ajouté à votre dictionnaire personnel !`, 'success');
-    }
-    return true;
-  }
-
-  removeCustomWord(rawWord) {
-    if (!rawWord) return false;
-    const word = rawWord.trim().toLowerCase();
-    const index = this.customDictionary.indexOf(word);
-    if (index === -1) return false;
-
-    this.customDictionary.splice(index, 1);
-    this.saveCustomDictionary();
-    this.scanEditor();
-    this.renderUserDictModal();
-    this.toasts.show(`« ${word} » a été retiré du dictionnaire personnel.`, 'info');
-    return true;
-  }
-
-  clearCustomDictionary() {
-    if (this.customDictionary.length === 0) {
-      this.toasts.show('Votre dictionnaire personnel est déjà vide.', 'info');
-      return;
-    }
-    const count = this.customDictionary.length;
-    if (confirm(`Voulez-vous vraiment effacer la totalité des ${count} mot(s) de votre dictionnaire personnel ?`)) {
-      this.customDictionary = [];
-      this.saveCustomDictionary();
-      this.scanEditor();
-      this.renderUserDictModal();
-      this.toasts.show('Le dictionnaire personnel a été réinitialisé.', 'info');
-    }
-  }
-
-  importCustomWords(fileOrText) {
-    if (!fileOrText || typeof fileOrText !== 'string') return;
-    const tokens = fileOrText.split(/[\r\n,; \t]+/).map((w) => w.trim().toLowerCase().replace(/^['’.,;!?]+|['’.,;!?]+$/g, '')).filter((w) => w.length > 0);
-    let added = 0;
-    tokens.forEach((w) => {
-      if (!this.customDictionary.includes(w)) {
-        this.customDictionary.push(w);
-        added++;
-      }
-    });
-
-    if (added > 0) {
-      this.customDictionary.sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' }));
-      this.saveCustomDictionary();
-      this.scanEditor();
-      this.renderUserDictModal();
-      this.toasts.show(`${added} mot(s) importé(s) dans votre dictionnaire personnel !`, 'success');
-    } else {
-      this.toasts.show('Aucun nouveau mot détecté à importer.', 'info');
-    }
-  }
-
-  exportCustomDictionary() {
-    if (this.customDictionary.length === 0) {
-      this.toasts.show('Votre dictionnaire personnel est vide.', 'info');
-      return;
-    }
-    const content = this.customDictionary.join('\n');
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'dictionnaire_personnel_word.txt';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    this.toasts.show('Dictionnaire personnel exporté (.txt)', 'success');
-  }
-
-  openUserDictModal() {
-    const modal = document.getElementById('modal-user-dict');
-    if (modal) {
-      modal.classList.add('active');
-      const input = document.getElementById('user-dict-new-word');
-      if (input) {
-        input.value = '';
-        setTimeout(() => input.focus(), 80);
-      }
-      const search = document.getElementById('user-dict-search');
-      if (search) search.value = '';
-      this.renderUserDictModal('');
-    }
-  }
-
-  closeUserDictModal() {
-    const modal = document.getElementById('modal-user-dict');
-    if (modal) modal.classList.remove('active');
-  }
-
-  renderUserDictModal(searchFilter = '') {
-    const listContainer = document.getElementById('user-dict-list');
-    const badge = document.getElementById('user-dict-count-badge');
-    if (!listContainer) return;
-
-    const totalCount = this.customDictionary.length;
-    if (badge) {
-      badge.textContent = `${totalCount} mot${totalCount > 1 ? 's' : ''} enregistré${totalCount > 1 ? 's' : ''}`;
-    }
-
-    const q = (searchFilter || '').trim().toLowerCase();
-    const filtered = q
-      ? this.customDictionary.filter((w) => w.toLowerCase().includes(q))
-      : this.customDictionary;
-
-    listContainer.innerHTML = '';
-
-    if (totalCount === 0) {
-      listContainer.innerHTML = `
-        <div class="user-dict-empty">
-          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" style="margin: 0 auto 8px auto; opacity: 0.6; display: block;"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
-          <div>Votre dictionnaire personnel est actuellement vide.</div>
-          <div style="font-size: 11px; margin-top: 4px; color: var(--text-muted);">Ajoutez des noms propres, termes métiers ou acronymes ci-dessus.</div>
-        </div>
-      `;
-      return;
-    }
-
-    if (filtered.length === 0) {
-      listContainer.innerHTML = `
-        <div class="user-dict-empty">
-          <div>Aucun mot ne correspond à votre recherche « ${searchFilter} ».</div>
-        </div>
-      `;
-      return;
-    }
-
-    filtered.forEach((word) => {
-      const item = document.createElement('div');
-      item.className = 'user-dict-item';
-      item.innerHTML = `
-        <div class="user-dict-item-word">
-          <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--word-primary);"></span>
-          <span>${word}</span>
-        </div>
-        <button class="user-dict-item-del" title="Supprimer « ${word} » du dictionnaire">
-          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"></path></svg>
-        </button>
-      `;
-
-      item.querySelector('.user-dict-item-del').addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.removeCustomWord(word);
-      });
-
-      listContainer.appendChild(item);
-    });
   }
 
   togglePanel() {
@@ -3348,13 +2731,11 @@ class SpellCheckEngine {
     if (errorSpans.length === 0) {
       this.spBody.innerHTML = `
         <div style="text-align: center; padding: 30px 10px; color: var(--text-muted);">
-          <svg viewBox="0 0 24 24" width="42" height="42" stroke="#107c41" fill="none" stroke-width="2" style="margin: 0 auto 10px auto; display: block;"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          <svg viewBox="0 0 24 24" width="42" height="42" stroke="#107c41" fill="none" stroke-width="2" style="margin: 0 auto 10px auto;"><polyline points="20 6 9 17 4 12"></polyline></svg>
           <div style="font-weight: 600; font-size: 14px; color: #107c41; margin-bottom: 4px;">Document impeccable !</div>
-          <p style="font-size: 12px; margin-bottom: 16px;">Aucune faute d'orthographe n'a été détectée.</p>
-          <button id="btn-sp-open-dict" class="btn-secondary" style="font-size: 12px; padding: 6px 12px;">📚 Dictionnaire personnel (${this.customDictionary.length})</button>
+          <p style="font-size: 12px;">Aucune faute d'orthographe n'a été détectée.</p>
         </div>
       `;
-      document.getElementById('btn-sp-open-dict')?.addEventListener('click', () => this.openUserDictModal());
       return;
     }
 
@@ -3416,7 +2797,12 @@ class SpellCheckEngine {
       addBtn.className = 'sr-btn';
       addBtn.textContent = 'Ajouter au dict.';
       addBtn.addEventListener('click', () => {
-        this.addCustomWord(word, true);
+        if (!this.customDictionary.includes(word.toLowerCase())) {
+          this.customDictionary.push(word.toLowerCase());
+          this.saveCustomDictionary();
+        }
+        this.toasts.show(`"${word}" ajouté au dictionnaire personnel !`, 'success');
+        this.scanEditor();
       });
 
       actionsRow.appendChild(ignoreBtn);
@@ -3425,26 +2811,6 @@ class SpellCheckEngine {
 
       this.spBody.appendChild(card);
     });
-
-    // Pied de page du volet latéral avec accès direct au dictionnaire personnel
-    const panelFooter = document.createElement('div');
-    panelFooter.style.marginTop = '16px';
-    panelFooter.style.paddingTop = '12px';
-    panelFooter.style.borderTop = '1px solid var(--border-subtle)';
-    panelFooter.style.textAlign = 'center';
-
-    const manageBtn = document.createElement('button');
-    manageBtn.className = 'btn-secondary';
-    manageBtn.style.fontSize = '12px';
-    manageBtn.style.width = '100%';
-    manageBtn.style.padding = '7px 10px';
-    manageBtn.innerHTML = `📚 Gérer le dictionnaire personnel (${this.customDictionary.length})`;
-    manageBtn.addEventListener('click', () => {
-      this.openUserDictModal();
-    });
-
-    panelFooter.appendChild(manageBtn);
-    this.spBody.appendChild(panelFooter);
   }
 }
 
@@ -3561,11 +2927,11 @@ class HeaderFooterManager {
       });
     }
 
-    // 7. Insérer le numéro de page (ouvre la modale personnalisable)
+    // 7. Insérer le numéro de page
     const btnPageNum = document.getElementById('btn-hf-insert-pagenum');
     if (btnPageNum) {
       btnPageNum.addEventListener('click', () => {
-        this.openPageNumberModal();
+        this.insertIntoActiveField('{page}');
       });
     }
 
@@ -3585,63 +2951,6 @@ class HeaderFooterManager {
     if (btnLeft) btnLeft.addEventListener('click', () => this.focusField(this.activeType, 'left'));
     if (btnCenter) btnCenter.addEventListener('click', () => this.focusField(this.activeType, 'center'));
     if (btnRight) btnRight.addEventListener('click', () => this.focusField(this.activeType, 'right'));
-
-    // 10. Bouton Numéro de page dans le ruban Insertion
-    document.getElementById('btn-insert-pagenumber')?.addEventListener('click', () => {
-      this.openPageNumberModal();
-    });
-
-    // 11. Événements de la modale Numérotation de Pages
-    document.querySelectorAll('input[name="pagenum-pos"]').forEach((radio) => {
-      radio.addEventListener('change', () => this.updatePageNumPreview());
-    });
-
-    document.querySelectorAll('input[name="pagenum-align"]').forEach((radio) => {
-      radio.addEventListener('change', () => this.updatePageNumPreview());
-    });
-
-    const formatSelect = document.getElementById('pagenum-format-select');
-    const customFormatRow = document.getElementById('pagenum-custom-format-row');
-    const customFormatInput = document.getElementById('pagenum-custom-format-input');
-
-    if (formatSelect) {
-      formatSelect.addEventListener('change', () => {
-        if (customFormatRow) {
-          customFormatRow.style.display = formatSelect.value === 'custom' ? 'block' : 'none';
-        }
-        this.updatePageNumPreview();
-      });
-    }
-
-    if (customFormatInput) {
-      customFormatInput.addEventListener('input', () => this.updatePageNumPreview());
-    }
-
-    document.getElementById('pagenum-show-first-page')?.addEventListener('change', () => {
-      this.updatePageNumPreview();
-    });
-
-    // Bouton Appliquer de la modale
-    document.getElementById('btn-pagenum-apply')?.addEventListener('click', () => {
-      const position = document.querySelector('input[name="pagenum-pos"]:checked')?.value || 'footer';
-      const alignment = document.querySelector('input[name="pagenum-align"]:checked')?.value || 'right';
-      
-      let format = formatSelect ? formatSelect.value : 'Page {page} sur {total}';
-      if (format === 'custom') {
-        format = (customFormatInput && customFormatInput.value.trim()) ? customFormatInput.value.trim() : '{page}';
-      }
-      
-      const showOnFirstPage = document.getElementById('pagenum-show-first-page')?.checked ?? true;
-
-      this.applyPageNumbering({ position, alignment, format, showOnFirstPage });
-      this.closePageNumberModal();
-    });
-
-    // Bouton Supprimer les numéros
-    document.getElementById('btn-pagenum-remove')?.addEventListener('click', () => {
-      this.removePageNumbering();
-      this.closePageNumberModal();
-    });
   }
 
   insertIntoActiveField(text) {
@@ -3783,227 +3092,6 @@ class HeaderFooterManager {
     }
   }
 
-  openPageNumberModal() {
-    const modal = document.getElementById('modal-pagenumber');
-    if (!modal) return;
-
-    // Détecter où se trouve actuellement une numérotation pour pré-remplir la modale
-    let detectedPos = 'footer';
-    let detectedAlign = 'right';
-    let detectedFormat = 'Page {page} sur {total}';
-
-    const checkSlot = (slotVal, pos, align) => {
-      if (typeof slotVal === 'string' && slotVal.includes('{page}')) {
-        detectedPos = pos;
-        detectedAlign = align;
-        detectedFormat = slotVal;
-      }
-    };
-
-    checkSlot(this.data.headerLeft, 'header', 'left');
-    checkSlot(this.data.headerCenter, 'header', 'center');
-    checkSlot(this.data.headerRight, 'header', 'right');
-    checkSlot(this.data.footerLeft, 'footer', 'left');
-    checkSlot(this.data.footerCenter, 'footer', 'center');
-    checkSlot(this.data.footerRight, 'footer', 'right');
-
-    const radioPos = document.querySelector(`input[name="pagenum-pos"][value="${detectedPos}"]`);
-    if (radioPos) radioPos.checked = true;
-
-    const radioAlign = document.querySelector(`input[name="pagenum-align"][value="${detectedAlign}"]`);
-    if (radioAlign) radioAlign.checked = true;
-
-    const formatSelect = document.getElementById('pagenum-format-select');
-    const customRow = document.getElementById('pagenum-custom-format-row');
-    const customInput = document.getElementById('pagenum-custom-format-input');
-
-    if (formatSelect) {
-      let matched = false;
-      for (let i = 0; i < formatSelect.options.length; i++) {
-        if (formatSelect.options[i].value === detectedFormat) {
-          formatSelect.selectedIndex = i;
-          matched = true;
-          break;
-        }
-      }
-      if (!matched) {
-        formatSelect.value = 'custom';
-        if (customRow) customRow.style.display = 'block';
-        if (customInput) customInput.value = detectedFormat;
-      } else {
-        if (customRow) customRow.style.display = 'none';
-      }
-    }
-
-    const chkFirst = document.getElementById('pagenum-show-first-page');
-    if (chkFirst) {
-      chkFirst.checked = !this.data.differentFirstPage;
-    }
-
-    this.updatePageNumPreview();
-    modal.classList.add('active');
-  }
-
-  closePageNumberModal() {
-    const modal = document.getElementById('modal-pagenumber');
-    if (modal) modal.classList.remove('active');
-  }
-
-  updatePageNumPreview() {
-    const pos = document.querySelector('input[name="pagenum-pos"]:checked')?.value || 'footer';
-    const align = document.querySelector('input[name="pagenum-align"]:checked')?.value || 'right';
-    const formatSelect = document.getElementById('pagenum-format-select');
-    let template = formatSelect ? formatSelect.value : 'Page {page} sur {total}';
-    if (template === 'custom') {
-      const customInput = document.getElementById('pagenum-custom-format-input');
-      template = (customInput && customInput.value.trim()) ? customInput.value.trim() : '{page}';
-    }
-
-    const rendered = template.replace(/{page}/g, '1').replace(/{total}/g, '3');
-
-    // Mettre à jour les emplacements de l'aperçu
-    const hLeft = document.getElementById('prev-h-left');
-    const hCenter = document.getElementById('prev-h-center');
-    const hRight = document.getElementById('prev-h-right');
-    const fLeft = document.getElementById('prev-f-left');
-    const fCenter = document.getElementById('prev-f-center');
-    const fRight = document.getElementById('prev-f-right');
-
-    const slots = [hLeft, hCenter, hRight, fLeft, fCenter, fRight];
-    slots.forEach((s) => {
-      if (s) {
-        s.textContent = '';
-        s.className = 'preview-hf-slot';
-      }
-    });
-
-    if (pos === 'header') {
-      if (hLeft) hLeft.textContent = this.data.headerLeft ? this.formatFieldValue('header-left', this.data.headerLeft, 1, 3) : 'Document';
-      if (hRight) hRight.textContent = (this.data.headerRight && !this.data.headerRight.includes('{page}')) ? this.data.headerRight : '';
-      
-      let activeTarget = hRight;
-      if (align === 'left') activeTarget = hLeft;
-      else if (align === 'center') activeTarget = hCenter;
-      
-      if (activeTarget) {
-        activeTarget.textContent = rendered;
-        activeTarget.className = 'preview-hf-slot preview-active-slot';
-      }
-      if (fLeft) fLeft.textContent = this.data.footerLeft || 'Microsoft Word';
-      if (fRight) fRight.textContent = this.data.footerRight && !this.data.footerRight.includes('{page}') ? this.data.footerRight : '';
-    } else {
-      if (hLeft) hLeft.textContent = this.data.headerLeft || 'Document';
-      if (hRight) hRight.textContent = this.data.headerRight || 'Format A4';
-      if (fLeft) fLeft.textContent = this.data.footerLeft || 'Microsoft Word';
-      
-      let activeTarget = fRight;
-      if (align === 'left') activeTarget = fLeft;
-      else if (align === 'center') activeTarget = fCenter;
-
-      if (activeTarget) {
-        activeTarget.textContent = rendered;
-        activeTarget.className = 'preview-hf-slot preview-active-slot';
-      }
-    }
-
-    // Mise à jour visuelle des cartes de sélection
-    const cardHeader = document.getElementById('card-pos-header');
-    const cardFooter = document.getElementById('card-pos-footer');
-    if (cardHeader && cardFooter) {
-      if (pos === 'header') {
-        cardHeader.style.borderColor = 'var(--word-primary)';
-        cardHeader.style.backgroundColor = 'var(--btn-selected)';
-        cardFooter.style.borderColor = 'var(--border-subtle)';
-        cardFooter.style.backgroundColor = 'var(--bg-paper)';
-      } else {
-        cardFooter.style.borderColor = 'var(--word-primary)';
-        cardFooter.style.backgroundColor = 'var(--btn-selected)';
-        cardHeader.style.borderColor = 'var(--border-subtle)';
-        cardHeader.style.backgroundColor = 'var(--bg-paper)';
-      }
-    }
-
-    ['left', 'center', 'right'].forEach((a) => {
-      const card = document.getElementById(`card-align-${a}`);
-      if (card) {
-        if (a === align) {
-          card.style.borderColor = 'var(--word-primary)';
-          card.style.backgroundColor = 'var(--btn-selected)';
-        } else {
-          card.style.borderColor = 'var(--border-subtle)';
-          card.style.backgroundColor = 'var(--bg-paper)';
-        }
-      }
-    });
-  }
-
-  applyPageNumbering(options) {
-    const { position, alignment, format, showOnFirstPage } = options;
-
-    // 1. Déterminer le champ cible
-    let targetFieldKey = '';
-    if (position === 'header') {
-      targetFieldKey = alignment === 'left' ? 'headerLeft' : (alignment === 'center' ? 'headerCenter' : 'headerRight');
-    } else {
-      targetFieldKey = alignment === 'left' ? 'footerLeft' : (alignment === 'center' ? 'footerCenter' : 'footerRight');
-    }
-
-    // 2. Nettoyer les anciens champs de numérotation pour éviter les doublons accidentels
-    const fieldKeys = ['headerLeft', 'headerCenter', 'headerRight', 'footerLeft', 'footerCenter', 'footerRight'];
-    fieldKeys.forEach((k) => {
-      if (k !== targetFieldKey && typeof this.data[k] === 'string' && this.data[k].includes('{page}')) {
-        this.data[k] = '';
-      }
-    });
-
-    // 3. Définir le nouveau modèle de champ dynamique
-    this.data[targetFieldKey] = format;
-
-    // 4. Gérer la première page différente
-    this.data.differentFirstPage = !showOnFirstPage;
-    if (this.chkDifferentFirst) {
-      this.chkDifferentFirst.checked = this.data.differentFirstPage;
-    }
-
-    // 5. Mettre à jour l'affichage sur toutes les pages A4 du document
-    if (window.wordApp && window.wordApp.pagination) {
-      window.wordApp.pagination.renderPageSheets(window.wordApp.pagination.totalPages);
-    }
-
-    // 6. Sauvegarder
-    if (window.wordApp && window.wordApp.fileManager) {
-      window.wordApp.fileManager.scheduleDebouncedSave();
-    }
-
-    const posLabel = position === 'header' ? 'Haut de page (En-tête)' : 'Bas de page (Pied de page)';
-    const alignLabel = alignment === 'left' ? 'Gauche' : (alignment === 'center' ? 'Centré' : 'Droite');
-    this.toasts.show(`Numéros de page appliqués : ${posLabel}, alignement ${alignLabel}`, 'success');
-  }
-
-  removePageNumbering() {
-    const fieldKeys = ['headerLeft', 'headerCenter', 'headerRight', 'footerLeft', 'footerCenter', 'footerRight'];
-    let removed = false;
-    fieldKeys.forEach((k) => {
-      if (typeof this.data[k] === 'string' && this.data[k].includes('{page}')) {
-        this.data[k] = '';
-        removed = true;
-      }
-    });
-
-    if (window.wordApp && window.wordApp.pagination) {
-      window.wordApp.pagination.renderPageSheets(window.wordApp.pagination.totalPages);
-    }
-    if (window.wordApp && window.wordApp.fileManager) {
-      window.wordApp.fileManager.scheduleDebouncedSave();
-    }
-
-    if (removed) {
-      this.toasts.show('Numéros de page supprimés du document', 'info');
-    } else {
-      this.toasts.show('Aucun numéro de page à supprimer', 'info');
-    }
-  }
-
   renderHeader(sheet, pageNum, totalPages) {
     const docTitle = window.wordApp ? window.wordApp.fileManager.getDocumentTitle() : 'Document Word';
     const isFirst = pageNum === 1;
@@ -4022,13 +3110,9 @@ class HeaderFooterManager {
       return;
     }
 
-    const left = (this.data.headerLeft !== undefined && this.data.headerLeft !== null)
-      ? this.formatFieldValue('header-left', this.data.headerLeft, pageNum, totalPages)
-      : docTitle;
-    const center = this.formatFieldValue('header-center', this.data.headerCenter || '', pageNum, totalPages);
-    const right = (this.data.headerRight !== undefined && this.data.headerRight !== null)
-      ? this.formatFieldValue('header-right', this.data.headerRight, pageNum, totalPages)
-      : 'Format A4';
+    const left = this.data.headerLeft ? this.formatFieldValue('header-left', this.data.headerLeft, pageNum, totalPages) : docTitle;
+    const center = this.formatFieldValue('header-center', this.data.headerCenter, pageNum, totalPages);
+    const right = this.data.headerRight ? this.formatFieldValue('header-right', this.data.headerRight, pageNum, totalPages) : 'Format A4';
 
     sheet.innerHTML += `
       <div class="page-sheet-header" data-page="${pageNum}">
@@ -4059,13 +3143,9 @@ class HeaderFooterManager {
       return;
     }
 
-    const left = (this.data.footerLeft !== undefined && this.data.footerLeft !== null)
-      ? this.formatFieldValue('footer-left', this.data.footerLeft, pageNum, totalPages)
-      : 'Microsoft Word';
-    const center = this.formatFieldValue('footer-center', this.data.footerCenter || '', pageNum, totalPages);
-    const right = (this.data.footerRight !== undefined && this.data.footerRight !== null)
-      ? this.formatFieldValue('footer-right', this.data.footerRight, pageNum, totalPages)
-      : `Page ${pageNum} sur ${totalPages}`;
+    const left = this.data.footerLeft ? this.formatFieldValue('footer-left', this.data.footerLeft, pageNum, totalPages) : 'Microsoft Word';
+    const center = this.formatFieldValue('footer-center', this.data.footerCenter, pageNum, totalPages);
+    const right = this.data.footerRight ? this.formatFieldValue('footer-right', this.data.footerRight, pageNum, totalPages) : `Page ${pageNum} sur ${totalPages}`;
 
     sheet.innerHTML += `
       <div class="page-sheet-footer" data-page="${pageNum}">
@@ -4077,235 +3157,6 @@ class HeaderFooterManager {
         <div class="hf-tag-badge">Pied de page - Page ${pageNum}</div>
       </div>
     `;
-  }
-}
-
-/**
- * ------------------------------------------------------------------------------
- * 8.6 GESTIONNAIRE DE FILIGRANE DE DOCUMENT (WATERMARK MANAGER)
- * Permet l'application d'un filigrane textuel fantôme sur l'ensemble des pages A4
- * avec personnalisation du texte (ex: Confidentiel, Brouillon), de l'opacité et de l'angle.
- * ------------------------------------------------------------------------------
- */
-class WatermarkManager {
-  constructor(toasts) {
-    this.toasts = toasts;
-    this.storageKey = 'ms_word_watermark';
-
-    // Configuration par défaut
-    this.state = {
-      enabled: false,
-      text: 'CONFIDENTIEL',
-      opacity: 0.15,
-      angle: 'diagonal', // 'diagonal' (-45deg) ou 'horizontal' (0deg)
-      color: '#6b7280'
-    };
-
-    this.modal = document.getElementById('modal-watermark');
-    this.textInput = document.getElementById('watermark-text-input');
-    this.opacitySlider = document.getElementById('watermark-opacity-slider');
-    this.opacityVal = document.getElementById('watermark-opacity-val');
-    this.colorSelect = document.getElementById('watermark-color-select');
-    this.previewBox = document.getElementById('watermark-preview-box');
-    this.previewText = document.getElementById('watermark-preview-text');
-    this.applyBtn = document.getElementById('btn-watermark-apply');
-    this.removeBtn = document.getElementById('btn-watermark-remove');
-
-    this.loadState();
-    this.initEvents();
-    this.applyToDOM();
-  }
-
-  loadState() {
-    try {
-      const raw = localStorage.getItem(this.storageKey);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        this.state = Object.assign(this.state, parsed);
-      }
-    } catch (e) {
-      console.warn('Impossible de charger le filigrane', e);
-    }
-  }
-
-  saveState() {
-    try {
-      localStorage.setItem(this.storageKey, JSON.stringify(this.state));
-    } catch (e) {
-      console.warn('Impossible de sauvegarder le filigrane', e);
-    }
-  }
-
-  initEvents() {
-    // Bouton Insertion > Filigrane dans le ruban
-    document.getElementById('btn-insert-watermark')?.addEventListener('click', () => {
-      this.openModal();
-    });
-
-    // Modèles prédéfinis (Presets)
-    document.querySelectorAll('.watermark-preset-btn').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const preset = btn.dataset.preset;
-        if (preset && this.textInput) {
-          this.textInput.value = preset;
-          this.updatePreview();
-        }
-      });
-    });
-
-    // Mise à jour de l'aperçu en direct
-    this.textInput?.addEventListener('input', () => this.updatePreview());
-    this.opacitySlider?.addEventListener('input', (e) => {
-      const val = parseInt(e.target.value, 10) || 15;
-      if (this.opacityVal) this.opacityVal.textContent = `${val} %`;
-      this.updatePreview();
-    });
-    this.colorSelect?.addEventListener('change', () => this.updatePreview());
-
-    document.querySelectorAll('input[name="watermark-angle"]').forEach((radio) => {
-      radio.addEventListener('change', () => this.updatePreview());
-    });
-
-    // Bouton Appliquer
-    this.applyBtn?.addEventListener('click', () => {
-      const text = (this.textInput?.value || '').trim() || 'CONFIDENTIEL';
-      const opacity = (parseInt(this.opacitySlider?.value, 10) || 15) / 100;
-      const angle = document.querySelector('input[name="watermark-angle"]:checked')?.value || 'diagonal';
-      const color = this.colorSelect?.value || '#6b7280';
-
-      this.state = {
-        enabled: true,
-        text,
-        opacity,
-        angle,
-        color
-      };
-
-      this.saveState();
-      this.applyToDOM();
-      this.closeModal();
-      this.toasts.show(`Filigrane « ${text} » appliqué à toutes les pages`, 'success');
-    });
-
-    // Bouton Supprimer
-    this.removeBtn?.addEventListener('click', () => {
-      this.state.enabled = false;
-      this.saveState();
-      this.applyToDOM();
-      this.closeModal();
-      this.toasts.show('Le filigrane a été supprimé du document', 'info');
-    });
-  }
-
-  openModal() {
-    if (!this.modal) return;
-    if (this.textInput) this.textInput.value = this.state.text || 'CONFIDENTIEL';
-    if (this.opacitySlider) {
-      const pct = Math.round((this.state.opacity || 0.15) * 100);
-      this.opacitySlider.value = String(pct);
-      if (this.opacityVal) this.opacityVal.textContent = `${pct} %`;
-    }
-    if (this.colorSelect) this.colorSelect.value = this.state.color || '#6b7280';
-
-    const diagRadio = document.getElementById('wm-angle-diag');
-    const horizRadio = document.getElementById('wm-angle-horiz');
-    if (this.state.angle === 'horizontal') {
-      if (horizRadio) horizRadio.checked = true;
-    } else {
-      if (diagRadio) diagRadio.checked = true;
-    }
-
-    if (this.removeBtn) {
-      this.removeBtn.style.display = this.state.enabled ? 'inline-block' : 'none';
-    }
-
-    this.updatePreview();
-    this.modal.classList.add('active');
-    setTimeout(() => this.textInput?.focus(), 80);
-  }
-
-  closeModal() {
-    if (this.modal) this.modal.classList.remove('active');
-  }
-
-  updatePreview() {
-    if (!this.previewText) return;
-    const text = (this.textInput?.value || '').trim() || 'CONFIDENTIEL';
-    const pct = parseInt(this.opacitySlider?.value, 10) || 15;
-    const color = this.colorSelect?.value || '#6b7280';
-    const angle = document.querySelector('input[name="watermark-angle"]:checked')?.value || 'diagonal';
-
-    this.previewText.textContent = text;
-    this.previewText.style.opacity = String(pct / 100);
-    this.previewText.style.color = color;
-    this.previewText.style.transform = angle === 'horizontal' ? 'rotate(0deg)' : 'rotate(-25deg)';
-  }
-
-  applyToDOM() {
-    // Mettre à jour les variables pour @media print
-    if (this.state.enabled) {
-      document.body.classList.add('has-watermark');
-      document.body.style.setProperty('--print-watermark-text', `"${this.state.text.replace(/"/g, '\\"')}"`);
-      document.body.style.setProperty('--print-watermark-opacity', String(this.state.opacity));
-      document.body.style.setProperty('--print-watermark-angle', this.state.angle === 'horizontal' ? '0deg' : '-45deg');
-      document.body.style.setProperty('--print-watermark-color', this.state.color);
-    } else {
-      document.body.classList.remove('has-watermark');
-      document.body.style.removeProperty('--print-watermark-text');
-      document.body.style.removeProperty('--print-watermark-opacity');
-      document.body.style.removeProperty('--print-watermark-angle');
-      document.body.style.removeProperty('--print-watermark-color');
-    }
-
-    // Mettre à jour chaque feuille A4 (.page-sheet)
-    const sheets = document.querySelectorAll('.page-sheet');
-    sheets.forEach((sheet) => this.renderSheetWatermark(sheet));
-
-    // Mettre à jour l'apparence active du bouton dans le ruban
-    const ribbonBtn = document.getElementById('btn-insert-watermark');
-    if (ribbonBtn) {
-      if (this.state.enabled) {
-        ribbonBtn.classList.add('active');
-        ribbonBtn.title = `Filigrane actif : « ${this.state.text} » (Cliquer pour modifier ou supprimer)`;
-      } else {
-        ribbonBtn.classList.remove('active');
-        ribbonBtn.title = "Ajouter ou modifier un filigrane de page (ex: Confidentiel, Brouillon)";
-      }
-    }
-  }
-
-  renderSheetWatermark(sheet) {
-    if (!sheet) return;
-    let wm = sheet.querySelector('.page-sheet-watermark');
-
-    if (!this.state.enabled) {
-      if (wm) wm.remove();
-      return;
-    }
-
-    if (!wm) {
-      wm = document.createElement('div');
-      wm.className = 'page-sheet-watermark';
-      wm.setAttribute('aria-hidden', 'true');
-      sheet.insertBefore(wm, sheet.firstChild);
-    }
-
-    const angleDeg = this.state.angle === 'horizontal' ? '0deg' : '-45deg';
-    let fontSize = 76;
-    if (this.state.text.length > 12) fontSize = 54;
-    if (this.state.text.length > 20) fontSize = 38;
-
-    wm.innerHTML = `
-      <div class="watermark-content" style="opacity: ${this.state.opacity}; transform: rotate(${angleDeg}); color: ${this.state.color}; font-size: ${fontSize}px;">
-        ${this.escapeHtml(this.state.text)}
-      </div>
-    `;
-  }
-
-  escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
   }
 }
 
@@ -4437,9 +3288,6 @@ class PaginationManager {
             <div class="hf-tag-badge">Pied de page - Page ${i}</div>
           </div>
         `;
-      }
-      if (window.wordApp && window.wordApp.watermark) {
-        window.wordApp.watermark.renderSheetWatermark(sheet);
       }
       this.pagesLayer.appendChild(sheet);
     }
@@ -5084,7 +3932,6 @@ class WordApp {
     );
     this.statusBar = new StatusBarManager(this.editorElement, this.zoomContainer, () => this.showStatsModal());
     this.headerFooter = new HeaderFooterManager(this.editorElement, this.docPageElement, this.toasts);
-    this.watermark = new WatermarkManager(this.toasts);
     this.pagination = new PaginationManager(this.editorElement, this.docPageElement, this.statusBar);
     window.wordApp = this;
 
