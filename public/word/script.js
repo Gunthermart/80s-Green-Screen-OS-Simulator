@@ -975,17 +975,6 @@ class FileManager {
       this.debounceTimer = null;
     }
 
-    if (window.wordApp && window.wordApp.multiDoc) {
-      window.wordApp.multiDoc.saveCurrentActiveDocState();
-      window.wordApp.multiDoc.markActiveDocSaved();
-      window.wordApp.multiDoc.saveToStorage();
-      this.isDirty = false;
-      this.isSaving = false;
-      const timeStr = new Date().toLocaleTimeString('fr-FR');
-      this.updateSaveIndicator(`Enregistré à ${timeStr}`, 'saved');
-      return;
-    }
-
     const data = {
       title: this.getDocumentTitle(),
       content: this.getCleanHtml(),
@@ -1023,10 +1012,6 @@ class FileManager {
     this.isDirty = true;
     this.updateSaveIndicator('Modifications...', 'pending');
 
-    if (window.wordApp && window.wordApp.multiDoc) {
-      window.wordApp.multiDoc.markActiveDocDirty();
-    }
-
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
     }
@@ -1037,10 +1022,6 @@ class FileManager {
   }
 
   loadFromStorage() {
-    if (window.wordApp && window.wordApp.multiDoc) {
-      return window.wordApp.multiDoc.loadFromStorage();
-    }
-
     try {
       const raw = localStorage.getItem(this.storageKey);
       if (raw) {
@@ -1153,20 +1134,17 @@ class FileManager {
             this.editor.innerHTML = html;
 
             const nameWithoutExt = file.name.replace(/\.[^/.]+$/, '');
-            if (window.wordApp && window.wordApp.multiDoc) {
-              window.wordApp.multiDoc.openFileAsDocument(nameWithoutExt, html);
-            } else {
-              this.editor.innerHTML = html;
-              this.titleInput.value = `${nameWithoutExt} - Word`;
-              this.saveToStorage();
-              this.toasts.show('Document .docx importé avec succès !', 'success');
-              if (window.wordApp) {
-                if (window.wordApp.history) window.wordApp.history.pushState(true);
-                setTimeout(() => {
-                  if (window.wordApp.pagination) window.wordApp.pagination.updatePagination();
-                  if (window.wordApp.spellCheck) window.wordApp.spellCheck.scanEditor();
-                }, 60);
-              }
+            this.titleInput.value = `${nameWithoutExt} - Word`;
+
+            this.saveToStorage();
+            this.toasts.show('Document .docx importé avec succès !', 'success');
+
+            if (window.wordApp) {
+              if (window.wordApp.history) window.wordApp.history.pushState(true);
+              setTimeout(() => {
+                if (window.wordApp.pagination) window.wordApp.pagination.updatePagination();
+                if (window.wordApp.spellCheck) window.wordApp.spellCheck.scanEditor();
+              }, 60);
             }
 
             if (result.messages.length > 0) {
@@ -1291,21 +1269,19 @@ class FileManager {
         extractedHtml = '<p>Le document PDF a été importé mais ne contient aucun texte vectoriel sélectionnable (il s\'agit probablement d\'un document scanné sous forme d\'image pure).</p>';
       }
 
+      this.editor.innerHTML = extractedHtml;
       const nameWithoutExt = file.name.replace(/\.[^/.]+$/, '');
-      if (window.wordApp && window.wordApp.multiDoc) {
-        window.wordApp.multiDoc.openFileAsDocument(nameWithoutExt, extractedHtml);
-      } else {
-        this.editor.innerHTML = extractedHtml;
-        this.titleInput.value = `${nameWithoutExt} - Word`;
-        this.saveToStorage();
-        this.toasts.show(`PDF "${file.name}" converti avec succès (${numPages} page${numPages > 1 ? 's' : ''}) !`, 'success', 3500);
-        if (window.wordApp) {
-          if (window.wordApp.history) window.wordApp.history.pushState(true);
-          setTimeout(() => {
-            if (window.wordApp.pagination) window.wordApp.pagination.updatePagination();
-            if (window.wordApp.spellCheck) window.wordApp.spellCheck.scanEditor();
-          }, 120);
-        }
+      this.titleInput.value = `${nameWithoutExt} - Word`;
+
+      this.saveToStorage();
+      this.toasts.show(`PDF "${file.name}" converti avec succès (${numPages} page${numPages > 1 ? 's' : ''}) !`, 'success', 3500);
+
+      if (window.wordApp) {
+        if (window.wordApp.history) window.wordApp.history.pushState(true);
+        setTimeout(() => {
+          if (window.wordApp.pagination) window.wordApp.pagination.updatePagination();
+          if (window.wordApp.spellCheck) window.wordApp.spellCheck.scanEditor();
+        }, 120);
       }
     } catch (err) {
       console.error('Erreur importation PDF:', err);
@@ -1526,16 +1502,6 @@ class MarkdownManager {
     this.statsBadge = document.getElementById('md-stats-badge');
     this.hiddenMdInput = document.getElementById('hidden-md-input');
 
-    // Éléments de numérotation des lignes
-    this.codeContainer = document.getElementById('markdown-code-container');
-    this.lineNumbers = document.getElementById('markdown-line-numbers');
-    this.lineCountBadge = document.getElementById('md-line-count-badge');
-    this.btnToggleLineNums = document.getElementById('md-btn-toggle-linenums');
-    this.btnToggleWrap = document.getElementById('md-btn-toggle-wrap');
-    this.showLineNumbers = true;
-    this.isWordWrap = false;
-    this.lastLineCount = 0;
-
     this.btnViewMarkdown = document.getElementById('btn-view-markdown');
     this.btnViewWysiwyg = document.getElementById('btn-view-multipage');
     this.sbToggleMode = document.getElementById('sb-toggle-mode');
@@ -1595,7 +1561,6 @@ class MarkdownManager {
 
       this.updatePreview();
       this.updateStats();
-      this.updateLineNumbers(true);
       this.updateUI();
 
       if (this.textarea) {
@@ -1641,89 +1606,6 @@ class MarkdownManager {
     const chars = text.length;
 
     this.statsBadge.textContent = `${lines} ligne${lines > 1 ? 's' : ''} | ${words} mot${words > 1 ? 's' : ''} | ${chars} car.`;
-  }
-
-  updateLineNumbers(force = false) {
-    if (!this.textarea || !this.lineNumbers) return;
-    const text = this.textarea.value;
-    const lines = text.split('\n');
-    const count = Math.max(1, lines.length);
-
-    // Ajuster dynamiquement la largeur du gutter si nécessaire (ex: > 999 lignes)
-    const digits = String(count).length;
-    const neededWidth = Math.max(52, digits * 10 + 20);
-    this.lineNumbers.style.width = `${neededWidth}px`;
-    this.lineNumbers.style.minWidth = `${neededWidth}px`;
-
-    // Si le nombre de lignes a changé, ou régénération forcée demandée
-    if (force || count !== this.lastLineCount || this.lineNumbers.children.length !== count) {
-      let numsHtml = '';
-      for (let i = 1; i <= count; i++) {
-        numsHtml += `<div class="md-line-num" data-line="${i}">${i}</div>`;
-      }
-      this.lineNumbers.innerHTML = numsHtml;
-      this.lastLineCount = count;
-    }
-
-    if (this.lineCountBadge) {
-      this.lineCountBadge.textContent = `${count} ligne${count > 1 ? 's' : ''}`;
-    }
-
-    this.updateActiveLineHighlight();
-    this.lineNumbers.scrollTop = this.textarea.scrollTop;
-  }
-
-  updateActiveLineHighlight() {
-    if (!this.textarea) return;
-    const cursorPos = this.textarea.selectionStart || 0;
-    const textBefore = this.textarea.value.substring(0, cursorPos);
-    const linesBefore = textBefore.split('\n');
-    const currentLine = linesBefore.length;
-    const currentCol = linesBefore[linesBefore.length - 1].length + 1;
-
-    if (this.showLineNumbers && this.lineNumbers) {
-      const prevActive = this.lineNumbers.querySelector('.md-line-num.active');
-      if (prevActive && parseInt(prevActive.dataset.line, 10) !== currentLine) {
-        prevActive.classList.remove('active');
-      }
-      const newActive = this.lineNumbers.querySelector(`.md-line-num[data-line="${currentLine}"]`);
-      if (newActive && !newActive.classList.contains('active')) {
-        newActive.classList.add('active');
-      }
-    }
-
-    if (this.statsBadge) {
-      const text = this.textarea.value;
-      const totalLines = text ? text.split('\n').length : 1;
-      const words = text ? (text.match(/[\w\u00C0-\u017F]+/g) || []).length : 0;
-      const chars = text.length;
-      this.statsBadge.textContent = `Ligne ${currentLine}, Col ${currentCol} | ${totalLines} ligne${totalLines > 1 ? 's' : ''} | ${words} mot${words > 1 ? 's' : ''} | ${chars} car.`;
-    }
-  }
-
-  toggleLineNumbers(force = null) {
-    this.showLineNumbers = force !== null ? force : !this.showLineNumbers;
-    if (this.lineNumbers) {
-      this.lineNumbers.classList.toggle('hidden', !this.showLineNumbers);
-    }
-    if (this.btnToggleLineNums) {
-      this.btnToggleLineNums.classList.toggle('active', this.showLineNumbers);
-    }
-    this.toasts.show(this.showLineNumbers ? 'Numérotation des lignes activée' : 'Numérotation des lignes masquée', 'info');
-  }
-
-  toggleWordWrap(force = null) {
-    this.isWordWrap = force !== null ? force : !this.isWordWrap;
-    if (this.codeContainer) {
-      this.codeContainer.classList.toggle('word-wrap-enabled', this.isWordWrap);
-    }
-    if (this.textarea) {
-      this.textarea.setAttribute('wrap', this.isWordWrap ? 'soft' : 'off');
-    }
-    if (this.btnToggleWrap) {
-      this.btnToggleWrap.classList.toggle('active', this.isWordWrap);
-    }
-    this.toasts.show(this.isWordWrap ? 'Retour automatique à la ligne activé' : 'Retour automatique à la ligne désactivé (Mode Code)', 'info');
   }
 
   updateUI() {
@@ -1785,36 +1667,32 @@ class MarkdownManager {
       const mdContent = e.target.result;
       const html = this.markdownToHtml(mdContent);
 
-      const nameWithoutExt = file.name.replace(/\.(md|markdown|txt)$/i, '');
-
-      if (window.wordApp && window.wordApp.multiDoc) {
-        window.wordApp.multiDoc.openFileAsDocument(file.name, html);
-      } else {
-        // Si on est en Mode Markdown, mettre à jour le textarea directement
-        if (this.textarea) {
-          this.textarea.value = mdContent;
-          this.updatePreview();
-          this.updateStats();
-        }
-
-        // Mettre à jour l'éditeur Word WYSIWYG
-        this.editor.innerHTML = html;
-
-        if (this.titleInput) {
-          this.titleInput.value = `${nameWithoutExt} - Word`;
-        }
-
-        if (window.wordApp) {
-          if (window.wordApp.history) window.wordApp.history.pushState(true);
-          setTimeout(() => {
-            if (window.wordApp.pagination) window.wordApp.pagination.updatePagination();
-            if (window.wordApp.spellCheck) window.wordApp.spellCheck.scanEditor();
-            if (window.wordApp.fileManager) window.wordApp.fileManager.saveToStorage();
-          }, 100);
-        }
-
-        this.toasts.show(`Fichier Markdown "${file.name}" importé avec succès !`, 'success');
+      // Si on est en Mode Markdown, mettre à jour le textarea directement
+      if (this.textarea) {
+        this.textarea.value = mdContent;
+        this.updatePreview();
+        this.updateStats();
       }
+
+      // Mettre à jour l'éditeur Word WYSIWYG
+      this.editor.innerHTML = html;
+
+      // Extraire le nom de fichier sans extension
+      const nameWithoutExt = file.name.replace(/\.(md|markdown|txt)$/i, '');
+      if (this.titleInput) {
+        this.titleInput.value = `${nameWithoutExt} - Word`;
+      }
+
+      if (window.wordApp) {
+        if (window.wordApp.history) window.wordApp.history.pushState(true);
+        setTimeout(() => {
+          if (window.wordApp.pagination) window.wordApp.pagination.updatePagination();
+          if (window.wordApp.spellCheck) window.wordApp.spellCheck.scanEditor();
+          if (window.wordApp.fileManager) window.wordApp.fileManager.saveToStorage();
+        }, 100);
+      }
+
+      this.toasts.show(`Fichier Markdown "${file.name}" importé avec succès !`, 'success');
     };
     reader.readAsText(file);
   }
@@ -1885,56 +1763,13 @@ class MarkdownManager {
       }
     });
 
-    // Défilement synchronisé entre le textarea et le gutter de numérotation
-    this.textarea?.addEventListener('scroll', () => {
-      if (this.lineNumbers) {
-        this.lineNumbers.scrollTop = this.textarea.scrollTop;
-      }
-    });
-
-    this.lineNumbers?.addEventListener('wheel', (e) => {
-      if (this.textarea && e.deltaY !== 0) {
-        this.textarea.scrollTop += e.deltaY;
-        this.lineNumbers.scrollTop = this.textarea.scrollTop;
-        e.preventDefault();
-      }
-    }, { passive: false });
-
-    // Clic sur un numéro de ligne pour sélectionner toute la ligne dans l'éditeur
-    this.lineNumbers?.addEventListener('click', (e) => {
-      const lineEl = e.target.closest('.md-line-num');
-      if (!lineEl || !this.textarea) return;
-      const targetLine = parseInt(lineEl.dataset.line, 10);
-      if (!targetLine) return;
-      const lines = this.textarea.value.split('\n');
-      let startIdx = 0;
-      for (let i = 0; i < targetLine - 1 && i < lines.length; i++) {
-        startIdx += lines[i].length + 1;
-      }
-      const lineLen = lines[targetLine - 1] ? lines[targetLine - 1].length : 0;
-      this.textarea.focus();
-      this.textarea.setSelectionRange(startIdx, startIdx + lineLen);
-      this.updateActiveLineHighlight();
-    });
-
-    // Saisie en direct dans le textarea avec debounce pour l'aperçu et mise à jour de la numérotation
+    // Saisie en direct dans le textarea avec debounce pour l'aperçu
     let previewDebounce = null;
     this.textarea?.addEventListener('input', () => {
       this.updateStats();
-      this.updateLineNumbers();
       clearTimeout(previewDebounce);
       previewDebounce = setTimeout(() => this.updatePreview(), 100);
     });
-
-    this.textarea?.addEventListener('keyup', () => this.updateActiveLineHighlight());
-    this.textarea?.addEventListener('click', () => this.updateActiveLineHighlight());
-    this.textarea?.addEventListener('mouseup', () => this.updateActiveLineHighlight());
-    this.textarea?.addEventListener('select', () => this.updateActiveLineHighlight());
-    this.textarea?.addEventListener('focus', () => this.updateActiveLineHighlight());
-
-    // Boutons de bascule de la barre d'outils Markdown
-    this.btnToggleLineNums?.addEventListener('click', () => this.toggleLineNumbers());
-    this.btnToggleWrap?.addEventListener('click', () => this.toggleWordWrap());
 
     // Support de la touche Tab (indente de 2 espaces) et raccourcis clavier dans le textarea
     this.textarea?.addEventListener('keydown', (e) => {
@@ -1945,7 +1780,6 @@ class MarkdownManager {
         this.textarea.value = this.textarea.value.substring(0, start) + '  ' + this.textarea.value.substring(end);
         this.textarea.selectionStart = this.textarea.selectionEnd = start + 2;
         this.updatePreview();
-        this.updateLineNumbers();
       } else if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
         this.exportMarkdownFile();
@@ -1994,7 +1828,6 @@ class MarkdownManager {
 
       this.updatePreview();
       this.updateStats();
-      this.updateLineNumbers();
     });
   }
 }
@@ -5220,976 +5053,6 @@ class RibbonManager {
 
 /**
  * ------------------------------------------------------------------------------
- * 8.8 GESTIONNAIRE DU MODE MULTI-DOCUMENTS (MULTI-DOCUMENT MANAGER)
- * Permet l'édition de multiples documents dans des onglets indépendants avec :
- * - Barre d'onglets dynamique style Office / Fluent (icône, titre, dirty indicator, fermeture)
- * - Création, renommage inline, duplication, fermeture avec invite de sauvegarde
- * - Mode Côte à côte (Split View) pour afficher et comparer 2 documents simultanément
- * - Synchronisation bidirectionnelle avec l'éditeur, l'historique et les paramètres (filigrane/en-têtes)
- * - Persistance complète en localStorage avec restauration de session
- * ------------------------------------------------------------------------------
- */
-class MultiDocumentManager {
-  constructor(editor, titleInput, toastManager) {
-    this.editor = editor;
-    this.titleInput = titleInput;
-    this.toasts = toastManager;
-    this.storageKey = 'ms_word_multi_docs_v1';
-
-    this.documents = [];
-    this.activeDocId = null;
-    this.isSplitMode = false;
-    this.splitDocId = null;
-    this.pendingCloseDocId = null;
-    this.pendingRenameDocId = null;
-
-    // Éléments du DOM
-    this.tabsBar = document.getElementById('doc-tabs-bar');
-    this.tabsScroll = document.getElementById('doc-tabs-scroll');
-    this.btnAddDoc = document.getElementById('btn-add-document');
-    this.btnSplitToggle = document.getElementById('btn-split-screen-toggle');
-    this.btnSplitViewRibbon = document.getElementById('btn-multi-split-view');
-    this.btnNewDocRibbon = document.getElementById('btn-multi-new-doc');
-    this.btnSwitchDocRibbon = document.getElementById('btn-multi-switch');
-    this.btnDocsMenu = document.getElementById('btn-docs-list-menu');
-    this.docsDropdown = document.getElementById('docs-list-dropdown');
-    this.docsDropdownItems = document.getElementById('docs-list-items');
-    this.btnDropdownNewDoc = document.getElementById('btn-dropdown-new-doc');
-    this.docsCountBadge = document.getElementById('docs-count-badge');
-    this.sbDocsCount = document.getElementById('sb-docs-count');
-    this.statusMultiDocs = document.getElementById('status-multi-docs');
-    this.contextMenu = document.getElementById('tab-context-menu');
-    this.contextTargetDocId = null;
-
-    // Modales de confirmation et de renommage (remplacent window.confirm/prompt bloqués en iframe)
-    this.modalCloseConfirm = document.getElementById('modal-close-confirm');
-    this.modalCloseMessage = document.getElementById('modal-close-message');
-    this.btnCloseConfirmSave = document.getElementById('btn-close-confirm-save');
-    this.btnCloseConfirmDiscard = document.getElementById('btn-close-confirm-discard');
-    this.modalRename = document.getElementById('modal-rename-doc');
-    this.modalRenameInput = document.getElementById('modal-rename-input');
-    this.btnModalRenameApply = document.getElementById('btn-modal-rename-apply');
-
-    // Volet Scindé (Côte à côte)
-    this.splitPane = document.getElementById('split-workspace-pane');
-    this.splitDocSelect = document.getElementById('split-doc-select');
-    this.splitEditorContent = document.getElementById('split-editor-content');
-    this.btnSplitSwap = document.getElementById('btn-split-swap');
-    this.btnSplitClose = document.getElementById('btn-split-close');
-
-    this.initEvents();
-  }
-
-  initEvents() {
-    // Bouton "+" pour nouveau document
-    this.btnAddDoc?.addEventListener('click', () => this.createDocument());
-    this.btnNewDocRibbon?.addEventListener('click', () => this.createDocument());
-    this.btnDropdownNewDoc?.addEventListener('click', () => {
-      this.closeDocsDropdown();
-      this.createDocument();
-    });
-
-    // Bascule mode Côte à côte
-    this.btnSplitToggle?.addEventListener('click', () => this.toggleSplitView());
-    this.btnSplitViewRibbon?.addEventListener('click', () => this.toggleSplitView());
-    this.btnSplitClose?.addEventListener('click', () => this.toggleSplitView(false));
-    this.btnSplitSwap?.addEventListener('click', () => this.swapSplitDocuments());
-
-    this.splitDocSelect?.addEventListener('change', (e) => {
-      this.splitDocId = e.target.value;
-      this.updateSplitViewContent();
-    });
-
-    // Sauvegarde en direct si l'utilisateur édite le volet de comparaison secondaire
-    this.splitEditorContent?.addEventListener('input', () => {
-      if (!this.splitDocId) return;
-      const doc = this.documents.find((d) => d.id === this.splitDocId);
-      if (doc) {
-        doc.content = this.cleanHtmlForStorage(this.splitEditorContent.innerHTML);
-        if (!doc.isDirty) {
-          doc.isDirty = true;
-          this.renderTabs();
-        }
-        this.saveToStorage();
-      }
-    });
-
-    // Bascule document suivant dans le ruban
-    this.btnSwitchDocRibbon?.addEventListener('click', () => this.cycleDocument(1));
-
-    // Menu déroulant de la liste des documents
-    this.btnDocsMenu?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.toggleDocsDropdown();
-    });
-
-    this.statusMultiDocs?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.toggleDocsDropdown();
-    });
-
-    // Fermer le menu déroulant et le menu contextuel lors d'un clic extérieur
-    document.addEventListener('click', (e) => {
-      if (!this.docsDropdown?.contains(e.target) && e.target !== this.btnDocsMenu) {
-        this.closeDocsDropdown();
-      }
-      if (this.contextMenu && !this.contextMenu.contains(e.target)) {
-        this.closeContextMenu();
-      }
-    });
-
-    // Défilement horizontal des onglets à la molette
-    this.tabsScroll?.addEventListener('wheel', (e) => {
-      if (e.deltaY !== 0) {
-        e.preventDefault();
-        this.tabsScroll.scrollLeft += e.deltaY;
-      }
-    }, { passive: false });
-
-    // Actions du menu contextuel
-    document.getElementById('tab-ctx-rename')?.addEventListener('click', () => {
-      const docId = this.contextTargetDocId;
-      this.closeContextMenu();
-      if (docId) this.promptRenameDocument(docId);
-    });
-
-    document.getElementById('tab-ctx-duplicate')?.addEventListener('click', () => {
-      const docId = this.contextTargetDocId;
-      this.closeContextMenu();
-      if (docId) this.duplicateDocument(docId);
-    });
-
-    document.getElementById('tab-ctx-save')?.addEventListener('click', () => {
-      const docId = this.contextTargetDocId;
-      this.closeContextMenu();
-      if (docId) {
-        if (docId === this.activeDocId) {
-          window.wordApp?.fileManager?.saveToStorage();
-        } else {
-          const doc = this.documents.find((d) => d.id === docId);
-          if (doc) {
-            doc.isDirty = false;
-            this.saveToStorage();
-            this.renderTabs();
-            this.toasts.show(`Document « ${doc.title} » enregistré`, 'success');
-          }
-        }
-      }
-    });
-
-    document.getElementById('tab-ctx-export-docx')?.addEventListener('click', () => {
-      const docId = this.contextTargetDocId;
-      this.closeContextMenu();
-      if (docId) this.exportDocumentAs(docId, 'docx');
-    });
-
-    document.getElementById('tab-ctx-export-md')?.addEventListener('click', () => {
-      const docId = this.contextTargetDocId;
-      this.closeContextMenu();
-      if (docId) this.exportDocumentAs(docId, 'md');
-    });
-
-    document.getElementById('tab-ctx-close')?.addEventListener('click', () => {
-      const docId = this.contextTargetDocId;
-      this.closeContextMenu();
-      if (docId) this.closeDocument(docId);
-    });
-
-    document.getElementById('tab-ctx-close-others')?.addEventListener('click', () => {
-      const docId = this.contextTargetDocId;
-      this.closeContextMenu();
-      if (docId) this.closeOtherDocuments(docId);
-    });
-
-    // Modale de confirmation de fermeture de document non enregistré
-    this.btnCloseConfirmSave?.addEventListener('click', () => {
-      const docId = this.pendingCloseDocId;
-      this.modalCloseConfirm?.classList.remove('active');
-      this.pendingCloseDocId = null;
-      if (docId) {
-        if (docId === this.activeDocId) {
-          window.wordApp?.fileManager?.saveToStorage();
-        } else {
-          const doc = this.documents.find((d) => d.id === docId);
-          if (doc) {
-            doc.isDirty = false;
-            this.saveToStorage();
-          }
-        }
-        this.closeDocument(docId, true);
-      }
-    });
-
-    this.btnCloseConfirmDiscard?.addEventListener('click', () => {
-      const docId = this.pendingCloseDocId;
-      this.modalCloseConfirm?.classList.remove('active');
-      this.pendingCloseDocId = null;
-      if (docId) {
-        this.closeDocument(docId, true);
-      }
-    });
-
-    // Modale de renommage de document
-    const applyRenameModal = () => {
-      const docId = this.pendingRenameDocId;
-      const val = this.modalRenameInput?.value?.trim();
-      this.modalRename?.classList.remove('active');
-      this.pendingRenameDocId = null;
-      if (docId && val) {
-        this.renameDocument(docId, val);
-      }
-    };
-
-    this.btnModalRenameApply?.addEventListener('click', applyRenameModal);
-    this.modalRenameInput?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        applyRenameModal();
-      }
-    });
-
-    // Raccourcis clavier globaux
-    window.addEventListener('keydown', (e) => {
-      // Ctrl+Alt+N : Nouveau document
-      if ((e.ctrlKey || e.metaKey) && e.altKey && e.key.toLowerCase() === 'n') {
-        e.preventDefault();
-        this.createDocument();
-      }
-      // Ctrl+Alt+W : Fermer document actif
-      else if ((e.ctrlKey || e.metaKey) && e.altKey && e.key.toLowerCase() === 'w') {
-        e.preventDefault();
-        if (this.activeDocId) this.closeDocument(this.activeDocId);
-      }
-      // Ctrl+Alt+PageDown ou Ctrl+Alt+ArrowRight : Document suivant
-      else if ((e.ctrlKey || e.metaKey) && e.altKey && (e.key === 'PageDown' || e.key === 'ArrowRight')) {
-        e.preventDefault();
-        this.cycleDocument(1);
-      }
-      // Ctrl+Alt+PageUp ou Ctrl+Alt+ArrowLeft : Document précédent
-      else if ((e.ctrlKey || e.metaKey) && e.altKey && (e.key === 'PageUp' || e.key === 'ArrowLeft')) {
-        e.preventDefault();
-        this.cycleDocument(-1);
-      }
-    });
-  }
-
-  /**
-   * Nettoie le code HTML d'un document avant sauvegarde en mémoire ou localStorage
-   * Ne supprime PAS les sauts manuels, supprime uniquement les sauts auto et résidus
-   */
-  cleanHtmlForStorage(rawHtml) {
-    if (!rawHtml || !rawHtml.trim()) return '<p><br></p>';
-    const temp = document.createElement('div');
-    temp.innerHTML = rawHtml;
-
-    // Supprimer les sauts automatiques créés par PaginationManager
-    temp.querySelectorAll('.word-page-break[data-manual="false"]').forEach((b) => b.remove());
-
-    // Supprimer les résidus et diviseurs vides corrompus
-    temp.querySelectorAll('.page-last-spacer, .page-last-footer, .page-break-spacer, .page-break-end, .page-break-start').forEach((el) => el.remove());
-    temp.querySelectorAll('div[style*="page-break-after"]').forEach((el) => {
-      if (!el.textContent.trim() && !el.querySelector('img, table, svg')) {
-        el.remove();
-      }
-    });
-
-    // Déballer les erreurs d'orthographe et marques de recherche
-    temp.querySelectorAll('.spell-error').forEach((span) => {
-      const textNode = document.createTextNode(span.textContent);
-      span.parentNode.replaceChild(textNode, span);
-    });
-    temp.querySelectorAll('mark.search-highlight').forEach((mark) => {
-      const textNode = document.createTextNode(mark.textContent);
-      mark.parentNode.replaceChild(textNode, mark);
-    });
-
-    const res = temp.innerHTML.trim();
-    return res || '<p><br></p>';
-  }
-
-  loadFromStorage() {
-    try {
-      const raw = localStorage.getItem(this.storageKey);
-      if (raw) {
-        const data = JSON.parse(raw);
-        if (Array.isArray(data.documents) && data.documents.length > 0) {
-          this.documents = data.documents.map((d, index) => ({
-            id: d.id || 'doc_' + Date.now() + '_' + index,
-            title: d.title || `Document ${index + 1}`,
-            content: this.cleanHtmlForStorage(d.content || '<p><br></p>'),
-            isDirty: false,
-            createdAt: d.createdAt || new Date().toISOString(),
-            updatedAt: d.updatedAt || new Date().toISOString(),
-            headerFooter: d.headerFooter || null,
-            watermark: d.watermark || null,
-            history: d.history || { undoStack: [d.content || '<p><br></p>'], redoStack: [] },
-            zoom: d.zoom || 100,
-          }));
-
-          const activeId = data.activeDocId;
-          const exists = this.documents.some((d) => d.id === activeId);
-          this.activeDocId = exists ? activeId : this.documents[0].id;
-          this.switchDocument(this.activeDocId, false);
-          return true;
-        }
-      }
-
-      // Migration de la session mono-document existante si présente
-      const legacyRaw = localStorage.getItem('ms_word_clone_autosave_v1');
-      if (legacyRaw) {
-        try {
-          const legacy = JSON.parse(legacyRaw);
-          if (legacy.content && legacy.content.trim().length > 0) {
-            const initialDoc = {
-              id: 'doc_' + Date.now(),
-              title: legacy.title || 'Document 1',
-              content: this.cleanHtmlForStorage(legacy.content),
-              isDirty: false,
-              createdAt: legacy.savedAt || new Date().toISOString(),
-              updatedAt: legacy.savedAt || new Date().toISOString(),
-              headerFooter: legacy.headerFooter || null,
-              watermark: null,
-              history: { undoStack: [legacy.content], redoStack: [] },
-              zoom: 100,
-            };
-            this.documents = [initialDoc];
-            this.activeDocId = initialDoc.id;
-            this.switchDocument(initialDoc.id, false);
-            this.saveToStorage();
-            return true;
-          }
-        } catch (e) {
-          console.warn('Erreur migration legacy doc', e);
-        }
-      }
-
-      // Document initial par défaut avec contenu actuel
-      const defaultDoc = {
-        id: 'doc_default_1',
-        title: 'Document 1',
-        content: this.cleanHtmlForStorage(this.editor.innerHTML),
-        isDirty: false,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        headerFooter: null,
-        watermark: null,
-        history: { undoStack: [this.editor.innerHTML], redoStack: [] },
-        zoom: 100,
-      };
-      this.documents = [defaultDoc];
-      this.activeDocId = defaultDoc.id;
-      this.renderTabs();
-      this.saveToStorage();
-      return true;
-    } catch (err) {
-      console.error('Erreur chargement multi-documents', err);
-      return false;
-    }
-  }
-
-  saveToStorage() {
-    try {
-      const payload = {
-        documents: this.documents,
-        activeDocId: this.activeDocId,
-        savedAt: new Date().toISOString(),
-      };
-      localStorage.setItem(this.storageKey, JSON.stringify(payload));
-    } catch (err) {
-      console.warn('Erreur sauvegarde multi-documents', err);
-    }
-  }
-
-  saveCurrentActiveDocState() {
-    if (!this.activeDocId) return;
-    const doc = this.documents.find((d) => d.id === this.activeDocId);
-    if (!doc) return;
-
-    if (window.wordApp?.markdown?.isMarkdownMode && window.wordApp.markdown.textarea) {
-      doc.content = window.wordApp.markdown.markdownToHtml(window.wordApp.markdown.textarea.value);
-    } else {
-      doc.content = this.cleanHtmlForStorage(this.editor.innerHTML);
-    }
-
-    if (this.titleInput && this.titleInput.value.trim()) {
-      const parsed = this.titleInput.value.replace(/\s*-\s*Word$/i, '').trim();
-      if (parsed) doc.title = parsed;
-    }
-
-    if (window.wordApp?.headerFooter) {
-      doc.headerFooter = JSON.parse(JSON.stringify(window.wordApp.headerFooter.data));
-    }
-    if (window.wordApp?.watermark) {
-      doc.watermark = JSON.parse(JSON.stringify(window.wordApp.watermark.state));
-    }
-    if (window.wordApp?.history) {
-      doc.history = {
-        undoStack: [...window.wordApp.history.undoStack],
-        redoStack: [...window.wordApp.history.redoStack],
-      };
-    }
-    doc.updatedAt = new Date().toISOString();
-  }
-
-  createDocument(title = null, content = '<p><br></p>', activate = true, headerFooter = null, watermark = null) {
-    if (!title) {
-      let maxNum = 0;
-      this.documents.forEach((d) => {
-        const m = d.title.match(/^Document\s+(\d+)$/i);
-        if (m) {
-          const num = parseInt(m[1], 10);
-          if (num > maxNum) maxNum = num;
-        }
-      });
-      title = `Document ${maxNum + 1}`;
-    }
-
-    if (activate && this.activeDocId) {
-      this.saveCurrentActiveDocState();
-    }
-
-    const cleanContent = this.cleanHtmlForStorage(content);
-
-    const newDoc = {
-      id: 'doc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
-      title: title,
-      content: cleanContent,
-      isDirty: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      headerFooter: headerFooter || (window.wordApp?.headerFooter ? JSON.parse(JSON.stringify(window.wordApp.headerFooter.data)) : null),
-      watermark: watermark || (window.wordApp?.watermark ? JSON.parse(JSON.stringify(window.wordApp.watermark.state)) : null),
-      history: { undoStack: [cleanContent], redoStack: [] },
-      zoom: 100,
-    };
-
-    this.documents.push(newDoc);
-
-    if (activate) {
-      this.switchDocument(newDoc.id, false);
-    } else {
-      this.renderTabs();
-      this.saveToStorage();
-    }
-
-    this.toasts.show(`Nouveau document « ${title} » créé`, 'info');
-    return newDoc;
-  }
-
-  switchDocument(docId, saveCurrent = true) {
-    if (saveCurrent && this.activeDocId) {
-      this.saveCurrentActiveDocState();
-    }
-
-    const target = this.documents.find((d) => d.id === docId);
-    if (!target) return;
-
-    this.activeDocId = docId;
-
-    // 1. Injecter le contenu nettoyé dans l'éditeur
-    const cleanContent = this.cleanHtmlForStorage(target.content || '<p><br></p>');
-    this.editor.innerHTML = cleanContent;
-
-    // 2. Mettre à jour les titres
-    this.titleInput.value = `${target.title} - Word`;
-    document.title = `${target.title} - Microsoft Word`;
-    const infoTitle = document.getElementById('info-doc-title');
-    if (infoTitle) infoTitle.textContent = target.title;
-
-    // 3. Restaurer en-tête et pied de page
-    if (window.wordApp?.headerFooter) {
-      if (target.headerFooter) {
-        window.wordApp.headerFooter.data = Object.assign(window.wordApp.headerFooter.data, target.headerFooter);
-      }
-    }
-
-    // 4. Restaurer le filigrane
-    if (window.wordApp?.watermark) {
-      if (target.watermark) {
-        window.wordApp.watermark.state = Object.assign(window.wordApp.watermark.state, target.watermark);
-      } else {
-        window.wordApp.watermark.state.enabled = false;
-      }
-      window.wordApp.watermark.applyToDOM();
-    }
-
-    // 5. Restaurer l'historique Annuler / Rétablir
-    if (window.wordApp?.history) {
-      window.wordApp.history.undoStack = target.history?.undoStack?.length ? [...target.history.undoStack] : [this.editor.innerHTML];
-      window.wordApp.history.redoStack = target.history?.redoStack?.length ? [...target.history.redoStack] : [];
-      window.wordApp.history.updateButtons();
-    }
-
-    // 6. Si on est en Mode Markdown, synchroniser la source et rafraîchir la numérotation des lignes
-    if (window.wordApp?.markdown?.isMarkdownMode) {
-      if (window.wordApp.markdown.textarea) {
-        window.wordApp.markdown.textarea.value = window.wordApp.markdown.htmlToMarkdown(cleanContent);
-        window.wordApp.markdown.updatePreview();
-        window.wordApp.markdown.updateStats();
-        window.wordApp.markdown.updateLineNumbers(true);
-        window.wordApp.markdown.updateActiveLineHighlight();
-      }
-    } else {
-      setTimeout(() => this.editor.focus(), 60);
-    }
-
-    // 7. Annuler tout enregistrement automatique en attente pour ne pas écraser les documents
-    if (window.wordApp?.fileManager?.debounceTimer) {
-      clearTimeout(window.wordApp.fileManager.debounceTimer);
-      window.wordApp.fileManager.debounceTimer = null;
-    }
-
-    // 8. Rendu des onglets & rafraîchissement
-    this.renderTabs();
-    this.saveToStorage();
-
-    setTimeout(() => {
-      if (window.wordApp?.pagination) window.wordApp.pagination.updatePagination();
-      if (window.wordApp?.spellCheck) window.wordApp.spellCheck.scanEditor();
-      if (window.wordApp?.statusBar) window.wordApp.statusBar.updateStats();
-      if (this.isSplitMode) this.updateSplitView();
-    }, 40);
-  }
-
-  closeDocument(docId, force = false) {
-    const doc = this.documents.find((d) => d.id === docId);
-    if (!doc) return;
-
-    if (!force && doc.isDirty) {
-      this.pendingCloseDocId = docId;
-      if (this.modalCloseConfirm) {
-        if (this.modalCloseMessage) {
-          this.modalCloseMessage.textContent = `Le document « ${doc.title} » contient des modifications non enregistrées. Voulez-vous l'enregistrer avant de le fermer ?`;
-        }
-        this.modalCloseConfirm.classList.add('active');
-        return;
-      }
-    }
-
-    const title = doc.title;
-
-    if (this.documents.length <= 1) {
-      // Si c'est le seul document, on le réinitialise à vierge "Document 1"
-      doc.title = 'Document 1';
-      doc.content = '<p><br></p>';
-      doc.isDirty = false;
-      doc.updatedAt = new Date().toISOString();
-      this.switchDocument(doc.id, false);
-      this.toasts.show('Document réinitialisé', 'info');
-      return;
-    }
-
-    const idx = this.documents.findIndex((d) => d.id === docId);
-    this.documents.splice(idx, 1);
-
-    if (this.splitDocId === docId) {
-      const other = this.documents.find((d) => d.id !== this.activeDocId);
-      this.splitDocId = other ? other.id : (this.documents[0]?.id || null);
-    }
-
-    if (this.activeDocId === docId) {
-      const nextIdx = Math.max(0, idx - 1);
-      const nextDoc = this.documents[nextIdx];
-      this.switchDocument(nextDoc.id, false);
-    } else {
-      this.renderTabs();
-      this.saveToStorage();
-      if (this.isSplitMode) this.updateSplitView();
-    }
-
-    this.toasts.show(`Document « ${title} » fermé`, 'info');
-  }
-
-  closeOtherDocuments(keepDocId) {
-    const keepDoc = this.documents.find((d) => d.id === keepDocId);
-    if (!keepDoc) return;
-
-    this.documents = [keepDoc];
-    this.switchDocument(keepDoc.id, false);
-    this.toasts.show('Tous les autres documents ont été fermés', 'info');
-  }
-
-  duplicateDocument(docId) {
-    const doc = this.documents.find((d) => d.id === docId);
-    if (!doc) return;
-
-    if (docId === this.activeDocId) {
-      this.saveCurrentActiveDocState();
-    }
-
-    const copyTitle = `${doc.title} (Copie)`;
-    this.createDocument(copyTitle, doc.content, true, doc.headerFooter, doc.watermark);
-  }
-
-  promptRenameDocument(docId) {
-    const doc = this.documents.find((d) => d.id === docId);
-    if (!doc) return;
-
-    this.pendingRenameDocId = docId;
-    if (this.modalRename && this.modalRenameInput) {
-      this.modalRenameInput.value = doc.title;
-      this.modalRename.classList.add('active');
-      setTimeout(() => {
-        this.modalRenameInput.focus();
-        this.modalRenameInput.select();
-      }, 50);
-    } else {
-      const tabEl = this.tabsScroll?.querySelector(`[data-doc-id="${docId}"]`);
-      const titleSpan = tabEl?.querySelector('.doc-tab-title');
-      if (tabEl && titleSpan) {
-        this.startInlineRename(docId, tabEl, titleSpan);
-      }
-    }
-  }
-
-  renameDocument(docId, newTitle) {
-    const doc = this.documents.find((d) => d.id === docId);
-    if (!doc) return;
-
-    const cleanTitle = newTitle.replace(/\s*-\s*Word$/i, '').trim() || 'Document';
-    doc.title = cleanTitle;
-
-    if (docId === this.activeDocId) {
-      this.titleInput.value = `${cleanTitle} - Word`;
-      document.title = `${cleanTitle} - Microsoft Word`;
-      const infoTitle = document.getElementById('info-doc-title');
-      if (infoTitle) infoTitle.textContent = cleanTitle;
-    }
-
-    this.renderTabs();
-    this.saveToStorage();
-    if (this.isSplitMode) this.updateSplitView();
-  }
-
-  startInlineRename(docId, tabEl, titleEl) {
-    const doc = this.documents.find((d) => d.id === docId);
-    if (!doc) return;
-
-    const currentTitle = doc.title;
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'doc-tab-rename-input';
-    input.value = currentTitle;
-
-    titleEl.replaceWith(input);
-    input.focus();
-    input.select();
-
-    const commit = () => {
-      const val = input.value.trim();
-      if (val && val !== currentTitle) {
-        this.renameDocument(docId, val);
-      } else {
-        this.renderTabs();
-      }
-    };
-
-    input.addEventListener('blur', commit);
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        input.removeEventListener('blur', commit);
-        commit();
-      } else if (e.key === 'Escape') {
-        input.removeEventListener('blur', commit);
-        this.renderTabs();
-      }
-    });
-  }
-
-  renderTabs() {
-    if (!this.tabsScroll) return;
-    this.tabsScroll.innerHTML = '';
-
-    this.documents.forEach((doc) => {
-      const isActive = doc.id === this.activeDocId;
-      const tab = document.createElement('div');
-      tab.className = `doc-tab ${isActive ? 'active' : ''}`;
-      tab.dataset.docId = doc.id;
-      tab.setAttribute('role', 'tab');
-      tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
-
-      // Icône Word ou Markdown
-      const isMd = doc.title.toLowerCase().endsWith('.md');
-      const iconSvg = isMd
-        ? `<svg class="doc-tab-icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M7 15V9l2.5 3L12 9v6"></path><path d="M16 11l2 2 2-2"></path><path d="M18 9v4"></path></svg>`
-        : `<svg class="doc-tab-icon" viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" fill="#185abd"/><path d="M14 2v6h6" fill="#103f7e"/><text x="7" y="18" font-size="8" font-weight="bold" fill="#ffffff">W</text></svg>`;
-
-      tab.innerHTML = `
-        ${iconSvg}
-        <span class="doc-tab-title" title="${doc.title} (Double-cliquer pour renommer)">${doc.title}</span>
-        ${doc.isDirty ? '<span class="doc-tab-dirty" title="Modifications non enregistrées"></span>' : ''}
-        <button class="doc-tab-close" title="Fermer ce document (Ctrl+Alt+W)">✕</button>
-      `;
-
-      // Clic pour activer
-      tab.addEventListener('click', (e) => {
-        if (!e.target.closest('.doc-tab-close') && !e.target.closest('.doc-tab-rename-input')) {
-          this.switchDocument(doc.id);
-        }
-      });
-
-      // Fermeture par la croix
-      const closeBtn = tab.querySelector('.doc-tab-close');
-      closeBtn?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.closeDocument(doc.id);
-      });
-
-      // Double-clic sur le titre pour renommer en ligne
-      const titleSpan = tab.querySelector('.doc-tab-title');
-      titleSpan?.addEventListener('dblclick', (e) => {
-        e.stopPropagation();
-        this.startInlineRename(doc.id, tab, titleSpan);
-      });
-
-      // Clic droit pour afficher le menu contextuel
-      tab.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        this.openContextMenu(doc.id, e.clientX, e.clientY);
-      });
-
-      this.tabsScroll.appendChild(tab);
-
-      if (isActive) {
-        tab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
-      }
-    });
-
-    // Mettre à jour les compteurs
-    const count = this.documents.length;
-    if (this.docsCountBadge) this.docsCountBadge.textContent = String(count);
-    if (this.sbDocsCount) this.sbDocsCount.textContent = `${count} document${count > 1 ? 's' : ''}`;
-
-    // Mettre à jour la liste dans le dropdown
-    this.updateDropdownList();
-  }
-
-  updateActiveDocTitle(title) {
-    if (!this.activeDocId) return;
-    const doc = this.documents.find((d) => d.id === this.activeDocId);
-    if (doc) {
-      doc.title = title;
-      const tab = this.tabsScroll?.querySelector(`[data-doc-id="${doc.id}"] .doc-tab-title`);
-      if (tab) tab.textContent = title;
-      this.updateDropdownList();
-    }
-  }
-
-  markActiveDocDirty() {
-    if (!this.activeDocId) return;
-    const doc = this.documents.find((d) => d.id === this.activeDocId);
-    if (doc) {
-      doc.isDirty = true;
-      const tab = this.tabsScroll?.querySelector(`[data-doc-id="${doc.id}"]`);
-      if (tab && !tab.querySelector('.doc-tab-dirty')) {
-        const dirtySpan = document.createElement('span');
-        dirtySpan.className = 'doc-tab-dirty';
-        dirtySpan.title = 'Modifications non enregistrées';
-        const closeBtn = tab.querySelector('.doc-tab-close');
-        tab.insertBefore(dirtySpan, closeBtn);
-      }
-    }
-  }
-
-  markActiveDocSaved() {
-    if (!this.activeDocId) return;
-    const doc = this.documents.find((d) => d.id === this.activeDocId);
-    if (doc) {
-      doc.isDirty = false;
-      const tab = this.tabsScroll?.querySelector(`[data-doc-id="${doc.id}"]`);
-      tab?.querySelector('.doc-tab-dirty')?.remove();
-    }
-  }
-
-  toggleDocsDropdown() {
-    if (!this.docsDropdown) return;
-    const isVisible = this.docsDropdown.style.display !== 'none';
-    if (isVisible) {
-      this.closeDocsDropdown();
-    } else {
-      this.updateDropdownList();
-      this.docsDropdown.style.display = 'flex';
-    }
-  }
-
-  closeDocsDropdown() {
-    if (this.docsDropdown) this.docsDropdown.style.display = 'none';
-  }
-
-  updateDropdownList() {
-    if (!this.docsDropdownItems) return;
-    this.docsDropdownItems.innerHTML = '';
-
-    this.documents.forEach((doc) => {
-      const isActive = doc.id === this.activeDocId;
-      const item = document.createElement('div');
-      item.className = `docs-list-item ${isActive ? 'active' : ''}`;
-      item.innerHTML = `
-        <div class="docs-list-item-left">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="${isActive ? '#185abd' : 'currentColor'}"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path></svg>
-          <span class="docs-list-item-title">${doc.title}</span>
-          ${doc.isDirty ? '<span style="color:#d83b01; font-size:10px;">●</span>' : ''}
-        </div>
-        <span class="docs-list-item-badge">${isActive ? 'Actif' : 'Ouvrir'}</span>
-      `;
-      item.addEventListener('click', () => {
-        this.switchDocument(doc.id);
-        this.closeDocsDropdown();
-      });
-      this.docsDropdownItems.appendChild(item);
-    });
-  }
-
-  openContextMenu(docId, x, y) {
-    if (!this.contextMenu) return;
-    this.contextTargetDocId = docId;
-
-    this.contextMenu.style.left = `${Math.min(x, window.innerWidth - 220)}px`;
-    this.contextMenu.style.top = `${Math.min(y, window.innerHeight - 250)}px`;
-    this.contextMenu.style.display = 'block';
-  }
-
-  closeContextMenu() {
-    if (this.contextMenu) {
-      this.contextMenu.style.display = 'none';
-      this.contextTargetDocId = null;
-    }
-  }
-
-  exportDocumentAs(docId, format) {
-    if (docId !== this.activeDocId) {
-      this.switchDocument(docId);
-      setTimeout(() => {
-        if (format === 'docx') window.wordApp?.fileManager?.exportDocx();
-        else if (format === 'md') window.wordApp?.fileManager?.exportMarkdown();
-      }, 150);
-    } else {
-      if (format === 'docx') window.wordApp?.fileManager?.exportDocx();
-      else if (format === 'md') window.wordApp?.fileManager?.exportMarkdown();
-    }
-  }
-
-  cycleDocument(step = 1) {
-    if (this.documents.length <= 1) {
-      this.toasts.show('Un seul document est ouvert actuellement. Créez-en un nouveau avec le bouton « + ».', 'info');
-      return;
-    }
-    const currentIdx = this.documents.findIndex((d) => d.id === this.activeDocId);
-    let nextIdx = (currentIdx + step) % this.documents.length;
-    if (nextIdx < 0) nextIdx = this.documents.length - 1;
-    this.switchDocument(this.documents[nextIdx].id);
-  }
-
-  openFileAsDocument(title, content) {
-    const cleanContent = this.cleanHtmlForStorage(content);
-    const activeDoc = this.documents.find((d) => d.id === this.activeDocId);
-    const isCurrentVirgin =
-      this.documents.length === 1 &&
-      activeDoc &&
-      !activeDoc.isDirty &&
-      (!this.editor.textContent || !this.editor.textContent.trim() || this.editor.textContent.trim().startsWith('Bienvenue dans Microsoft Word pour le Web'));
-
-    if (isCurrentVirgin) {
-      activeDoc.title = title;
-      activeDoc.content = cleanContent;
-      activeDoc.isDirty = false;
-      this.switchDocument(activeDoc.id, false);
-      this.toasts.show(`Fichier « ${title} » ouvert avec succès !`, 'success');
-    } else {
-      this.createDocument(title, cleanContent, true);
-      this.toasts.show(`Fichier « ${title} » ouvert dans un nouvel onglet !`, 'success');
-    }
-  }
-
-  // ==================== MODE CÔTE À CÔTE (SPLIT VIEW) ====================
-
-  toggleSplitView(force = null) {
-    this.isSplitMode = force !== null ? force : !this.isSplitMode;
-
-    document.body.classList.toggle('split-mode-active', this.isSplitMode);
-    this.btnSplitToggle?.classList.toggle('active', this.isSplitMode);
-    this.btnSplitViewRibbon?.classList.toggle('active', this.isSplitMode);
-
-    if (this.isSplitMode) {
-      this.saveCurrentActiveDocState();
-
-      if (this.documents.length < 2) {
-        const active = this.documents[0];
-        const newDoc = {
-          id: 'doc_' + Date.now(),
-          title: `${active.title} (Copie comparaison)`,
-          content: active.content,
-          isDirty: false,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          headerFooter: active.headerFooter,
-          watermark: active.watermark,
-          history: { undoStack: [active.content], redoStack: [] },
-          zoom: 100,
-        };
-        this.documents.push(newDoc);
-        this.renderTabs();
-        this.splitDocId = newDoc.id;
-      } else {
-        const otherDoc = this.documents.find((d) => d.id !== this.activeDocId);
-        this.splitDocId = otherDoc ? otherDoc.id : this.documents[0].id;
-      }
-
-      if (this.splitPane) this.splitPane.style.display = 'flex';
-      this.updateSplitView();
-      this.toasts.show('Mode côte à côte activé (Édition & comparaison multi-documents)', 'info');
-    } else {
-      if (this.splitPane) this.splitPane.style.display = 'none';
-      this.toasts.show('Mode côte à côte désactivé', 'info');
-    }
-
-    setTimeout(() => {
-      if (window.wordApp?.pagination) window.wordApp.pagination.updatePagination();
-    }, 80);
-  }
-
-  updateSplitView() {
-    if (!this.isSplitMode || !this.splitDocSelect) return;
-
-    this.splitDocSelect.innerHTML = '';
-    this.documents.forEach((doc) => {
-      const opt = document.createElement('option');
-      opt.value = doc.id;
-      opt.textContent = doc.title + (doc.id === this.activeDocId ? ' (Actif)' : '');
-      if (doc.id === this.splitDocId) opt.selected = true;
-      this.splitDocSelect.appendChild(opt);
-    });
-
-    this.updateSplitViewContent();
-  }
-
-  updateSplitViewContent() {
-    if (!this.splitEditorContent || !this.splitDocId) return;
-
-    if (this.splitDocId === this.activeDocId) {
-      this.saveCurrentActiveDocState();
-    }
-
-    const doc = this.documents.find((d) => d.id === this.splitDocId);
-    if (doc) {
-      this.splitEditorContent.innerHTML = doc.content || '<p><br></p>';
-    }
-  }
-
-  swapSplitDocuments() {
-    if (!this.isSplitMode || !this.splitDocId || this.splitDocId === this.activeDocId) return;
-    const oldActiveId = this.activeDocId;
-    const targetId = this.splitDocId;
-
-    this.saveCurrentActiveDocState();
-    this.splitDocId = oldActiveId;
-    this.switchDocument(targetId, false);
-    this.toasts.show('Documents permutés', 'info');
-  }
-}
-
-/**
- * ------------------------------------------------------------------------------
  * 9. ORCHESTRATEUR PRINCIPAL DE L'APPLICATION (WORD APP)
  * ------------------------------------------------------------------------------
  */
@@ -6223,8 +5086,6 @@ class WordApp {
     this.headerFooter = new HeaderFooterManager(this.editorElement, this.docPageElement, this.toasts);
     this.watermark = new WatermarkManager(this.toasts);
     this.pagination = new PaginationManager(this.editorElement, this.docPageElement, this.statusBar);
-    this.markdown = new MarkdownManager(this.editorElement, this.docTitleInput, this.toasts);
-    this.multiDoc = new MultiDocumentManager(this.editorElement, this.docTitleInput, this.toasts);
     window.wordApp = this;
 
     this.initGlobalEvents();
@@ -6232,8 +5093,8 @@ class WordApp {
     this.initModals();
     this.initThemeToggle();
 
-    // Restauration de la session multi-documents précédente
-    this.multiDoc.loadFromStorage();
+    // Restauration de la session précédente si disponible
+    this.fileManager.loadFromStorage();
     // Analyse orthographique et pagination initiales
     setTimeout(() => {
       this.pagination.updatePagination();
@@ -6303,13 +5164,11 @@ class WordApp {
       }
     });
 
-    // Synchroniser le titre du document dans l'en-tête HTML et sur les onglets multi-documents
+    // Synchroniser le titre du document dans l'en-tête HTML et sur les en-têtes de pages
     this.docTitleInput.addEventListener('input', () => {
-      const currentTitle = this.fileManager.getDocumentTitle();
-      document.title = `${currentTitle} - Microsoft Word`;
+      document.title = `${this.fileManager.getDocumentTitle()} - Microsoft Word`;
       const infoTitle = document.getElementById('info-doc-title');
-      if (infoTitle) infoTitle.textContent = currentTitle;
-      if (this.multiDoc) this.multiDoc.updateActiveDocTitle(currentTitle);
+      if (infoTitle) infoTitle.textContent = this.fileManager.getDocumentTitle();
       this.pagination.updatePagination();
     });
 
@@ -6362,18 +5221,17 @@ class WordApp {
 
     // Modèles prédéfinis
     document.getElementById('tmpl-blank').addEventListener('click', () => {
-      if (this.multiDoc) {
-        this.multiDoc.createDocument();
-      } else {
-        this.editorElement.innerHTML = '<p><br></p>';
-        this.docTitleInput.value = 'Document 1 - Word';
-        this.history.pushState(true);
-      }
+      this.editorElement.innerHTML = '<p><br></p>';
+      this.docTitleInput.value = 'Nouveau Document - Word';
+      this.history.pushState(true);
       backstage.classList.remove('active');
+      this.toasts.show('Nouveau document vierge créé', 'info');
+      this.pagination.updatePagination();
+      this.spellCheck.scanEditor();
     });
 
     document.getElementById('tmpl-report').addEventListener('click', () => {
-      const reportHtml = `
+      this.editorElement.innerHTML = `
         <h1>RAPPORT D'ACTIVITÉ STRATÉGIQUE</h1>
         <p><strong>Date :</strong> 29 Septembre 2026 | <strong>Auteur :</strong> Direction Générale</p>
         <hr>
@@ -6393,18 +5251,16 @@ class WordApp {
         <h2>3. Conclusion et recommandations</h2>
         <blockquote>Poursuivre l'optimisation continue et le déploiement des fonctionnalités RIA de nouvelle génération.</blockquote>
       `;
-      if (this.multiDoc) {
-        this.multiDoc.createDocument("Rapport d'activité", reportHtml, true);
-      } else {
-        this.editorElement.innerHTML = reportHtml;
-        this.docTitleInput.value = "Rapport d'activité - Word";
-        this.history.pushState(true);
-      }
+      this.docTitleInput.value = "Rapport d'activité - Word";
+      this.history.pushState(true);
       backstage.classList.remove('active');
+      this.toasts.show('Modèle de rapport chargé', 'info');
+      this.pagination.updatePagination();
+      this.spellCheck.scanEditor();
     });
 
     document.getElementById('tmpl-letter').addEventListener('click', () => {
-      const letterHtml = `
+      this.editorElement.innerHTML = `
         <p style="text-align: right;">Paris, le 29 septembre 2026</p>
         <p><strong>Expéditeur :</strong><br>Jean Dupont<br>75008 Paris</p>
         <p style="margin-top: 20px;"><strong>Destinataire :</strong><br>Direction des Ressources Humaines</p>
@@ -6415,18 +5271,16 @@ class WordApp {
         <p>Restant à votre entière disposition pour tout entretien, je vous prie d'agréer mes salutations distinguées.</p>
         <p style="margin-top: 30px;"><em>Jean Dupont</em></p>
       `;
-      if (this.multiDoc) {
-        this.multiDoc.createDocument('Lettre formelle', letterHtml, true);
-      } else {
-        this.editorElement.innerHTML = letterHtml;
-        this.docTitleInput.value = 'Lettre formelle - Word';
-        this.history.pushState(true);
-      }
+      this.docTitleInput.value = 'Lettre formelle - Word';
+      this.history.pushState(true);
       backstage.classList.remove('active');
+      this.toasts.show('Modèle de lettre chargé', 'info');
+      this.pagination.updatePagination();
+      this.spellCheck.scanEditor();
     });
 
     document.getElementById('tmpl-meeting').addEventListener('click', () => {
-      const meetingHtml = `
+      this.editorElement.innerHTML = `
         <h1>COMPTE-RENDU DE RÉUNION</h1>
         <p><strong>Projet :</strong> Déploiement Microsoft Word Clone | <strong>Date :</strong> 29 Septembre 2026</p>
         <h2>Ordre du jour</h2>
@@ -6444,14 +5298,12 @@ class WordApp {
           </tbody>
         </table>
       `;
-      if (this.multiDoc) {
-        this.multiDoc.createDocument('Compte-rendu', meetingHtml, true);
-      } else {
-        this.editorElement.innerHTML = meetingHtml;
-        this.docTitleInput.value = 'Compte-rendu - Word';
-        this.history.pushState(true);
-      }
+      this.docTitleInput.value = 'Compte-rendu - Word';
+      this.history.pushState(true);
       backstage.classList.remove('active');
+      this.toasts.show('Modèle de compte-rendu chargé', 'info');
+      this.pagination.updatePagination();
+      this.spellCheck.scanEditor();
     });
 
     // Actions d'export & d'import
@@ -6517,20 +5369,15 @@ class WordApp {
       if (file) {
         const reader = new FileReader();
         reader.onload = (ev) => {
-          const docName = file.name.replace(/\.[^/.]+$/, '');
-          if (this.multiDoc) {
-            this.multiDoc.openFileAsDocument(docName, ev.target.result);
-          } else {
-            this.editorElement.innerHTML = ev.target.result;
-            this.docTitleInput.value = `${docName} - Word`;
-            this.history.pushState(true);
-            this.toasts.show('Fichier HTML importé', 'success');
-            setTimeout(() => {
-              this.pagination.updatePagination();
-              this.spellCheck.scanEditor();
-            }, 60);
-          }
+          this.editorElement.innerHTML = ev.target.result;
+          this.docTitleInput.value = `${file.name.replace(/\.[^/.]+$/, '')} - Word`;
+          this.history.pushState(true);
           backstage.classList.remove('active');
+          this.toasts.show('Fichier HTML importé', 'success');
+          setTimeout(() => {
+            this.pagination.updatePagination();
+            this.spellCheck.scanEditor();
+          }, 60);
         };
         reader.readAsText(file);
       }
@@ -6545,52 +5392,21 @@ class WordApp {
           try {
             const data = JSON.parse(ev.target.result);
             if (data.htmlContent) {
-              const docName = data.title || file.name.replace(/\.[^/.]+$/, '');
-              if (this.multiDoc) {
-                this.multiDoc.openFileAsDocument(docName, data.htmlContent);
-              } else {
-                this.editorElement.innerHTML = data.htmlContent;
-                this.docTitleInput.value = `${docName} - Word`;
-                this.history.pushState(true);
-                this.toasts.show('Projet JSON restauré', 'success');
-                setTimeout(() => {
-                  this.pagination.updatePagination();
-                  this.spellCheck.scanEditor();
-                }, 60);
-              }
+              this.editorElement.innerHTML = data.htmlContent;
+              if (data.title) this.docTitleInput.value = `${data.title} - Word`;
+              this.history.pushState(true);
               backstage.classList.remove('active');
+              this.toasts.show('Projet JSON restauré', 'success');
+              setTimeout(() => {
+                this.pagination.updatePagination();
+                this.spellCheck.scanEditor();
+              }, 60);
             }
           } catch {
             this.toasts.show('Fichier JSON invalide', 'error');
           }
         };
         reader.readAsText(file);
-      }
-    });
-
-    // Parcourir PDF (.pdf)
-    const hiddenPdfInput = document.getElementById('hidden-pdf-input');
-    const browsePdfBtn = document.getElementById('btn-browse-pdf');
-    browsePdfBtn?.addEventListener('click', () => hiddenPdfInput?.click());
-    hiddenPdfInput?.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (file) {
-        this.fileManager.importPdf(file);
-        backstage.classList.remove('active');
-        hiddenPdfInput.value = '';
-      }
-    });
-
-    // Parcourir Markdown (.md)
-    const hiddenMdInput = document.getElementById('hidden-md-input');
-    const browseMdBtn = document.getElementById('btn-browse-markdown');
-    browseMdBtn?.addEventListener('click', () => hiddenMdInput?.click());
-    hiddenMdInput?.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (file) {
-        this.markdown.importMarkdownFile(file);
-        backstage.classList.remove('active');
-        hiddenMdInput.value = '';
       }
     });
   }
