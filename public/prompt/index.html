@@ -1,0 +1,1212 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PromptCraft Studio - Générateur & Optimiseur de Prompts LLM</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Marked.js for real-time Markdown rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              900: '#312e81',
+              950: '#0f172a',
+            },
+            model: {
+              chatgpt: '#10a37f',
+              claude: '#d97706',
+              gemini: '#2563eb',
+              deepseek: '#0284c7',
+              ollama: '#8b5cf6'
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #090d16;
+      color: #f1f5f9;
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+
+    /* Target badge pulse */
+    .active-target {
+      box-shadow: 0 0 15px rgba(99, 102, 241, 0.35);
+    }
+
+    /* Pulse animation for health score update */
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.02); opacity: 1; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+    .score-pulse {
+      animation: pulse-ring 2s infinite ease-in-out;
+    }
+
+    /* Custom Toast Notification */
+    #toast {
+      transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s ease;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col bg-slate-950 text-slate-100 antialiased selection:bg-indigo-500 selection:text-white">
+
+  <!-- Top Navigation Bar -->
+  <header class="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-slate-800/80 px-4 lg:px-8 py-3">
+    <div class="max-w-7xl mx-auto flex items-center justify-between gap-4">
+      
+      <!-- Brand Logo -->
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-violet-600 to-cyan-400 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+          <i class="fa-solid fa-wand-magic-sparkles text-white text-lg"></i>
+        </div>
+        <div>
+          <h1 class="font-bold text-lg leading-tight tracking-tight text-white flex items-center gap-2">
+            PromptCraft <span class="bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent text-sm font-semibold uppercase tracking-wider">Studio</span>
+          </h1>
+          <p class="text-xs text-slate-400 hidden sm:block">Générateur, Structurateur & Optimiseur Multi-LLM</p>
+        </div>
+      </div>
+
+      <!-- Quick Template Bar & Controls -->
+      <div class="flex items-center gap-2 sm:gap-3">
+        <!-- Preset Dropdown -->
+        <div class="relative">
+          <select id="templateSelector" onchange="loadSelectedTemplate(this.value)" class="bg-slate-800 border border-slate-700 hover:border-slate-600 text-xs text-slate-200 rounded-lg px-3 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer transition">
+            <option value="" disabled selected>📂 Charger un modèle...</option>
+            <optgroup label="Modèles Prédéfinis" id="defaultTemplatesGroup"></optgroup>
+            <optgroup label="Mes Modèles Sauvegardés" id="customTemplatesGroup"></optgroup>
+          </select>
+          <i class="fa-solid fa-chevron-down absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 pointer-events-none"></i>
+        </div>
+
+        <!-- Action Header Buttons -->
+        <button onclick="saveCurrentAsTemplate()" title="Sauvegarder comme modèle personnalisé" class="p-2 sm:px-3 sm:py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 text-xs font-medium flex items-center gap-1.5 transition">
+          <i class="fa-solid fa-bookmark text-indigo-400"></i>
+          <span class="hidden md:inline">Sauvegarder</span>
+        </button>
+
+        <button onclick="confirmResetForm()" title="Réinitialiser tous les champs" class="p-2 sm:px-3 sm:py-2 bg-slate-800/80 hover:bg-rose-950/40 hover:text-rose-300 text-slate-400 rounded-lg border border-slate-700/80 text-xs font-medium flex items-center gap-1.5 transition">
+          <i class="fa-solid fa-rotate-left"></i>
+          <span class="hidden md:inline">Effacer</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Application Area -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+    <!-- LEFT COLUMN: Prompt Architect Controls (7 cols on lg) -->
+    <section class="lg:col-span-7 flex flex-col gap-5">
+      
+      <!-- LLM Target Switcher Section -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl">
+        <div class="flex items-center justify-between mb-3">
+          <label class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+            <i class="fa-solid fa-microchip text-indigo-400"></i> Modèle Cible (Adaptation Dynamique)
+          </label>
+          <span id="targetBadge" class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">Standard</span>
+        </div>
+
+        <div class="grid grid-cols-5 gap-2" id="targetButtonsContainer">
+          <button onclick="setTargetModel('chatgpt')" id="btn-chatgpt" class="target-btn active-target bg-slate-800 hover:bg-slate-700 border border-emerald-500/50 rounded-xl p-2.5 flex flex-col items-center justify-center gap-1 text-xs font-medium transition text-emerald-400">
+            <i class="fa-solid fa-robot text-base"></i>
+            <span>ChatGPT</span>
+          </button>
+          
+          <button onclick="setTargetModel('claude')" id="btn-claude" class="target-btn bg-slate-800/60 hover:bg-slate-700 border border-slate-700 rounded-xl p-2.5 flex flex-col items-center justify-center gap-1 text-xs font-medium transition text-slate-400">
+            <i class="fa-solid fa-brain text-base"></i>
+            <span>Claude</span>
+          </button>
+
+          <button onclick="setTargetModel('gemini')" id="btn-gemini" class="target-btn bg-slate-800/60 hover:bg-slate-700 border border-slate-700 rounded-xl p-2.5 flex flex-col items-center justify-center gap-1 text-xs font-medium transition text-slate-400">
+            <i class="fa-solid fa-gem text-base"></i>
+            <span>Gemini</span>
+          </button>
+
+          <button onclick="setTargetModel('deepseek')" id="btn-deepseek" class="target-btn bg-slate-800/60 hover:bg-slate-700 border border-slate-700 rounded-xl p-2.5 flex flex-col items-center justify-center gap-1 text-xs font-medium transition text-slate-400">
+            <i class="fa-solid fa-eye text-base"></i>
+            <span>DeepSeek</span>
+          </button>
+
+          <button onclick="setTargetModel('ollama')" id="btn-ollama" class="target-btn bg-slate-800/60 hover:bg-slate-700 border border-slate-700 rounded-xl p-2.5 flex flex-col items-center justify-center gap-1 text-xs font-medium transition text-slate-400">
+            <i class="fa-solid fa-terminal text-base"></i>
+            <span>Ollama</span>
+          </button>
+        </div>
+
+        <!-- Dynamic LLM Formatting Hint -->
+        <div id="llmHintBox" class="mt-3 p-2.5 rounded-lg bg-slate-950/60 border border-slate-800 text-xs text-slate-400 flex items-start gap-2">
+          <i class="fa-solid fa-circle-info text-indigo-400 mt-0.5"></i>
+          <span id="llmHintText">Format universel propre avec balisage clair pour ChatGPT.</span>
+        </div>
+      </div>
+
+      <!-- Mode Split API Toggle -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-3 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-sliders text-indigo-400 text-sm"></i>
+          <span class="text-xs font-semibold text-slate-300">Mode d'Architecture du Prompt</span>
+        </div>
+        <div class="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+          <button onclick="setApiMode('monolithic')" id="modeMonoBtn" class="px-3 py-1 rounded-lg bg-indigo-600 text-white font-medium shadow transition">
+            Monolithique
+          </button>
+          <button onclick="setApiMode('split')" id="modeSplitBtn" class="px-3 py-1 rounded-lg text-slate-400 hover:text-slate-200 font-medium transition">
+            API Split (System / User)
+          </button>
+        </div>
+      </div>
+
+      <!-- Prompt Building Form Fields -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col gap-4">
+        
+        <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+          <h2 class="text-sm font-bold text-slate-200 flex items-center gap-2">
+            <i class="fa-solid fa-layer-group text-indigo-400"></i> Composants du Prompt
+          </h2>
+          <button onclick="optimizePromptWithAntiHallucination()" class="px-3 py-1.5 bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 text-amber-300 border border-amber-500/30 rounded-lg text-xs font-medium flex items-center gap-1.5 transition">
+            <i class="fa-solid fa-shield-halved"></i>
+            <span>Optimiser (Anti-hallucination)</span>
+          </button>
+        </div>
+
+        <!-- 1. Rôle / Persona -->
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label for="inputRole" class="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+              <i class="fa-solid fa-user-ninja text-indigo-400"></i> 1. Rôle & Persona
+            </label>
+            <span class="text-[10px] text-slate-500">Ex: Expert en Cybersécurité Senior</span>
+          </div>
+          <input type="text" id="inputRole" oninput="updateAll()" placeholder="Tu es un expert reconnu en..." class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition placeholder:text-slate-600">
+        </div>
+
+        <!-- 2. Contexte & Objectif -->
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label for="inputContext" class="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+              <i class="fa-solid fa-compass text-indigo-400"></i> 2. Contexte & Objectif
+            </label>
+            <span class="text-[10px] text-slate-500">Contexte global de la requête</span>
+          </div>
+          <textarea id="inputContext" rows="2" oninput="updateAll()" placeholder="Explique la situation, l'environnement ou l'historique du projet..." class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition placeholder:text-slate-600 resize-y"></textarea>
+        </div>
+
+        <!-- 3. Tâche précise -->
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label for="inputTask" class="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+              <i class="fa-solid fa-[#6366f1] fa-list-check text-indigo-400"></i> 3. Tâche Précise & Actions
+            </label>
+            <span class="text-[10px] text-slate-500">Obligatoire</span>
+          </div>
+          <textarea id="inputTask" rows="3" oninput="updateAll()" placeholder="Décris précisément ce que l'IA doit accomplir, étape par étape..." class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition placeholder:text-slate-600 resize-y"></textarea>
+        </div>
+
+        <!-- 4. Contraintes & Consignes -->
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label for="inputConstraints" class="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+              <i class="fa-solid fa-triangle-exclamation text-indigo-400"></i> 4. Contraintes & Ce qu'il faut éviter
+            </label>
+            <span class="text-[10px] text-slate-500">Ton, langue, limites, interdictions</span>
+          </div>
+          <textarea id="inputConstraints" rows="2" oninput="updateAll()" placeholder="Ex: Ne pas utiliser de jargon excessif. Répondre exclusivement en français..." class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition placeholder:text-slate-600 resize-y"></textarea>
+        </div>
+
+        <!-- 5. Format de sortie -->
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label for="inputFormat" class="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+              <i class="fa-solid fa-file-code text-indigo-400"></i> 5. Format de Sortie Attendu
+            </label>
+            <span class="text-[10px] text-slate-500">JSON, Markdown, Tableau, Code, Listes</span>
+          </div>
+          <input type="text" id="inputFormat" oninput="updateAll()" placeholder="Ex: Structure la réponse sous forme de tableau Markdown avec colonnes X, Y, Z" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition placeholder:text-slate-600">
+        </div>
+
+        <!-- 6. Exemples (Few-Shot) -->
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label for="inputExamples" class="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+              <i class="fa-solid fa-lightbulb text-indigo-400"></i> 6. Exemples (Few-shot Prompting)
+            </label>
+            <span class="text-[10px] text-slate-500">1 ou 2 démonstrations d'entrée/sortie</span>
+          </div>
+          <textarea id="inputExamples" rows="2" oninput="updateAll()" placeholder="Entrée: ... &#10;Sortie souhaitée: ..." class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition placeholder:text-slate-600 font-mono text-xs resize-y"></textarea>
+        </div>
+
+      </div>
+
+      <!-- Variable Dynamic Filler Panel -->
+      <div id="variablesContainer" class="hidden bg-slate-900 border border-amber-500/30 rounded-2xl p-4 shadow-xl">
+        <div class="flex items-center gap-2 mb-3">
+          <i class="fa-solid fa-brackets-curly text-amber-400"></i>
+          <h3 class="text-xs font-bold text-amber-300 uppercase tracking-wider">Variables Détectées dans le Prompt</h3>
+          <span id="varsCountBadge" class="ml-auto text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-full font-mono">0</span>
+        </div>
+        <p class="text-xs text-slate-400 mb-3">Remplissez les valeurs ci-dessous pour les injecter automatiquement dans le prompt final :</p>
+        <div id="variablesList" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <!-- Dynamic Variable Inputs will be rendered here -->
+        </div>
+      </div>
+
+    </section>
+
+    <!-- RIGHT COLUMN: Preview, Health Score & Output Actions (5 cols on lg) -->
+    <section class="lg:col-span-5 flex flex-col gap-5">
+      
+      <!-- Prompt Health Score Module -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col gap-4">
+        <div class="flex items-center justify-between">
+          <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+            <i class="fa-solid fa-heart-pulse text-emerald-400"></i> Prompt Health / Scorer
+          </h3>
+          <span id="scoreStatusBadge" class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
+            Moyen
+          </span>
+        </div>
+
+        <!-- Gauge Progress Bar -->
+        <div class="flex items-center gap-4">
+          <div class="relative w-16 h-16 flex items-center justify-center shrink-0">
+            <svg class="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+              <path class="text-slate-800" stroke-width="3.5" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+              <path id="scoreCircle" class="text-emerald-500 transition-all duration-500 ease-out" stroke-dasharray="0, 100" stroke-width="3.5" stroke-linecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+            </svg>
+            <span id="scoreText" class="absolute text-sm font-bold font-mono text-white">0%</span>
+          </div>
+
+          <div class="flex-1 text-xs text-slate-400 space-y-1">
+            <div id="scoreSummary" class="font-medium text-slate-200">En cours d'analyse...</div>
+            <div id="scoreSubtext" class="text-[11px] text-slate-500">Ajoutez un rôle, une tâche et des contraintes pour maximiser la clarté.</div>
+          </div>
+        </div>
+
+        <!-- Detailed Feedback Checks -->
+        <div id="healthChecksContainer" class="space-y-1.5 pt-2 border-t border-slate-800 text-xs">
+          <!-- Dynamic checklist items -->
+        </div>
+      </div>
+
+      <!-- Live Preview & Output Panel -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl flex-1 flex flex-col">
+        
+        <!-- Tab Bar & Metrics -->
+        <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-800">
+          <!-- Preview Tabs -->
+          <div class="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+            <button onclick="setPreviewTab('rendered')" id="tabRendered" class="px-2.5 py-1 rounded-lg bg-indigo-600 text-white font-medium transition">
+              <i class="fa-solid fa-eye mr-1"></i> Rendu
+            </button>
+            <button onclick="setPreviewTab('raw')" id="tabRaw" class="px-2.5 py-1 rounded-lg text-slate-400 hover:text-slate-200 font-medium transition">
+              <i class="fa-solid fa-code mr-1"></i> Brut
+            </button>
+            <button onclick="setPreviewTab('json')" id="tabJson" class="px-2.5 py-1 rounded-lg text-slate-400 hover:text-slate-200 font-medium transition">
+              <i class="fa-brackets-curly text-indigo-400 mr-1"></i> JSON API
+            </button>
+          </div>
+
+          <!-- Token & Character Metrics -->
+          <div class="flex items-center gap-3 text-[11px] font-mono text-slate-400 bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800">
+            <span title="Estimation du nombre de mots"><strong id="metricWords" class="text-indigo-400">0</strong> mots</span>
+            <span class="text-slate-700">|</span>
+            <span title="Nombre de caractères"><strong id="metricChars" class="text-indigo-400">0</strong> car</span>
+            <span class="text-slate-700">|</span>
+            <span title="Tokens approximatifs (~4 car/token)" class="text-emerald-400 font-bold"><i class="fa-solid fa-bolt text-xs mr-0.5"></i><span id="metricTokens">0</span> tk</span>
+          </div>
+        </div>
+
+        <!-- Display Area -->
+        <div class="mt-3 flex-1 min-h-[320px] max-h-[500px] overflow-y-auto rounded-xl bg-slate-950 border border-slate-800 p-4 text-xs font-mono relative">
+          
+          <!-- Rendered Markdown View -->
+          <div id="viewRendered" class="prose prose-invert prose-xs max-w-none font-sans leading-relaxed text-slate-200">
+            <p class="text-slate-500 italic">Commencez à remplir le formulaire pour générer le prompt...</p>
+          </div>
+
+          <!-- Raw Text View -->
+          <pre id="viewRaw" class="hidden whitespace-pre-wrap text-slate-300 font-mono text-xs leading-relaxed"></pre>
+
+          <!-- JSON API View -->
+          <pre id="viewJson" class="hidden text-emerald-400 font-mono text-xs leading-relaxed overflow-x-auto"></pre>
+
+        </div>
+
+        <!-- Action Bar Buttons -->
+        <div class="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <button onclick="copyCurrentPrompt()" class="col-span-2 sm:col-span-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/25 transition">
+            <i class="fa-solid fa-copy"></i>
+            <span>Copier le Prompt</span>
+          </button>
+
+          <button onclick="copyJsonApi()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-medium py-2.5 px-2 rounded-xl text-xs flex items-center justify-center gap-1.5 transition">
+            <i class="fa-solid fa-code text-indigo-400"></i>
+            <span>Copier JSON</span>
+          </button>
+
+          <div class="relative">
+            <button onclick="toggleExportMenu()" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-medium py-2.5 px-2 rounded-xl text-xs flex items-center justify-center gap-1.5 transition">
+              <i class="fa-solid fa-download text-emerald-400"></i>
+              <span>Exporter</span>
+              <i class="fa-solid fa-chevron-down text-[10px]"></i>
+            </button>
+            <!-- Dropdown Menu -->
+            <div id="exportDropdown" class="hidden absolute right-0 bottom-full mb-2 w-40 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-1.5 z-50">
+              <button onclick="exportPrompt('txt')" class="w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-slate-800 rounded-lg flex items-center gap-2">
+                <i class="fa-solid fa-file-lines text-indigo-400"></i> Fichier .TXT
+              </button>
+              <button onclick="exportPrompt('json')" class="w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-slate-800 rounded-lg flex items-center gap-2">
+                <i class="fa-solid fa-file-code text-emerald-400"></i> Fichier .JSON
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- Toast Notification Bar -->
+  <div id="toast" class="fixed bottom-6 right-6 z-50 transform translate-y-20 opacity-0 pointer-events-none bg-indigo-600 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 border border-indigo-400/30 text-xs font-semibold">
+    <i class="fa-solid fa-circle-check text-base text-emerald-300"></i>
+    <span id="toastMsg">Copié dans le presse-papier !</span>
+  </div>
+
+  <!-- JavaScript Logic -->
+  <script>
+    // Default Preset Templates
+    const PRESET_TEMPLATES = [
+      {
+        id: 'code-review',
+        name: '💻 Refactoring Code Senior',
+        role: 'Développeur Senior & Architecte Logiciel Full-Stack',
+        context: 'Revue de code sur une fonction critique du projet {{projet}} écrite en {{langage}}.',
+        task: '1. Analyser le code fourni pour identifier les goulots d\'étranglement de performance.\n2. Proposer une version refactorisée propre, modulaire et optimisée.\n3. Ajouter des commentaires explicatifs sur les améliorations apportées.',
+        constraints: 'Utiliser les meilleures pratiques du langage. Éviter le sur-engineering. Conserver la comptabilité ascendante.',
+        format: 'Fournir d\'abord un résumé synthétique des problèmes, puis le bloc de code refactorisé, et enfin les explications.',
+        examples: 'Exemple de structure:\n### Diagnostic\n- Point 1...\n### Code Refactorisé\n```{{langage}}\n// Code propre\n```'
+      },
+      {
+        id: 'copywriting-b2b',
+        name: '✍️ Copywriting Article B2B',
+        role: 'Expert Copywriter B2B & Content Marketer Senior',
+        context: 'Rédaction d\'un article de blog à fort impact ciblant des {{cible_audience}} sur le sujet {{sujet}}.',
+        task: 'Rédiger un article captivant avec une accroche percutante, 3 sections principales bien argumentées, et un appel à l\'action (CTA) clair.',
+        constraints: 'Langue: Français. Ton: Professionnel mais accessible et dynamique. Pas de phrases passives excessives. Longueur: ~800 mots.',
+        format: 'Format Markdown avec titres (H1, H2, H3), listes à puces et phrases clés en gras.',
+        examples: 'Exemple H1: Pourquoi {{sujet}} va transformer votre secteur en 2026.'
+      },
+      {
+        id: 'data-analyst',
+        name: '📊 Analyseur de Données & Insights',
+        role: 'Lead Data Analyst & Business Intelligence Expert',
+        context: 'Analyse d\'un jeu de données business pour le trimestre {{trimestre}}.',
+        task: '1. Identifier les 3 tendances majeures.\n2. Détecter les anomalies ou baisses de performance.\n3. Formuler 3 recommandations stratégiques actionnables.',
+        constraints: 'Être ultra-factuel. Baser toutes les conclusions sur les chiffres fournis sans spéculation.',
+        format: 'Tableau Markdown récapitulatif suivi de recommandations sous forme de bullet points.',
+        examples: 'Tableau:\n| Métrique | Valeur | Évolution |\n| --- | --- | --- |'
+      },
+      {
+        id: 'cyber-audit',
+        name: '🛡️ Audit de Sécurité & Pentest',
+        role: 'Expert en Cybersécurité & Pentester Certifié',
+        context: 'Évaluation de la sécurité de l\'application {{systeme}}.',
+        task: 'Analyser les vecteurs d\'attaque potentiels, classifier les risques selon l\'échelle CVSS et proposer des correctifs applicatifs.',
+        constraints: 'Ne traiter que de la sécurité défensive. Fournir des exemples de remediations concrètes.',
+        format: 'Rapport structuré avec Niveaux de Sévérité (Critique, Élevé, Moyen, Faible).',
+        examples: ''
+      },
+      {
+        id: 'brainstorming',
+        name: '💡 Brainstorming & Idéation Produit',
+        role: 'Product Manager & Designer UX Inovant',
+        context: 'Recherche d\'idées de fonctionnalités disruptives pour {{produit}}.',
+        task: 'Générer 10 idées de fonctionnalités novatrices qui répondent au problème suivant : {{probleme}}.',
+        constraints: 'Sortir des sentiers battus. Privilégier la valeur utilisateur et la faisabilité technique.',
+        format: 'Liste numérotée avec pour chaque idée : Nom, Description court, Impact utilisateur (1-5), Effort estimé (1-5).',
+        examples: ''
+      },
+      {
+        id: 'fin-fundamental',
+        name: '📈 Analyse Fondamentale d\'Entreprise',
+        role: 'Analyste Financier Senior (CFA)',
+        context: 'Évaluation de la santé financière et du profil de valorisation de l\'entreprise {{societe}}.',
+        task: '1. Analyser les résultats financiers (compte de résultat, bilan, flux de trésorerie) et calculer les ratios clés (P/E, EV/EBITDA, ROE, Debt/EBITDA).\n2. Évaluer le fossé concurrentiel (Moat) et la pérennité du modèle économique.\n3. Identifier les risques majeurs et les leviers de croissance.',
+        constraints: 'Approche rigoureuse et objective. Distinguer clairement les faits comptables des prévisions. Mentionner la qualité des cash-flows.',
+        format: 'Rapport d\'analyse financière en Markdown avec tableau comparatif des ratios, synthèse des forces/faiblesses et conclusion sur la valorisation.',
+        examples: 'Exemple de structure:\n### 1. Ratios Clés & Métriques\n| Ratio | Valeur | Secteur |\n| --- | --- | --- |\n### 2. Analyse du Moat & Risques'
+      },
+      {
+        id: 'trade-technical',
+        name: '📊 Analyse Technique & Plan de Trading',
+        role: 'Trader Pro & Analyste Technique Certifié (CMT)',
+        context: 'Analyse graphique et planification d\'opportunités de trading sur l\'actif {{actif}} sur l\'horizon de temps {{timeframe}}.',
+        task: '1. Identifier la tendance de fond, les niveaux majeurs de support et de résistance.\n2. Analyser les indicateurs techniques clés (RSI, MACD, Moyennes Mobiles, Volumes).\n3. Élaborer un plan de trade précis avec point d\'entrée, Stop-Loss et objectifs de Take-Profit.',
+        constraints: 'Ratios Risque/Rendement minimum de 1:2. Inclure les conditions d\'invalidation du scénario. Rappeler l\'importance de la gestion du risque (Money Management).',
+        format: 'Fiche synthétique comprenant: Configuration actuelle, Plan de Trade (Entrée, SL, TP1, TP2) et Analyse des Scénarios (Haussier/Baissier).',
+        examples: 'Exemple:\n- Actif: BTC/USDT (4H)\n- Entrée: $64,200\n- Stop-Loss: $62,800\n- Take-Profit 1: $67,000 (R:R = 1:2)'
+      },
+      {
+        id: 'fin-valuation',
+        name: '💰 Valorisation d\'Entreprise & Modèle DCF',
+        role: 'Expert en Valorisation M&A & Corporate Finance',
+        context: 'Estimation de la valeur intrinsèque de {{entreprise}} dans le secteur {{secteur}}.',
+        task: '1. Structurer la méthodologie de valorisation par Actualisation des Flux de Trésorerie (DCF).\n2. Définir et justifier les hypothèses clés : Taux de croissance des revenus, marge opérationnelle, WACC (Coût Moyen Pondéré du Capital) et taux de croissance à l\'infini (g).\n3. Effectuer une analyse de sensibilité de la valeur par action selon différents scénarios (Bear, Base, Bull).',
+        constraints: 'Expliciter toutes les formules et hypothèses de calcul utilisées. Maintenir une démarche prudente et réaliste.',
+        format: 'Document de cadrage financier comprenant la grille d\'hypothèses, les étapes du modèle DCF et la matrice de sensibilité.',
+        examples: ''
+      },
+      {
+        id: 'portfolio-risk',
+        name: '🛡️ Gestion de Portefeuille & Audit de Risque',
+        role: 'Gestionnaire de Portefeuille & Chief Risk Officer (CRO)',
+        context: 'Revue stratégique et audit de risque d\'un portefeuille d\'investissement composé de {{actifs}} pour un profil {{profil_risque}}.',
+        task: '1. Évaluer le niveau de diversification, les corrélations entre classes d\'actifs et la concentration géographique/sectorielle.\n2. Analyser l\'exposition aux risques macroéconomiques (taux d\'intérêt, inflation, volatilité).\n3. Recommander des rééquilibrages tactiques pour optimiser le ratio de Sharpe.',
+        constraints: 'Respecter scrupuleusement la tolérance au risque spécifiée. Mentionner la Value at Risk (VaR) estimée et les couvertures possibles.',
+        format: 'Rapport d\'Audit de Portefeuille structuré avec tableau d\'allocation actuelle vs recommandée et plan d\'action.',
+        examples: ''
+      },
+      {
+        id: 'crypto-onchain',
+        name: '🪙 Analyse Crypto & Tokenomics',
+        role: 'Analyste Senior Web3 & Research Lead Crypto',
+        context: 'Évaluation approfondie des fondamentaux du projet crypto/token {{projet_crypto}}.',
+        task: '1. Analyser le modèle de Tokenomics (offre totale, offre en circulation, calendrier d\'émission/vesting, mécanismes de burn ou de staking).\n2. Vérifier les métriques On-Chain et d\'adoption (Valeur Totale Verrouillée - TVL, adresses actives, volume des transactions, activité développeur).\n3. Identifier les risques réglementaires, de centralisation ou de sécurité des smart contracts.',
+        constraints: 'Pas de conseil financier direct (DYOR). Rester neutre et orienté données factuelles.',
+        format: 'Fiche d\'évaluation crypto en 4 volets: Utilité du Jeton, Analyse Tokenomics, Santé On-Chain et Matrice de Risques.',
+        examples: ''
+      }
+    ];
+
+    // Global State
+    let appState = {
+      targetModel: 'chatgpt', // chatgpt, claude, gemini, deepseek, ollama
+      apiMode: 'monolithic', // monolithic, split
+      previewTab: 'rendered', // rendered, raw, json
+      variables: {},
+      customTemplates: []
+    };
+
+    const LLM_ADAPTERS = {
+      chatgpt: {
+        name: 'ChatGPT (OpenAI)',
+        badge: 'Markdown Optimisé',
+        hint: 'Structure Markdown standard propre (# Rôle, ## Contexte) idéale pour GPT-4o.',
+        wrap: (data) => buildStandardMarkdownPrompt(data)
+      },
+      claude: {
+        name: 'Claude (Anthropic)',
+        badge: 'Structure XML',
+        hint: 'Utilise des balises XML (<context>, <instructions>, <constraints>) parfaitement interprétées par Claude 3.5 Sonnet.',
+        wrap: (data) => buildClaudeXmlPrompt(data)
+      },
+      gemini: {
+        name: 'Gemini (Google)',
+        badge: 'Consignes Directes',
+        hint: 'Instructions système directes avec contraintes explicites et séparateurs de section.',
+        wrap: (data) => buildGeminiPrompt(data)
+      },
+      deepseek: {
+        name: 'DeepSeek R1 / V3',
+        badge: 'Raisonnement Étape par Étape',
+        hint: 'Intègre des directives de réflexion analytique explicite avant de fournir la réponse.',
+        wrap: (data) => buildDeepSeekPrompt(data)
+      },
+      ollama: {
+        name: 'Ollama (Local LLM)',
+        badge: 'ChatML / Concis',
+        hint: 'Structure concise et directe idéale pour les modèles locaux (Llama 3, Mistral, Qwen).',
+        wrap: (data) => buildOllamaPrompt(data)
+      }
+    };
+
+    window.addEventListener('DOMContentLoaded', () => {
+      loadSavedCustomTemplates();
+      populateTemplateDropdown();
+      
+      // Load last draft or set default
+      const savedDraft = localStorage.getItem('promptcraft_draft');
+      if (savedDraft) {
+        try {
+          const parsed = JSON.parse(savedDraft);
+          document.getElementById('inputRole').value = parsed.role || '';
+          document.getElementById('inputContext').value = parsed.context || '';
+          document.getElementById('inputTask').value = parsed.task || '';
+          document.getElementById('inputConstraints').value = parsed.constraints || '';
+          document.getElementById('inputFormat').value = parsed.format || '';
+          document.getElementById('inputExamples').value = parsed.examples || '';
+        } catch (e) { console.error("Error loading draft", e); }
+      } else {
+        // Load default code review template
+        loadTemplateById('code-review');
+      }
+
+      updateAll();
+    });
+
+    function setTargetModel(modelKey) {
+      appState.targetModel = modelKey;
+      
+      // Update UI Buttons
+      document.querySelectorAll('.target-btn').forEach(btn => {
+        btn.classList.remove('active-target', 'border-emerald-500/50', 'border-amber-500/50', 'border-blue-500/50', 'border-sky-500/50', 'border-purple-500/50', 'text-emerald-400', 'text-amber-400', 'text-blue-400', 'text-sky-400', 'text-purple-400');
+        btn.classList.add('border-slate-700', 'text-slate-400');
+      });
+
+      const activeBtn = document.getElementById(`btn-${modelKey}`);
+      if (activeBtn) {
+        activeBtn.classList.add('active-target');
+        activeBtn.classList.remove('border-slate-700', 'text-slate-400');
+        
+        const colorMap = {
+          chatgpt: ['border-emerald-500/50', 'text-emerald-400'],
+          claude: ['border-amber-500/50', 'text-amber-400'],
+          gemini: ['border-blue-500/50', 'text-blue-400'],
+          deepseek: ['border-sky-500/50', 'text-sky-400'],
+          ollama: ['border-purple-500/50', 'text-purple-400']
+        };
+
+        if (colorMap[modelKey]) {
+          activeBtn.classList.add(...colorMap[modelKey]);
+        }
+      }
+
+      // Update Badge & Hint Box
+      const adapter = LLM_ADAPTERS[modelKey];
+      document.getElementById('targetBadge').innerText = adapter.badge;
+      document.getElementById('llmHintText').innerText = adapter.hint;
+
+      updateAll();
+    }
+
+    function setApiMode(mode) {
+      appState.apiMode = mode;
+      const monoBtn = document.getElementById('modeMonoBtn');
+      const splitBtn = document.getElementById('modeSplitBtn');
+
+      if (mode === 'monolithic') {
+        monoBtn.className = "px-3 py-1 rounded-lg bg-indigo-600 text-white font-medium shadow transition";
+        splitBtn.className = "px-3 py-1 rounded-lg text-slate-400 hover:text-slate-200 font-medium transition";
+      } else {
+        splitBtn.className = "px-3 py-1 rounded-lg bg-indigo-600 text-white font-medium shadow transition";
+        monoBtn.className = "px-3 py-1 rounded-lg text-slate-400 hover:text-slate-200 font-medium transition";
+      }
+
+      updateAll();
+    }
+
+    function setPreviewTab(tab) {
+      appState.previewTab = tab;
+      
+      const tabRendered = document.getElementById('tabRendered');
+      const tabRaw = document.getElementById('tabRaw');
+      const tabJson = document.getElementById('tabJson');
+
+      const viewRendered = document.getElementById('viewRendered');
+      const viewRaw = document.getElementById('viewRaw');
+      const viewJson = document.getElementById('viewJson');
+
+      // Reset tab button styles
+      [tabRendered, tabRaw, tabJson].forEach(t => {
+        t.className = "px-2.5 py-1 rounded-lg text-slate-400 hover:text-slate-200 font-medium transition";
+      });
+
+      // Hide all views
+      viewRendered.classList.add('hidden');
+      viewRaw.classList.add('hidden');
+      viewJson.classList.add('hidden');
+
+      if (tab === 'rendered') {
+        tabRendered.className = "px-2.5 py-1 rounded-lg bg-indigo-600 text-white font-medium transition";
+        viewRendered.classList.remove('hidden');
+      } else if (tab === 'raw') {
+        tabRaw.className = "px-2.5 py-1 rounded-lg bg-indigo-600 text-white font-medium transition";
+        viewRaw.classList.remove('hidden');
+      } else if (tab === 'json') {
+        tabJson.className = "px-2.5 py-1 rounded-lg bg-indigo-600 text-white font-medium transition";
+        viewJson.classList.remove('hidden');
+      }
+    }
+
+    function getFormData() {
+      return {
+        role: document.getElementById('inputRole').value.trim(),
+        context: document.getElementById('inputContext').value.trim(),
+        task: document.getElementById('inputTask').value.trim(),
+        constraints: document.getElementById('inputConstraints').value.trim(),
+        format: document.getElementById('inputFormat').value.trim(),
+        examples: document.getElementById('inputExamples').value.trim()
+      };
+    }
+
+    function applyVariablesToText(text) {
+      if (!text) return '';
+      return text.replace(/\{\{\s*([a-zA-Z0-9_\-]+)\s*\}\}/g, (match, varName) => {
+        const val = appState.variables[varName];
+        return (val !== undefined && val !== '') ? val : `{{${varName}}}`;
+      });
+    }
+
+    // 1. Standard ChatGPT Markdown Builder
+    function buildStandardMarkdownPrompt(d) {
+      let parts = [];
+      if (d.role) parts.push(`### 🎭 Rôle & Persona\n${d.role}`);
+      if (d.context) parts.push(`### 🌐 Contexte\n${d.context}`);
+      if (d.task) parts.push(`### 🎯 Tâche Précise\n${d.task}`);
+      if (d.constraints) parts.push(`### ⚠️ Contraintes & Consignes\n${d.constraints}`);
+      if (d.format) parts.push(`### 📦 Format de Sortie Attendu\n${d.format}`);
+      if (d.examples) parts.push(`### 💡 Exemples\n${d.examples}`);
+      return parts.join('\n\n');
+    }
+
+    // 2. Claude XML Tag Builder
+    function buildClaudeXmlPrompt(d) {
+      let parts = [];
+      if (d.role) parts.push(`<role>\n${d.role}\n</role>`);
+      if (d.context) parts.push(`<context>\n${d.context}\n</context>`);
+      if (d.task) parts.push(`<instructions>\n${d.task}\n</instructions>`);
+      if (d.constraints) parts.push(`<constraints>\n${d.constraints}\n</constraints>`);
+      if (d.format) parts.push(`<output_format>\n${d.format}\n</output_format>`);
+      if (d.examples) parts.push(`<examples>\n${d.examples}\n</examples>`);
+      return parts.join('\n\n');
+    }
+
+    // 3. Gemini Prompt Builder
+    function buildGeminiPrompt(d) {
+      let parts = [];
+      if (d.role) parts.push(`[SYSTEM INSTRUCTION: PERSONA]\n${d.role}`);
+      if (d.context) parts.push(`[CONTEXT]\n${d.context}`);
+      if (d.task) parts.push(`[TASK & INSTRUCTIONS]\n${d.task}`);
+      if (d.constraints) parts.push(`[STRICT CONSTRAINTS]\n${d.constraints}`);
+      if (d.format) parts.push(`[OUTPUT FORMAT REQUIREMENTS]\n${d.format}`);
+      if (d.examples) parts.push(`[FEW-SHOT EXAMPLES]\n${d.examples}`);
+      return parts.join('\n\n');
+    }
+
+    // 4. DeepSeek Reasoning Prompt Builder
+    function buildDeepSeekPrompt(d) {
+      let base = buildStandardMarkdownPrompt(d);
+      let reasoningCue = "### 🧠 Directives d'Analyse Étape par Étape\nAvant de fournir la réponse finale, analyse méthodiquement le problème étape par étape en décomposant les contraintes et la logique requise.";
+      return base ? `${base}\n\n${reasoningCue}` : reasoningCue;
+    }
+
+    // 5. Ollama / Local LLM Builder
+    function buildOllamaPrompt(d) {
+      let parts = [];
+      if (d.role) parts.push(`SYSTEM: ${d.role}`);
+      if (d.context) parts.push(`CONTEXT: ${d.context}`);
+      if (d.task) parts.push(`TASK: ${d.task}`);
+      if (d.constraints) parts.push(`RULES: ${d.constraints}`);
+      if (d.format) parts.push(`OUTPUT FORMAT: ${d.format}`);
+      if (d.examples) parts.push(`EXAMPLES:\n${d.examples}`);
+      return parts.join('\n');
+    }
+
+    function generateFinalPromptTexts() {
+      let d = getFormData();
+
+      // Apply dynamic variable replacements
+      d.role = applyVariablesToText(d.role);
+      d.context = applyVariablesToText(d.context);
+      d.task = applyVariablesToText(d.task);
+      d.constraints = applyVariablesToText(d.constraints);
+      d.format = applyVariablesToText(d.format);
+      d.examples = applyVariablesToText(d.examples);
+
+      const adapter = LLM_ADAPTERS[appState.targetModel] || LLM_ADAPTERS.chatgpt;
+
+      if (appState.apiMode === 'monolithic') {
+        const fullText = adapter.wrap(d);
+        const jsonApi = [
+          { role: "user", content: fullText }
+        ];
+        return {
+          monolithicText: fullText,
+          systemContent: "",
+          userContent: fullText,
+          jsonArray: jsonApi
+        };
+      } else {
+        // Split API mode
+        const systemContent = d.role ? (appState.targetModel === 'claude' ? `<role>${d.role}</role>` : d.role) : "Tu es un assistant IA utile, précis et rigoureux.";
+        
+        let userFormData = { ...d, role: "" }; // omit role from user prompt
+        const userContent = adapter.wrap(userFormData);
+
+        const jsonApi = [
+          { role: "system", content: systemContent },
+          { role: "user", content: userContent }
+        ];
+
+        const combinedMonolithicView = `=== SYSTEM PROMPT ===\n${systemContent}\n\n=== USER PROMPT ===\n${userContent}`;
+
+        return {
+          monolithicText: combinedMonolithicView,
+          systemContent: systemContent,
+          userContent: userContent,
+          jsonArray: jsonApi
+        };
+      }
+    }
+
+    function detectAndRenderVariables() {
+      const rawText = JSON.stringify(getFormData());
+      const matches = [...rawText.matchAll(/\{\{\s*([a-zA-Z0-9_\-]+)\s*\}\}/g)];
+      
+      const varNames = [...new Set(matches.map(m => m[1]))];
+      const container = document.getElementById('variablesContainer');
+      const list = document.getElementById('variablesList');
+      const badge = document.getElementById('varsCountBadge');
+
+      if (varNames.length === 0) {
+        container.classList.add('hidden');
+        return;
+      }
+
+      container.classList.remove('hidden');
+      badge.innerText = varNames.length;
+
+      // Ensure state maintains values for detected variables
+      varNames.forEach(v => {
+        if (appState.variables[v] === undefined) {
+          appState.variables[v] = '';
+        }
+      });
+
+      // Clear non-existing vars
+      Object.keys(appState.variables).forEach(k => {
+        if (!varNames.includes(k)) {
+          delete appState.variables[k];
+        }
+      });
+
+      // Re-render variable inputs without destroying focused element if already typing
+      const activeElementId = document.activeElement ? document.activeElement.id : null;
+      
+      list.innerHTML = varNames.map(v => `
+        <div class="flex flex-col gap-1">
+          <label for="var_input_${v}" class="text-[11px] font-mono text-amber-300 font-semibold flex items-center gap-1">
+            <i class="fa-solid fa-tag text-[9px]"></i> {{${v}}}
+          </label>
+          <input type="text" id="var_input_${v}" value="${escapeHtml(appState.variables[v] || '')}" 
+            oninput="handleVariableInput('${v}', this.value)"
+            placeholder="Valeur pour ${v}..." 
+            class="bg-slate-950 border border-amber-500/30 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-amber-400 font-mono">
+        </div>
+      `).join('');
+
+      // Restore focus if possible
+      if (activeElementId && document.getElementById(activeElementId)) {
+        document.getElementById(activeElementId).focus();
+      }
+    }
+
+    function handleVariableInput(varName, val) {
+      appState.variables[varName] = val;
+      updateAll(false); // Update without re-rendering variables DOM
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    function computePromptHealthScore(d) {
+      let score = 0;
+      let checks = [];
+
+      // 1. Role Check (15 pts)
+      if (d.role.length >= 5) {
+        score += 15;
+        checks.push({ status: 'pass', msg: 'Rôle/Persona clairement spécifié' });
+      } else {
+        checks.push({ status: 'warn', msg: 'Rôle manquant (ex: "Tu es un expert...")' });
+      }
+
+      // 2. Context Check (15 pts)
+      if (d.context.length >= 15) {
+        score += 15;
+        checks.push({ status: 'pass', msg: 'Contexte de situation présent' });
+      } else {
+        checks.push({ status: 'info', msg: 'Contexte court ou absent (aide l\'IA à cadrer)' });
+      }
+
+      // 3. Task Precision (30 pts)
+      if (d.task.length >= 25) {
+        score += 30;
+        checks.push({ status: 'pass', msg: 'Tâche et consignes bien détaillées' });
+      } else if (d.task.length > 0) {
+        score += 15;
+        checks.push({ status: 'warn', msg: 'Tâche un peu trop vague' });
+      } else {
+        checks.push({ status: 'fail', msg: 'Aucune tâche explicite définie (obligatoire)' });
+      }
+
+      // 4. Constraints Check (15 pts)
+      if (d.constraints.length >= 10) {
+        score += 15;
+        checks.push({ status: 'pass', msg: 'Contraintes négatives & consignes définies' });
+      } else {
+        checks.push({ status: 'warn', msg: 'Pas de contraintes ("Ce qu\'il faut éviter")' });
+      }
+
+      // 5. Output Format (15 pts)
+      if (d.format.length >= 5) {
+        score += 15;
+        checks.push({ status: 'pass', msg: 'Format de sortie structuré spécifié' });
+      } else {
+        checks.push({ status: 'warn', msg: 'Format de sortie non précisé' });
+      }
+
+      // 6. Few-shot Examples (10 pts bonus)
+      if (d.examples.length >= 15) {
+        score += 10;
+        checks.push({ status: 'pass', msg: 'Exemples (Few-shot) fournis' });
+      } else {
+        checks.push({ status: 'info', msg: 'Aucun exemple (Few-shot) pour guider le modèle' });
+      }
+
+      score = Math.min(100, score);
+      return { score, checks };
+    }
+
+    function renderHealthScore() {
+      const d = getFormData();
+      const { score, checks } = computePromptHealthScore(d);
+
+      const scoreCircle = document.getElementById('scoreCircle');
+      const scoreText = document.getElementById('scoreText');
+      const scoreBadge = document.getElementById('scoreStatusBadge');
+      const scoreSummary = document.getElementById('scoreSummary');
+      const healthContainer = document.getElementById('healthChecksContainer');
+
+      // Update circle stroke
+      scoreCircle.setAttribute('stroke-dasharray', `${score}, 100`);
+      scoreText.innerText = `${score}%`;
+
+      // Status Colors
+      if (score >= 80) {
+        scoreCircle.className = "text-emerald-500 transition-all duration-500 ease-out";
+        scoreBadge.className = "text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+        scoreBadge.innerText = "Excellent";
+        scoreSummary.innerText = "Prompt hautement structuré et optimisé !";
+      } else if (score >= 50) {
+        scoreCircle.className = "text-amber-500 transition-all duration-500 ease-out";
+        scoreBadge.className = "text-xs font-semibold px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30";
+        scoreBadge.innerText = "Moyen";
+        scoreSummary.innerText = "Bonne base, des améliorations sont possibles.";
+      } else {
+        scoreCircle.className = "text-rose-500 transition-all duration-500 ease-out";
+        scoreBadge.className = "text-xs font-semibold px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30";
+        scoreBadge.innerText = "Faible";
+        scoreSummary.innerText = "Prompt incomplet ou trop ambigu.";
+      }
+
+      // Render checks list
+      healthContainer.innerHTML = checks.map(c => {
+        let icon = '<i class="fa-solid fa-circle-check text-emerald-400"></i>';
+        if (c.status === 'warn') icon = '<i class="fa-solid fa-triangle-exclamation text-amber-400"></i>';
+        if (c.status === 'fail') icon = '<i class="fa-solid fa-circle-xmark text-rose-400"></i>';
+        if (c.status === 'info') icon = '<i class="fa-solid fa-circle-info text-sky-400"></i>';
+
+        return `
+          <div class="flex items-center justify-between text-[11px] text-slate-300">
+            <span class="flex items-center gap-1.5">${icon} ${c.msg}</span>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function updateMetrics(text) {
+      const charCount = text.length;
+      const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
+      // Rough estimation for LLM tokens (~4 chars/token in Western languages)
+      const tokenCount = Math.ceil(charCount / 4);
+
+      document.getElementById('metricChars').innerText = charCount.toLocaleString();
+      document.getElementById('metricWords').innerText = wordCount.toLocaleString();
+      document.getElementById('metricTokens').innerText = tokenCount.toLocaleString();
+    }
+
+    function updateAll(refreshVars = true) {
+      // 1. Detect variables
+      if (refreshVars) {
+        detectAndRenderVariables();
+      }
+
+      // 2. Generate Prompt Text
+      const promptData = generateFinalPromptTexts();
+      const mainText = promptData.monolithicText;
+
+      // 3. Render Views
+      const viewRendered = document.getElementById('viewRendered');
+      const viewRaw = document.getElementById('viewRaw');
+      const viewJson = document.getElementById('viewJson');
+
+      if (mainText.trim()) {
+        viewRendered.innerHTML = marked.parse(mainText);
+        viewRaw.innerText = mainText;
+        viewJson.innerText = JSON.stringify(promptData.jsonArray, null, 2);
+      } else {
+        viewRendered.innerHTML = '<p class="text-slate-500 italic">Remplissez les champs à gauche pour générer votre prompt...</p>';
+        viewRaw.innerText = '';
+        viewJson.innerText = '[]';
+      }
+
+      // 4. Update Metrics & Health Score
+      updateMetrics(mainText);
+      renderHealthScore();
+
+      // 5. Save draft to localStorage
+      saveCurrentDraft();
+    }
+
+    function optimizePromptWithAntiHallucination() {
+      const constraintsInput = document.getElementById('inputConstraints');
+      const currentVal = constraintsInput.value.trim();
+
+      const antiHallucinationGuard = "Si une information est absente ou incertaine, indique-le clairement au lieu d'inventer. Prends une inspiration et vérifie ta réponse étape par étape.";
+
+      if (!currentVal.includes("incertaine") && !currentVal.includes("inventer")) {
+        constraintsInput.value = currentVal ? `${currentVal}\n${antiHallucinationGuard}` : antiHallucinationGuard;
+        showToast("Garde-fous anti-hallucination ajoutés !");
+        updateAll();
+      } else {
+        showToast("Les garde-fous sont déjà présents dans le prompt.");
+      }
+    }
+
+    function populateTemplateDropdown() {
+      const defaultGroup = document.getElementById('defaultTemplatesGroup');
+      const customGroup = document.getElementById('customTemplatesGroup');
+
+      defaultGroup.innerHTML = PRESET_TEMPLATES.map(t => 
+        `<option value="preset_${t.id}">${t.name}</option>`
+      ).join('');
+
+      if (appState.customTemplates.length > 0) {
+        customGroup.innerHTML = appState.customTemplates.map((t, idx) => 
+          `<option value="custom_${idx}">⭐ ${t.name}</option>`
+        ).join('');
+      } else {
+        customGroup.innerHTML = '<option value="" disabled>(Aucun modèle sauvegardé)</option>';
+      }
+    }
+
+    function loadSelectedTemplate(val) {
+      if (!val) return;
+      if (val.startsWith('preset_')) {
+        const id = val.replace('preset_', '');
+        loadTemplateById(id);
+      } else if (val.startsWith('custom_')) {
+        const idx = parseInt(val.replace('custom_', ''), 10);
+        if (appState.customTemplates[idx]) {
+          const t = appState.customTemplates[idx];
+          fillForm(t);
+          showToast(`Modèle "${t.name}" chargé !`);
+        }
+      }
+      document.getElementById('templateSelector').value = "";
+    }
+
+    function loadTemplateById(id) {
+      const t = PRESET_TEMPLATES.find(x => x.id === id);
+      if (t) {
+        fillForm(t);
+        showToast(`Modèle "${t.name}" chargé !`);
+      }
+    }
+
+    function fillForm(data) {
+      document.getElementById('inputRole').value = data.role || '';
+      document.getElementById('inputContext').value = data.context || '';
+      document.getElementById('inputTask').value = data.task || '';
+      document.getElementById('inputConstraints').value = data.constraints || '';
+      document.getElementById('inputFormat').value = data.format || '';
+      document.getElementById('inputExamples').value = data.examples || '';
+      updateAll();
+    }
+
+    function saveCurrentAsTemplate() {
+      const data = getFormData();
+      if (!data.task) {
+        alert("Veuillez au moins saisir une tâche avant de sauvegarder le modèle.");
+        return;
+      }
+
+      const name = prompt("Nommez votre modèle personnalisé :", "Mon Modèle " + (appState.customTemplates.length + 1));
+      if (!name) return;
+
+      const newTemplate = {
+        name: name,
+        ...data
+      };
+
+      appState.customTemplates.push(newTemplate);
+      localStorage.setItem('promptcraft_custom_templates', JSON.stringify(appState.customTemplates));
+      populateTemplateDropdown();
+      showToast(`Modèle "${name}" sauvegardé !`);
+    }
+
+    function loadSavedCustomTemplates() {
+      const saved = localStorage.getItem('promptcraft_custom_templates');
+      if (saved) {
+        try {
+          appState.customTemplates = JSON.parse(saved);
+        } catch(e) { console.error(e); }
+      }
+    }
+
+    function saveCurrentDraft() {
+      const data = getFormData();
+      localStorage.setItem('promptcraft_draft', JSON.stringify(data));
+    }
+
+    function confirmResetForm() {
+      if (confirm("Voulez-vous vraiment effacer tous les champs du formulaire ?")) {
+        fillForm({ role: '', context: '', task: '', constraints: '', format: '', examples: '' });
+        showToast("Formulaire réinitialisé.");
+      }
+    }
+
+    function copyCurrentPrompt() {
+      const promptData = generateFinalPromptTexts();
+      copyToClipboard(promptData.monolithicText, "Prompt copié dans le presse-papier !");
+    }
+
+    function copyJsonApi() {
+      const promptData = generateFinalPromptTexts();
+      copyToClipboard(JSON.stringify(promptData.jsonArray, null, 2), "JSON API copié dans le presse-papier !");
+    }
+
+    function copyToClipboard(text, successMessage) {
+      if (!text) {
+        showToast("Rien à copier !");
+        return;
+      }
+      
+      // ExecCommand fallback for iframe environments
+      const tempTextArea = document.createElement("textarea");
+      tempTextArea.value = text;
+      tempTextArea.style.position = "fixed";
+      tempTextArea.style.left = "-9999px";
+      document.body.appendChild(tempTextArea);
+      tempTextArea.select();
+      
+      try {
+        document.execCommand('copy');
+        showToast(successMessage);
+      } catch (err) {
+        console.error('Copy failed', err);
+        showToast("Échec de la copie.");
+      } finally {
+        document.body.removeChild(tempTextArea);
+      }
+    }
+
+    function toggleExportMenu() {
+      const menu = document.getElementById('exportDropdown');
+      menu.classList.toggle('hidden');
+    }
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      const dropdown = document.getElementById('exportDropdown');
+      const exportBtn = e.target.closest('button[onclick="toggleExportMenu()"]');
+      if (!exportBtn && dropdown && !dropdown.contains(e.target)) {
+        dropdown.classList.add('hidden');
+      }
+    });
+
+    function exportPrompt(type) {
+      const promptData = generateFinalPromptTexts();
+      const timestamp = new Date().toISOString().slice(0, 10);
+      let filename = `prompt_${appState.targetModel}_${timestamp}.${type}`;
+      let content = "";
+      let mime = "text/plain";
+
+      if (type === 'json') {
+        content = JSON.stringify({
+          model_target: appState.targetModel,
+          api_mode: appState.apiMode,
+          created_at: new Date().toISOString(),
+          messages: promptData.jsonArray,
+          raw_fields: getFormData()
+        }, null, 2);
+        mime = "application/json";
+      } else {
+        content = promptData.monolithicText;
+      }
+
+      const blob = new Blob([content], { type: `${mime};charset=utf-8` });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      document.getElementById('exportDropdown').classList.add('hidden');
+      showToast(`Fichier ${filename} téléchargé !`);
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toastMsg').innerText = msg;
+      
+      toast.classList.remove('translate-y-20', 'opacity-0', 'pointer-events-none');
+      
+      setTimeout(() => {
+        toast.classList.add('translate-y-20', 'opacity-0', 'pointer-events-none');
+      }, 3000);
+    }
+  </script>
+</body>
+</html>
