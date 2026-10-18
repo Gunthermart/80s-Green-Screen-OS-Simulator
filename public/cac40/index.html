@@ -1563,11 +1563,26 @@
                         </div>
                         <div>
                             <h2 class="text-xl font-bold text-white">Sélection de Convictions Actions Cibles</h2>
-                            <p class="text-xs text-slate-400">Gérez vos valeurs cibles : ajoutez, modifiez ou supprimez des actions à croiser dans la matrice des fonds.</p>
+                            <p class="text-xs text-slate-400">Gérez vos valeurs cibles : ajoutez, modifiez, exportez ou importez des actions (format Google Sheets / CSV ou JSON).</p>
                         </div>
                     </div>
-                    <div class="flex items-center space-x-3 shrink-0">
+                    <div class="flex flex-wrap items-center gap-2 shrink-0">
                         <span id="stock-count-badge" class="px-3 py-1.5 rounded-xl text-xs font-mono font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30">0 Titres</span>
+                        
+                        <!-- Import / Export Google Sheets & JSON for Convictions -->
+                        <button onclick="exportStocksCSV()" title="Exporter en CSV (compatible Google Sheets & Excel)" class="px-3 py-2 rounded-xl text-xs font-bold bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 transition flex items-center space-x-1.5 cursor-pointer">
+                            <i class="fa-solid fa-file-excel text-xs"></i>
+                            <span class="hidden md:inline">Google Sheets</span>
+                        </button>
+                        <button onclick="exportStocksJSON()" title="Exporter la sauvegarde JSON des convictions" class="p-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition cursor-pointer">
+                            <i class="fa-solid fa-download"></i>
+                        </button>
+                        <label title="Importer un fichier Google Sheets CSV ou JSON" class="px-3 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition cursor-pointer inline-flex items-center space-x-1.5">
+                            <i class="fa-solid fa-upload text-sky-400"></i>
+                            <span>Importer</span>
+                            <input type="file" id="importStocksFileInput" accept=".csv,.json,.txt" onchange="importStocksFile(event)" class="hidden">
+                        </label>
+
                         <button onclick="openStockModal()" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg flex items-center space-x-1.5 transition cursor-pointer">
                             <i class="fa-solid fa-plus-circle text-xs"></i>
                             <span>Ajouter une Action</span>
@@ -5501,6 +5516,124 @@ Date: ${new Date().toLocaleDateString('fr-FR')}
             reader.readAsText(file);
         }
         window.importJournalJSON = importJournalJSON;
+
+        // ================= CONVICTIONS IMPORT / EXPORT GOOGLE SHEETS & JSON =================
+        function exportStocksCSV() {
+            if (!db || !db.stocks) return;
+            db.stocks.toArray().then(stocks => {
+                let csv = "\uFEFFTicker;Nom;Catégorie;Thématique;Market Cap\n";
+                stocks.forEach(s => {
+                    const cleanName = (s.name || '').replace(/"/g, '""');
+                    const cleanCat = (s.category || '').replace(/"/g, '""');
+                    const cleanTheme = (s.theme || '').replace(/"/g, '""');
+                    const cleanCap = (s.marketCap || '').replace(/"/g, '""');
+                    csv += `"${s.id}";"${cleanName}";"${cleanCat}";"${cleanTheme}";"${cleanCap}"\n`;
+                });
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `euronext-convictions-sheets-${new Date().toISOString().slice(0,10)}.csv`;
+                a.click();
+                showToast("Fichier Convictions Google Sheets / CSV téléchargé !", "success");
+            });
+        }
+        window.exportStocksCSV = exportStocksCSV;
+
+        function exportStocksJSON() {
+            if (!db || !db.stocks) return;
+            db.stocks.toArray().then(stocks => {
+                const blob = new Blob([JSON.stringify(stocks, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `euronext-convictions-backup-${new Date().toISOString().slice(0,10)}.json`;
+                a.click();
+                showToast("Sauvegarde JSON des convictions exportée !", "success");
+            });
+        }
+        window.exportStocksJSON = exportStocksJSON;
+
+        function importStocksFile(event) {
+            const file = event.target.files[0];
+            if (!file || !db) return;
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                const content = e.target.result;
+                let addedCount = 0;
+                let updatedCount = 0;
+
+                try {
+                    if (file.name.endsWith('.json')) {
+                        const items = JSON.parse(content);
+                        if (Array.isArray(items)) {
+                            for (const item of items) {
+                                const id = (item.id || item.ticker || '').toString().trim().toUpperCase();
+                                if (!id) continue;
+                                const existing = await db.stocks.get(id);
+                                const record = {
+                                    id: id,
+                                    name: item.name || id,
+                                    category: item.category || 'Small Cap',
+                                    theme: item.theme || 'Secteur Général',
+                                    marketCap: item.marketCap || 'Mid'
+                                };
+                                if (existing) {
+                                    await db.stocks.update(id, record);
+                                    updatedCount++;
+                                } else {
+                                    await db.stocks.add(record);
+                                    addedCount++;
+                                }
+                            }
+                        }
+                    } else {
+                        // CSV / Text parsing (handles both ';' and ',' separators)
+                        const lines = content.split(/\r?\n/);
+                        if (lines.length > 0) {
+                            for (let i = 0; i < lines.length; i++) {
+                                const line = lines[i].trim();
+                                if (!line) continue;
+                                // Ignore header
+                                if (i === 0 && (line.toLowerCase().includes('ticker') || line.toLowerCase().includes('nom'))) continue;
+
+                                const delim = line.includes(';') ? ';' : ',';
+                                const parts = line.split(delim).map(p => p.replace(/^"|"$/g, '').trim());
+                                const id = (parts[0] || '').toUpperCase();
+                                if (!id || id.length > 10) continue;
+
+                                const record = {
+                                    id: id,
+                                    name: parts[1] || id,
+                                    category: parts[2] || 'Imported Cap',
+                                    theme: parts[3] || 'Secteur Général',
+                                    marketCap: parts[4] || 'Mid'
+                                };
+
+                                const existing = await db.stocks.get(id);
+                                if (existing) {
+                                    await db.stocks.update(id, record);
+                                    updatedCount++;
+                                } else {
+                                    await db.stocks.add(record);
+                                    addedCount++;
+                                }
+                            }
+                        }
+                    }
+
+                    await refreshFundsAndStocksFromDexie();
+                    showToast(`Import terminé : ${addedCount} ajout(s), ${updatedCount} mise(s) à jour dans Dexie !`, "success");
+                } catch (err) {
+                    console.error("Erreur import convictions:", err);
+                    showToast("Fichier d'importation invalide ou corrompu.", "amber");
+                }
+                event.target.value = '';
+            };
+            reader.readAsText(file);
+        }
+        window.importStocksFile = importStocksFile;
 
         function scrollQuickNavRail(offset) {
             const rail = document.getElementById('quickNavScrollRail');
