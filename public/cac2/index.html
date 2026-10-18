@@ -2808,11 +2808,24 @@
             container.innerHTML = fundsToRender.map(f => {
                 const matchedStockBadges = (f.matchedStocks || []).map(stockId => {
                     const st = loadedStocks.find(s => s.id === stockId);
-                    return `<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-sky-500/20 border border-sky-500/30 text-sky-300 font-bold">${st ? st.name : stockId}</span>`;
+                    const stockLabel = st ? st.name : stockId;
+                    return `
+                    <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono bg-sky-500/20 border border-sky-500/30 text-sky-300 font-bold">
+                        <span>${stockLabel}</span>
+                        <button type="button" onclick="event.stopPropagation(); analyzeDirectTicker('${stockId}')" class="hover:text-emerald-300 transition text-[9px] underline cursor-pointer" title="Lancer l'Analyse Netlify Directe">
+                            🎯 Analyser
+                        </button>
+                    </span>`;
                 }).join(' ');
 
                 const allHoldingsBadges = (f.topHoldings || []).map(holding => {
-                    return `<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 border border-slate-700 text-slate-300 font-medium">${holding}</span>`;
+                    return `
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 border border-slate-700 text-slate-300 font-medium">
+                        <span>${holding}</span>
+                        <button type="button" onclick="event.stopPropagation(); analyzeDirectTicker('${holding}')" class="text-sky-400 hover:text-sky-300 transition text-[9px] cursor-pointer" title="Lancer l'Analyse Netlify">
+                            <i class="fa-solid fa-magnifying-glass text-[8px]"></i>
+                        </button>
+                    </span>`;
                 }).join(' ');
 
                 return `
@@ -2883,6 +2896,10 @@
                                 <h3 class="text-xs sm:text-sm font-bold text-white mt-1 group-hover:text-sky-300 transition-colors">${stock.name}</h3>
                             </div>
                             <div class="flex items-center space-x-1">
+                                <button onclick="analyzeDirectTicker('${stock.id}')" class="px-2 py-1 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 text-[10px] font-bold border border-sky-500/30 transition cursor-pointer flex items-center space-x-1" title="Lancer l'analyse du titre">
+                                    <i class="fa-solid fa-bolt text-[9px]"></i>
+                                    <span>Analyser</span>
+                                </button>
                                 <button onclick="openStockModal('${stock.id}')" class="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition cursor-pointer" title="Modifier">
                                     <i class="fa-solid fa-pen text-xs"></i>
                                 </button>
@@ -2917,9 +2934,14 @@
             if (!headersEl || !bodyEl) return;
 
             headersEl.innerHTML = loadedStocks.map(stock => `
-                <th class="p-3 font-semibold text-center text-slate-300 border-r border-slate-800/60 min-w-[100px]">
-                    <div class="font-bold text-sky-400">${stock.id}</div>
-                    <div class="text-[10px] text-slate-400 font-normal truncate max-w-[90px]" title="${stock.name}">${stock.name}</div>
+                <th class="p-3 font-semibold text-center text-slate-300 border-r border-slate-800/60 min-w-[110px]">
+                    <div class="font-bold text-sky-400 flex items-center justify-center gap-1">
+                        <span>${stock.id}</span>
+                        <button type="button" onclick="analyzeDirectTicker('${stock.id}')" class="p-1 rounded text-slate-400 hover:text-emerald-400 transition cursor-pointer" title="Lancer l'analyse du titre">
+                            <i class="fa-solid fa-paper-plane text-[9px]"></i>
+                        </button>
+                    </div>
+                    <div class="text-[10px] text-slate-400 font-normal truncate max-w-[95px]" title="${stock.name}">${stock.name}</div>
                 </th>
             `).join('');
 
@@ -2929,14 +2951,15 @@
                     return `
                     <td class="p-3 text-center border-r border-slate-800/40 relative group">
                         ${isHeld ? `
-                            <div class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-bold text-xs cursor-pointer shadow-sm">
+                            <div onclick="analyzeDirectTicker('${stock.id}')" class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/40 border border-emerald-500/40 font-bold text-xs cursor-pointer shadow-sm transition" title="Cliquer pour analyser ${stock.name}">
                                 ✓
                             </div>
-                            <div class="hidden group-hover:block absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2.5 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl text-left z-30 pointer-events-none font-sans">
+                            <div class="hidden group-hover:block absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2.5 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl text-left z-30 font-sans">
                                 <div class="text-[11px] font-bold font-mono text-sky-400">${stock.name} (${stock.id})</div>
                                 <div class="text-[10px] text-slate-300 mt-0.5">${stock.category || ''} • ${stock.theme || ''}</div>
-                                <div class="text-[10px] text-emerald-400 font-medium mt-1 pt-1 border-t border-slate-800">
-                                    Détenu par ${fund.company}
+                                <div class="text-[10px] text-emerald-400 font-medium mt-1 pt-1 border-t border-slate-800 flex items-center justify-between">
+                                    <span>Détenu par ${fund.company}</span>
+                                    <span class="font-bold underline text-sky-300">Analyser 🎯</span>
                                 </div>
                             </div>
                         ` : `
@@ -2958,13 +2981,27 @@
             }).join('');
         }
 
+        function analyzeDirectTicker(tickerQuery) {
+            if (!tickerQuery) return;
+            closeFundDetailModal();
+            selectPreset(tickerQuery);
+        }
+        window.analyzeDirectTicker = analyzeDirectTicker;
+
         function openFundDetailModal(fundId) {
             const fund = loadedFunds.find(f => f.id === fundId);
             if (!fund) return;
 
-            const matchedNames = (fund.matchedStocks || []).map(stockId => {
+            const matchedBadges = (fund.matchedStocks || []).map(stockId => {
                 const st = loadedStocks.find(s => s.id === stockId);
-                return st ? `${st.name} (${st.id})` : stockId;
+                const name = st ? `${st.name} (${st.id})` : stockId;
+                return `
+                <span class="inline-flex items-center gap-2 px-2.5 py-1 rounded bg-sky-500/20 text-sky-300 text-xs font-bold border border-sky-500/30">
+                    <span>${name}</span>
+                    <button type="button" onclick="analyzeDirectTicker('${stockId}')" class="px-1.5 py-0.5 rounded bg-sky-500 hover:bg-sky-400 text-slate-950 font-black text-[10px] transition cursor-pointer">
+                        Analyser 🎯
+                    </button>
+                </span>`;
             });
 
             const content = document.getElementById('fundDetailModalContent');
@@ -3004,19 +3041,26 @@
 
                         <div class="space-y-2 bg-slate-950 p-3.5 rounded-xl border border-slate-800 font-mono">
                             <h4 class="text-xs font-bold text-sky-400 uppercase tracking-wider flex items-center justify-between">
-                                <span>Positions majeures du portefeuille</span>
-                                <span class="text-[10px] text-slate-400 font-normal">Top lignes déclarées</span>
+                                <span>Principales positions du portefeuille</span>
+                                <span class="text-[10px] text-slate-400 font-normal">Cliquer pour analyser</span>
                             </h4>
                             <div class="flex flex-wrap gap-1.5 pt-1">
-                                ${(fund.topHoldings || []).map(h => `<span class="px-2.5 py-1 rounded bg-slate-900 text-slate-200 text-xs font-medium border border-slate-800">${h}</span>`).join('')}
+                                ${(fund.topHoldings || []).map(h => `
+                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-900 text-slate-200 text-xs font-medium border border-slate-800">
+                                        <span>${h}</span>
+                                        <button type="button" onclick="analyzeDirectTicker('${h}')" class="text-sky-400 hover:text-sky-300 font-bold text-[10px] transition cursor-pointer">
+                                            🎯
+                                        </button>
+                                    </span>
+                                `).join('')}
                             </div>
                         </div>
 
                         <div class="space-y-2 font-mono">
                             <h4 class="text-xs font-bold text-slate-300 uppercase tracking-wider">Détention dans votre grille de convictions</h4>
                             <div class="flex flex-wrap gap-1.5">
-                                ${matchedNames.length > 0 
-                                    ? matchedNames.map(name => `<span class="px-2.5 py-1 rounded bg-sky-500/20 text-sky-300 text-xs font-bold border border-sky-500/30">${name}</span>`).join('')
+                                ${matchedBadges.length > 0 
+                                    ? matchedBadges.join('')
                                     : `<span class="text-xs text-slate-500 italic font-sans">Aucun titre de votre grille de convictions n'est actuellement répertorié pour ce fonds.</span>`}
                             </div>
                         </div>
