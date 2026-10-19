@@ -1363,18 +1363,13 @@
                             </div>
 
                             <div class="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-0.5">
-                                <div class="text-[10px] text-slate-400">Gain Net TP1 (+15%)</div>
-                                <div id="mmEuroGain" class="text-base font-extrabold text-emerald-400">--</div>
-                            </div>
-
-                            <div class="p-3 rounded-lg bg-slate-900 border border-slate-800 col-span-2 sm:col-span-1 space-y-0.5">
-                                <div class="text-[10px] text-slate-400">Gain Net TP2 Target</div>
-                                <div id="mmEuroGainTP2" class="text-base font-extrabold text-teal-300">--</div>
-                            </div>
+                            <div class="text-[10px] text-slate-400">Gain Net TP2 Target</div>
+                            <div id="mmEuroGainTP2" class="text-base font-extrabold text-teal-300">--</div>
                         </div>
                     </div>
+                </div>
 
-                    <!-- Exemples de Trades & Setups Communautaires Identifiés -->
+                <!-- Exemples de Trades & Setups Communautaires Identifiés -->
                     <div id="tradeExamplesContainer" class="p-5 rounded-xl bg-slate-950/90 border border-emerald-500/30 space-y-4">
                         <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
                             <div class="text-xs font-mono font-bold text-emerald-400 uppercase flex items-center space-x-2">
@@ -3019,15 +3014,19 @@
                 return `
                 <div class="bg-slate-900/90 border border-slate-800 hover:border-slate-700 rounded-2xl p-4 flex flex-col justify-between transition-all duration-200 shadow-md relative group font-mono">
                     <div class="space-y-2">
-                        <div class="flex items-start justify-between">
+                        <div class="flex items-start justify-between gap-1">
                             <div>
                                 <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30">${stock.id}</span>
                                 <h3 class="text-xs sm:text-sm font-bold text-white mt-1 group-hover:text-sky-300 transition-colors">${stock.name}</h3>
                             </div>
-                            <div class="flex items-center space-x-1">
+                            <div class="flex items-center space-x-1 shrink-0">
                                 <button onclick="analyzeDirectTicker('${stock.id}')" class="px-2 py-1 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 text-[10px] font-bold border border-sky-500/30 transition cursor-pointer flex items-center space-x-1" title="Lancer l'analyse du titre">
                                     <i class="fa-solid fa-bolt text-[9px]"></i>
                                     <span>Analyser</span>
+                                </button>
+                                <button onclick="analyzeStockSentiment('${stock.id}', '${stock.name.replace(/'/g, "\\'")}')" class="px-2 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 hover:text-amber-200 text-[10px] font-bold border border-amber-500/30 transition cursor-pointer flex items-center space-x-1" title="Analyser le sentiment du marché (Bull / Bear) en direct">
+                                    <i class="fa-solid fa-gauge-high text-[9px]"></i>
+                                    <span>Bull/Bear 🐂</span>
                                 </button>
                                 <button onclick="openStockModal('${stock.id}')" class="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition cursor-pointer" title="Modifier">
                                     <i class="fa-solid fa-pen text-xs"></i>
@@ -3056,6 +3055,67 @@
                 `;
             }).join('');
         }
+
+        async function analyzeStockSentiment(ticker, name) {
+            openDeepDiveModal();
+            const output = document.getElementById('deepDiveOutput');
+            const compEl = document.getElementById('deepDiveModalCompanyName');
+            if (compEl) compEl.innerText = `${name} (${ticker})`;
+
+            if (output) {
+                output.innerHTML = `
+                    <div class="p-6 text-center space-y-3 font-mono">
+                        <div class="w-8 h-8 rounded-full border-2 border-slate-700 border-t-amber-400 animate-spin mx-auto"></div>
+                        <div class="text-xs text-amber-300">Analyse en direct du Sentiment Bull / Bear pour ${name} ($${ticker})...</div>
+                        <div class="text-[11px] text-slate-400 font-sans">Scan FinTwit (X), Boursorama, actualités de presse et flux de marché Netlify...</div>
+                    </div>
+                `;
+            }
+
+            try {
+                const sysPrompt = `Tu es un scanner de sentiment boursier en temps réel pour le marché Euronext. 
+Pour l'action "${name}" (Ticker: ${ticker}), analyse le sentiment du marché Bull / Bear en direct sur Boursorama, FinTwit (X), et la presse financière.
+
+Formate ta réponse en HTML stylisé prêt à insérer, contenant :
+1. Une grande jauge/badge d'orientation globale : "🟢 FORTEMENT BULLISH", "🟢 LEGEREMENT BULLISH", "🟡 NEUTRE / HESITANT", "🔴 LEGEREMENT BEARISH" ou "🔴 FORTEMENT BEARISH".
+2. Un score de sentiment sur 100 (ex: 78/100 Bullish) avec barre de progression.
+3. Répartition Bull vs Bear (% Bull / % Bear).
+4. Principaux arguments et catalyseurs Haussiers (Bullish).
+5. Principaux risques et arguments Baissiers (Bearish).
+6. Consensus du chatter social / rumeurs du jour.`;
+
+                const userPrompt = `Analyse en direct du sentiment Bullish vs Bearish pour l'action ${name} (${ticker}).`;
+                const res = await callStocksAnalyserAPI(sysPrompt, userPrompt);
+                
+                let resText = typeof res === 'string' ? res : JSON.stringify(res, null, 2);
+
+                if (output) {
+                    output.innerHTML = `
+                        <div class="p-5 rounded-xl bg-slate-950 border border-amber-500/30 text-xs text-slate-200 leading-relaxed space-y-4 font-sans">
+                            <div class="flex items-center justify-between border-b border-slate-800 pb-3 font-mono">
+                                <div class="flex items-center space-x-2">
+                                    <i class="fa-solid fa-gauge-high text-amber-400 text-base"></i>
+                                    <span class="font-bold text-amber-300 uppercase text-xs">Diagnostic Live Sentiment Bull / Bear</span>
+                                </div>
+                                <span class="px-2.5 py-0.5 rounded bg-sky-500/10 text-sky-300 border border-sky-500/20 font-bold">${ticker}</span>
+                            </div>
+                            <div class="whitespace-pre-line text-slate-300">${resText}</div>
+                            <div class="pt-3 border-t border-slate-800 flex justify-end">
+                                <button onclick="selectPreset('${ticker}')" class="px-4 py-2 rounded-xl bg-gradient-to-r from-sky-500 via-teal-500 to-emerald-500 hover:from-sky-400 hover:to-emerald-400 text-white font-bold text-xs font-mono transition flex items-center space-x-2 cursor-pointer shadow-lg">
+                                    <span>Lancer l'Analyse Boursière Complète (14 Sections)</span>
+                                    <i class="fa-solid fa-paper-plane text-[10px]"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }
+            } catch (e) {
+                if (output) {
+                    output.innerHTML = `<div class="p-4 rounded-xl bg-rose-950/80 border border-rose-500/40 text-xs text-rose-300">Erreur lors du scan de sentiment Bull/Bear : ${e.message}</div>`;
+                }
+            }
+        }
+        window.analyzeStockSentiment = analyzeStockSentiment;
 
         function renderMatrixGrid() {
             const headersEl = document.getElementById('matrix-headers');
