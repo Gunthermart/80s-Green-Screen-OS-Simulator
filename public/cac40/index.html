@@ -4902,14 +4902,41 @@ Calcule et retourne UNIFIQUEMENT UN JSON STRICT sous la forme :
             const oat10y = parseFloat(data?.bceRates?.oat10y) || 4.95;
             const oatBundSpread = parseFloat(data?.bceRates?.oatBundSpread) || 152;
 
-            // Rating calculations
-            let vixScore = vixVal < 18 ? 85 : vixVal < 22 ? 65 : vixVal < 28 ? 40 : 15;
-            let creditScore = itraxx < 300 ? 80 : itraxx < 380 ? 55 : 25;
-            let cesiScore = cesiEur > 10 ? 80 : cesiEur > -10 ? 50 : 20;
-            let oatBundScore = oatBundSpread < 60 ? 85 : oatBundSpread < 80 ? 60 : oatBundSpread < 100 ? 35 : 15;
+            // Rating calculations per individual indicator
+            let cnnScore = Math.min(100, Math.max(0, cnnVal));
+            let vixScore = vixVal < 15 ? 90 : vixVal < 18 ? 75 : vixVal < 22 ? 55 : vixVal < 28 ? 30 : 10;
+            let creditScore = itraxx < 250 ? 90 : itraxx < 300 ? 75 : itraxx < 380 ? 45 : 15;
+            let cesiScore = cesiEur > 20 ? 85 : cesiEur > 0 ? 65 : cesiEur > -20 ? 40 : 15;
 
-            // Composite score incorporating Sovereign Risk (OAT/Bund Spread)
-            const compositeScore = Math.round((cnnVal * 0.25) + (vixScore * 0.25) + (creditScore * 0.15) + (cesiScore * 0.15) + (oatBundScore * 0.20));
+            // Strict Taux & Obligataire scoring
+            const fedHike = data?.cmeFedWatch?.probabilities?.hike25Pct || 0;
+            const expectedBps = data?.cmeFedWatch?.expectedBps || '';
+            const isHawkish = fedHike > 50 || expectedBps.includes('+') || (data?.bceRates?.bias && data?.bceRates?.bias.includes('Resserrement'));
+            
+            let ratesScore = isHawkish ? 25 : 70;
+            if (oat10y > 4.5) ratesScore -= 10;
+
+            let oatBundScore = oatBundSpread < 50 ? 90 : oatBundSpread < 80 ? 70 : oatBundSpread < 120 ? 35 : oatBundSpread < 150 ? 20 : 5;
+
+            // 1. PONDÉRATION RESTRUCTUREE :
+            // Taux (25%) + Spread Souverain (25%) + VIX (20%) + iTraxx (15%) + CESI (10%) + CNN (5%)
+            let weightedBaseScore = (ratesScore * 0.25) + 
+                                    (oatBundScore * 0.25) + 
+                                    (vixScore * 0.20) + 
+                                    (creditScore * 0.15) + 
+                                    (cesiScore * 0.10) + 
+                                    (cnnScore * 0.05);
+
+            // 2. MALUS DYNAMIQUE ASYMÉTRIQUE POUR RISQUE SYSTÉMIQUE :
+            // Si le spread OAT/Bund dépasse 120bps ou que les taux obligataires dépassent un niveau critique,
+            // la valorisation boursière subit une compression de multiples incontournable (WACC élevé).
+            let systemicPenalty = 0;
+            if (oatBundSpread >= 150) systemicPenalty += 18;
+            else if (oatBundSpread >= 100) systemicPenalty += 10;
+
+            if (isHawkish && oat10y >= 4.5) systemicPenalty += 7;
+
+            const compositeScore = Math.max(5, Math.min(100, Math.round(weightedBaseScore - systemicPenalty)));
 
             const banner = document.getElementById('marketMasterClimateBanner');
             const badge = document.getElementById('marketMasterStatusBadge');
@@ -4922,30 +4949,32 @@ Calcule et retourne UNIFIQUEMENT UN JSON STRICT sous la forme :
 
             if (document.getElementById('snapCnnVal')) document.getElementById('snapCnnVal').innerText = cnnVal > 60 ? `Cupidité (${cnnVal}) 🟢` : cnnVal < 40 ? `Peur (${cnnVal}) 🔴` : `Neutre (${cnnVal}) 🟡`;
             if (document.getElementById('snapVixVal')) document.getElementById('snapVixVal').innerText = vixVal < 18 ? `Serein (${vixVal}) 🟢` : vixVal < 23 ? `Sous tension (${vixVal}) 🟡` : `Alerte (${vixVal}) 🔴`;
+            if (document.getElementById('snapRatesVal')) document.getElementById('snapRatesVal').innerText = isHawkish ? `Hawkish (Alerte WACC) 🔴` : `Neutre / Dovish 🟢`;
             if (document.getElementById('snapOatBundVal')) document.getElementById('snapOatBundVal').innerText = `${oat10y.toFixed(2)}% (${oatBundSpread}bps) 🔴`;
             if (document.getElementById('snapItraxxVal')) document.getElementById('snapItraxxVal').innerText = itraxx < 300 ? `Solide (${itraxx}bps) 🟢` : `Stress (${itraxx}bps) 🔴`;
             if (document.getElementById('snapCesiVal')) document.getElementById('snapCesiVal').innerText = cesiEur > 0 ? `Batte Est. (+${cesiEur}) 🟢` : `Déceptions (${cesiEur}) 🔴`;
 
-            if (compositeScore >= 62) {
+            // Dynamic Equity Allocation Guidelines adapting to systemic risk constraints
+            if (compositeScore >= 65 && oatBundSpread < 100) {
                 if (badge) {
                     badge.innerText = "🟢 MARCHÉ ACTION FAVORABLE (RISK-ON)";
                     badge.className = "px-3 py-1 rounded-full text-xs font-black font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/40";
                 }
-                if (desc) desc.innerText = `Climat d'investissement sous contrôle malgré la tension sur l'OAT 10 ans (${oat10y.toFixed(2)}%) et le spread OAT/Bund (${oatBundSpread} bps). Allocation actions suggérée : 65% à 80%.`;
+                if (desc) desc.innerText = `Environnement macroéconomique sain. Risques obligataires faibles. Allocation actions recommandée : 70% à 80%.`;
                 if (banner) banner.className = "glass-panel rounded-2xl p-5 border-2 border-emerald-500/40 space-y-4 relative overflow-hidden bg-gradient-to-r from-slate-900/90 via-emerald-950/30 to-slate-900/90 shadow-2xl";
-            } else if (compositeScore >= 45) {
+            } else if (compositeScore >= 45 || (oatBundSpread >= 100 && oatBundSpread < 160)) {
                 if (badge) {
-                    badge.innerText = "🟡 PRUDENCE TACTIQUE (NEUTRE / DISPERSÉ)";
+                    badge.innerText = "🟡 VIGILANCE TACTIQUE (PRUDENCE ET HEDGING)";
                     badge.className = "px-3 py-1 rounded-full text-xs font-black font-mono bg-amber-500/20 text-amber-300 border border-amber-500/40";
                 }
-                if (desc) desc.innerText = `Prudence recommandée : Taux OAT 10 ans à ${oat10y.toFixed(2)}% et écartement du spread Bund à ${oatBundSpread} bps (source TradingEconomics). Sélectivité stricte sur la solvabilité des bilans.`;
+                if (desc) desc.innerText = `Régime de marché sous tension obligataire (OAT 10Y à ${oat10y.toFixed(2)}%, Spread OAT/Bund à ${oatBundSpread} bps). Tassement du WACC et pression sur les multiples. Allocation actions recommandée : 40% à 50% max (avec biais Value / FCF Yield).`;
                 if (banner) banner.className = "glass-panel rounded-2xl p-5 border-2 border-amber-500/40 space-y-4 relative overflow-hidden bg-gradient-to-r from-slate-900/90 via-amber-950/30 to-slate-900/90 shadow-2xl";
             } else {
                 if (badge) {
-                    badge.innerText = "🔴 MARCHÉ ACTION DÉFAVORABLE (RISK-OFF)";
+                    badge.innerText = "🔴 MARCHÉ ACTION DÉFAVORABLE (PRUDENCE / RISK-OFF)";
                     badge.className = "px-3 py-1 rounded-full text-xs font-black font-mono bg-rose-500/20 text-rose-300 border border-rose-500/40";
                 }
-                if (desc) desc.innerText = `Conditions défavorables : Tension majeure sur l'OAT 10 ans (${oat10y.toFixed(2)}%) et spread OAT/Bund à ${oatBundSpread} bps. Privilégier la trésorerie et la qualité bilancielle.`;
+                if (desc) desc.innerText = `Alerte de risque systémique : Cumul de taux élevés (${oat10y.toFixed(2)}%) et spread souverain élevé (${oatBundSpread} bps). Allocation actions fortement sous-pondérée (20-35% max) et préférence marquée pour le cash.`;
                 if (banner) banner.className = "glass-panel rounded-2xl p-5 border-2 border-rose-500/40 space-y-4 relative overflow-hidden bg-gradient-to-r from-slate-900/90 via-rose-950/30 to-slate-900/90 shadow-2xl";
             }
         }
