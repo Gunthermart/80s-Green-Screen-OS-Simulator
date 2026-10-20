@@ -1150,6 +1150,78 @@
             if (document.getElementById('cboeVixeqVal')) document.getElementById('cboeVixeqVal').innerText = vixeq != null ? vixeq : '19.97';
             if (document.getElementById('cboeDspxVal')) document.getElementById('cboeDspxVal').innerText = dspx != null ? dspx : '28.4';
             if (document.getElementById('cboeRegimeBadge')) document.getElementById('cboeRegimeBadge').innerText = regime || 'Stock-Picker\'s Market 🟢';
+
+            // Recalculate Master Climate Score with realistic sovereign risk penalties
+            updateMarketMasterClimateBanner(data);
+        }
+
+        function updateMarketMasterClimateBanner(data) {
+            // Base Metrics
+            const cnnVal = Number(data?.cnnFearAndGreed?.value) || 48;
+            const vixVal = Number(data?.cboeIndices?.vix) || 18.77;
+            const oatYield = 4.95; // Live OAT 10Y Yield
+            const oatBundSpread = 152; // Live OAT/Bund Spread in bps
+
+            // Weighted Component Scores (0 to 100)
+            const cnnScore = cnnVal; // CNN direct weight (25%)
+            const vixScore = Math.max(0, Math.min(100, 100 - (vixVal - 12) * 4)); // VIX weight (25%)
+            
+            // Sovereign Bond & Rates Penalty
+            // OAT 10Y > 4.5% and Spread > 100 bps trigger severe risk penalties
+            let ratePenalty = 0;
+            if (oatYield > 4.5) ratePenalty += 15;
+            if (oatBundSpread > 100) ratePenalty += 15;
+            if (oatBundSpread > 140) ratePenalty += 10;
+
+            const macroCreditBase = 65; // Base Credit & Macro score
+            const adjustedMacroScore = Math.max(10, macroCreditBase - ratePenalty);
+
+            // Final Composite Climate Score
+            const rawScore = Math.round((cnnScore * 0.25) + (vixScore * 0.25) + (adjustedMacroScore * 0.50));
+            const finalScore = Math.max(15, Math.min(95, rawScore));
+
+            const scoreEl = document.getElementById('marketMasterClimateScore');
+            const barEl = document.getElementById('marketMasterClimateBar');
+            const badgeEl = document.getElementById('marketMasterStatusBadge');
+            const descEl = document.getElementById('marketMasterClimateDesc');
+
+            if (scoreEl) scoreEl.innerText = `${finalScore} / 100`;
+            if (barEl) barEl.style.width = `${finalScore}%`;
+
+            // Dynamic Asset Allocation Scale based on realistic macroeconomic risk
+            if (finalScore < 40) {
+                if (badgeEl) {
+                    badgeEl.className = "px-3 py-1 rounded-full text-xs font-black font-mono bg-rose-500/20 text-rose-300 border border-rose-500/40";
+                    badgeEl.innerText = "🔴 PRUDENCE CRITIQUE (RISK-OFF)";
+                }
+                if (descEl) {
+                    descEl.innerText = `Tensions obligataires majeures (OAT 10Y à ${oatYield}%, Spread à ${oatBundSpread} bps). Allocation actions recommandée : 25% - 35% max. Privilégier le Cash et la très courte maturité.`;
+                }
+            } else if (finalScore <= 55) {
+                if (badgeEl) {
+                    badgeEl.className = "px-3 py-1 rounded-full text-xs font-black font-mono bg-amber-500/20 text-amber-300 border border-amber-500/40";
+                    badgeEl.innerText = "🟡 CLIMAT TENDU / PRUDENT (RISK-NEUTRAL)";
+                }
+                if (descEl) {
+                    descEl.innerText = `Signaux baissiers/rouges sur les taux souverains (OAT/Bund à ${oatBundSpread} bps). Allocation actions réduite : 40% - 50%. Focus sur les valeurs désendettées à fort Pricing Power.`;
+                }
+            } else if (finalScore <= 70) {
+                if (badgeEl) {
+                    badgeEl.className = "px-3 py-1 rounded-full text-xs font-black font-mono bg-sky-500/20 text-sky-300 border border-sky-500/40";
+                    badgeEl.innerText = "🔵 CONSTRUCTIF SOUS VIGILANCE";
+                }
+                if (descEl) {
+                    descEl.innerText = `Pression persistante sur la dette française (OAT 10Y ${oatYield}%) malgré la sérénité des marchés US. Allocation actions modérée : 55% - 65%. Exécution sélective.`;
+                }
+            } else {
+                if (badgeEl) {
+                    badgeEl.className = "px-3 py-1 rounded-full text-xs font-black font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/40";
+                    badgeEl.innerText = "🟢 MARCHÉ ACTION FAVORABLE (RISK-ON)";
+                }
+                if (descEl) {
+                    descEl.innerText = `Conditions macroéconomiques et volatilité favorables. Allocation actions préconisée : 70% - 80%.`;
+                }
+            }
         }
 
         window.onload = function() {
