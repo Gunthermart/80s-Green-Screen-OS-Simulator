@@ -3965,6 +3965,7 @@ Retourne UNIQUEMENT UN JSON STRICT valide au format :
   "cfaPersona": { "roe": "22.5%", "debtEbitda": "0.85x", "fcfQuality": "Excellente conversion FCF/Net Income (>110%)", "moatRating": "Moat Fort (Effet de réseau & marque)", "factsVsForecasts": "Faits: CA 2024 confirmé. Consensus: Croissance CA de +8.5% en 2025." },
   "cmtPersona": { "rrRatio": "1 : 2.40", "invalidationCondition": "Clôture sous le support majeur de 610 €", "levelsText": "Support fort à 620 €, Résistance à 740 €. RSI à 56.5 (Zone saine).", "scenarioText": "Haussier: Rebond sur Kijun ciblant TP1 (782 €). Baissier: Enfoncement des 610 € annulant la tendance." },
   "mnaPersona": { "bearPrice": "580.00 €", "basePrice": "720.00 €", "bullPrice": "840.00 €", "waccFormula": "WACC = 8.5% | g = 2.0% | Marge EBIT Cible = 22.0%", "assumptionsText": "Modèle DCF M&A fondé sur la rentabilité historique des capitaux et la préservation du WACC." },
+  "bayesianPerspective": { "probBullish": "72.4%", "expectedRange": "640.00 € - 725.00 €", "peadVal": "+3.1%", "peadText": "Surprise positive récente alimentant le drift post-résultats.", "peadBar": "75%", "macroVal": "Résistant", "macroText": "Insensibilité relative au spread OAT/Bund et au coût du WACC.", "macroBar": "65%", "gammaVal": "1 : 2.4", "gammaText": "Asymétrie positive du ratio gain/risque autour des supports.", "gammaBar": "70%", "summary": "Perspectives T+1 très favorables fondées sur la régularité des FCF et la révision positive du consensus." },
   "financialKPIs": { "currency": "EUR", "period": "FY 2024 / 2025", "revenue": "", "ebitda": "", "netIncome": "", "fcf": "", "operatingMargin": "", "eps": "", "marketCap": "", "netDebt": "" },
   "healthScores": { "piotroskiScore": 8, "piotroskiAnalysis": "", "altmanZScore": "3.5", "altmanAnalysis": "", "pegRatio": "0.9", "pegBadge": "GARP Attractif 🟢", "pegAnalysis": "", "dividendYield": "", "dividendSafety": "Sécurisé 🟢", "dividendAnalysis": "", "interestCoverage": "12.0x", "debtEbitda": "0.8x", "currentRatio": "1.8x" },
   "valuationMultiples": { "peRatio": "", "evEbitda": "", "pFCF": "", "roicWacc": "+8.5%" },
@@ -4055,25 +4056,33 @@ Retourne UNIQUEMENT UN JSON STRICT valide au format :
                 }
             }
 
-            // Bayesian Sub-factors
+            // Dynamic calculation of Bayesian range & probability based on target stock entry & SL
             const entryValNum = parseFloat(String(trading.entryZone || '').replace(/[^0-9.]/g, '')) || 100;
-            const slValNum = parseFloat(String(trading.stopLoss || '').replace(/[^0-9.]/g, '')) || 90;
-            const tp1ValNum = parseFloat(String(trading.tp1 || '').replace(/[^0-9.]/g, '')) || 120;
+            const slValNum = parseFloat(String(trading.stopLoss || '').replace(/[^0-9.]/g, '')) || (entryValNum * 0.9);
+            const tp1ValNum = parseFloat(String(trading.tp1 || '').replace(/[^0-9.]/g, '')) || (entryValNum * 1.15);
 
-            if (document.getElementById('bayesianProbVal')) document.getElementById('bayesianProbVal').innerText = bayesian.probBullish || (isNegative ? '38.5%' : '74.2%');
-            if (document.getElementById('bayesianRangeVal')) document.getElementById('bayesianRangeVal').innerText = bayesian.expectedRange || `${slValNum.toFixed(2)} € - ${tp1ValNum.toFixed(2)} €`;
+            // Compute dynamic probability based on overall score if not provided
+            const dynamicProb = bayesian.probBullish || (diag.overallScore ? `${Math.min(92, Math.max(25, Math.round(diag.overallScore * 0.88)))}.%` : (isNegative ? '38.5%' : '72.4%'));
+            const dynamicRange = bayesian.expectedRange || `${slValNum.toFixed(2)} € - ${tp1ValNum.toFixed(2)} €`;
 
-            if (document.getElementById('peadDriftVal')) document.getElementById('peadDriftVal').innerText = bayesian.peadVal || (isNegative ? '-1.8%' : '+2.8%');
-            if (document.getElementById('peadDriftText')) document.getElementById('peadDriftText').innerText = bayesian.peadText || "Post-Earnings Announcement Drift mesuré d'après le momentum des révisions.";
-            if (document.getElementById('peadDriftBar')) document.getElementById('peadDriftBar').style.width = bayesian.peadBar || (isNegative ? '35%' : '78%');
+            if (document.getElementById('bayesianProbVal')) document.getElementById('bayesianProbVal').innerText = dynamicProb;
+            if (document.getElementById('bayesianRangeVal')) document.getElementById('bayesianRangeVal').innerText = dynamicRange;
 
-            if (document.getElementById('macroWaccSensVal')) document.getElementById('macroWaccSensVal').innerText = bayesian.macroVal || "Résistant";
+            // PEAD Drift, Macro & Gamma dynamic rendering
+            const scoreFactor = (diag.overallScore || 75) / 100;
+            const peadValCalculated = isNegative ? `-${(1.5 + (1 - scoreFactor) * 3).toFixed(1)}%` : `+${(1.2 + scoreFactor * 2.8).toFixed(1)}%`;
+
+            if (document.getElementById('peadDriftVal')) document.getElementById('peadDriftVal').innerText = bayesian.peadVal || peadValCalculated;
+            if (document.getElementById('peadDriftText')) document.getElementById('peadDriftText').innerText = bayesian.peadText || (isNegative ? "Post-Earnings Drift défavorable pesant sur les révisions." : "Post-Earnings Announcement Drift mesuré d'après le momentum des révisions.");
+            if (document.getElementById('peadDriftBar')) document.getElementById('peadDriftBar').style.width = bayesian.peadBar || `${Math.round(scoreFactor * 85)}%`;
+
+            if (document.getElementById('macroWaccSensVal')) document.getElementById('macroWaccSensVal').innerText = bayesian.macroVal || (scoreFactor > 0.7 ? "Résistant" : "Sensible");
             if (document.getElementById('macroWaccSensText')) document.getElementById('macroWaccSensText').innerText = bayesian.macroText || "Sensibilité à l'évolution de la courbe des taux et au coût du WACC.";
-            if (document.getElementById('macroWaccSensBar')) document.getElementById('macroWaccSensBar').style.width = bayesian.macroBar || '60%';
+            if (document.getElementById('macroWaccSensBar')) document.getElementById('macroWaccSensBar').style.width = bayesian.macroBar || `${Math.round(scoreFactor * 70 + 15)}%`;
 
             if (document.getElementById('gammaAsymmetryVal')) document.getElementById('gammaAsymmetryVal').innerText = bayesian.gammaVal || cmt.rrRatio || "1 : 2.3";
             if (document.getElementById('gammaAsymmetryText')) document.getElementById('gammaAsymmetryText').innerText = bayesian.gammaText || "Asymétrie des options et bandes de volatilité implicites.";
-            if (document.getElementById('gammaAsymmetryBar')) document.getElementById('gammaAsymmetryBar').style.width = bayesian.gammaBar || '72%';
+            if (document.getElementById('gammaAsymmetryBar')) document.getElementById('gammaAsymmetryBar').style.width = bayesian.gammaBar || `${Math.round(scoreFactor * 75 + 10)}%`;
 
             // Render Persona 2 (CMT)
             let calculatedRr = "1 : 2.00";
