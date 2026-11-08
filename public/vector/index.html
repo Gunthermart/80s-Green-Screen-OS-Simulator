@@ -122,12 +122,13 @@
             initStarfield();
         });
 
-        const STATES = { MENU: 0, PLAYING: 1, GAMEOVER: 2 };
-        let gameState = STATES.MENU;
+        const STATES = { SPLASH: -1, MENU: 0, PLAYING: 1, GAMEOVER: 2 };
+        let gameState = STATES.SPLASH;
         let score = 0;
         let multiplier = 1;
         let highScore = parseInt(localStorage.getItem('zerovector_highscore') || '0', 10);
         let screenShake = 0;
+        let splashTime = 0;
 
         class SoundFX {
             constructor() { this.ctx = null; }
@@ -288,6 +289,18 @@
                 gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.5);
                 osc.connect(gain); gain.connect(this.ctx.destination);
                 osc.start(); osc.stop(this.ctx.currentTime + 0.5);
+            }
+            playIntroBoom() {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(40, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(320, this.ctx.currentTime + 0.6);
+                gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.6);
+                osc.connect(gain); gain.connect(this.ctx.destination);
+                osc.start(); osc.stop(this.ctx.currentTime + 0.6);
             }
         }
         const audio = new SoundFX();
@@ -907,6 +920,42 @@
                 ctx.lineTo(tx, ty);
             }
             ctx.lineTo(x2, y2);
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        // GENERATEUR D'ECLAIR COMPLEXE A BRANCHES MULTIPLES
+        function drawBranchingLightning(x1, y1, x2, y2, depth = 0) {
+            if (depth > 2) return;
+            ctx.save();
+            ctx.shadowColor = depth === 0 ? '#00f0ff' : '#ff00aa';
+            ctx.shadowBlur = 15 - depth * 4;
+            ctx.strokeStyle = depth === 0 ? '#ffffff' : (depth === 1 ? '#00f0ff' : '#ff00aa');
+            ctx.lineWidth = Math.max(1, 3.5 - depth * 1.2);
+
+            const steps = 7;
+            let cx = x1, cy = y1;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+
+            for (let i = 1; i <= steps; i++) {
+                const t = i / steps;
+                const nextX = x1 + (x2 - x1) * t + (Math.random() - 0.5) * (28 / (depth + 1));
+                const nextY = y1 + (y2 - y1) * t + (Math.random() - 0.5) * (28 / (depth + 1));
+                ctx.lineTo(nextX, nextY);
+
+                if (Math.random() < 0.35 && depth < 2) {
+                    const branchAngle = Math.atan2(y2 - y1, x2 - x1) + (Math.random() - 0.5) * 1.4;
+                    const branchLen = 25 + Math.random() * 40;
+                    drawBranchingLightning(
+                        nextX, nextY,
+                        nextX + Math.cos(branchAngle) * branchLen,
+                        nextY + Math.sin(branchAngle) * branchLen,
+                        depth + 1
+                    );
+                }
+                cx = nextX; cy = nextY;
+            }
             ctx.stroke();
             ctx.restore();
         }
@@ -1605,11 +1654,26 @@
 
         function handlePointerStart(e) {
             audio.init();
-            if (gameState === STATES.MENU || gameState === STATES.GAMEOVER) {
+            if (gameState === STATES.SPLASH) {
+                triggerSplashTransition();
+            } else if (gameState === STATES.MENU || gameState === STATES.GAMEOVER) {
                 resetGame();
             } else if (gameState === STATES.PLAYING) {
                 handlePointerMove(e);
             }
+        }
+
+        function triggerSplashTransition() {
+            audio.playIntroBoom();
+            screenShake = 20;
+            shockwaves.push(new Shockwave(width / 2, height / 2, '#00f0ff'));
+            shockwaves.push(new Shockwave(width / 2, height / 2, '#ff0055'));
+            for (let i = 0; i < 40; i++) {
+                const ang = Math.random() * Math.PI * 2;
+                const spd = 4 + Math.random() * 8;
+                particles.push(new Particle(width / 2, height / 2, Math.random() < 0.5 ? '#00f0ff' : '#ff0055', { x: Math.cos(ang) * spd, y: Math.sin(ang) * spd }, 0.8, 3));
+            }
+            gameState = STATES.MENU;
         }
 
         function resetGame() {
@@ -1639,8 +1703,10 @@
 
         window.addEventListener('keydown', (e) => {
             audio.init();
-            if (e.code === 'Space') {
-                if (gameState === STATES.MENU || gameState === STATES.GAMEOVER) {
+            if (e.code === 'Space' || e.code === 'Enter') {
+                if (gameState === STATES.SPLASH) {
+                    triggerSplashTransition();
+                } else if (gameState === STATES.MENU || gameState === STATES.GAMEOVER) {
                     resetGame();
                 } else if (gameState === STATES.PLAYING) {
                     player.triggerEMP();
@@ -1870,6 +1936,186 @@
             ctx.restore();
         }
 
+        function drawSplash(dt) {
+            splashTime += dt;
+
+            ctx.save();
+
+            // 1. ANNEAUX DE DISTORSION ET ONDES EN ARRIÈRE-PLAN
+            const pulseCenterY = height * 0.42;
+            ctx.save();
+            ctx.strokeStyle = 'rgba(0, 240, 255, 0.12)';
+            ctx.lineWidth = 2;
+            for (let r = 0; r < 3; r++) {
+                const rad = ((splashTime * 140 + r * 120) % (Math.max(width, height) * 0.6));
+                ctx.beginPath();
+                ctx.arc(width / 2, pulseCenterY, rad, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+            ctx.restore();
+
+            // 2. ESCADRILLE D'ENNEMIS SPECTRALES EN DÉFILÉ ARRIÈRE-PLAN
+            for (let i = 0; i < 6; i++) {
+                const ex = (width * 0.1) + ((i * 140 + splashTime * 90) % (width * 0.85));
+                const ey = height * 0.15 + Math.sin(splashTime * 2 + i) * 25;
+                ctx.save();
+                ctx.translate(ex, ey);
+                ctx.shadowColor = i % 2 === 0 ? '#ff00aa' : '#00ffcc';
+                ctx.shadowBlur = 10;
+                ctx.strokeStyle = i % 2 === 0 ? '#ff00aa' : '#00ffcc';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.arc(0, 0, 10, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.strokeRect(-5, -5, 10, 10);
+                ctx.restore();
+            }
+
+            // Animation de duel cinématique
+            const shipX = width / 2 + Math.cos(splashTime * 1.5) * (width * 0.3);
+            const shipY = height * 0.68 + Math.sin(splashTime * 3) * 18;
+            const bossX = width / 2 - Math.cos(splashTime * 1.5) * (width * 0.3);
+            const bossY = height * 0.22;
+
+            // Tir cinématique continu avec particules arc-en-ciel
+            if (Math.floor(splashTime * 30) % 2 === 0) {
+                particles.push(new Particle(shipX + (Math.random() - 0.5) * 20, shipY - 15, '#00ffff', { x: (Math.random() - 0.5) * 3, y: -14 }, 0.45, 2.5));
+                particles.push(new Particle(bossX + (Math.random() - 0.5) * 30, bossY + 25, '#ff0055', { x: (Math.random() - 0.5) * 3, y: 12 }, 0.45, 3));
+            }
+
+            // 3. ECLAIRS TESLA ENTRE BOSS, JOUEUR ET BORDURES DU CADRE
+            if (Math.random() < 0.6) {
+                drawBranchingLightning(shipX, shipY - 20, bossX, bossY + 30);
+            }
+            if (Math.random() < 0.4) {
+                const cornerX = Math.random() < 0.5 ? 20 : width - 20;
+                drawBranchingLightning(cornerX, 20, shipX, shipY);
+            }
+
+            // Vaisseau Joueur Cinématique
+            ctx.save();
+            ctx.translate(shipX, shipY);
+            ctx.shadowColor = '#00f0ff'; ctx.shadowBlur = 25;
+            ctx.strokeStyle = '#ffffff'; ctx.fillStyle = '#00f0ff'; ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(0, -28); ctx.lineTo(18, 20); ctx.lineTo(0, 9); ctx.lineTo(-18, 20);
+            ctx.closePath(); ctx.fill(); ctx.stroke();
+            // Anneau d'énergie autour du vaisseau
+            ctx.strokeStyle = '#ff00aa'; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.arc(0, 0, 22 + Math.sin(splashTime * 10) * 3, 0, Math.PI * 2); ctx.stroke();
+            ctx.restore();
+
+            // Boss Skull Cinématique
+            ctx.save();
+            ctx.translate(bossX, bossY);
+            ctx.shadowColor = '#ff0055'; ctx.shadowBlur = 30;
+            ctx.strokeStyle = '#ff0055'; ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(0, -12, 40, Math.PI, 0);
+            ctx.lineTo(32, 18); ctx.lineTo(-32, 18);
+            ctx.closePath(); ctx.stroke();
+            ctx.fillStyle = '#ff0055';
+            ctx.beginPath(); ctx.arc(-16, -12, 9, 0, Math.PI * 2); ctx.arc(16, -12, 9, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+
+            // ==========================================
+            // CADRE CYBERNÉTIQUE ANIMÉ ET ÉCLAIRS TESLA
+            // ==========================================
+            ctx.save();
+            const margin = 16;
+            const cornerSize = 50;
+            const borderCol = Math.sin(splashTime * 5) > 0 ? '#00f0ff' : '#ff00aa';
+
+            ctx.shadowColor = borderCol;
+            ctx.shadowBlur = 22;
+            ctx.strokeStyle = borderCol;
+            ctx.lineWidth = 3;
+
+            // Bords principaux du cadre
+            ctx.beginPath();
+            ctx.moveTo(margin + cornerSize, margin); ctx.lineTo(margin, margin); ctx.lineTo(margin, margin + cornerSize);
+            ctx.moveTo(width - margin - cornerSize, margin); ctx.lineTo(width - margin, margin); ctx.lineTo(width - margin, margin + cornerSize);
+            ctx.moveTo(width - margin, height - margin - cornerSize); ctx.lineTo(width - margin, height - margin); ctx.lineTo(width - margin - cornerSize, height - margin);
+            ctx.moveTo(margin + cornerSize, height - margin); ctx.lineTo(margin, height - margin); ctx.lineTo(margin, height - margin - cornerSize);
+            ctx.stroke();
+
+            // Viseurs rotatifs sur les 4 coins
+            const rot = splashTime * 2.5;
+            [
+                { x: margin + 14, y: margin + 14 },
+                { x: width - margin - 14, y: margin + 14 },
+                { x: width - margin - 14, y: height - margin - 14 },
+                { x: margin + 14, y: height - margin - 14 }
+            ].forEach(pt => {
+                ctx.save();
+                ctx.translate(pt.x, pt.y);
+                ctx.rotate(rot);
+                ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2;
+                ctx.strokeRect(-9, -9, 18, 18);
+                ctx.restore();
+            });
+
+            // ÉCLAIRS TESLA PERMANENTS SUR TOUT LE CADRE
+            if (Math.random() < 0.95) {
+                const zaps = [
+                    { x1: margin, y1: margin + Math.random() * (height - margin * 2), x2: margin + 45, y2: margin + Math.random() * (height - margin * 2) },
+                    { x1: width - margin, y1: margin + Math.random() * (height - margin * 2), x2: width - margin - 45, y2: margin + Math.random() * (height - margin * 2) },
+                    { x1: margin + Math.random() * (width - margin * 2), y1: margin, x2: margin + Math.random() * (width - margin * 2), y2: margin + 45 }
+                ];
+                const pZap = zaps[Math.floor(Math.random() * zaps.length)];
+                drawBranchingLightning(pZap.x1, pZap.y1, pZap.x2, pZap.y2);
+            }
+
+            // Balises lumineuses texte d'avertissement cyberpunk sur le cadre
+            ctx.font = 'bold 11px monospace';
+            ctx.fillStyle = borderCol;
+            ctx.textAlign = 'left';
+            ctx.fillText('⚡ HIGH VOLTAGE TESLA MATRIX', margin + 55, margin + 16);
+            ctx.textAlign = 'right';
+            ctx.fillText('SYSTEM OVERDRIVE ⚡', width - margin - 55, margin + 16);
+            ctx.restore();
+
+            // TITRE SPECTACULAIRE CYBERPUNK NÉON
+            ctx.textAlign = 'center';
+
+            const pulse = 1 + Math.sin(splashTime * 4) * 0.05;
+            ctx.save();
+            ctx.translate(width / 2, pulseCenterY);
+            ctx.scale(pulse, pulse);
+
+            ctx.shadowColor = '#00f0ff'; ctx.shadowBlur = 40;
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '900 56px monospace';
+            ctx.fillText('ZERO VECTOR', 0, 0);
+
+            // Double effet Glitch décalé néon magenta / cyan
+            if (Math.random() < 0.25) {
+                ctx.fillStyle = '#ff00aa';
+                ctx.fillText('ZERO VECTOR', (Math.random() - 0.5) * 12, (Math.random() - 0.5) * 8);
+                ctx.fillStyle = '#00ffff';
+                ctx.fillText('ZERO VECTOR', (Math.random() - 0.5) * -10, (Math.random() - 0.5) * -6);
+            }
+
+            ctx.font = 'bold 16px monospace'; ctx.fillStyle = '#00f0ff';
+            ctx.shadowBlur = 15;
+            ctx.fillText('--- ULTRA NEON SHMUP ARCADE ---', 0, 40);
+            ctx.restore();
+
+            // BOUTON INTERACTIF ENTRÉE
+            ctx.save();
+            const btnAlpha = 0.5 + Math.sin(splashTime * 6) * 0.5;
+            ctx.globalAlpha = btnAlpha;
+            ctx.shadowColor = '#ff0055'; ctx.shadowBlur = 22;
+            ctx.fillStyle = '#ff0055';
+            ctx.font = 'bold 22px monospace';
+            ctx.fillText('[ APPUYEZ SUR ESPACE OU CLIQUEZ ]', width / 2, height * 0.83);
+            ctx.restore();
+
+            ctx.font = '12px monospace'; ctx.fillStyle = '#888888';
+            ctx.fillText('VITA GAMES PARALLAX ENGINE v4.0', width / 2, height - 25);
+            ctx.restore();
+        }
+
         function drawMenu() {
             ctx.save();
             ctx.textAlign = 'center';
@@ -1962,6 +2208,8 @@
                 player.draw(ctx);
 
                 drawHUD();
+            } else if (gameState === STATES.SPLASH) {
+                drawSplash(dt);
             } else if (gameState === STATES.MENU) {
                 drawMenu();
             } else if (gameState === STATES.GAMEOVER) {
