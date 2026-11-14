@@ -200,7 +200,7 @@
                         <i class="fa-solid fa-calculator"></i>
                         <span>Injecter DCF</span>
                     </button>
-                    <button onclick="addCurrentStockToConvictions()" class="px-3.5 py-2 rounded-xl bg-teal-600/20 hover:bg-teal-600/30 text-teal-300 border border-teal-500/40 font-mono text-xs font-bold transition cursor-pointer">
+                    <button id="btnAddConvictionHeader" onclick="addCurrentStockToConvictions(this)" class="px-3.5 py-2 rounded-xl bg-teal-600/20 hover:bg-teal-600/30 text-teal-300 border border-teal-500/40 font-mono text-xs font-bold transition cursor-pointer">
                         + Conviction
                     </button>
                     <button onclick="window.print()" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-mono cursor-pointer">
@@ -1255,7 +1255,7 @@
                         <i class="fa-solid fa-copy"></i>
                         <span>Copier Synthèse</span>
                     </button>
-                    <button onclick="addCurrentStockToConvictions()" class="px-3.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs shadow-lg transition flex items-center space-x-1.5 cursor-pointer">
+                    <button onclick="addCurrentStockToConvictions(this)" class="px-3.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs shadow-lg transition flex items-center space-x-1.5 cursor-pointer">
                         <i class="fa-solid fa-layer-group"></i>
                         <span>+ Conviction</span>
                     </button>
@@ -2829,39 +2829,98 @@ Ne laisse AUCUNE chaîne vide. Respecte exactement cette structure JSON :
                 marketCap: document.getElementById("stock-form-marketcap").value.trim() || "Mid Cap",
                 theme: document.getElementById("stock-form-theme").value.trim() || "Valeur Euronext"
             };
-            if (editingId && editingId !== id) {
-                await db.stocks.delete(editingId);
+            stocksList = stocksList.filter(s => s.id !== editingId && s.id !== id);
+            stocksList.push(item);
+
+            if (!useMemoryFallback) {
+                try {
+                    if (editingId && editingId !== id) {
+                        await db.stocks.delete(editingId);
+                    }
+                    await db.stocks.put(item);
+                    stocksList = await db.stocks.toArray();
+                } catch {
+                    useMemoryFallback = true;
+                }
             }
-            await db.stocks.put(item);
-            stocksList = await db.stocks.toArray();
             updateStocksCountBadge();
             renderStocksGrid();
+            renderCrossMatrix();
             closeStockModal();
-            showToast(`Conviction ${id} enregistrée dans Dexie.js.`, "success");
+            showToast(`Conviction ${id} enregistrée.`, "success");
         }
 
         async function deleteStock(id) {
-            await db.stocks.delete(id);
-            stocksList = await db.stocks.toArray();
+            stocksList = stocksList.filter(s => s.id !== id);
+            if (!useMemoryFallback) {
+                try {
+                    await db.stocks.delete(id);
+                    stocksList = await db.stocks.toArray();
+                } catch {
+                    useMemoryFallback = true;
+                }
+            }
             updateStocksCountBadge();
             renderStocksGrid();
+            renderCrossMatrix();
             showToast(`Conviction ${id} supprimée.`, "info");
         }
 
-        async function addCurrentStockToConvictions() {
-            if (!currentReportData?.companyInfo) return;
+        async function addCurrentStockToConvictions(btnEl) {
+            if (!currentReportData?.companyInfo) {
+                showToast("Lance d'abord l'audit d'une valeur avant de l'ajouter aux convictions.", "warning");
+                return;
+            }
             const info = currentReportData.companyInfo;
-            const ticker = (info.ticker || "ACTION").toUpperCase().replace(/[^A-Z0-9.]/g, "");
-            await db.stocks.put({
+            const rawTicker = String(info.ticker || document.getElementById("reportTickerBadge")?.innerText || "ACTION")
+                .replace(/^TICKER\s*:\s*/i, "")
+                .trim();
+            const ticker = rawTicker.toUpperCase().replace(/[^A-Z0-9.]/g, "") || "ACTION";
+            const companyName = info.name || document.getElementById("reportCompanyName")?.innerText || ticker;
+
+            const newConviction = {
                 id: ticker,
-                name: info.name || ticker,
+                name: companyName,
                 category: info.index || "Euronext",
                 marketCap: currentReportData.financialKPIs?.marketCap || "Euronext",
-                theme: info.icbSector || "Audit Hydrogen"
-            });
-            stocksList = await db.stocks.toArray();
+                theme: info.icbSector || "Audit FactCheck AI"
+            };
+
+            const existingIdx = stocksList.findIndex(s => s.id === ticker);
+            if (existingIdx >= 0) {
+                stocksList[existingIdx] = newConviction;
+            } else {
+                stocksList.push(newConviction);
+            }
+
+            if (!useMemoryFallback) {
+                try {
+                    await db.stocks.put(newConviction);
+                    const dbItems = await db.stocks.toArray();
+                    if (Array.isArray(dbItems) && dbItems.length > 0) {
+                        stocksList = dbItems;
+                    }
+                } catch {
+                    useMemoryFallback = true;
+                }
+            }
+
             updateStocksCountBadge();
-            showToast(`${info.name} (${ticker}) ajoutée aux convictions.`, "success");
+            renderStocksGrid();
+            renderCrossMatrix();
+
+            const targetBtn = btnEl || document.getElementById("btnAddConvictionHeader");
+            if (targetBtn) {
+                const originalHtml = targetBtn.innerHTML;
+                targetBtn.innerHTML = `<i class="fa-solid fa-check mr-1"></i>Ajoutée (${escapeHTML(ticker)})`;
+                targetBtn.classList.add("bg-emerald-500/30", "text-emerald-200", "border-emerald-400");
+                setTimeout(() => {
+                    targetBtn.innerHTML = originalHtml;
+                    targetBtn.classList.remove("bg-emerald-500/30", "text-emerald-200", "border-emerald-400");
+                }, 2200);
+            }
+
+            showToast(`${companyName} (${ticker}) ajoutée aux Convictions (${stocksList.length}).`, "success");
         }
 
         function exportStocksCSV() {
