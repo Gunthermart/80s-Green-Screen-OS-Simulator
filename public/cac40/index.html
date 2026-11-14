@@ -1362,8 +1362,8 @@
         ];
 
         // --- DEXIE.JS DATABASE ---
-        const db = new Dexie("EuronextFactCheckDB");
-        db.version(1).stores({
+        let db = new Dexie("EuronextFactCheckDB");
+        db.version(20).stores({
             trades: "++id, date, company, ticker, status, entryPrice, stopLoss, tp1, tp2, shares, exitPrice, pnlEuro",
             funds: "id, name, manager, styleCategory",
             stocks: "id, name, category"
@@ -2722,6 +2722,23 @@ Ne laisse AUCUNE chaîne vide. Respecte exactement cette structure JSON :
         // --- DEXIE: FUNDS, STOCKS & CROSS MATRIX ---
         async function initDatabaseData() {
             try {
+                try {
+                    await db.open();
+                } catch (openErr) {
+                    if (openErr && (openErr.name === "VersionError" || String(openErr.message).includes("VersionError"))) {
+                        await Dexie.delete("EuronextFactCheckDB");
+                        db = new Dexie("EuronextFactCheckDB");
+                        db.version(20).stores({
+                            trades: "++id, date, company, ticker, status, entryPrice, stopLoss, tp1, tp2, shares, exitPrice, pnlEuro",
+                            funds: "id, name, manager, styleCategory",
+                            stocks: "id, name, category"
+                        });
+                        await db.open();
+                    } else {
+                        throw openErr;
+                    }
+                }
+
                 const rawFunds = await db.funds.toArray();
                 const validFunds = rawFunds.filter(f => f && f.id && f.name && Array.isArray(f.topHoldings));
                 if (validFunds.length === 0) {
