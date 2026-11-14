@@ -236,28 +236,13 @@ exports.handler = async function (event) {
     const mode = body.mode || "legacy";
     const subjectQuery = String(body.subjectQuery || "").trim();
 
-    // Mode 1 : Audit complet sur contexte XML injecté (29 sources) + responseSchema strict
-    if (mode === "stock_analysis" && subjectQuery) {
-      const xmlCorpus = await buildInjectedXmlCorpus(subjectQuery, apiKey, modelId);
-
-      const extractionPrompt = `${body.userPrompt || `Analyse complète de ${subjectQuery}`}
-
-Voici les 29 contenus nettoyés extraits des portails financiers certifiés. Lis, croise et extrais les données avec une précision chirurgicale :
-
-${xmlCorpus}`;
-
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${encodeURIComponent(apiKey)}`;
-      const geminiRes = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
     // Mode 1 : Audit complet sur contexte XML injecté (29 sources)
     if (mode === "stock_analysis" && subjectQuery) {
       const xmlCorpus = await buildInjectedXmlCorpus(subjectQuery, apiKey, modelId);
 
       const extractionPrompt = `${body.userPrompt || `Analyse complète de ${subjectQuery}`}
 
-Voici les contenus nettoyés extraits des 29 sources financières certifiées. Croise et extrais les données exactes en JSON strict :
+Voici les contenus nettoyés extraits des 29 sources financières certifiées. Lis, croise et extrais les données avec une précision chirurgicale en JSON strict :
 
 ${xmlCorpus}`;
 
