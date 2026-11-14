@@ -40,296 +40,10 @@ const CERTIFIED_SOURCES = [
   { id: 29, name: "Societe.com", url: "https://www.societe.com/cgi-bin/search?champs=" }
 ];
 
-const STOCK_AUDIT_RESPONSE_SCHEMA = {
-  type: "OBJECT",
-  properties: {
-    companyInfo: {
-      type: "OBJECT",
-      properties: {
-        name: { type: "STRING" },
-        ticker: { type: "STRING" },
-        isin: { type: "STRING" },
-        market: { type: "STRING" },
-        index: { type: "STRING" },
-        icbSector: { type: "STRING" },
-        headquarters: { type: "STRING" },
-        summary: { type: "STRING" },
-        competitivePositioning: { type: "STRING" }
-      },
-      required: ["name", "ticker", "isin", "market", "index", "icbSector", "headquarters", "summary", "competitivePositioning"]
-    },
-    cfaPersona: {
-      type: "OBJECT",
-      properties: {
-        roe: { type: "STRING" },
-        debtEbitda: { type: "STRING" },
-        moatRating: { type: "STRING" },
-        fcfQuality: { type: "STRING" },
-        factsVsForecasts: { type: "STRING" }
-      },
-      required: ["roe", "debtEbitda", "moatRating", "fcfQuality", "factsVsForecasts"]
-    },
-    cmtPersona: {
-      type: "OBJECT",
-      properties: {
-        rrRatio: { type: "STRING" },
-        invalidationCondition: { type: "STRING" },
-        levelsText: { type: "STRING" },
-        scenarioText: { type: "STRING" }
-      },
-      required: ["rrRatio", "invalidationCondition", "levelsText", "scenarioText"]
-    },
-    mnaPersona: {
-      type: "OBJECT",
-      properties: {
-        bearPrice: { type: "STRING" },
-        basePrice: { type: "STRING" },
-        bullPrice: { type: "STRING" },
-        waccFormula: { type: "STRING" },
-        assumptionsText: { type: "STRING" }
-      },
-      required: ["bearPrice", "basePrice", "bullPrice", "waccFormula", "assumptionsText"]
-    },
-    bayesianPerspective: {
-      type: "OBJECT",
-      properties: {
-        probBullish: { type: "STRING" },
-        expectedRange: { type: "STRING" },
-        peadVal: { type: "STRING" },
-        peadText: { type: "STRING" },
-        peadBar: { type: "STRING" },
-        macroVal: { type: "STRING" },
-        macroText: { type: "STRING" },
-        macroBar: { type: "STRING" },
-        gammaVal: { type: "STRING" },
-        gammaText: { type: "STRING" },
-        gammaBar: { type: "STRING" },
-        summary: { type: "STRING" }
-      },
-      required: ["probBullish", "expectedRange", "peadVal", "peadText", "peadBar", "macroVal", "macroText", "macroBar", "gammaVal", "gammaText", "gammaBar", "summary"]
-    },
-    financialKPIs: {
-      type: "OBJECT",
-      properties: {
-        period: { type: "STRING" },
-        revenue: { type: "STRING" },
-        ebitda: { type: "STRING" },
-        netIncome: { type: "STRING" },
-        fcf: { type: "STRING" },
-        operatingMargin: { type: "STRING" },
-        eps: { type: "STRING" },
-        marketCap: { type: "STRING" },
-        netDebt: { type: "STRING" },
-        fcfMillionsNumeric: { type: "NUMBER" },
-        netDebtMillionsNumeric: { type: "NUMBER" },
-        sharesMillionsNumeric: { type: "NUMBER" },
-        currentPriceNumeric: { type: "NUMBER" }
-      },
-      required: [
-        "period", "revenue", "ebitda", "netIncome", "fcf", "operatingMargin",
-        "eps", "marketCap", "netDebt", "fcfMillionsNumeric", "netDebtMillionsNumeric",
-        "sharesMillionsNumeric", "currentPriceNumeric"
-      ]
-    },
-    debtStructure: {
-      type: "OBJECT",
-      properties: {
-        grossDebt: { type: "STRING" },
-        cash: { type: "STRING" },
-        costOfDebt: { type: "STRING" },
-        creditRating: { type: "STRING" },
-        fixedRatePct: { type: "NUMBER" },
-        variableRatePct: { type: "NUMBER" },
-        maturitySTPct: { type: "NUMBER" },
-        maturityMTPct: { type: "NUMBER" },
-        maturityLTPct: { type: "NUMBER" }
-      },
-      required: ["grossDebt", "cash", "costOfDebt", "creditRating", "fixedRatePct", "variableRatePct", "maturitySTPct", "maturityMTPct", "maturityLTPct"]
-    },
-    healthScores: {
-      type: "OBJECT",
-      properties: {
-        piotroskiScore: { type: "NUMBER" },
-        piotroskiAnalysis: { type: "STRING" },
-        altmanZScore: { type: "STRING" },
-        altmanAnalysis: { type: "STRING" },
-        pegRatio: { type: "STRING" },
-        pegBadge: { type: "STRING" },
-        pegAnalysis: { type: "STRING" },
-        dividendYield: { type: "STRING" },
-        dividendSafety: { type: "STRING" },
-        dividendAnalysis: { type: "STRING" },
-        debtEbitda: { type: "STRING" },
-        interestCoverage: { type: "STRING" }
-      },
-      required: [
-        "piotroskiScore", "piotroskiAnalysis", "altmanZScore", "altmanAnalysis",
-        "pegRatio", "pegBadge", "pegAnalysis", "dividendYield", "dividendSafety",
-        "dividendAnalysis", "debtEbitda", "interestCoverage"
-      ]
-    },
-    valuationMultiples: {
-      type: "OBJECT",
-      properties: {
-        peRatio: { type: "STRING" },
-        evEbitda: { type: "STRING" },
-        pFCF: { type: "STRING" },
-        roicWacc: { type: "STRING" }
-      },
-      required: ["peRatio", "evEbitda", "pFCF", "roicWacc"]
-    },
-    growthAnalysis: {
-      type: "OBJECT",
-      properties: {
-        cagrHist: { type: "STRING" },
-        cagrEpsEst: { type: "STRING" },
-        revisionTrend: { type: "STRING" },
-        lastSurprise: { type: "STRING" },
-        historicalGrowthSummary: { type: "STRING" },
-        growthOutlook: { type: "STRING" },
-        growthDrivers: { type: "ARRAY", items: { type: "STRING" } },
-        marketRumors: {
-          type: "ARRAY",
-          items: {
-            type: "OBJECT",
-            properties: {
-              source: { type: "STRING" },
-              credibility: { type: "STRING" },
-              text: { type: "STRING" }
-            }
-          }
-        }
-      },
-      required: ["cagrHist", "cagrEpsEst", "revisionTrend", "lastSurprise", "historicalGrowthSummary", "growthOutlook", "growthDrivers", "marketRumors"]
-    },
-    governanceAndCapital: {
-      type: "OBJECT",
-      properties: {
-        majorShareholders: {
-          type: "ARRAY",
-          items: {
-            type: "OBJECT",
-            properties: {
-              name: { type: "STRING" },
-              percentage: { type: "STRING" }
-            }
-          }
-        },
-        governanceNotes: { type: "STRING" }
-      },
-      required: ["majorShareholders", "governanceNotes"]
-    },
-    perspectives: {
-      type: "OBJECT",
-      properties: {
-        guidanceSummary: { type: "STRING" },
-        strategicPillars: { type: "ARRAY", items: { type: "STRING" } }
-      },
-      required: ["guidanceSummary", "strategicPillars"]
-    },
-    analystConsensusAndNews: {
-      type: "OBJECT",
-      properties: {
-        consensusRecommendation: { type: "STRING" },
-        targetPriceAvg: { type: "STRING" },
-        consensusSummary: { type: "STRING" }
-      },
-      required: ["consensusRecommendation", "targetPriceAvg", "consensusSummary"]
-    },
-    documentedRisks: {
-      type: "ARRAY",
-      items: {
-        type: "OBJECT",
-        properties: {
-          category: { type: "STRING" },
-          description: { type: "STRING" }
-        }
-      }
-    },
-    shortInterest: {
-      type: "OBJECT",
-      properties: {
-        shortCapitalPct: { type: "STRING" },
-        shortSqueezePotential: { type: "STRING" },
-        shortAnalysis: { type: "STRING" }
-      },
-      required: ["shortCapitalPct", "shortSqueezePotential", "shortAnalysis"]
-    },
-    portfolioEntryIndicators: {
-      type: "OBJECT",
-      properties: {
-        grahamStatus: { type: "STRING" },
-        grahamDesc: { type: "STRING" },
-        kellyValue: { type: "STRING" },
-        kellyDesc: { type: "STRING" },
-        kijunStatus: { type: "STRING" },
-        kijunDesc: { type: "STRING" }
-      },
-      required: ["grahamStatus", "grahamDesc", "kellyValue", "kellyDesc", "kijunStatus", "kijunDesc"]
-    },
-    leonceDiagnostic: {
-      type: "OBJECT",
-      properties: {
-        overallScore: { type: "NUMBER" },
-        stAnalysis: { type: "STRING" },
-        mtAnalysis: { type: "STRING" }
-      },
-      required: ["overallScore", "stAnalysis", "mtAnalysis"]
-    },
-    tradingPlan: {
-      type: "OBJECT",
-      properties: {
-        entryZone: { type: "STRING" },
-        stopLoss: { type: "STRING" },
-        tp1: { type: "STRING" },
-        tp2: { type: "STRING" },
-        ichimokuKumo: { type: "STRING" },
-        ichimokuTK: { type: "STRING" },
-        ichimokuChikou: { type: "STRING" },
-        tradeExamples: {
-          type: "ARRAY",
-          items: {
-            type: "OBJECT",
-            properties: {
-              title: { type: "STRING" },
-              rrRatio: { type: "STRING" },
-              setupSummary: { type: "STRING" },
-              entry: { type: "STRING" },
-              stopLoss: { type: "STRING" },
-              target: { type: "STRING" }
-            }
-          }
-        }
-      },
-      required: ["entryZone", "stopLoss", "tp1", "tp2", "ichimokuKumo", "ichimokuTK", "ichimokuChikou", "tradeExamples"]
-    },
-    qvmComposite: {
-      type: "OBJECT",
-      properties: {
-        overallScore: { type: "NUMBER" },
-        qualityScore: { type: "NUMBER" },
-        valuationScore: { type: "NUMBER" },
-        momentumScore: { type: "NUMBER" },
-        qualityAnalysis: { type: "STRING" },
-        valuationAnalysis: { type: "STRING" },
-        momentumAnalysis: { type: "STRING" }
-      },
-      required: ["overallScore", "qualityScore", "valuationScore", "momentumScore", "qualityAnalysis", "valuationAnalysis", "momentumAnalysis"]
-    }
-  },
-  required: [
-    "companyInfo", "cfaPersona", "cmtPersona", "mnaPersona", "bayesianPerspective",
-    "financialKPIs", "debtStructure", "healthScores", "valuationMultiples",
-    "growthAnalysis", "governanceAndCapital", "perspectives", "analystConsensusAndNews",
-    "documentedRisks", "shortInterest", "portfolioEntryIndicators", "leonceDiagnostic",
-    "tradingPlan", "qvmComposite"
-  ]
-};
-
 /**
  * Nettoyage HTML déterministe : supprime scripts, styles, balises et compresse les espaces.
  */
-function stripHtmlToCleanText(html, maxChars = 14000) {
+function stripHtmlToCleanText(html, maxChars = 3500) {
   if (!html) return "";
   const cleaned = html
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
@@ -357,12 +71,13 @@ function escapeXmlAttr(str) {
 }
 
 /**
- * Collecte parallèle directe des 29 URLs certifiées avec timeout court.
+ * Collecte parallèle directe des 29 URLs certifiées avec timeout court (1.8s)
+ * pour garantir le respect strict de la limite Netlify de 10s.
  */
 async function fetchSingleCertifiedSource(source, encodedQuery) {
   const targetUrl = `${source.url}${encodedQuery}`;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 3200);
+  const timer = setTimeout(() => controller.abort(), 1800);
   try {
     const res = await fetch(targetUrl, {
       headers: {
@@ -377,12 +92,12 @@ async function fetchSingleCertifiedSource(source, encodedQuery) {
       return { ...source, targetUrl, ok: false, text: "" };
     }
     const rawHtml = await res.text();
-    const cleanText = stripHtmlToCleanText(rawHtml, 12000);
+    const cleanText = stripHtmlToCleanText(rawHtml, 3500);
     const blocked = /captcha|cloudflare|access denied|enable javascript|just a moment/i.test(cleanText) && cleanText.length < 1500;
     return {
       ...source,
       targetUrl,
-      ok: !blocked && cleanText.length > 250,
+      ok: !blocked && cleanText.length > 200,
       text: blocked ? "" : cleanText
     };
   } catch {
@@ -392,62 +107,78 @@ async function fetchSingleCertifiedSource(source, encodedQuery) {
 }
 
 /**
- * Complément par petits lots ciblés (4 à 5 sites maximum par appel Gemini Search)
- * pour les sources protégées contre le scraping direct.
+ * Appel Gemini résilient avec fallback automatique de modèle si le modèle cible est indisponible.
  */
-async function fetchMissingBatchesViaSearch(subjectQuery, missingSources, apiKey, modelId) {
-  if (!missingSources.length) return new Map();
+async function callGeminiWithFallback(apiKey, primaryModel, payload) {
+  const modelsToTry = Array.from(new Set([primaryModel, "gemini-3-flash-preview", "gemini-2.5-flash"]));
+  let lastError = null;
 
-  const batches = [];
-  for (let i = 0; i < missingSources.length; i += 5) {
-    batches.push(missingSources.slice(i, i + 5));
-  }
-
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${encodeURIComponent(apiKey)}`;
-  const batchResults = await Promise.allSettled(
-    batches.map(async (batch) => {
-      const siteFilters = batch.map((s) => `site:${new URL(s.url).hostname}`).join(" OR ");
-      const prompt = `Recherche factuelle ciblée sur "${subjectQuery}" uniquement sur ce lot de ${batch.length} sources financières : ${batch.map((s) => `${s.name} (${new URL(s.url).hostname})`).join(", ")}.
-Requête de recherche ciblée : "${subjectQuery}" (${siteFilters}).
-Extrais uniquement les faits vérifiés : cours actuel, variation, capitalisation, CA, EBITDA, résultat net, FCF, dette nette, nombre d'actions, PER, EV/EBITDA, consensus et actualités récentes.`;
-
+  for (const model of modelsToTry) {
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6800);
+    try {
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          tools: [{ google_search: {} }],
-          generationConfig: { temperature: 0 }
-        })
+        body: JSON.stringify(payload),
+        signal: controller.signal
       });
-      if (!res.ok) return [];
+      clearTimeout(timer);
       const data = await res.json();
-      const snippet = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      return batch.map((s) => ({ id: s.id, text: snippet }));
-    })
-  );
-
-  const enrichedMap = new Map();
-  for (const r of batchResults) {
-    if (r.status === "fulfilled") {
-      for (const item of r.value) {
-        enrichedMap.set(item.id, item.text);
+      if (res.ok) {
+        return { ok: true, status: 200, data };
       }
+      lastError = { status: res.status, message: data?.error?.message || `Erreur API (${model})` };
+      if (res.status !== 404 && res.status !== 400 && res.status !== 503) {
+        break;
+      }
+    } catch (err) {
+      clearTimeout(timer);
+      lastError = { status: 504, message: err.name === "AbortError" ? `Timeout sur ${model}` : err.message };
     }
   }
-  return enrichedMap;
+
+  return {
+    ok: false,
+    status: lastError?.status || 502,
+    error: lastError?.message || "Échec de communication avec l'API Gemini."
+  };
 }
 
 /**
- * Construction du corpus XML balisé (<source id="1" url="...">...</source>)
+ * Requête de vérification chiffrée temps réel exécutée en parallèle des 29 sources
+ * pour garantir les agrégats exacts (cours, CA, EBITDA, FCF, dette nette, PER).
+ */
+async function fetchRealtimeMarketSnapshot(subjectQuery, apiKey, modelId) {
+  const prompt = `Extrais les chiffres financiers exacts et le cours boursier actuel de "${subjectQuery}" (Euronext / Europe) depuis les portails financiers reconnus (Boursorama, ZoneBourse, Euronext, Investing, Yahoo Finance) :
+- Nom exact, Ticker, Code ISIN, Compartiment, Indice, Secteur ICB, Siège social
+- Cours actuel exact en €, Capitalisation boursière, Nombre d'actions (en millions)
+- Dernier exercice / LTM : Chiffre d'affaires, EBITDA, Résultat Net, Free Cash Flow (en M€), Marge opérationnelle, BNPA (EPS), Dette Nette (ou Trésorerie Nette en M€)
+- Multiples : PER, EV/EBITDA, P/FCF, ROIC vs WACC, Rendement dividende
+- Consensus analystes (recommandation et objectif moyen), actionnaires principaux, positions courtes AMF, et niveaux techniques (supports, résistances, Ichimoku).`;
+
+  const res = await callGeminiWithFallback(apiKey, modelId, {
+    contents: [{ parts: [{ text: prompt }] }],
+    tools: [{ google_search: {} }],
+    generationConfig: { temperature: 0 }
+  });
+
+  if (!res.ok) return "";
+  return res.data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+}
+
+/**
+ * Construction simultanée du corpus XML balisé (<source id="1" url="...">...</source>)
+ * en moins de 3.5 secondes.
  */
 async function buildInjectedXmlCorpus(subjectQuery, apiKey, modelId) {
   const encodedQuery = encodeURIComponent(subjectQuery);
 
-  // 1. Collecte déterministe en parallèle sur les 29 URLs
-  const directSettlements = await Promise.allSettled(
-    CERTIFIED_SOURCES.map((src) => fetchSingleCertifiedSource(src, encodedQuery))
-  );
+  const [directSettlements, liveSnapshot] = await Promise.all([
+    Promise.allSettled(CERTIFIED_SOURCES.map((src) => fetchSingleCertifiedSource(src, encodedQuery))),
+    fetchRealtimeMarketSnapshot(subjectQuery, apiKey, modelId)
+  ]);
 
   const collected = directSettlements.map((s, idx) =>
     s.status === "fulfilled"
@@ -455,14 +186,16 @@ async function buildInjectedXmlCorpus(subjectQuery, apiKey, modelId) {
       : { ...CERTIFIED_SOURCES[idx], targetUrl: `${CERTIFIED_SOURCES[idx].url}${encodedQuery}`, ok: false, text: "" }
   );
 
-  // 2. Identification des sources protégées (anti-bot) et collecte par lots de 5 max
-  const missingSources = collected.filter((c) => !c.ok);
-  const fallbackMap = await fetchMissingBatchesViaSearch(subjectQuery, missingSources, apiKey, modelId);
-
   const xmlBlocks = collected.map((src) => {
-    const content = src.ok ? src.text : (fallbackMap.get(src.id) || "Données non disponibles sur ce portail.");
+    const content = src.ok
+      ? src.text
+      : (liveSnapshot ? `Synthèse consolidée portails financiers : ${liveSnapshot}` : "Données non disponibles sur ce portail.");
     return `<source id="${src.id}" name="${escapeXmlAttr(src.name)}" url="${escapeXmlAttr(src.targetUrl)}">\n${content}\n</source>`;
   });
+
+  if (liveSnapshot) {
+    xmlBlocks.unshift(`<source id="0" name="Consolidation_Temps_Reel_29_Portails" url="https://live.euronext.com">\n${liveSnapshot}\n</source>`);
+  }
 
   return `<corpus subject="${escapeXmlAttr(subjectQuery)}" total_sources="29">\n${xmlBlocks.join("\n")}\n</corpus>`;
 }
@@ -518,35 +251,42 @@ ${xmlCorpus}`;
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          systemInstruction: body.systemInstruction || undefined,
-          contents: [{ parts: [{ text: extractionPrompt }] }],
-          generationConfig: {
-            temperature: 0,
-            responseMimeType: "application/json",
-            responseSchema: STOCK_AUDIT_RESPONSE_SCHEMA
-          }
-        })
+    // Mode 1 : Audit complet sur contexte XML injecté (29 sources)
+    if (mode === "stock_analysis" && subjectQuery) {
+      const xmlCorpus = await buildInjectedXmlCorpus(subjectQuery, apiKey, modelId);
+
+      const extractionPrompt = `${body.userPrompt || `Analyse complète de ${subjectQuery}`}
+
+Voici les contenus nettoyés extraits des 29 sources financières certifiées. Croise et extrais les données exactes en JSON strict :
+
+${xmlCorpus}`;
+
+      const geminiResult = await callGeminiWithFallback(apiKey, modelId, {
+        systemInstruction: body.systemInstruction || undefined,
+        contents: [{ parts: [{ text: extractionPrompt }] }],
+        generationConfig: {
+          temperature: 0,
+          responseMimeType: "application/json"
+        }
       });
 
-      const geminiData = await geminiRes.json();
-      if (!geminiRes.ok) {
+      if (!geminiResult.ok) {
         return {
-          statusCode: geminiRes.status,
+          statusCode: geminiResult.status,
           headers,
-          body: JSON.stringify({ error: geminiData?.error?.message || "Erreur API gemini-4-hydrogen." })
+          body: JSON.stringify({ error: geminiResult.error })
         };
       }
 
       return {
         statusCode: 200,
         headers,
-        body: JSON.stringify(geminiData)
+        body: JSON.stringify(geminiResult.data)
       };
     }
 
     // Mode 2 : Appels ciblés (Comparateur VS, Deep Dive, Radar Rumeurs, Stress-Test, Mise à jour fonds)
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${encodeURIComponent(apiKey)}`;
-    const payload = {
+    const geminiResult = await callGeminiWithFallback(apiKey, modelId, {
       systemInstruction: body.systemInstruction || undefined,
       contents: body.contents || [],
       tools: body.tools || undefined,
@@ -554,27 +294,20 @@ ${xmlCorpus}`;
         temperature: 0,
         ...(body.generationConfig || {})
       }
-    };
-
-    const geminiRes = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
     });
 
-    const geminiData = await geminiRes.json();
-    if (!geminiRes.ok) {
+    if (!geminiResult.ok) {
       return {
-        statusCode: geminiRes.status,
+        statusCode: geminiResult.status,
         headers,
-        body: JSON.stringify({ error: geminiData?.error?.message || "Erreur API gemini-4-hydrogen." })
+        body: JSON.stringify({ error: geminiResult.error })
       };
     }
 
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify(geminiData)
+      body: JSON.stringify(geminiResult.data)
     };
   } catch (error) {
     return {
