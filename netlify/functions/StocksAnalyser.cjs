@@ -236,6 +236,8 @@ exports.handler = async function (event) {
       headers,
       body: JSON.stringify({ error: "Clé API StocksAnalyserKey manquante dans les variables d'environnement Netlify." })
     };
+  }
+
   const modelId = process.env.GEMINI_MODEL || "gemini-3-flash-preview";
 
   try {
