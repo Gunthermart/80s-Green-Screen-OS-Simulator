@@ -1502,6 +1502,9 @@
             }
 
             if (!res.ok) {
+                if (res.status === 404) {
+                    throw new Error("Fonction serverless StocksAnalyser introuvable (404). Vérifie le déploiement de netlify/functions/StocksAnalyser.cjs sur Netlify.");
+                }
                 throw new Error(data?.error || `Erreur serveur Netlify (${res.status})`);
             }
 
@@ -2559,18 +2562,25 @@ Ne laisse AUCUNE chaîne vide. Respecte exactement cette structure JSON :
         // --- DEXIE: FUNDS, STOCKS & CROSS MATRIX ---
         async function initDatabaseData() {
             try {
-                const existingFunds = await db.funds.count();
-                if (existingFunds === 0) {
+                const rawFunds = await db.funds.toArray();
+                const validFunds = rawFunds.filter(f => f && f.id && f.name && Array.isArray(f.topHoldings));
+                if (validFunds.length === 0) {
+                    await db.funds.clear();
                     await db.funds.bulkPut(DEFAULT_FUNDS_DATA);
+                    fundsList = [...DEFAULT_FUNDS_DATA];
+                } else {
+                    fundsList = validFunds;
                 }
-                const existingStocks = await db.stocks.count();
-                if (existingStocks === 0) {
+
+                const rawStocks = await db.stocks.toArray();
+                const validStocks = rawStocks.filter(s => s && s.id && s.name);
+                if (validStocks.length === 0) {
+                    await db.stocks.clear();
                     await db.stocks.bulkPut(DEFAULT_STOCKS_DATA);
+                    stocksList = [...DEFAULT_STOCKS_DATA];
+                } else {
+                    stocksList = validStocks;
                 }
-                const dbFunds = await db.funds.toArray();
-                const dbStocks = await db.stocks.toArray();
-                if (dbFunds.length > 0) fundsList = dbFunds;
-                if (dbStocks.length > 0) stocksList = dbStocks;
             } catch (err) {
                 console.warn("IndexedDB indisponible, bascule sur la mémoire locale :", err);
                 useMemoryFallback = true;
@@ -2578,12 +2588,8 @@ Ne laisse AUCUNE chaîne vide. Respecte exactement cette structure JSON :
                 stocksList = [...DEFAULT_STOCKS_DATA];
             }
             updateStocksCountBadge();
-            if (!document.getElementById("fundsContainer").classList.contains("hidden")) {
-                renderFundsGrid();
-            }
-            if (!document.getElementById("stocksContainer").classList.contains("hidden")) {
-                renderStocksGrid();
-            }
+            renderFundsGrid();
+            renderStocksGrid();
             if (!document.getElementById("matrixContainer").classList.contains("hidden")) {
                 renderCrossMatrix();
             }
@@ -2625,26 +2631,30 @@ Ne laisse AUCUNE chaîne vide. Respecte exactement cette structure JSON :
             });
 
             const grid = document.getElementById("funds-grid");
+            if (!grid) return;
             if (filtered.length === 0) {
-                grid.innerHTML = `<div class="col-span-full p-6 text-center text-xs font-mono text-slate-400 bg-slate-900/70 rounded-xl border border-slate-800">Aucun gérant ne correspond à ce filtre.</div>`;
+                grid.innerHTML = `<div class="col-span-full p-6 text-center text-xs font-mono text-slate-400 bg-slate-900/70 rounded-xl border border-slate-800 space-y-3">
+                    <p>Aucun gérant ne correspond à ce filtre.</p>
+                    <button onclick="setFundStyleFilter('ALL'); document.getElementById('search-funds').value=''; filterFundsList();" class="px-3 py-1.5 rounded-lg bg-sky-500/20 text-sky-300 border border-sky-500/30 font-bold cursor-pointer">Afficher tous les gérants</button>
+                </div>`;
                 return;
             }
             grid.innerHTML = filtered.map(f => `
                 <div class="p-5 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col justify-between space-y-4 glass-card">
                     <div class="space-y-2">
                         <div class="flex items-center justify-between text-[10px] font-mono">
-                            <span class="px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 font-bold">${escapeHTML(f.style)}</span>
-                            <span class="text-emerald-400 font-bold">YTD ${escapeHTML(f.perfYtd)}</span>
+                            <span class="px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 font-bold">${escapeHTML(f.style || "Conviction")}</span>
+                            <span class="text-emerald-400 font-bold">YTD ${escapeHTML(f.perfYtd || "--")}</span>
                         </div>
-                        <h3 class="font-bold text-white text-base">${escapeHTML(f.name)}</h3>
-                        <p class="text-xs text-slate-400 font-mono">${escapeHTML(f.fundName)} • Gérant : ${escapeHTML(f.manager)}</p>
-                        <p class="text-xs text-slate-300 line-clamp-2">${escapeHTML(f.thesis)}</p>
+                        <h3 class="font-bold text-white text-base">${escapeHTML(f.name || "Société de Gestion")}</h3>
+                        <p class="text-xs text-slate-400 font-mono">${escapeHTML(f.fundName || "")} • Gérant : ${escapeHTML(f.manager || "--")}</p>
+                        <p class="text-xs text-slate-300 line-clamp-2">${escapeHTML(f.thesis || "")}</p>
                         <div class="flex flex-wrap gap-1 pt-1">
                             ${(f.topHoldings || []).slice(0, 5).map(h => `<span class="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-[10px] font-mono text-slate-300">${escapeHTML(h)}</span>`).join("")}
                         </div>
                     </div>
                     <div class="flex items-center justify-between pt-2 border-t border-slate-800 text-xs font-mono">
-                        <span class="text-slate-400">Encours : <strong class="text-white">${escapeHTML(f.aum)}</strong></span>
+                        <span class="text-slate-400">Encours : <strong class="text-white">${escapeHTML(f.aum || "--")}</strong></span>
                         <button onclick="openFundDetailModal('${escapeHTML(f.id)}')" class="text-sky-400 hover:text-sky-300 font-bold cursor-pointer">Fiche complète →</button>
                     </div>
                 </div>
@@ -2725,7 +2735,20 @@ Ne laisse AUCUNE chaîne vide. Respecte exactement cette structure JSON :
                 closeFundUpdateModal();
                 showToast("Base de données gérants actualisée.", "success");
             } catch (err) {
-                showToast(err.message, "error");
+                if (String(err.message).includes("404")) {
+                    const f = fundsList.find(item => item.id === targetId) || fundsList[0];
+                    if (f && customQuery) {
+                        f.recentMoves = `[Note locale ${new Date().toLocaleDateString("fr-FR")}] ${customQuery}`;
+                        if (!useMemoryFallback) {
+                            await db.funds.put(f).catch(() => {});
+                        }
+                        renderFundsGrid();
+                    }
+                    closeFundUpdateModal();
+                    showToast("Backend 404 : base locale conservée et note enregistrée localement.", "warning");
+                } else {
+                    showToast(err.message, "error");
+                }
             } finally {
                 loading.classList.add("hidden");
                 btn.disabled = false;
@@ -3223,6 +3246,8 @@ Ne laisse AUCUNE chaîne vide. Respecte exactement cette structure JSON :
 
         // --- INITIALIZATION ---
         document.addEventListener("DOMContentLoaded", async () => {
+            renderFundsGrid();
+            renderStocksGrid();
             await initDatabaseData();
             runDCFCalculation();
         });
