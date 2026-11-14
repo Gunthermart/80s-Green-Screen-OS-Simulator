@@ -110,40 +110,57 @@ async function fetchSingleCertifiedSource(source, encodedQuery) {
  * Appel Gemini résilient avec fallback automatique de modèle si le modèle cible est indisponible.
  */
 async function callGeminiWithFallback(apiKey, primaryModel, payload) {
-  const modelsToTry = Array.from(new Set([primaryModel, "gemini-3-flash-preview", "gemini-2.5-flash"]));
+  const modelsToTry = Array.from(new Set([primaryModel, "gemini-3.8-flash", "gemini-3-flash-preview"]));
   let lastError = null;
 
   for (const model of modelsToTry) {
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 6800);
-    try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-        signal: controller.signal
+    // Certains modèles rejettent la combinaison google_search + responseMimeType: "application/json" (HTTP 400)
+    const variants = [payload];
+    if (payload?.tools?.length && payload?.generationConfig?.responseMimeType === "application/json") {
+      const { responseMimeType, ...restGenConfig } = payload.generationConfig;
+      variants.push({
+        ...payload,
+        generationConfig: restGenConfig
       });
-      clearTimeout(timer);
-      const data = await res.json();
-      if (res.ok) {
-        return { ok: true, status: 200, data };
-      }
-      const rawMsg = data?.error?.message || `Erreur API (${model})`;
-      if (/prepayment credits|billing|quota|resource_exhausted/i.test(rawMsg) || res.status === 402 || res.status === 429) {
-        lastError = {
-          status: res.status,
-          message: "Crédits prépayés Google AI Studio épuisés ou quota dépassé. Rechargez votre solde sur https://ai.studio/projects (Facturation)."
-        };
+    }
+
+    for (const currentPayload of variants) {
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 6800);
+      try {
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(currentPayload),
+          signal: controller.signal
+        });
+        clearTimeout(timer);
+        const data = await res.json();
+        if (res.ok) {
+          return { ok: true, status: 200, data };
+        }
+        const rawMsg = data?.error?.message || `Erreur API (${model})`;
+        if (/prepayment credits|billing|quota|resource_exhausted/i.test(rawMsg) || res.status === 402 || res.status === 429) {
+          return {
+            ok: false,
+            status: res.status,
+            error: "Crédits prépayés Google AI Studio épuisés ou quota dépassé. Rechargez votre solde sur https://ai.studio/projects (Facturation)."
+          };
+        }
+        lastError = { status: res.status, message: rawMsg };
+        if (res.status !== 400) {
+          break;
+        }
+      } catch (err) {
+        clearTimeout(timer);
+        lastError = { status: 504, message: err.name === "AbortError" ? `Timeout sur ${model}` : err.message };
         break;
       }
-      lastError = { status: res.status, message: rawMsg };
-      if (res.status !== 404 && res.status !== 400 && res.status !== 503) {
-        break;
-      }
-    } catch (err) {
-      clearTimeout(timer);
-      lastError = { status: 504, message: err.name === "AbortError" ? `Timeout sur ${model}` : err.message };
+    }
+
+    if (lastError && lastError.status !== 404 && lastError.status !== 400 && lastError.status !== 503 && lastError.status !== 504) {
+      break;
     }
   }
 
