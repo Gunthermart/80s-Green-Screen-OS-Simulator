@@ -1370,8 +1370,10 @@
             stocks: "id, name, category"
         });
 
-        let fundsList = [];
-        let stocksList = [];
+        let fundsList = [...DEFAULT_FUNDS_DATA];
+        let stocksList = [...DEFAULT_STOCKS_DATA];
+        let inMemoryTrades = [];
+        let useMemoryFallback = false;
         let currentFundStyleFilter = "ALL";
         let currentJournalFilter = "ALL";
         let currentReportData = null;
@@ -2556,17 +2558,35 @@ Ne laisse AUCUNE chaîne vide. Respecte exactement cette structure JSON :
 
         // --- DEXIE: FUNDS, STOCKS & CROSS MATRIX ---
         async function initDatabaseData() {
-            const existingFunds = await db.funds.count();
-            if (existingFunds === 0) {
-                await db.funds.bulkPut(DEFAULT_FUNDS_DATA);
+            try {
+                const existingFunds = await db.funds.count();
+                if (existingFunds === 0) {
+                    await db.funds.bulkPut(DEFAULT_FUNDS_DATA);
+                }
+                const existingStocks = await db.stocks.count();
+                if (existingStocks === 0) {
+                    await db.stocks.bulkPut(DEFAULT_STOCKS_DATA);
+                }
+                const dbFunds = await db.funds.toArray();
+                const dbStocks = await db.stocks.toArray();
+                if (dbFunds.length > 0) fundsList = dbFunds;
+                if (dbStocks.length > 0) stocksList = dbStocks;
+            } catch (err) {
+                console.warn("IndexedDB indisponible, bascule sur la mémoire locale :", err);
+                useMemoryFallback = true;
+                fundsList = [...DEFAULT_FUNDS_DATA];
+                stocksList = [...DEFAULT_STOCKS_DATA];
             }
-            const existingStocks = await db.stocks.count();
-            if (existingStocks === 0) {
-                await db.stocks.bulkPut(DEFAULT_STOCKS_DATA);
-            }
-            fundsList = await db.funds.toArray();
-            stocksList = await db.stocks.toArray();
             updateStocksCountBadge();
+            if (!document.getElementById("fundsContainer").classList.contains("hidden")) {
+                renderFundsGrid();
+            }
+            if (!document.getElementById("stocksContainer").classList.contains("hidden")) {
+                renderStocksGrid();
+            }
+            if (!document.getElementById("matrixContainer").classList.contains("hidden")) {
+                renderCrossMatrix();
+            }
         }
 
         function updateStocksCountBadge() {
@@ -2594,6 +2614,9 @@ Ne laisse AUCUNE chaîne vide. Respecte exactement cette structure JSON :
         }
 
         function renderFundsGrid() {
+            if (!Array.isArray(fundsList) || fundsList.length === 0) {
+                fundsList = [...DEFAULT_FUNDS_DATA];
+            }
             const query = (document.getElementById("search-funds")?.value || "").toLowerCase().trim();
             const filtered = fundsList.filter(f => {
                 const matchStyle = currentFundStyleFilter === "ALL" || (f.styleCategory || "").toLowerCase().includes(currentFundStyleFilter.toLowerCase());
@@ -2602,6 +2625,10 @@ Ne laisse AUCUNE chaîne vide. Respecte exactement cette structure JSON :
             });
 
             const grid = document.getElementById("funds-grid");
+            if (filtered.length === 0) {
+                grid.innerHTML = `<div class="col-span-full p-6 text-center text-xs font-mono text-slate-400 bg-slate-900/70 rounded-xl border border-slate-800">Aucun gérant ne correspond à ce filtre.</div>`;
+                return;
+            }
             grid.innerHTML = filtered.map(f => `
                 <div class="p-5 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col justify-between space-y-4 glass-card">
                     <div class="space-y-2">
@@ -2683,14 +2710,15 @@ Ne laisse AUCUNE chaîne vide. Respecte exactement cette structure JSON :
                 const res = await callGeminiHydrogenProxy({ mode: "legacy", userPrompt: prompt, useSearch: true });
 
                 if (res.fundId) {
-                    const f = await db.funds.get(res.fundId);
+                    const f = fundsList.find(item => item.id === res.fundId);
                     if (f) {
                         f.recentMoves = res.recentMoves || f.recentMoves;
                         if (Array.isArray(res.newHoldings)) {
                             f.topHoldings = Array.from(new Set([...res.newHoldings, ...(f.topHoldings || [])]));
                         }
-                        await db.funds.put(f);
-                        fundsList = await db.funds.toArray();
+                        if (!useMemoryFallback) {
+                            await db.funds.put(f).catch(() => {});
+                        }
                         renderFundsGrid();
                     }
                 }
@@ -2705,14 +2733,22 @@ Ne laisse AUCUNE chaîne vide. Respecte exactement cette structure JSON :
         }
 
         async function resetFundsToDefaults() {
-            await db.funds.clear();
-            await db.funds.bulkPut(DEFAULT_FUNDS_DATA);
-            fundsList = await db.funds.toArray();
+            fundsList = [...DEFAULT_FUNDS_DATA];
+            if (!useMemoryFallback) {
+                try {
+                    await db.funds.clear();
+                    await db.funds.bulkPut(DEFAULT_FUNDS_DATA);
+                    fundsList = await db.funds.toArray();
+                } catch {}
+            }
             renderFundsGrid();
             showToast("Base gérants réinitialisée.", "info");
         }
 
         function renderStocksGrid() {
+            if (!Array.isArray(stocksList) || stocksList.length === 0) {
+                stocksList = [...DEFAULT_STOCKS_DATA];
+            }
             const grid = document.getElementById("stocks-grid");
             grid.innerHTML = stocksList.map(st => `
                 <div class="p-4 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col justify-between space-y-3 glass-card">
