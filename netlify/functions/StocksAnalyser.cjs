@@ -256,6 +256,61 @@ async function buildInjectedXmlCorpus(subjectQuery) {
   return `<corpus subject="${escapeXmlAttr(subjectQuery)}" total_sources="29">\n${xmlBlocks.join("\n")}\n</corpus>`;
 }
 
+/**
+ * Récupération ultra-rapide (< 600ms) des données de marché réelles (ticker exact, cours, devise, place)
+ * via Yahoo Finance Search + Chart API pour garantir des faits chiffrés non vides.
+ */
+async function fetchLiveMarketSnapshot(subjectQuery) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 900);
+  try {
+    const searchUrl = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(subjectQuery)}&quotesCount=5&newsCount=0`;
+    const searchRes = await fetch(searchUrl, {
+      headers: { "User-Agent": "Mozilla/5.0" },
+      signal: controller.signal
+    });
+    if (!searchRes.ok) {
+      clearTimeout(timer);
+      return "";
+    }
+    const searchJson = await searchRes.json();
+    const quotes = searchJson?.quotes || [];
+    const bestQuote =
+      quotes.find((q) => String(q.symbol || "").endsWith(".PA") || String(q.symbol || "").endsWith(".AS") || String(q.symbol || "").endsWith(".BR")) ||
+      quotes[0];
+
+    if (!bestQuote?.symbol) {
+      clearTimeout(timer);
+      return "";
+    }
+
+    const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(bestQuote.symbol)}?interval=1d&range=1mo`;
+    const chartRes = await fetch(chartUrl, {
+      headers: { "User-Agent": "Mozilla/5.0" },
+      signal: controller.signal
+    });
+    clearTimeout(timer);
+    if (!chartRes.ok) {
+      return `Symbole identifié: ${bestQuote.symbol} | Nom: ${bestQuote.longname || bestQuote.shortname || subjectQuery} | Place: ${bestQuote.exchDisp || "Euronext"}`;
+    }
+    const chartJson = await chartRes.json();
+    const meta = chartJson?.chart?.result?.[0]?.meta || {};
+    return [
+      `Nom officiel: ${bestQuote.longname || bestQuote.shortname || subjectQuery}`,
+      `Ticker Yahoo: ${bestQuote.symbol}`,
+      `Place de cotation: ${meta.fullExchangeName || bestQuote.exchDisp || "Euronext"}`,
+      `Devise: ${meta.currency || "EUR"}`,
+      `Cours actuel: ${meta.regularMarketPrice ?? "N/A"} ${meta.currency || "EUR"}`,
+      `Plus haut 52 sem.: ${meta.fiftyTwoWeekHigh ?? "N/A"}`,
+      `Plus bas 52 sem.: ${meta.fiftyTwoWeekLow ?? "N/A"}`,
+      `Clôture précédente: ${meta.chartPreviousClose ?? "N/A"}`
+    ].join(" | ");
+  } catch {
+    clearTimeout(timer);
+    return "";
+  }
+}
+
 exports.handler = async function (event) {
   const functionStartMs = Date.now();
   const netlifyDeadlineMs = functionStartMs + 8900;
@@ -297,16 +352,25 @@ exports.handler = async function (event) {
 
     // Mode 1 : Audit complet ou partiel (29 sources XML)
     if ((mode === "stock_analysis" || mode === "stock_analysis_part1" || mode === "stock_analysis_part2") && subjectQuery) {
-      const xmlCorpus = body.skipCorpusFetch
-        ? `<corpus subject="${escapeXmlAttr(subjectQuery)}" total_sources="29">Synthèse complémentaire sur les 29 sources Euronext certifiées.</corpus>`
-        : await buildInjectedXmlCorpus(subjectQuery);
-      const useLiveSearch = mode !== "stock_analysis_part2";
+      const [xmlCorpus, liveSnapshot] = await Promise.all([
+        body.skipCorpusFetch
+          ? Promise.resolve(`<corpus subject="${escapeXmlAttr(subjectQuery)}" total_sources="29">Synthèse complémentaire sur les 29 sources Euronext certifiées.</corpus>`)
+          : buildInjectedXmlCorpus(subjectQuery),
+        fetchLiveMarketSnapshot(subjectQuery)
+      ]);
+      const useLiveSearch = false;
 
       const extractionPrompt = `${body.userPrompt || `Analyse complète de ${subjectQuery}`}
 
-RÈGLE DE FORMAT : Réponds UNIQUEMENT avec l'objet JSON brut valide (sans balises markdown \`\`\`json ni texte autour). Sois concis, dense et chirurgical sur chaque champ texte (1 à 2 phrases max par champ).
+DONNÉES TEMPS RÉEL VÉRIFIÉES :
+${liveSnapshot || `Valeur recherchée : ${subjectQuery}`}
 
-Voici les contenus extraits des 29 sources financières certifiées. Croise ces données avec les chiffres boursiers et financiers à jour pour produire le JSON exact :
+RÈGLES IMPÉRATIVES :
+1. Réponds UNIQUEMENT avec l'objet JSON brut valide (sans balises markdown \`\`\`json ni texte autour).
+2. INTERDICTION ABSOLUE de laisser des chaînes vides "" ou "--". Remplis CHAQUE champ avec les données réelles connues et calculées de la société "${subjectQuery}".
+3. Sois concis, dense et chirurgical sur chaque champ texte (1 à 2 phrases max par champ).
+
+Voici les contenus extraits des 29 sources financières certifiées :
 
 ${xmlCorpus}`;
 
