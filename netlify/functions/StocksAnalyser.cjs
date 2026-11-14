@@ -71,13 +71,13 @@ function escapeXmlAttr(str) {
 }
 
 /**
- * Collecte parallèle directe des 29 URLs certifiées avec timeout strict (1.1s)
- * pour garantir le respect de la limite Netlify de 10s.
+ * Collecte parallèle directe des 29 URLs certifiées avec timeout strict (750ms)
+ * pour garantir le respect absolu de la limite Netlify de 10s.
  */
 async function fetchSingleCertifiedSource(source, encodedQuery) {
   const targetUrl = `${source.url}${encodedQuery}`;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 1100);
+  const timer = setTimeout(() => controller.abort(), 750);
   try {
     const res = await fetch(targetUrl, {
       headers: {
@@ -107,32 +107,39 @@ async function fetchSingleCertifiedSource(source, encodedQuery) {
 }
 
 /**
- * Appel Gemini résilient avec budget temps global (anti-504 Netlify) et fallback automatique de modèle.
+ * Appel Gemini résilient avec budget temps global (anti-504 Netlify),
+ * thinkingBudget: 0 pour latence minimale (< 3s) et fallback automatique.
  */
 async function callGeminiWithFallback(apiKey, primaryModel, payload, deadlineMs = Date.now() + 8500) {
-  const modelsToTry = Array.from(new Set([primaryModel, "gemini-3.8-flash", "gemini-3-flash-preview"]));
+  const modelsToTry = Array.from(new Set([primaryModel, "gemini-3-flash-preview", "gemini-2.5-flash"]));
   let lastError = null;
 
   for (const model of modelsToTry) {
     const remainingForModel = deadlineMs - Date.now();
-    if (remainingForModel < 1500) {
+    if (remainingForModel < 1800) {
       lastError = { status: 504, message: "Budget temps Netlify atteint avant la fin de la synthèse." };
       break;
     }
 
-    // Si google_search est actif, éviter responseMimeType: "application/json" qui provoque un HTTP 400 et fait perdre 1 round-trip
-    let effectivePayload = payload;
-    if (payload?.tools?.length && payload?.generationConfig?.responseMimeType === "application/json") {
-      const { responseMimeType, ...restGenConfig } = payload.generationConfig;
-      effectivePayload = {
-        ...payload,
-        generationConfig: restGenConfig
-      };
+    const baseGenConfig = {
+      temperature: 0,
+      thinkingConfig: { thinkingBudget: 0 },
+      ...(payload?.generationConfig || {})
+    };
+
+    // Si google_search est actif, retirer responseMimeType: "application/json" (incompatible API)
+    if (payload?.tools?.length && baseGenConfig.responseMimeType === "application/json") {
+      delete baseGenConfig.responseMimeType;
     }
+
+    const effectivePayload = {
+      ...payload,
+      generationConfig: baseGenConfig
+    };
 
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
     const controller = new AbortController();
-    const timeoutMs = Math.max(2000, Math.min(7200, deadlineMs - Date.now()));
+    const timeoutMs = Math.max(2200, Math.min(7200, deadlineMs - Date.now()));
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
@@ -229,18 +236,17 @@ exports.handler = async function (event) {
       headers,
       body: JSON.stringify({ error: "Clé API StocksAnalyserKey manquante dans les variables d'environnement Netlify." })
     };
-  }
-
-  const modelId = process.env.GEMINI_MODEL || "gemini-4-hydrogen";
+  const modelId = process.env.GEMINI_MODEL || "gemini-3-flash-preview";
 
   try {
     const body = JSON.parse(event.body || "{}");
     const mode = body.mode || "legacy";
     const subjectQuery = String(body.subjectQuery || "").trim();
 
-    // Mode 1 : Audit complet mono-passe (29 sources XML + vérification temps réel en un seul appel Gemini)
-    if (mode === "stock_analysis" && subjectQuery) {
+    // Mode 1 : Audit complet ou partiel (29 sources XML)
+    if ((mode === "stock_analysis" || mode === "stock_analysis_part1" || mode === "stock_analysis_part2") && subjectQuery) {
       const xmlCorpus = await buildInjectedXmlCorpus(subjectQuery);
+      const useLiveSearch = mode !== "stock_analysis_part2";
 
       const extractionPrompt = `${body.userPrompt || `Analyse complète de ${subjectQuery}`}
 
@@ -256,9 +262,10 @@ ${xmlCorpus}`;
         {
           systemInstruction: body.systemInstruction || undefined,
           contents: [{ parts: [{ text: extractionPrompt }] }],
-          tools: [{ google_search: {} }],
+          tools: useLiveSearch ? [{ google_search: {} }] : undefined,
           generationConfig: {
-            temperature: 0
+            temperature: 0,
+            ...(useLiveSearch ? {} : { responseMimeType: "application/json" })
           }
         },
         netlifyDeadlineMs
