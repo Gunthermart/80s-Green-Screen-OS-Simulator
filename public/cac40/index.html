@@ -1436,34 +1436,54 @@
 
         function extractCleanJSON(text) {
             if (!text) return null;
+            let parsed = null;
             try {
-                return JSON.parse(text);
+                parsed = JSON.parse(text);
             } catch {
                 const start = text.indexOf("{");
                 const end = text.lastIndexOf("}");
                 if (start !== -1 && end !== -1 && end > start) {
                     try {
-                        return JSON.parse(text.slice(start, end + 1));
+                        parsed = JSON.parse(text.slice(start, end + 1));
                     } catch {
                         return null;
                     }
                 }
-                return null;
             }
+            if (!parsed || typeof parsed !== "object") return null;
+            if (Array.isArray(parsed)) {
+                parsed = parsed[0] || null;
+            }
+            // Déballer automatiquement si le modèle a encapsulé la réponse dans une clé racine unique (ex: { "part1": { ... } })
+            const keys = parsed ? Object.keys(parsed) : [];
+            if (keys.length === 1 && parsed[keys[0]] && typeof parsed[keys[0]] === "object" && !Array.isArray(parsed[keys[0]])) {
+                return parsed[keys[0]];
+            }
+            return parsed;
         }
 
-        async function callGeminiHydrogenProxy({ mode = "legacy", subjectQuery = "", systemPrompt = "", userPrompt = "", useSearch = false }) {
+        async function callGeminiHydrogenProxy({ mode = "legacy", subjectQuery = "", systemPrompt = "", userPrompt = "", useSearch = false, skipCorpusFetch = false }) {
             const payload = {
                 mode,
                 subjectQuery,
-                systemInstruction: systemPrompt ? { parts: [{ text: systemPrompt }] } : undefined,
-                contents: [{ parts: [{ text: userPrompt }] }],
-                tools: useSearch ? [{ google_search: {} }] : undefined,
-                generationConfig: {
-                    temperature: 0,
-                    responseMimeType: "application/json"
-                }
+                skipCorpusFetch,
+                userPrompt
             };
+
+            if (systemPrompt) {
+                payload.systemInstruction = {
+                    parts: [{ text: systemPrompt }]
+                };
+            }
+
+            if (mode === "legacy") {
+                payload.contents = [{ parts: [{ text: userPrompt }] }];
+                if (useSearch) {
+                    payload.tools = [{ google_search: {} }];
+                } else {
+                    payload.generationConfig = { responseMimeType: "application/json" };
+                }
+            }
 
             const res = await fetch("/.netlify/functions/StocksAnalyser", {
                 method: "POST",
@@ -1471,15 +1491,27 @@
                 body: JSON.stringify(payload)
             });
 
-            const data = await res.json();
-            if (!res.ok) {
-                throw new Error(data.error || `Erreur serveur Netlify (${res.status})`);
+            const rawResponseText = await res.text();
+            let data = null;
+            try {
+                data = JSON.parse(rawResponseText);
+            } catch {
+                throw new Error(`Délai serveur dépassé ou réponse invalide (HTTP ${res.status}). Réessaie l'audit.`);
             }
 
-            const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+            if (!res.ok) {
+                throw new Error(data?.error || `Erreur serveur Netlify (${res.status})`);
+            }
+
+            if (data?.parsedJson && typeof data.parsedJson === "object") {
+                return data.parsedJson;
+            }
+
+            const parts = data?.candidates?.[0]?.content?.parts || [];
+            const rawText = parts.map(p => p?.text || "").filter(Boolean).join("\n");
             const parsed = extractCleanJSON(rawText);
             if (!parsed) {
-                throw new Error("Réponse JSON invalide reçue depuis gemini-4-hydrogen.");
+                throw new Error("Réponse JSON invalide reçue depuis le moteur d'analyse.");
             }
             return parsed;
         }
@@ -1612,26 +1644,100 @@
 Tu reçois un corpus XML de 29 sources financières certifiées (<source id="1"> à <source id="29">).
 Extrais les données avec une précision chirurgicale, sans hallucination, en croisant les bilans, cours du jour, FCF en M€, dette nette en M€ (négative si trésorerie nette), nombre d'actions en millions, ratios de valorisation, consensus et niveaux techniques Ichimoku.`;
 
-            const userPrompt = `Produis l'audit financier et technique complet au format JSON strict pour : "${query}".
-Renseigne impérativement :
-- fcfMillionsNumeric (nombre en M€)
-- netDebtMillionsNumeric (nombre en M€, négatif si trésorerie nette)
-- sharesMillionsNumeric (nombre d'actions en millions)
-- currentPriceNumeric (cours actuel en €)
-- tradingPlan avec entryZone, stopLoss, tp1, tp2 exprimés en € cohérents avec le cours actuel.`;
+            const userPromptPart1 = `Produis la PARTIE 1 (Identité, Triple Audit, KPIs, Dette, Santé & Multiples) au format JSON strict pour : "${query}".
+Ne laisse AUCUNE chaîne vide. Respecte exactement cette structure JSON :
+{
+  "companyInfo": { "name": "Nom complet", "ticker": "TICKER", "isin": "Code ISIN", "market": "Euronext Paris", "index": "CAC 40 / SBF 120 / Mid & Small", "icbSector": "Secteur", "headquarters": "Ville, Pays", "summary": "Présentation activité en 2 phrases", "competitivePositioning": "Avantage concurrentiel" },
+  "cfaPersona": { "roe": "ex: 18.5%", "debtEbitda": "ex: 0.8x", "moatRating": "Large / Étroit", "fcfQuality": "Conversion FCF élevée", "factsVsForecasts": "Analyse bilan et rentabilité" },
+  "cmtPersona": { "rrRatio": "1:2.4", "invalidationCondition": "Clôture sous support", "levelsText": "Supports et résistances clés", "scenarioText": "Scénario technique court/moyen terme" },
+  "mnaPersona": { "bearPrice": "ex: 520 €", "basePrice": "ex: 640 €", "bullPrice": "ex: 750 €", "waccFormula": "WACC 8.5% | g 2.0%", "assumptionsText": "Hypothèses DCF et multiples pairs" },
+  "bayesianPerspective": { "probBullish": "62%", "expectedRange": "Fourchette T+1", "peadVal": "+1.8%", "peadText": "Dynamique post-publication", "peadBar": "65%", "macroVal": "Modérée", "macroText": "Impact taux BCE/OAT", "macroBar": "55%", "gammaVal": "Positive", "gammaText": "Asymétrie hausse/baisse", "gammaBar": "60%", "summary": "Synthèse probabiliste T+1" },
+  "financialKPIs": { "period": "Exercice / LTM", "revenue": "ex: 84,7 Md€", "ebitda": "ex: 22,8 Md€", "netIncome": "ex: 12,6 Md€", "fcf": "ex: 10,5 Md€", "operatingMargin": "ex: 23.1%", "eps": "ex: 25,10 €", "marketCap": "ex: 310 Md€", "netDebt": "ex: 9,2 Md€", "fcfMillionsNumeric": 10500, "netDebtMillionsNumeric": 9200, "sharesMillionsNumeric": 500, "currentPriceNumeric": 620 },
+  "debtStructure": { "grossDebt": "ex: 18,0 Md€", "cash": "ex: 8,8 Md€", "costOfDebt": "ex: 3.1%", "creditRating": "A+ / Solidité", "fixedRatePct": 75, "variableRatePct": 25, "maturitySTPct": 15, "maturityMTPct": 45, "maturityLTPct": 40 },
+  "healthScores": { "piotroskiScore": 7, "piotroskiAnalysis": "Diagnostic F-Score", "altmanZScore": "3.4", "altmanAnalysis": "Diagnostic solvabilité", "pegRatio": "1.4", "pegBadge": "GARP", "pegAnalysis": "Croissance vs PER", "dividendYield": "2.1%", "dividendSafety": "Sécurisé", "dividendAnalysis": "Politique dividende", "debtEbitda": "0.8x", "interestCoverage": "14.2x" },
+  "valuationMultiples": { "peRatio": "22.5x", "evEbitda": "13.8x", "pFCF": "24.0x", "roicWacc": "+6.5%" }
+}`;
+
+            const userPromptPart2 = `Produis la PARTIE 2 (Croissance, Gouvernance, Guidance, Consensus, Risques, Shorts, Filtres, Diagnostic, Plan Trading, Ichimoku & QVM) au format JSON strict pour : "${query}".
+Ne laisse AUCUNE chaîne vide. Respecte exactement cette structure JSON :
+{
+  "growthAnalysis": { "cagrHist": "+8.5%", "cagrEpsEst": "+9.2%", "revisionTrend": "Stable / Haussière", "lastSurprise": "+2.4%", "historicalGrowthSummary": "Trajectoire historique", "growthOutlook": "Perspectives 12-24 mois", "growthDrivers": ["Moteur 1", "Moteur 2"], "marketRumors": [{ "source": "Presse financière", "credibility": "Vérifié", "text": "Catalyseur ou actualité récente" }] },
+  "governanceAndCapital": { "majorShareholders": [{ "name": "Actionnaire principal", "percentage": "48%" }], "governanceNotes": "Structure gouvernance et flottant" },
+  "perspectives": { "guidanceSummary": "Objectifs direction", "strategicPillars": ["Pilier 1", "Pilier 2"] },
+  "analystConsensusAndNews": { "consensusRecommendation": "Achat / Surperformance", "targetPriceAvg": "Objectif moyen €", "consensusSummary": "Synthèse des bureaux d'études" },
+  "documentedRisks": [{ "category": "Macro / Cycle", "description": "Risque principal documenté" }],
+  "shortInterest": { "shortCapitalPct": "0.6%", "shortSqueezePotential": "Faible", "shortAnalysis": "Positions courtes déclarées AMF" },
+  "portfolioEntryIndicators": { "grahamStatus": "Validé / Sélectif", "grahamDesc": "Critère valeur intrinsèque", "kellyValue": "4.5%", "kellyDesc": "Taille optimale fractionnée", "kijunStatus": "Au-dessus / Test", "kijunDesc": "Position par rapport à la Kijun" },
+  "leonceDiagnostic": { "overallScore": 76, "stAnalysis": "Lecture technique et catalyseurs court terme", "mtAnalysis": "Thèse fondamentale moyen terme" },
+  "tradingPlan": { "entryZone": "615", "stopLoss": "565", "tp1": "680", "tp2": "730", "ichimokuKumo": "Cours par rapport au nuage Kumo", "ichimokuTK": "Position Tenkan / Kijun", "ichimokuChikou": "Validation Chikou Span", "tradeExamples": [{ "title": "Accumulation sur repli", "rrRatio": "1:2.2", "setupSummary": "Achat sur support majeur", "entry": "615 €", "stopLoss": "565 €", "target": "725 €" }] },
+  "qvmComposite": { "overallScore": 76, "qualityScore": 80, "valuationScore": 72, "momentumScore": 75, "qualityAnalysis": "Qualité marges et bilan", "valuationAnalysis": "Niveau des multiples", "momentumAnalysis": "Dynamique des cours et révisions" }
+}`;
+
+            const userPromptPart2 = `Produis la PARTIE 2 (Croissance, Gouvernance, Guidance, Consensus, Risques, Shorts, Filtres, Diagnostic, Plan Trading, Ichimoku & QVM) au format JSON strict pour : "${query}".
+Respecte exactement cette structure JSON :
+{
+  "growthAnalysis": { "cagrHist": "", "cagrEpsEst": "", "revisionTrend": "", "lastSurprise": "", "historicalGrowthSummary": "", "growthOutlook": "", "growthDrivers": [""], "marketRumors": [{ "source": "", "credibility": "", "text": "" }] },
+  "governanceAndCapital": { "majorShareholders": [{ "name": "", "percentage": "" }], "governanceNotes": "" },
+  "perspectives": { "guidanceSummary": "", "strategicPillars": [""] },
+  "analystConsensusAndNews": { "consensusRecommendation": "", "targetPriceAvg": "", "consensusSummary": "" },
+  "documentedRisks": [{ "category": "", "description": "" }],
+  "shortInterest": { "shortCapitalPct": "", "shortSqueezePotential": "", "shortAnalysis": "" },
+  "portfolioEntryIndicators": { "grahamStatus": "", "grahamDesc": "", "kellyValue": "", "kellyDesc": "", "kijunStatus": "", "kijunDesc": "" },
+  "leonceDiagnostic": { "overallScore": 75, "stAnalysis": "", "mtAnalysis": "" },
+  "tradingPlan": { "entryZone": "", "stopLoss": "", "tp1": "", "tp2": "", "ichimokuKumo": "", "ichimokuTK": "", "ichimokuChikou": "", "tradeExamples": [{ "title": "", "rrRatio": "", "setupSummary": "", "entry": "", "stopLoss": "", "target": "" }] },
+  "qvmComposite": { "overallScore": 75, "qualityScore": 78, "valuationScore": 72, "momentumScore": 75, "qualityAnalysis": "", "valuationAnalysis": "", "momentumAnalysis": "" }
+}`;
 
             try {
                 setTimeout(() => {
-                    document.getElementById("loadingStatusText").innerText = "Extraction & synthèse chirurgicale sur contexte XML 1M tokens (gemini-4-hydrogen)...";
-                    document.getElementById("loadingProgressBar").style.width = "82%";
-                }, 1200);
+                    document.getElementById("loadingStatusText").innerText = "Synthèse parallèle Fondamentale & Technique sur contexte XML (29 sources)...";
+                    document.getElementById("loadingProgressBar").style.width = "78%";
+                }, 900);
 
-                const report = await callGeminiHydrogenProxy({
-                    mode: "stock_analysis",
-                    subjectQuery: query,
-                    systemPrompt,
-                    userPrompt
-                });
+                const [res1, res2] = await Promise.allSettled([
+                    callGeminiHydrogenProxy({
+                        mode: "stock_analysis_part1",
+                        subjectQuery: query,
+                        systemPrompt,
+                        userPrompt: userPromptPart1,
+                        skipCorpusFetch: false
+                    }),
+                    callGeminiHydrogenProxy({
+                        mode: "stock_analysis_part2",
+                        subjectQuery: query,
+                        systemPrompt,
+                        userPrompt: userPromptPart2,
+                        skipCorpusFetch: true
+                    })
+                ]);
+
+                if (res1.status === "rejected" && res2.status === "rejected") {
+                    throw new Error(res1.reason?.message || res2.reason?.message || "Échec de l'audit sur les 29 sources.");
+                }
+
+                const part1 = res1.status === "fulfilled" ? res1.value : {};
+                const part2 = res2.status === "fulfilled" ? res2.value : {};
+                const cleanObj = (obj) => {
+                    if (!obj || typeof obj !== "object") return {};
+                    const out = {};
+                    for (const [k, v] of Object.entries(obj)) {
+                        if (v !== null && v !== undefined && String(v).trim() !== "" && String(v).trim() !== "--") {
+                            out[k] = v;
+                        }
+                    }
+                    return out;
+                };
+                const mergedCompanyInfo = {
+                    name: query,
+                    ticker: query.toUpperCase(),
+                    ...cleanObj(part2.companyInfo),
+                    ...cleanObj(part1.companyInfo)
+                };
+                const report = {
+                    ...part2,
+                    ...part1,
+                    companyInfo: mergedCompanyInfo
+                };
 
                 currentReportData = report;
                 renderSingleReport(report);
@@ -1640,7 +1746,12 @@ Renseigne impérativement :
                 document.getElementById("loadingContainer").classList.add("hidden");
                 document.getElementById("resultsContainer").classList.remove("hidden");
                 document.getElementById("quickNavContainer").classList.remove("hidden");
-                showToast(`Audit ${report.companyInfo?.ticker || query} terminé (29 sources)`, "success");
+
+                if (res1.status === "rejected" || res2.status === "rejected") {
+                    showToast(`Audit partiel affiché pour ${report.companyInfo?.ticker || query} (une sous-requête a expiré).`, "warning");
+                } else {
+                    showToast(`Audit ${report.companyInfo?.ticker || query} terminé (29 sources)`, "success");
+                }
             } catch (err) {
                 document.getElementById("loadingContainer").classList.add("hidden");
                 document.getElementById("welcomeContainer").classList.remove("hidden");
