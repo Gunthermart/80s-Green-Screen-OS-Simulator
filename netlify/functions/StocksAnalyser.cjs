@@ -129,7 +129,15 @@ async function callGeminiWithFallback(apiKey, primaryModel, payload) {
       if (res.ok) {
         return { ok: true, status: 200, data };
       }
-      lastError = { status: res.status, message: data?.error?.message || `Erreur API (${model})` };
+      const rawMsg = data?.error?.message || `Erreur API (${model})`;
+      if (/prepayment credits|billing|quota|resource_exhausted/i.test(rawMsg) || res.status === 402 || res.status === 429) {
+        lastError = {
+          status: res.status,
+          message: "Crédits prépayés Google AI Studio épuisés ou quota dépassé. Rechargez votre solde sur https://ai.studio/projects (Facturation)."
+        };
+        break;
+      }
+      lastError = { status: res.status, message: rawMsg };
       if (res.status !== 404 && res.status !== 400 && res.status !== 503) {
         break;
       }
