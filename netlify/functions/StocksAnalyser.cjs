@@ -43,7 +43,7 @@ const CERTIFIED_SOURCES = [
 /**
  * Nettoyage HTML déterministe : supprime scripts, styles, balises et compresse les espaces.
  */
-function stripHtmlToCleanText(html, maxChars = 1200) {
+function stripHtmlToCleanText(html, maxChars = 750) {
   if (!html) return "";
   const cleaned = html
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
@@ -71,13 +71,13 @@ function escapeXmlAttr(str) {
 }
 
 /**
- * Collecte parallèle directe des 29 URLs certifiées avec timeout strict (750ms)
+ * Collecte parallèle directe des 29 URLs certifiées avec timeout strict (650ms)
  * pour garantir le respect absolu de la limite Netlify de 10s.
  */
 async function fetchSingleCertifiedSource(source, encodedQuery) {
   const targetUrl = `${source.url}${encodedQuery}`;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 750);
+  const timer = setTimeout(() => controller.abort(), 650);
   try {
     const res = await fetch(targetUrl, {
       headers: {
@@ -92,12 +92,12 @@ async function fetchSingleCertifiedSource(source, encodedQuery) {
       return { ...source, targetUrl, ok: false, text: "" };
     }
     const rawHtml = await res.text();
-    const cleanText = stripHtmlToCleanText(rawHtml, 1200);
+    const cleanText = stripHtmlToCleanText(rawHtml, 750);
     const blocked = /captcha|cloudflare|access denied|enable javascript|just a moment/i.test(cleanText) && cleanText.length < 1500;
     return {
       ...source,
       targetUrl,
-      ok: !blocked && cleanText.length > 200,
+      ok: !blocked && cleanText.length > 180,
       text: blocked ? "" : cleanText
     };
   } catch {
@@ -107,16 +107,57 @@ async function fetchSingleCertifiedSource(source, encodedQuery) {
 }
 
 /**
+ * Extraction JSON robuste côté serveur (gère les blocs ```json, citations [1], ou objets encapsulés).
+ */
+function parseAndCleanModelJson(rawText) {
+  if (!rawText) return null;
+  let cleaned = String(rawText)
+    .replace(/```json\s*/gi, "")
+    .replace(/```\s*/g, "")
+    .trim();
+
+  let parsed = null;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch {
+    const start = cleaned.indexOf("{");
+    const end = cleaned.lastIndexOf("}");
+    if (start !== -1 && end !== -1 && end > start) {
+      try {
+        parsed = JSON.parse(cleaned.slice(start, end + 1));
+      } catch {
+        return null;
+      }
+    }
+  }
+  if (!parsed || typeof parsed !== "object") return null;
+  if (Array.isArray(parsed)) parsed = parsed[0] || null;
+  const keys = parsed ? Object.keys(parsed) : [];
+  if (keys.length === 1 && parsed[keys[0]] && typeof parsed[keys[0]] === "object" && !Array.isArray(parsed[keys[0]])) {
+    return parsed[keys[0]];
+  }
+  return parsed;
+}
+
+/**
  * Appel Gemini résilient avec budget temps global (anti-504 Netlify),
- * thinkingBudget: 0 pour latence minimale (< 3s) et fallback automatique.
+ * thinkingBudget: 0 pour latence minimale et fallback automatique sans google_search si nécessaire.
  */
 async function callGeminiWithFallback(apiKey, primaryModel, payload, deadlineMs = Date.now() + 8500) {
-  const modelsToTry = Array.from(new Set([primaryModel, "gemini-3-flash-preview", "gemini-2.5-flash"]));
+  const baseCandidates = Array.from(new Set([primaryModel, "gemini-3-flash-preview", "gemini-2.5-flash"]));
+  // Si google_search est activé, prévoir un repli immédiat en JSON natif sans google_search en cas de lenteur/erreur
+  const attempts = payload?.tools?.length
+    ? [
+        ...baseCandidates.map((m) => ({ model: m, useTools: true })),
+        { model: "gemini-2.5-flash", useTools: false }
+      ]
+    : baseCandidates.map((m) => ({ model: m, useTools: false }));
+
   let lastError = null;
 
-  for (const model of modelsToTry) {
+  for (const attempt of attempts) {
     const remainingForModel = deadlineMs - Date.now();
-    if (remainingForModel < 1800) {
+    if (remainingForModel < 1600) {
       lastError = { status: 504, message: "Budget temps Netlify atteint avant la fin de la synthèse." };
       break;
     }
@@ -127,19 +168,23 @@ async function callGeminiWithFallback(apiKey, primaryModel, payload, deadlineMs 
       ...(payload?.generationConfig || {})
     };
 
-    // Si google_search est actif, retirer responseMimeType: "application/json" (incompatible API)
-    if (payload?.tools?.length && baseGenConfig.responseMimeType === "application/json") {
+    if (attempt.useTools) {
       delete baseGenConfig.responseMimeType;
+    } else {
+      baseGenConfig.responseMimeType = "application/json";
     }
 
     const effectivePayload = {
       ...payload,
+      tools: attempt.useTools ? payload.tools : undefined,
       generationConfig: baseGenConfig
     };
 
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(attempt.model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
     const controller = new AbortController();
-    const timeoutMs = Math.max(2200, Math.min(7200, deadlineMs - Date.now()));
+    const timeoutMs = attempt.useTools
+      ? Math.max(2500, Math.min(4800, remainingForModel - 1800))
+      : Math.max(2000, Math.min(6500, remainingForModel));
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
@@ -152,15 +197,18 @@ async function callGeminiWithFallback(apiKey, primaryModel, payload, deadlineMs 
       clearTimeout(timer);
       const data = await res.json();
       if (res.ok) {
-        // Concaténer toutes les parties texte (utile quand google_search génère plusieurs parts)
         const parts = data?.candidates?.[0]?.content?.parts || [];
         const mergedText = parts.map((p) => p?.text || "").filter(Boolean).join("\n");
-        if (mergedText && data?.candidates?.[0]?.content) {
-          data.candidates[0].content.parts = [{ text: mergedText }];
+        const parsedJson = parseAndCleanModelJson(mergedText);
+        if (parsedJson && data?.candidates?.[0]?.content) {
+          data.candidates[0].content.parts = [{ text: JSON.stringify(parsedJson) }];
+          data.parsedJson = parsedJson;
+          return { ok: true, status: 200, data };
         }
-        return { ok: true, status: 200, data };
+        lastError = { status: 502, message: `JSON non exploitable sur ${attempt.model}` };
+        continue;
       }
-      const rawMsg = data?.error?.message || `Erreur API (${model})`;
+      const rawMsg = data?.error?.message || `Erreur API (${attempt.model})`;
       if (/prepayment credits|billing|quota|resource_exhausted/i.test(rawMsg) || res.status === 402 || res.status === 429) {
         return {
           ok: false,
@@ -171,11 +219,7 @@ async function callGeminiWithFallback(apiKey, primaryModel, payload, deadlineMs 
       lastError = { status: res.status, message: rawMsg };
     } catch (err) {
       clearTimeout(timer);
-      lastError = { status: 504, message: err.name === "AbortError" ? `Délai dépassé sur ${model}` : err.message };
-    }
-
-    if (lastError && lastError.status !== 404 && lastError.status !== 400 && lastError.status !== 503 && lastError.status !== 504) {
-      break;
+      lastError = { status: 504, message: err.name === "AbortError" ? `Délai dépassé sur ${attempt.model}` : err.message };
     }
   }
 
@@ -253,7 +297,9 @@ exports.handler = async function (event) {
 
     // Mode 1 : Audit complet ou partiel (29 sources XML)
     if ((mode === "stock_analysis" || mode === "stock_analysis_part1" || mode === "stock_analysis_part2") && subjectQuery) {
-      const xmlCorpus = await buildInjectedXmlCorpus(subjectQuery);
+      const xmlCorpus = body.skipCorpusFetch
+        ? `<corpus subject="${escapeXmlAttr(subjectQuery)}" total_sources="29">Synthèse complémentaire sur les 29 sources Euronext certifiées.</corpus>`
+        : await buildInjectedXmlCorpus(subjectQuery);
       const useLiveSearch = mode !== "stock_analysis_part2";
 
       const extractionPrompt = `${body.userPrompt || `Analyse complète de ${subjectQuery}`}
