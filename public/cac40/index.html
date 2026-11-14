@@ -480,7 +480,7 @@
                     </h3>
                     <div class="flex flex-wrap items-center gap-2 no-print">
                         <button onclick="copyTradeTweet()" class="px-3 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/30 font-mono text-xs font-bold cursor-pointer">Copier Post (&lt;270c)</button>
-                        <button onclick="saveCurrentTrade()" class="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-xs font-bold shadow-lg cursor-pointer">+ Enregistrer au Journal</button>
+                        <button id="btnSaveCurrentTrade" onclick="saveCurrentTrade(this)" class="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-xs font-bold shadow-lg cursor-pointer transition">+ Enregistrer au Journal</button>
                     </div>
                 </div>
 
@@ -3160,53 +3160,58 @@ Ne laisse AUCUNE chaîne vide. Respecte exactement cette structure JSON :
             }
             const info = currentReportData.companyInfo || {};
             const kpi = currentReportData.financialKPIs || {};
+            const hs = currentReportData.healthScores || {};
             const val = currentReportData.valuationMultiples || {};
             const diag = currentReportData.leonceDiagnostic || {};
             const qvm = currentReportData.qvmComposite || {};
-            const entry = document.getElementById("planEntryInput").value;
-            const sl = document.getElementById("planStopLossInput").value;
-            const tp1 = document.getElementById("planTP1Input").value;
-            const tp2 = document.getElementById("planTP2Input").value;
+            const mna = currentReportData.mnaPersona || {};
+            const con = currentReportData.analystConsensusAndNews || {};
 
-            document.getElementById("summaryModalTitle").innerText = `Synthèse Express — ${info.name || "--"}`;
-            document.getElementById("summaryModalTicker").innerText = `${info.ticker || "--"} • ${info.isin || "--"}`;
+            const entry = document.getElementById("planEntryInput")?.value || "--";
+            const sl = document.getElementById("planStopLossInput")?.value || "--";
+            const tp1 = document.getElementById("planTP1Input")?.value || "--";
+            const tp2 = document.getElementById("planTP2Input")?.value || "--";
+
+            document.getElementById("summaryModalTitle").innerText = `Synthèse 360° • ${info.name || "--"}`;
+            document.getElementById("summaryModalTicker").innerText = info.ticker || "--";
 
             document.getElementById("summaryModalContent").innerHTML = `
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono text-xs">
                     <div class="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
-                        <span class="text-[10px] text-slate-400 block uppercase">Score Diagnostic</span>
-                        <strong class="text-lg font-black text-sky-400">${diag.overallScore ?? "--"} / 100</strong>
+                        <span class="text-[10px] text-slate-400 uppercase block">Score Global</span>
+                        <strong class="text-lg font-black text-sky-400">${escapeHTML(String(diag.overallScore ?? qvm.overallScore ?? "--"))} / 100</strong>
                     </div>
                     <div class="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
-                        <span class="text-[10px] text-slate-400 block uppercase">Composite QVM</span>
-                        <strong class="text-lg font-black text-amber-300">${qvm.overallScore ?? "--"} / 100</strong>
+                        <span class="text-[10px] text-slate-400 uppercase block">Piotroski / Altman</span>
+                        <strong class="text-sm font-bold text-emerald-400">${escapeHTML(String(hs.piotroskiScore ?? "--"))}/9 • Z=${escapeHTML(String(hs.altmanZScore ?? "--"))}</strong>
                     </div>
                     <div class="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
-                        <span class="text-[10px] text-slate-400 block uppercase">PER / EV-EBITDA</span>
-                        <strong class="text-sm font-bold text-white">${escapeHTML(val.peRatio || "--")} / ${escapeHTML(val.evEbitda || "--")}</strong>
+                        <span class="text-[10px] text-slate-400 uppercase block">PER / EV-EBITDA</span>
+                        <strong class="text-sm font-bold text-white">${escapeHTML(val.peRatio || "--")} • ${escapeHTML(val.evEbitda || "--")}</strong>
                     </div>
                     <div class="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
-                        <span class="text-[10px] text-slate-400 block uppercase">FCF / Dette Nette</span>
-                        <strong class="text-sm font-bold text-emerald-400">${escapeHTML(kpi.fcf || "--")} / ${escapeHTML(kpi.netDebt || "--")}</strong>
+                        <span class="text-[10px] text-slate-400 uppercase block">Consensus & Cible</span>
+                        <strong class="text-sm font-bold text-amber-300">${escapeHTML(con.consensusRecommendation || "--")} (${escapeHTML(con.targetPriceAvg || "--")})</strong>
                     </div>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                     <div class="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
-                        <div class="font-mono font-bold text-teal-400 uppercase">Thèse Court Terme</div>
+                        <div class="font-mono font-bold text-teal-400 uppercase">Diagnostic Court Terme</div>
                         <p class="text-slate-300 leading-relaxed">${escapeHTML(diag.stAnalysis || "--")}</p>
                     </div>
                     <div class="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
-                        <div class="font-mono font-bold text-sky-400 uppercase">Thèse Moyen Terme</div>
+                        <div class="font-mono font-bold text-sky-400 uppercase">Thèse Moyen Terme & Valorisation</div>
                         <p class="text-slate-300 leading-relaxed">${escapeHTML(diag.mtAnalysis || "--")}</p>
+                        <div class="font-mono text-[11px] text-purple-300 pt-1">Fourchette M&A : Bear ${escapeHTML(mna.bearPrice || "--")} | Base ${escapeHTML(mna.basePrice || "--")} | Bull ${escapeHTML(mna.bullPrice || "--")}</div>
                     </div>
                 </div>
 
                 <div class="p-4 rounded-xl bg-slate-950 border border-emerald-500/30 font-mono text-xs flex flex-wrap items-center justify-between gap-3">
-                    <div><span class="text-slate-400">Entrée :</span> <strong class="text-sky-300">${entry} €</strong></div>
-                    <div><span class="text-slate-400">Stop Loss :</span> <strong class="text-rose-400">${sl} €</strong></div>
-                    <div><span class="text-slate-400">TP1 :</span> <strong class="text-emerald-400">${tp1} €</strong></div>
-                    <div><span class="text-slate-400">TP2 :</span> <strong class="text-teal-300">${tp2} €</strong></div>
+                    <div><span class="text-slate-400 block text-[10px]">CAPITALISATION / DETTE</span><strong class="text-white">${escapeHTML(kpi.marketCap || "--")} / ${escapeHTML(kpi.netDebt || "--")}</strong></div>
+                    <div><span class="text-slate-400 block text-[10px]">ENTRÉE</span><strong class="text-sky-300">${escapeHTML(entry)} €</strong></div>
+                    <div><span class="text-slate-400 block text-[10px]">STOP LOSS</span><strong class="text-rose-400">${escapeHTML(sl)} €</strong></div>
+                    <div><span class="text-slate-400 block text-[10px]">OBJECTIFS TP1 / TP2</span><strong class="text-emerald-400">${escapeHTML(tp1)} € / ${escapeHTML(tp2)} €</strong></div>
                 </div>
             `;
 
@@ -3217,13 +3222,15 @@ Ne laisse AUCUNE chaîne vide. Respecte exactement cette structure JSON :
             document.getElementById("summaryModal").classList.add("hidden");
         }
 
-        function copySummaryTextToClipboard() {
-            if (!currentReportData) return;
-            const info = currentReportData.companyInfo || {};
-            const diag = currentReportData.leonceDiagnostic || {};
-            const text = `SYNTHÈSE ${info.name} (${info.ticker})\nScore Global : ${diag.overallScore}/100\nCourt Terme : ${diag.stAnalysis}\nMoyen Terme : ${diag.mtAnalysis}\nPlan : Entrée ${document.getElementById("planEntryInput").value} € | SL ${document.getElementById("planStopLossInput").value} € | TP1 ${document.getElementById("planTP1Input").value} €`;
-            navigator.clipboard.writeText(text);
-            showToast("Synthèse complète copiée.", "success");
+        function copyTextFallback(text) {
+            const ta = document.createElement("textarea");
+            ta.value = text;
+            ta.style.position = "fixed";
+            ta.style.opacity = "0";
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand("copy");
+            document.body.removeChild(ta);
         }
 
         function copyInvestorNote() {
@@ -3232,46 +3239,122 @@ Ne laisse AUCUNE chaîne vide. Respecte exactement cette structure JSON :
             const kpi = currentReportData.financialKPIs || {};
             const val = currentReportData.valuationMultiples || {};
             const diag = currentReportData.leonceDiagnostic || {};
-            const md = `# Audit ${info.name} (${info.ticker} - ${info.isin})\n- **CA :** ${kpi.revenue} | **EBITDA :** ${kpi.ebitda} | **FCF :** ${kpi.fcf} | **Dette Nette :** ${kpi.netDebt}\n- **Multiples :** PER ${val.peRatio} | EV/EBITDA ${val.evEbitda} | P/FCF ${val.pFCF} | ROIC-WACC ${val.roicWacc}\n- **Score :** ${diag.overallScore}/100\n- **Plan :** Entrée ${document.getElementById("planEntryInput").value} € | SL ${document.getElementById("planStopLossInput").value} € | TP1 ${document.getElementById("planTP1Input").value} €`;
-            navigator.clipboard.writeText(md);
-            showToast("Note Markdown copiée.", "success");
+            const md = `# Audit Euronext FactCheck AI : ${info.name || ""} (${info.ticker || ""})
+- **ISIN** : ${info.isin || "--"} | **Secteur** : ${info.icbSector || "--"}
+- **CA** : ${kpi.revenue || "--"} | **EBITDA** : ${kpi.ebitda || "--"} | **FCF** : ${kpi.fcf || "--"} | **Dette Nette** : ${kpi.netDebt || "--"}
+- **Multiples** : PER ${val.peRatio || "--"} | EV/EBITDA ${val.evEbitda || "--"} | P/FCF ${val.pFCF || "--"}
+- **Score Global** : ${diag.overallScore ?? "--"}/100
+- **Thèse MT** : ${diag.mtAnalysis || "--"}`;
+            copyTextFallback(md);
+            showToast("Fiche Markdown copiée dans le presse-papiers.", "success");
         }
 
         function copyTradeTweet() {
             if (!currentReportData) return;
             const info = currentReportData.companyInfo || {};
             const val = currentReportData.valuationMultiples || {};
-            const entry = document.getElementById("planEntryInput").value;
-            const sl = document.getElementById("planStopLossInput").value;
-            const tp1 = document.getElementById("planTP1Input").value;
-            const rr = document.getElementById("planRRTP1").innerText;
-            const post = `$${info.ticker} (${info.name}) — Audit fondamental & plan :\nPER ${val.peRatio} | EV/EBITDA ${val.evEbitda} | P/FCF ${val.pFCF}\nEntrée : ${entry}€ | SL : ${sl}€ | TP1 : ${tp1}€ (${rr})`.slice(0, 268);
-            navigator.clipboard.writeText(post);
-            showToast(`Post PP copié (${post.length}/270 car.).`, "success");
+            const entry = document.getElementById("planEntryInput")?.value || "--";
+            const sl = document.getElementById("planStopLossInput")?.value || "--";
+            const tp1 = document.getElementById("planTP1Input")?.value || "--";
+            const tweet = `$${info.ticker || "ACTION"} (${info.name || ""}) • Audit FactCheck AI\nPER ${val.peRatio || "--"} | EV/EBITDA ${val.evEbitda || "--"}\nPlan : Entrée ${entry}€ | SL ${sl}€ | TP1 ${tp1}€ #Euronext #Bourse`.slice(0, 270);
+            copyTextFallback(tweet);
+            showToast("Post court (<270 car.) copié.", "success");
         }
 
-        // --- JOURNAL DES TRADES MT (DEXIE.JS) ---
-        async function saveCurrentTrade() {
-            if (!currentReportData) {
+        function copySummaryTextToClipboard() {
+            if (!currentReportData) return;
+            const info = currentReportData.companyInfo || {};
+            const diag = currentReportData.leonceDiagnostic || {};
+            const txt = `SYNTHÈSE 360° ${info.name || ""} (${info.ticker || ""}) — Score ${diag.overallScore ?? "--"}/100\nCT : ${diag.stAnalysis || "--"}\nMT : ${diag.mtAnalysis || "--"}`;
+            copyTextFallback(txt);
+            showToast("Synthèse 360° copiée dans le presse-papiers.", "success");
+        }
+
+        // --- JOURNAL DES TRADES MT (DEXIE.JS + FALLBACK MÉMOIRE) ---
+        let nextMemoryTradeId = 1;
+
+        async function getAllTradesSafe() {
+            if (!useMemoryFallback) {
+                try {
+                    const list = await db.trades.toArray();
+                    return list.sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
+                } catch (err) {
+                    console.warn("Bascule journal sur mémoire locale :", err);
+                    useMemoryFallback = true;
+                }
+            }
+            return [...inMemoryTrades].sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
+        }
+
+        async function saveCurrentTrade(btnEl) {
+            const domName = document.getElementById("reportCompanyName")?.innerText?.trim();
+            const domTicker = document.getElementById("reportTickerBadge")?.innerText?.replace(/^Ticker:\s*/i, "").trim();
+
+            if (!currentReportData && (!domName || domName === "--")) {
                 showToast("Lance d'abord l'audit d'un titre.", "warning");
                 return;
             }
-            const info = currentReportData.companyInfo || {};
+
+            const info = currentReportData?.companyInfo || {};
+            const entryPrice = parseFrenchNumber(document.getElementById("planEntryInput")?.value, 0);
+            const stopLoss = parseFrenchNumber(document.getElementById("planStopLossInput")?.value, 0);
+            const tp1 = parseFrenchNumber(document.getElementById("planTP1Input")?.value, 0);
+            const tp2 = parseFrenchNumber(document.getElementById("planTP2Input")?.value, 0);
+            const shares = Math.max(1, parseInt(document.getElementById("mmSharesInput")?.value, 10) || 1);
+
+            if (entryPrice <= 0) {
+                showToast("Saisis un prix d'entrée valide avant d'enregistrer.", "warning");
+                return;
+            }
+
             const trade = {
                 date: new Date().toISOString().slice(0, 10),
-                company: info.name || "Action",
-                ticker: (info.ticker || "TICK").toUpperCase(),
+                company: info.name || domName || "Action Euronext",
+                ticker: (info.ticker || domTicker || "TICK").toUpperCase(),
                 status: "OPEN",
-                entryPrice: parseFloat(document.getElementById("planEntryInput").value) || 0,
-                stopLoss: parseFloat(document.getElementById("planStopLossInput").value) || 0,
-                tp1: parseFloat(document.getElementById("planTP1Input").value) || 0,
-                tp2: parseFloat(document.getElementById("planTP2Input").value) || 0,
-                shares: parseInt(document.getElementById("mmSharesInput").value, 10) || 1,
+                entryPrice: round2(entryPrice),
+                stopLoss: round2(stopLoss),
+                tp1: round2(tp1),
+                tp2: round2(tp2),
+                shares,
                 exitPrice: null,
                 pnlEuro: 0
             };
-            await db.trades.add(trade);
-            showToast(`Position ${trade.ticker} (${trade.shares} actions @ ${trade.entryPrice} €) enregistrée.`, "success");
+
+            let saved = false;
+            if (!useMemoryFallback) {
+                try {
+                    const insertedId = await db.trades.add(trade);
+                    inMemoryTrades.push({ ...trade, id: insertedId });
+                    saved = true;
+                } catch (err) {
+                    console.warn("IndexedDB indisponible pour db.trades.add, sauvegarde en mémoire :", err);
+                    useMemoryFallback = true;
+                }
+            }
+
+            if (!saved) {
+                inMemoryTrades.push({ ...trade, id: nextMemoryTradeId++ });
+            }
+
+            const targetBtn = btnEl || document.getElementById("btnSaveCurrentTrade");
+            if (targetBtn) {
+                const prevHtml = targetBtn.innerHTML;
+                targetBtn.innerHTML = `<i class="fa-solid fa-check mr-1"></i>Enregistré au Journal !`;
+                targetBtn.classList.remove("bg-emerald-600", "hover:bg-emerald-500");
+                targetBtn.classList.add("bg-teal-500", "text-slate-950");
+                setTimeout(() => {
+                    targetBtn.innerHTML = prevHtml;
+                    targetBtn.classList.remove("bg-teal-500", "text-slate-950");
+                    targetBtn.classList.add("bg-emerald-600", "hover:bg-emerald-500");
+                }, 2200);
+            }
+
+            if (!document.getElementById("historyModal")?.classList.contains("hidden")) {
+                await renderJournalList();
+            }
+
+            showToast(`Position ${trade.ticker} (${trade.shares} actions @ ${trade.entryPrice.toFixed(2)} €) enregistrée au journal.`, "success");
         }
 
         async function openHistoryModal() {
@@ -3295,7 +3378,7 @@ Ne laisse AUCUNE chaîne vide. Respecte exactement cette structure JSON :
         }
 
         async function renderJournalList() {
-            const allTrades = await db.trades.reverse().toArray();
+            const allTrades = await getAllTradesSafe();
             const openTrades = allTrades.filter(t => t.status === "OPEN");
             const closedTrades = allTrades.filter(t => t.status === "CLOSED");
 
@@ -3352,27 +3435,47 @@ Ne laisse AUCUNE chaîne vide. Respecte exactement cette structure JSON :
 
         async function closeTradePosition(id) {
             const input = document.getElementById(`closePrice-${id}`);
-            const exitPrice = parseFloat(input?.value);
+            const exitPrice = parseFrenchNumber(input?.value, 0);
             if (!Number.isFinite(exitPrice) || exitPrice <= 0) {
                 showToast("Saisis un cours de sortie valide.", "warning");
                 return;
             }
-            const trade = await db.trades.get(id);
+            const allTrades = await getAllTradesSafe();
+            const trade = allTrades.find(t => Number(t.id) === Number(id));
             if (!trade) return;
             const pnlEuro = round2((exitPrice - trade.entryPrice) * trade.shares);
-            await db.trades.update(id, { status: "CLOSED", exitPrice, pnlEuro });
+
+            if (!useMemoryFallback) {
+                try {
+                    await db.trades.update(id, { status: "CLOSED", exitPrice, pnlEuro });
+                } catch {
+                    useMemoryFallback = true;
+                }
+            }
+            const memIdx = inMemoryTrades.findIndex(t => Number(t.id) === Number(id));
+            if (memIdx >= 0) {
+                inMemoryTrades[memIdx] = { ...inMemoryTrades[memIdx], status: "CLOSED", exitPrice, pnlEuro };
+            }
+
             await renderJournalList();
-            showToast(`Position ${trade.ticker} clôturée (P&L : ${pnlEuro >= 0 ? "+" : ""}${pnlEuro} €).`, "success");
+            showToast(`Position ${trade.ticker} clôturée (P&L : ${pnlEuro >= 0 ? "+" : ""}${pnlEuro.toFixed(2)} €).`, "success");
         }
 
         async function deleteTrade(id) {
-            await db.trades.delete(id);
+            if (!useMemoryFallback) {
+                try {
+                    await db.trades.delete(id);
+                } catch {
+                    useMemoryFallback = true;
+                }
+            }
+            inMemoryTrades = inMemoryTrades.filter(t => Number(t.id) !== Number(id));
             await renderJournalList();
             showToast("Ligne supprimée du journal.", "info");
         }
 
         async function exportJournalCSV() {
-            const trades = await db.trades.toArray();
+            const trades = await getAllTradesSafe();
             const headers = ["ID", "Date", "Societe", "Ticker", "Statut", "Actions", "Entree", "StopLoss", "TP1", "Sortie", "PnL_Euro"];
             const rows = trades.map(t => [t.id, t.date, t.company, t.ticker, t.status, t.shares, t.entryPrice, t.stopLoss, t.tp1, t.exitPrice ?? "", t.pnlEuro].join(";"));
             const csv = "\uFEFF" + [headers.join(";"), ...rows].join("\n");
@@ -3381,7 +3484,7 @@ Ne laisse AUCUNE chaîne vide. Respecte exactement cette structure JSON :
         }
 
         async function exportJournalJSON() {
-            const trades = await db.trades.toArray();
+            const trades = await getAllTradesSafe();
             downloadBlob(JSON.stringify(trades, null, 2), "journal_trades_euronext.json", "application/json");
             showToast("Journal JSON exporté.", "success");
         }
@@ -3393,7 +3496,14 @@ Ne laisse AUCUNE chaîne vide. Respecte exactement cette structure JSON :
                 const parsed = JSON.parse(await file.text());
                 if (Array.isArray(parsed)) {
                     const sanitized = parsed.map(({ id, ...rest }) => rest);
-                    await db.trades.bulkAdd(sanitized);
+                    if (!useMemoryFallback) {
+                        try {
+                            await db.trades.bulkAdd(sanitized);
+                        } catch {
+                            useMemoryFallback = true;
+                        }
+                    }
+                    sanitized.forEach(item => inMemoryTrades.push({ ...item, id: nextMemoryTradeId++ }));
                     await renderJournalList();
                     showToast("Trades importés avec succès.", "success");
                 }
