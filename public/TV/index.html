@@ -1173,61 +1173,107 @@
         return `${rawStreamUrl}${separator}sid=${sid}&deviceType=web&deviceMake=Chrome&deviceModel=web&deviceVersion=1.0.0`;
       }
 
-      async getPlutoChannels(search = '', genre = 'all') {
+      async getPlutoChannels(search = '', genre = 'all', country = 'FR') {
+        const regionCode = (country && country !== 'GLOBAL') ? country.toLowerCase() : 'fr';
+        const sources = [
+          `https://raw.githubusercontent.com/iptv-org/iptv/master/streams/${regionCode}_pluto.m3u`,
+          `https://i.mjh.nz/PlutoTV/${regionCode}.m3u8`,
+          `https://raw.githubusercontent.com/iptv-org/iptv/master/streams/fr_pluto.m3u`
+        ];
+
+        const uniqueMap = new Map();
+
+        // 1. Fetch from Pluto Official API v0
         try {
           const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 4000);
-          
+          const timer = setTimeout(() => controller.abort(), 3500);
           let apiUrl = 'https://api.pluto.tv/v0/channels?clientModelNumber=0.0.0&serverSideAds=true';
-          if (window.location.hostname !== 'localhost') {
+          if (window.location.hostname !== 'localhost' && !window.location.hostname.includes('usercontent.goog')) {
             apiUrl = `/.netlify/functions/IPTV?url=${encodeURIComponent(apiUrl)}`;
           }
-
           const res = await fetch(apiUrl, { signal: controller.signal });
           clearTimeout(timer);
-
           if (res.ok) {
             const data = await res.json();
-            if (Array.isArray(data) && data.length > 0) {
-              const parsed = [];
+            if (Array.isArray(data)) {
               data.forEach(ch => {
                 if (ch.isLive !== false) {
-                  let rawStreamUrl = '';
-                  if (ch.stitched && ch.stitched.urls && ch.stitched.urls[0] && ch.stitched.urls[0].url) {
-                    rawStreamUrl = ch.stitched.urls[0].url;
-                  }
-
+                  const rawStreamUrl = ch.stitched?.urls?.[0]?.url || `https://stitcher.pluto.tv/stitch/hls/channel/${ch._id}/master.m3u8`;
                   const logo = ch.colorLogoPNG?.path || ch.featuredImage?.path || `https://images.pluto.tv/channels/${ch._id}/colorLogoPNG.png`;
-
-                  parsed.push({
+                  uniqueMap.set(ch.name.toLowerCase().trim(), {
                     id: `pluto_${ch._id}`,
                     rawId: ch._id,
-                    rawStreamUrl: rawStreamUrl,
+                    rawStreamUrl,
                     name: ch.name,
                     url: rawStreamUrl,
-                    logo: logo,
-                    country: 'FR',
+                    logo,
+                    country: regionCode.toUpperCase(),
                     tags: ch.category || 'Pluto TV 24/7',
                     type: 'video',
                     category: ch.category ? ch.category.toLowerCase() : 'all'
                   });
                 }
               });
-
-              const filtered = parsed.filter(ch => {
-                const matchSearch = !search || ch.name.toLowerCase().includes(search.toLowerCase()) || ch.tags.toLowerCase().includes(search.toLowerCase());
-                const matchGenre = genre === 'all' || ch.category.includes(genre.toLowerCase()) || ch.tags.toLowerCase().includes(genre.toLowerCase());
-                return matchSearch && matchGenre;
-              });
-
-              if (filtered.length > 0) return filtered;
             }
           }
-        } catch (e) {
-          console.warn("Pluto TV API v0 fallback actif", e);
+        } catch (e) {}
+
+        // 2. Fetch from Open-Source M3U Pluto Feeds (iptv-org & i.mjh.nz)
+        for (const m3uUrl of sources) {
+          try {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 3500);
+            const res = await fetch(m3uUrl, { signal: controller.signal });
+            clearTimeout(timer);
+            if (res.ok) {
+              const text = await res.text();
+              const lines = text.split('\n');
+              let current = null;
+              for (let rawLine of lines) {
+                const line = rawLine.trim();
+                if (line.startsWith('#EXTINF:')) {
+                  const name = (line.match(/,(.+)$/) || [])[1]?.trim() || 'Pluto Channel';
+                  const logo = (line.match(/tvg-logo="([^"]*)"/) || [])[1] || '';
+                  const group = (line.match(/group-title="([^"]*)"/) || [])[1] || 'Pluto TV 24/7';
+                  const chIdMatch = line.match(/tvg-id="([^"]*)"/);
+                  const rawId = chIdMatch ? chIdMatch[1].split('@')[0] : name.toLowerCase().replace(/[^a-z0-9]/g, '');
+                  current = {
+                    id: `pluto_${rawId}`,
+                    rawId,
+                    name,
+                    logo,
+                    country: regionCode.toUpperCase(),
+                    tags: group,
+                    type: 'video',
+                    category: group.toLowerCase()
+                  };
+                } else if (line && !line.startsWith('#') && current) {
+                  current.rawStreamUrl = line;
+                  current.url = line;
+                  const key = current.name.toLowerCase().trim();
+                  if (!uniqueMap.has(key)) {
+                    uniqueMap.set(key, current);
+                  }
+                  current = null;
+                }
+              }
+              if (uniqueMap.size > 15) break;
+            }
+          } catch (e) {}
         }
 
-        return this.getBackupPlutoChannels(search, genre);
+        // 3. Merge with curated backup channels
+        this.getBackupPlutoChannels('', 'all').forEach(b => {
+          const key = b.name.toLowerCase().trim();
+          if (!uniqueMap.has(key)) uniqueMap.set(key, b);
+        });
+
+        const allChannels = Array.from(uniqueMap.values());
+        return allChannels.filter(ch => {
+          const matchSearch = !search || ch.name.toLowerCase().includes(search.toLowerCase()) || ch.tags.toLowerCase().includes(search.toLowerCase());
+          const matchGenre = genre === 'all' || ch.category.includes(genre.toLowerCase()) || ch.tags.toLowerCase().includes(genre.toLowerCase());
+          return matchSearch && matchGenre;
+        });
       }
 
       getBackupPlutoChannels(search = '', genre = 'all') {
@@ -1370,10 +1416,15 @@
     class MediaFetcher {
       constructor() {
         this.pluto = new PlutoTVService();
+        this.rbMirrors = [
+          'https://de1.api.radio-browser.info',
+          'https://nl1.api.radio-browser.info',
+          'https://at1.api.radio-browser.info'
+        ];
       }
 
-      async getPlutoTV(search = '', genre = 'all') {
-        return await this.pluto.getPlutoChannels(search, genre);
+      async getPlutoTV(search = '', genre = 'all', country = 'FR') {
+        return await this.pluto.getPlutoChannels(search, genre, country);
       }
 
       async getRadios(country = 'FR', genre = 'all', search = '') {
@@ -1385,51 +1436,52 @@
           humor: ['humour', 'comedy', 'rire', 'fun']
         };
 
-        const backups = BACKUP_STATIONS.FR_RADIO || [];
+        const backups = country === 'FR' || country === 'GLOBAL' ? (BACKUP_STATIONS.FR_RADIO || []) : [];
+        let fetchedList = [];
 
-        try {
-          const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 3500);
-          const countryParam = country === 'GLOBAL' ? '' : `bycountrycodeexact/${country.toLowerCase()}`;
-          const apiUrl = `https://de1.api.radio-browser.info/json/stations/${countryParam}?order=clickcount&reverse=true&limit=80`;
-          const res = await fetch(apiUrl, { signal: controller.signal });
-          clearTimeout(timer);
+        // Query multiple Radio-Browser mirrors for maximum coverage (up to 250 stations)
+        for (const mirror of this.rbMirrors) {
+          try {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 3500);
+            let apiUrl = '';
+            if (search && search.trim().length >= 2) {
+              apiUrl = `${mirror}/json/stations/search?name=${encodeURIComponent(search.trim())}&order=clickcount&reverse=true&limit=150&hidebroken=true`;
+            } else if (country === 'GLOBAL') {
+              apiUrl = `${mirror}/json/stations/topclick/250`;
+            } else {
+              apiUrl = `${mirror}/json/stations/bycountrycodeexact/${country.toLowerCase()}?order=clickcount&reverse=true&limit=250&hidebroken=true`;
+            }
 
-          if (res.ok) {
-            const data = await res.json();
-            const fetchedList = data
-              .filter(st => st.url_resolved && (st.codec === 'MP3' || st.codec === 'AAC' || st.url_resolved.includes('.m3u8') || st.url_resolved.includes('.mp3')))
-              .map(st => ({
-                id: `rb_${st.stationuuid}`,
-                name: st.name ? st.name.trim() : 'Radio',
-                url: st.url_resolved,
-                logo: st.favicon || '',
-                country: country,
-                tags: st.tags ? st.tags.split(',').slice(0, 3).join(', ') : 'Radio Live',
-                type: 'audio'
-              }));
+            const res = await fetch(apiUrl, { signal: controller.signal });
+            clearTimeout(timer);
 
-            const combined = [...backups, ...fetchedList];
-            const uniqueMap = new Map();
-            combined.forEach(st => {
-              const key = st.name.toLowerCase().replace(/[^a-z0-9]/g, '');
-              if (!uniqueMap.has(key)) uniqueMap.set(key, st);
-            });
+            if (res.ok) {
+              const data = await res.json();
+              fetchedList = data
+                .filter(st => st.url_resolved && (st.codec === 'MP3' || st.codec === 'AAC' || st.codec === 'OGG' || st.url_resolved.includes('.m3u8') || st.url_resolved.includes('.mp3')))
+                .map(st => ({
+                  id: `rb_${st.stationuuid}`,
+                  name: st.name ? st.name.trim() : 'Radio',
+                  url: st.url_resolved,
+                  logo: st.favicon || '',
+                  country: st.countrycode || country,
+                  tags: st.tags ? st.tags.split(',').slice(0, 3).join(', ') : 'Radio Live',
+                  type: 'audio'
+                }));
+              if (fetchedList.length > 0) break;
+            }
+          } catch (e) {}
+        }
 
-            return Array.from(uniqueMap.values()).filter(st => {
-              const matchSearch = !search || st.name.toLowerCase().includes(search.toLowerCase()) || st.tags.toLowerCase().includes(search.toLowerCase());
-              let matchGenre = (genre === 'all');
-              if (!matchGenre && genreKeywords[genre]) {
-                const tagLower = st.tags.toLowerCase();
-                const nameLower = st.name.toLowerCase();
-                matchGenre = genreKeywords[genre].some(k => tagLower.includes(k) || nameLower.includes(k));
-              }
-              return matchSearch && matchGenre;
-            });
-          }
-        } catch (e) { console.warn('Radio Browser fallback actif', e); }
+        const combined = [...backups, ...fetchedList];
+        const uniqueMap = new Map();
+        combined.forEach(st => {
+          const key = st.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (!uniqueMap.has(key)) uniqueMap.set(key, st);
+        });
 
-        return backups.filter(st => {
+        return Array.from(uniqueMap.values()).filter(st => {
           const matchSearch = !search || st.name.toLowerCase().includes(search.toLowerCase()) || st.tags.toLowerCase().includes(search.toLowerCase());
           let matchGenre = (genre === 'all');
           if (!matchGenre && genreKeywords[genre]) {
@@ -1450,30 +1502,44 @@
           humor: ['humour', 'comedy', 'séries', 'divertissement']
         };
 
-        const targetUrl = country === 'GLOBAL' 
-          ? `https://iptv-org.github.io/iptv/index.m3u`
-          : `https://iptv-org.github.io/iptv/countries/${country.toLowerCase()}.m3u`;
+        // Aggregate multiple official iptv-org playlists (country + thematic streams)
+        const m3uSources = country === 'GLOBAL'
+          ? ['https://iptv-org.github.io/iptv/languages/fra.m3u', 'https://iptv-org.github.io/iptv/index.m3u']
+          : [
+              `https://iptv-org.github.io/iptv/countries/${country.toLowerCase()}.m3u`,
+              ...(country === 'FR' ? [
+                'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/fr_bfm.m3u',
+                'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/fr_rakuten.m3u'
+              ] : [])
+            ];
 
-        const backups = BACKUP_STATIONS.FR_TV || [];
+        const backups = (country === 'FR' || country === 'GLOBAL') ? (BACKUP_STATIONS.FR_TV || []) : [];
         let fetchedList = [];
 
-        try {
-          const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 4000);
-          const res = await fetch(targetUrl, { signal: controller.signal });
-          clearTimeout(timer);
-
-          if (res.ok) {
+        const results = await Promise.allSettled(
+          m3uSources.map(async (srcUrl) => {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 4500);
+            const res = await fetch(srcUrl, { signal: controller.signal });
+            clearTimeout(timer);
+            if (!res.ok) return [];
             const text = await res.text();
-            fetchedList = this.parseM3U(text, search, country);
+            return this.parseM3U(text, '', country, 250);
+          })
+        );
+
+        results.forEach(r => {
+          if (r.status === 'fulfilled' && Array.isArray(r.value)) {
+            fetchedList = fetchedList.concat(r.value);
           }
-        } catch (e) { console.warn('IPTV M3U fallback actif', e); }
+        });
 
         const combined = [...backups, ...fetchedList];
         const uniqueMap = new Map();
         combined.forEach(item => {
-          if (!uniqueMap.has(item.name.toLowerCase())) {
-            uniqueMap.set(item.name.toLowerCase(), item);
+          const key = item.name.toLowerCase().trim();
+          if (!uniqueMap.has(key)) {
+            uniqueMap.set(key, item);
           }
         });
 
@@ -1602,7 +1668,7 @@
         return episodes;
       }
 
-      parseM3U(content, search = '', country = 'FR') {
+      parseM3U(content, search = '', country = 'FR', maxItems = 250) {
         const lines = content.split('\n');
         const list = [];
         let item = null;
@@ -1623,7 +1689,7 @@
             }
             item = null;
           }
-          if (list.length >= 100) break;
+          if (list.length >= maxItems) break;
         }
         return list;
       }
@@ -2195,8 +2261,36 @@
         };
 
         document.getElementById('btn-play-pause').onclick = () => {
-          if (this.media.paused) this.media.play();
+          if (this.media.paused) this.media.play().catch(() => {});
           else this.media.pause();
+        };
+
+        document.getElementById('btn-prev').onclick = () => {
+          if (this.currentPlayingEpisode && this.currentEpisodes && this.currentEpisodes.length > 0) {
+            const idx = this.currentEpisodes.findIndex(e => e.id === this.currentPlayingEpisode.id);
+            if (idx > 0) this.playPodcastEpisode(idx - 1);
+          } else if (this.stations.length > 0) {
+            const prevIdx = (this.activeStationIndex - 1 + this.stations.length) % this.stations.length;
+            this.playStation(prevIdx);
+          }
+        };
+
+        document.getElementById('btn-next').onclick = () => {
+          if (this.queue.queue.length > 0) {
+            const nextItem = this.queue.next();
+            if (nextItem) {
+              this.showToast(`▶ Suivant : ${nextItem.episode.title}`);
+              this.playPodcastEpisodeObj(nextItem.episode, nextItem.podcast);
+              return;
+            }
+          }
+          if (this.currentPlayingEpisode && this.currentEpisodes && this.currentEpisodes.length > 0) {
+            const idx = this.currentEpisodes.findIndex(e => e.id === this.currentPlayingEpisode.id);
+            if (idx >= 0 && idx < this.currentEpisodes.length - 1) this.playPodcastEpisode(idx + 1);
+          } else if (this.stations.length > 0) {
+            const nextIdx = (this.activeStationIndex + 1) % this.stations.length;
+            this.playStation(nextIdx);
+          }
         };
 
         document.getElementById('btn-skip-back').onclick = () => { this.media.currentTime = Math.max(0, this.media.currentTime - 10); };
@@ -2230,7 +2324,7 @@
         const stageFavBtn = document.getElementById('btn-stage-fav');
         if (stageFavBtn) {
           stageFavBtn.onclick = () => {
-            const currentItem = this.currentPlayingEpisode || this.stations[this.activeStationIndex];
+            const currentItem = this.getCurrentActiveMedia();
             if (currentItem) this.toggleFav(currentItem);
           };
         }
@@ -2238,7 +2332,7 @@
         const playerFavBtn = document.getElementById('btn-player-fav');
         if (playerFavBtn) {
           playerFavBtn.onclick = () => {
-            const currentItem = this.currentPlayingEpisode || this.stations[this.activeStationIndex];
+            const currentItem = this.getCurrentActiveMedia();
             if (currentItem) this.toggleFav(currentItem);
           };
         }
@@ -2275,10 +2369,52 @@
         };
       }
 
+      getCurrentActiveMedia() {
+        if (this.currentPlayingEpisode) {
+          return {
+            id: this.currentPlayingEpisode.id,
+            name: this.currentPlayingEpisode.title,
+            url: this.currentPlayingEpisode.url,
+            logo: this.selectedPodcast ? this.selectedPodcast.logo : '',
+            tags: this.selectedPodcast ? this.selectedPodcast.name : 'Podcast',
+            type: 'audio'
+          };
+        }
+        return this.stations[this.activeStationIndex] || null;
+      }
+
+      updateActiveFavIcons(item) {
+        const isFav = item ? this.favStore.isFav(item.id, item.type) : false;
+        const stageIcon = document.getElementById('icon-stage-fav');
+        const playerIcon = document.getElementById('icon-player-fav');
+        [stageIcon, playerIcon].forEach(icon => {
+          if (icon) {
+            icon.setAttribute('fill', isFav ? '#ef4444' : 'none');
+            icon.setAttribute('stroke', isFav ? '#ef4444' : 'currentColor');
+          }
+        });
+      }
+
       updateMetadata(title, subtitle, logo) {
         document.getElementById('player-title').textContent = title || 'Sans titre';
         document.getElementById('player-subtitle').textContent = subtitle || 'Direct Stream';
         document.getElementById('stage-title').textContent = title || 'OmniStream';
+
+        this.updateActiveFavIcons(this.getCurrentActiveMedia());
+
+        if ('mediaSession' in navigator) {
+          try {
+            navigator.mediaSession.metadata = new MediaMetadata({
+              title: title || 'OmniStream',
+              artist: subtitle || 'Direct Stream',
+              artwork: logo ? [{ src: logo, sizes: '512x512', type: 'image/png' }] : []
+            });
+            navigator.mediaSession.setActionHandler('play', () => this.media.play());
+            navigator.mediaSession.setActionHandler('pause', () => this.media.pause());
+            navigator.mediaSession.setActionHandler('previoustrack', () => document.getElementById('btn-prev').click());
+            navigator.mediaSession.setActionHandler('nexttrack', () => document.getElementById('btn-next').click());
+          } catch (e) {}
+        }
 
         const stageImg = document.getElementById('stage-cover-img');
         const stageFallback = document.getElementById('stage-cover-fallback');
@@ -2322,21 +2458,40 @@
 
       initFullscreenAndHUD() {
         const toggleFullscreen = () => {
-          if (!document.fullscreenElement) {
-            if (this.theater.requestFullscreen) this.theater.requestFullscreen();
+          const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+          if (!fsEl) {
+            if (this.theater.requestFullscreen) {
+              this.theater.requestFullscreen().catch(() => {});
+            } else if (this.theater.webkitRequestFullscreen) {
+              this.theater.webkitRequestFullscreen();
+            } else if (this.media.webkitEnterFullscreen) {
+              this.media.webkitEnterFullscreen();
+            }
           } else {
-            if (document.exitFullscreen) document.exitFullscreen();
+            if (document.exitFullscreen) {
+              document.exitFullscreen().catch(() => {});
+            } else if (document.webkitExitFullscreen) {
+              document.webkitExitFullscreen();
+            }
           }
+          setTimeout(() => this.visualizer.resize(), 150);
         };
 
         document.getElementById('btn-stage-fullscreen').onclick = toggleFullscreen;
         document.getElementById('btn-fullscreen').onclick = toggleFullscreen;
+        if (this.videoViewport) {
+          this.videoViewport.ondblclick = toggleFullscreen;
+        }
 
         window.addEventListener('keydown', (e) => {
+          if (document.activeElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
           if (e.key === 'f' || e.key === 'F') {
-            if (document.activeElement.tagName !== 'INPUT') {
-              toggleFullscreen();
-            }
+            toggleFullscreen();
+          } else if (e.key === ' ') {
+            e.preventDefault();
+            document.getElementById('btn-play-pause').click();
+          } else if (e.key === 'm' || e.key === 'M') {
+            document.getElementById('btn-volume-toggle').click();
           }
         });
 
@@ -2374,11 +2529,11 @@
       async loadCatalog(search = '') {
         this.grid.style.display = 'grid';
         this.episodesContainer.innerHTML = '';
-        this.grid.innerHTML = '<div class="loader-container"><div class="spinner"></div><p>Chargement en cours...</p></div>';
+        this.grid.innerHTML = '<div class="loader-container"><div class="spinner"></div><p>Agrégation de tous les flux en cours...</p></div>';
 
         if (this.currentTab === 'radio') this.stations = await this.fetcher.getRadios(this.currentCountry, this.currentGenre, search);
         else if (this.currentTab === 'tv') this.stations = await this.fetcher.getTV(this.currentCountry, this.currentGenre, search);
-        else if (this.currentTab === 'pluto') this.stations = await this.fetcher.getPlutoTV(search, this.currentGenre);
+        else if (this.currentTab === 'pluto') this.stations = await this.fetcher.getPlutoTV(search, this.currentGenre, this.currentCountry);
         else if (this.currentTab === 'podcasts') this.stations = await this.fetcher.getPodcasts(search, this.currentGenre, this.currentCountry);
         else if (this.currentTab === 'radio-fav') this.stations = this.favStore.getRadioFavs();
         else if (this.currentTab === 'tv-fav') this.stations = this.favStore.getTvFavs();
@@ -2543,6 +2698,7 @@
         this.audioOverlay.style.display = 'flex';
         this.visualizer.start();
         this.visualizer.setPreset(document.getElementById('anim-preset-select').value || 'cyber');
+        requestAnimationFrame(() => this.visualizer.resize());
 
         this.playMediaStream(ep.url, false);
         
@@ -2568,6 +2724,7 @@
         }
 
         this.updateMetadata(s.name, s.tags || s.country, s.logo);
+        this.renderGrid();
 
         const isVideo = s.type === 'video' || s.type === 'tv';
         if (isVideo) {
@@ -2580,6 +2737,7 @@
           this.audioOverlay.style.display = 'flex';
           this.visualizer.start();
           this.visualizer.setPreset(document.getElementById('anim-preset-select').value || 'cyber');
+          requestAnimationFrame(() => this.visualizer.resize());
           this.playMediaStream(streamUrl, false);
         }
       }
@@ -2595,6 +2753,10 @@
           this.hlsPlayer = null;
         }
 
+        this.media.pause();
+        this.media.removeAttribute('src');
+        this.media.load();
+
         this.media.muted = false;
         if (!this.media.volume || this.media.volume === 0) this.media.volume = 0.8;
 
@@ -2606,6 +2768,7 @@
           class CustomHlsLoader extends Hls.DefaultConfig.loader {
             constructor(config) {
               super(config);
+              this.config = config;
             }
 
             load(context, config, callbacks) {
@@ -2644,7 +2807,8 @@
                 }
               }
 
-              const shouldUseProxy = window.location.hostname !== 'localhost' && !context.isDirectRetry && (targetUrl.startsWith('http://') || targetUrl.includes('pluto.tv') || targetUrl.includes('bfm'));
+              const isPreviewOrLocal = window.location.hostname === 'localhost' || window.location.hostname.includes('usercontent.goog') || window.location.protocol === 'blob:';
+              const shouldUseProxy = !isPreviewOrLocal && !context.isDirectRetry && (targetUrl.startsWith('http://') || targetUrl.includes('pluto.tv') || targetUrl.includes('bfm'));
               if (shouldUseProxy && (targetUrl.startsWith('http://') || targetUrl.startsWith('https://'))) {
                 if (!targetUrl.startsWith(window.location.origin)) {
                   context.url = `/.netlify/functions/IPTV?url=${encodeURIComponent(targetUrl)}`;
@@ -2670,7 +2834,11 @@
                 if (!context.isDirectRetry && targetUrl && (targetUrl.startsWith('http://') || targetUrl.startsWith('https://'))) {
                   context.isDirectRetry = true;
                   context.url = targetUrl;
-                  super.load(context, config, callbacks);
+                  const fallbackLoader = new Hls.DefaultConfig.loader(this.config || config);
+                  fallbackLoader.load(context, config, {
+                    ...callbacks,
+                    onError: originalOnError
+                  });
                   return;
                 }
                 if (originalOnError) {
@@ -2745,6 +2913,7 @@
         const added = this.favStore.toggle(station);
         this.showToast(added ? `❤️ Ajouté aux favoris` : `Retiré des favoris`);
         this.updateBadgesUI();
+        this.updateActiveFavIcons(this.getCurrentActiveMedia());
         if (this.currentTab === 'radio-fav' || this.currentTab === 'tv-fav') {
           this.loadCatalog();
         } else {
