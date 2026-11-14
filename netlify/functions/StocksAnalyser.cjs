@@ -152,6 +152,12 @@ async function callGeminiWithFallback(apiKey, primaryModel, payload, deadlineMs 
       clearTimeout(timer);
       const data = await res.json();
       if (res.ok) {
+        // Concaténer toutes les parties texte (utile quand google_search génère plusieurs parts)
+        const parts = data?.candidates?.[0]?.content?.parts || [];
+        const mergedText = parts.map((p) => p?.text || "").filter(Boolean).join("\n");
+        if (mergedText && data?.candidates?.[0]?.content) {
+          data.candidates[0].content.parts = [{ text: mergedText }];
+        }
         return { ok: true, status: 200, data };
       }
       const rawMsg = data?.error?.message || `Erreur API (${model})`;
