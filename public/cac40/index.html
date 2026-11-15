@@ -3351,30 +3351,272 @@ Ne laisse AUCUNE chaîne vide. Respecte exactement cette structure JSON :
 
         function copyInvestorNote() {
             if (!currentReportData) return;
-            const info = currentReportData.companyInfo || {};
-            const kpi = currentReportData.financialKPIs || {};
-            const val = currentReportData.valuationMultiples || {};
-            const diag = currentReportData.leonceDiagnostic || {};
-            const md = `# Audit Euronext FactCheck AI : ${info.name || ""} (${info.ticker || ""})
-- **ISIN** : ${info.isin || "--"} | **Secteur** : ${info.icbSector || "--"}
-- **CA** : ${kpi.revenue || "--"} | **EBITDA** : ${kpi.ebitda || "--"} | **FCF** : ${kpi.fcf || "--"} | **Dette Nette** : ${kpi.netDebt || "--"}
-- **Multiples** : PER ${val.peRatio || "--"} | EV/EBITDA ${val.evEbitda || "--"} | P/FCF ${val.pFCF || "--"}
-- **Score Global** : ${diag.overallScore ?? "--"}/100
-- **Thèse MT** : ${diag.mtAnalysis || "--"}`;
+            const d = currentReportData;
+            const info = d.companyInfo || {};
+            const cfa = d.cfaPersona || {};
+            const cmt = d.cmtPersona || {};
+            const mna = d.mnaPersona || {};
+            const bay = d.bayesianPerspective || {};
+            const kpi = d.financialKPIs || {};
+            const ds = d.debtStructure || {};
+            const hs = d.healthScores || {};
+            const val = d.valuationMultiples || {};
+            const gr = d.growthAnalysis || {};
+            const gov = d.governanceAndCapital || {};
+            const per = d.perspectives || {};
+            const con = d.analystConsensusAndNews || {};
+            const sh = d.shortInterest || {};
+            const pf = d.portfolioEntryIndicators || {};
+            const diag = d.leonceDiagnostic || {};
+            const tp = d.tradingPlan || {};
+            const qvm = d.qvmComposite || {};
+
+            const entry = document.getElementById("planEntryInput")?.value || tp.entryZone || "--";
+            const sl = document.getElementById("planStopLossInput")?.value || tp.stopLoss || "--";
+            const tp1 = document.getElementById("planTP1Input")?.value || tp.tp1 || "--";
+            const tp2 = document.getElementById("planTP2Input")?.value || tp.tp2 || "--";
+            const shares = document.getElementById("mmSharesInput")?.value || "--";
+            const capInvested = document.getElementById("mmCapitalInvested")?.innerText || "--";
+            const euroRisk = document.getElementById("mmEuroRisk")?.innerText || "--";
+            const euroGain1 = document.getElementById("mmEuroGain")?.innerText || "--";
+            const euroGain2 = document.getElementById("mmEuroGainTP2")?.innerText || "--";
+
+            const driversMd = (gr.growthDrivers || []).map(x => `  - ${x}`).join("\n") || "  - Non renseigné";
+            const pillarsMd = (per.strategicPillars || []).map(x => `  - ${x}`).join("\n") || "  - Non renseigné";
+            const shareholdersMd = (gov.majorShareholders || []).map(s => `  - **${s.name}** : ${s.percentage}`).join("\n") || "  - Flottant majoritaire";
+            const risksMd = (d.documentedRisks || []).map(r => `  - **[${r.category || "Risque"}]** : ${r.description || ""}`).join("\n") || "  - Aucun risque majeur listé";
+
+            const md = `# 📊 DOSSIER D'AUDIT FONDAMENTAL & TECHNIQUE — ${info.name || "--"} (${info.ticker || "--"})
+*Généré par Euronext FactCheck AI • Pipeline 29 Sources Certifiées • ${new Date().toLocaleDateString("fr-FR")}*
+
+---
+
+## 1. Identité & Positionnement Stratégique
+- **Société** : ${info.name || "--"} | **Ticker** : \`${info.ticker || "--"}\` | **ISIN** : \`${info.isin || "--"}\`
+- **Place / Compartiment** : ${info.market || "--"} | **Indice** : ${info.index || "--"}
+- **Secteur ICB** : ${info.icbSector || "--"} | **Siège** : ${info.headquarters || "--"}
+- **Activité** : ${info.summary || "--"}
+- **Avantage Concurrentiel (Moat)** : ${info.competitivePositioning || "--"}
+
+---
+
+## 2. Comité Triple Audit (CFA • CMT • M&A) & Perspective Bayésienne T+1
+- **Perspective Bayésienne T+1** : Probabilité Haussière **${bay.probBullish || "--"}** | Fourchette estimée : **${bay.expectedRange || "--"}**
+  - *PEAD Drift* : ${bay.peadVal || "--"} (${bay.peadText || "--"})
+  - *Sensibilité Macro / WACC* : ${bay.macroVal || "--"} (${bay.macroText || "--"})
+  - *Asymétrie Gamma* : ${bay.gammaVal || "--"} (${bay.gammaText || "--"})
+  - *Synthèse T+1* : ${bay.summary || "--"}
+- **Analyste Fondamental (CFA)** : ROE **${cfa.roe || "--"}** | Dette/EBITDA **${cfa.debtEbitda || hs.debtEbitda || "--"}** | Moat : **${cfa.moatRating || "--"}** (${cfa.fcfQuality || "--"})
+  - *Analyse* : ${cfa.factsVsForecasts || "--"}
+- **Analyste Technique (CMT)** : Ratio R:R **${cmt.rrRatio || "--"}** | Invalidation : **${cmt.invalidationCondition || "--"}**
+  - *Niveaux* : ${cmt.levelsText || "--"}
+  - *Scénario* : ${cmt.scenarioText || "--"}
+- **Valorisation & M&A** : Bear **${mna.bearPrice || "--"}** | Base **${mna.basePrice || "--"}** | Bull **${mna.bullPrice || "--"}**
+  - *Paramètres* : ${mna.waccFormula || "--"} — ${mna.assumptionsText || "--"}
+
+---
+
+## 3. Agrégats Financiers Clés & Structure de la Dette (${kpi.period || "LTM"})
+| Indicateur | Valeur | Indicateur | Valeur |
+| :--- | :--- | :--- | :--- |
+| **Chiffre d'Affaires** | ${kpi.revenue || "--"} | **Marge Opérationnelle** | ${kpi.operatingMargin || "--"} |
+| **EBITDA** | ${kpi.ebitda || "--"} | **BNPA (EPS)** | ${kpi.eps || "--"} |
+| **Résultat Net** | ${kpi.netIncome || "--"} | **Capitalisation** | ${kpi.marketCap || "--"} |
+| **Free Cash Flow (FCF)** | ${kpi.fcf || "--"} | **Dette Nette / (Cash)** | ${kpi.netDebt || "--"} |
+
+- **Profil de Crédit** : Dette Brute **${ds.grossDebt || "--"}** | Trésorerie **${ds.cash || "--"}** | Coût moyen dette **${ds.costOfDebt || "--"}** | Couverture intérêts (ICR) **${hs.interestCoverage || "--"}** | Rating : **${ds.creditRating || "--"}**
+
+---
+
+## 4. Solidité Financière & Multiples de Valorisation
+- **Piotroski F-Score** : **${hs.piotroskiScore ?? "--"} / 9** — ${hs.piotroskiAnalysis || "--"}
+- **Altman Z-Score** : **${hs.altmanZScore || "--"}** — ${hs.altmanAnalysis || "--"}
+- **Ratio PEG** : **${hs.pegRatio || "--"}** (${hs.pegBadge || "--"}) — ${hs.pegAnalysis || "--"}
+- **Dividende** : Rendement **${hs.dividendYield || "--"}** (${hs.dividendSafety || "--"}) — ${hs.dividendAnalysis || "--"}
+- **Multiples & Création de Valeur** :
+  - **PER** : ${val.peRatio || "--"} | **EV / EBITDA** : ${val.evEbitda || "--"} | **P / FCF** : ${val.pFCF || "--"} | **Spread ROIC - WACC** : ${val.roicWacc || "--"}
+
+---
+
+## 5. Croissance, Guidance & Consensus Analystes
+- **Trajectoire** : CAGR CA Hist. **${gr.cagrHist || "--"}** | CAGR BPA Est. **${gr.cagrEpsEst || "--"}** | Révisions BPA : **${gr.revisionTrend || "--"}** | Dernière Surprise : **${gr.lastSurprise || "--"}**
+- **Résumé Historique** : ${gr.historicalGrowthSummary || "--"}
+- **Perspectives 12-24 mois** : ${gr.growthOutlook || "--"}
+- **Moteurs de Croissance** :
+${driversMd}
+- **Guidance Direction** : ${per.guidanceSummary || "--"}
+- **Piliers Stratégiques** :
+${pillarsMd}
+- **Consensus Bureaux d'Études** : **${con.consensusRecommendation || "--"}** | Objectif Moyen : **${con.targetPriceAvg || "--"}**
+  - ${con.consensusSummary || "--"}
+
+---
+
+## 6. Actionnariat, Risques & Positions Courtes (AMF)
+- **Principaux Actionnaires** :
+${shareholdersMd}
+- **Gouvernance & Flottant** : ${gov.governanceNotes || "--"}
+- **Short Interest (AMF)** : Capital vadé **${sh.shortCapitalPct || "--"}** | Potentiel Short Squeeze : **${sh.shortSqueezePotential || "--"}** — ${sh.shortAnalysis || "--"}
+- **Facteurs de Risques Documentés** :
+${risksMd}
+
+---
+
+## 7. Synthèse Décisionnelle, Ichimoku & Score QVM
+- **Score Global FactCheck** : **${diag.overallScore ?? "--"} / 100** | **Score Composite QVM** : **${qvm.overallScore ?? "--"} / 100** (Qualité ${qvm.qualityScore ?? "--"}/100 • Valorisation ${qvm.valuationScore ?? "--"}/100 • Momentum ${qvm.momentumScore ?? "--"}/100)
+- **Diagnostic Court Terme (Swing)** : ${diag.stAnalysis || "--"}
+- **Thèse Moyen Terme (6-18 mois)** : ${diag.mtAnalysis || "--"}
+- **Filtres Institutionnels** :
+  - *Graham* : **${pf.grahamStatus || "--"}** (${pf.grahamDesc || "--"})
+  - *Kelly Sizing* : **${pf.kellyValue || "--"}** (${pf.kellyDesc || "--"})
+  - *Kijun-Sen* : **${pf.kijunStatus || "--"}** (${pf.kijunDesc || "--"})
+- **Ichimoku Kinko Hyo** :
+  - *Nuage (Kumo)* : ${tp.ichimokuKumo || "--"}
+  - *Tenkan / Kijun* : ${tp.ichimokuTK || "--"}
+  - *Chikou Span* : ${tp.ichimokuChikou || "--"}
+
+---
+
+## 8. Plan d'Exécution & Money Management
+- **Zone d'Entrée** : **${entry} €**
+- **Stop Loss (Invalidation)** : **${sl} €** (${document.getElementById("planStopLossPct")?.innerText || "--"})
+- **Objectif TP1** : **${tp1} €** (${document.getElementById("planTP1Pct")?.innerText || "--"} | ${document.getElementById("planRRTP1")?.innerText || "--"})
+- **Objectif TP2** : **${tp2} €** (${document.getElementById("planTP2Pct")?.innerText || "--"} | ${document.getElementById("planRRTP2")?.innerText || "--"})
+- **Sizing Calculé** : **${shares} actions** | Capital engagé : **${capInvested}** | Risque net max : **${euroRisk}** | Gain net estimé : **${euroGain1}** (TP1) / **${euroGain2}** (TP2)`;
+
             copyTextFallback(md);
-            showToast("Fiche Markdown copiée dans le presse-papiers.", "success");
+            showToast("Fiche Markdown complète copiée dans le presse-papiers.", "success");
         }
 
         function copyTradeTweet() {
             if (!currentReportData) return;
             const info = currentReportData.companyInfo || {};
-            const val = currentReportData.valuationMultiples || {};
+            const diag = currentReportData.leonceDiagnostic || {};
+            const ticker = String(info.ticker || "ACTION").replace(/^TICKER\s*:\s*/i, "").trim().toUpperCase();
+            const name = String(info.name || "").trim();
             const entry = document.getElementById("planEntryInput")?.value || "--";
             const sl = document.getElementById("planStopLossInput")?.value || "--";
             const tp1 = document.getElementById("planTP1Input")?.value || "--";
-            const tweet = `$${info.ticker || "ACTION"} (${info.name || ""}) • Audit FactCheck AI\nPER ${val.peRatio || "--"} | EV/EBITDA ${val.evEbitda || "--"}\nPlan : Entrée ${entry}€ | SL ${sl}€ | TP1 ${tp1}€ #Euronext #Bourse`.slice(0, 270);
+            const tp2 = document.getElementById("planTP2Input")?.value || "--";
+
+            const rawThesis = String(diag.mtAnalysis || info.summary || "Thèse fondamentale Euronext")
+                .replace(/\s+/g, " ")
+                .trim();
+
+            const prefix = `$${ticker} (${name})  Plan : Entrée ${entry}€ | SL ${sl}€ | TP1 ${tp1}€ | TP2 ${tp2}€ | (`;
+            const suffix = ")";
+            const maxThesisLen = Math.max(10, 270 - prefix.length - suffix.length);
+            const thesis = rawThesis.length > maxThesisLen
+                ? `${rawThesis.slice(0, Math.max(0, maxThesisLen - 3)).trim()}...`
+                : rawThesis;
+
+            const tweet = `${prefix}${thesis}${suffix}`.slice(0, 270);
             copyTextFallback(tweet);
-            showToast("Post court (<270 car.) copié.", "success");
+            showToast(`Post PP (${tweet.length}/270 car.) copié.`, "success");
+        }
+
+        function copySummaryTextToClipboard() {
+            if (!currentReportData) return;
+            const d = currentReportData;
+            const info = d.companyInfo || {};
+            const cfa = d.cfaPersona || {};
+            const cmt = d.cmtPersona || {};
+            const mna = d.mnaPersona || {};
+            const bay = d.bayesianPerspective || {};
+            const kpi = d.financialKPIs || {};
+            const hs = d.healthScores || {};
+            const val = d.valuationMultiples || {};
+            const gr = d.growthAnalysis || {};
+            const con = d.analystConsensusAndNews || {};
+            const sh = d.shortInterest || {};
+            const diag = d.leonceDiagnostic || {};
+            const tp = d.tradingPlan || {};
+            const qvm = d.qvmComposite || {};
+
+            const entry = document.getElementById("planEntryInput")?.value || tp.entryZone || "--";
+            const sl = document.getElementById("planStopLossInput")?.value || tp.stopLoss || "--";
+            const tp1 = document.getElementById("planTP1Input")?.value || tp.tp1 || "--";
+            const tp2 = document.getElementById("planTP2Input")?.value || tp.tp2 || "--";
+            const shares = document.getElementById("mmSharesInput")?.value || "--";
+            const capInvested = document.getElementById("mmCapitalInvested")?.innerText || "--";
+            const euroRisk = document.getElementById("mmEuroRisk")?.innerText || "--";
+            const euroGain1 = document.getElementById("mmEuroGain")?.innerText || "--";
+
+            const risksList = (d.documentedRisks || []).map(r => `• [${r.category || "Risque"}] ${r.description || ""}`).join("\n") || "• Non renseigné";
+            const driversList = (gr.growthDrivers || []).map(x => `• ${x}`).join("\n") || "• Non renseigné";
+
+            const txt = `====================================================================
+SYNTHÈSE 360° EURONEXT FACTCHECK AI : ${info.name || "--"} (${info.ticker || "--"})
+====================================================================
+ISIN : ${info.isin || "--"} | Marché : ${info.market || "--"} (${info.index || "--"}) | Secteur : ${info.icbSector || "--"}
+Score Global : ${diag.overallScore ?? "--"}/100 | Score QVM : ${qvm.overallScore ?? "--"}/100 (Q:${qvm.qualityScore ?? "--"} / V:${qvm.valuationScore ?? "--"} / M:${qvm.momentumScore ?? "--"})
+
+1. PROFIL & POSITIONNEMENT
+${info.summary || "--"}
+Avantage concurrentiel : ${info.competitivePositioning || "--"}
+
+2. TRIPLE AUDIT & PERSPECTIVE BAYÉSIENNE T+1
+• Probabilité Haussière T+1 : ${bay.probBullish || "--"} (Fourchette : ${bay.expectedRange || "--"}) — ${bay.summary || "--"}
+• CFA (Fondamental) : ROE ${cfa.roe || "--"} | Dette/EBITDA ${cfa.debtEbitda || hs.debtEbitda || "--"} | ${cfa.moatRating || "--"} — ${cfa.factsVsForecasts || "--"}
+• CMT (Technique) : R:R ${cmt.rrRatio || "--"} | Invalidation : ${cmt.invalidationCondition || "--"} — ${cmt.scenarioText || "--"}
+• M&A / DCF : Bear ${mna.bearPrice || "--"} | Base ${mna.basePrice || "--"} | Bull ${mna.bullPrice || "--"} (${mna.waccFormula || "--"})
+
+3. AGRÉGATS FINANCIERS & SOLIDITÉ (${kpi.period || "LTM"})
+• CA : ${kpi.revenue || "--"} | EBITDA : ${kpi.ebitda || "--"} | Résultat Net : ${kpi.netIncome || "--"} | FCF : ${kpi.fcf || "--"}
+• Marge Op. : ${kpi.operatingMargin || "--"} | BNPA : ${kpi.eps || "--"} | Cap. Boursière : ${kpi.marketCap || "--"} | Dette Nette : ${kpi.netDebt || "--"}
+• Piotroski F-Score : ${hs.piotroskiScore ?? "--"}/9 | Altman Z-Score : ${hs.altmanZScore || "--"} | PEG : ${hs.pegRatio || "--"} | Dividende : ${hs.dividendYield || "--"} (${hs.dividendSafety || "--"})
+• Multiples : PER ${val.peRatio || "--"} | EV/EBITDA ${val.evEbitda || "--"} | P/FCF ${val.pFCF || "--"} | ROIC-WACC ${val.roicWacc || "--"}
+
+4. CROISSANCE, CONSENSUS & POSITIONS COURTES
+• CAGR CA Hist. : ${gr.cagrHist || "--"} | CAGR BPA Est. : ${gr.cagrEpsEst || "--"} | Révisions : ${gr.revisionTrend || "--"}
+• Perspectives : ${gr.growthOutlook || "--"}
+Moteurs clés :
+${driversList}
+• Consensus Analystes : ${con.consensusRecommendation || "--"} | Objectif Moyen : ${con.targetPriceAvg || "--"} (${con.consensusSummary || "--"})
+• Short Interest AMF : ${sh.shortCapitalPct || "--"} (Squeeze : ${sh.shortSqueezePotential || "--"})
+
+5. DIAGNOSTIC CT / MT & ICHIMOKU
+• Court Terme (Swing) : ${diag.stAnalysis || "--"}
+• Moyen Terme (6-18 mois) : ${diag.mtAnalysis || "--"}
+• Ichimoku : Kumo (${tp.ichimokuKumo || "--"}) | Tenkan/Kijun (${tp.ichimokuTK || "--"}) | Chikou (${tp.ichimokuChikou || "--"})
+
+6. RISQUES DOCUMENTÉS
+${risksList}
+
+7. PLAN D'EXÉCUTION & MONEY MANAGEMENT
+• Entrée : ${entry} € | Stop Loss : ${sl} € (${document.getElementById("planStopLossPct")?.innerText || "--"})
+• Objectifs : TP1 ${tp1} € (${document.getElementById("planRRTP1")?.innerText || "--"}) | TP2 ${tp2} € (${document.getElementById("planRRTP2")?.innerText || "--"})
+• Sizing : ${shares} actions (${capInvested}) | Risque net max : ${euroRisk} | Gain net TP1 : ${euroGain1}`;
+
+            copyTextFallback(txt);
+            showToast("Synthèse 360° complète copiée dans le presse-papiers.", "success");
+        }
+
+        function copyTradeTweet() {
+            if (!currentReportData) return;
+            const info = currentReportData.companyInfo || {};
+            const diag = currentReportData.leonceDiagnostic || {};
+            const ticker = String(info.ticker || "ACTION").replace(/^TICKER\s*:\s*/i, "").trim().toUpperCase();
+            const name = String(info.name || "").trim();
+            const entry = document.getElementById("planEntryInput")?.value || "--";
+            const sl = document.getElementById("planStopLossInput")?.value || "--";
+            const tp1 = document.getElementById("planTP1Input")?.value || "--";
+            const tp2 = document.getElementById("planTP2Input")?.value || "--";
+
+            const rawThesis = String(diag.mtAnalysis || info.summary || "Thèse fondamentale Euronext")
+                .replace(/\s+/g, " ")
+                .trim();
+
+            const prefix = `$${ticker} (${name})  Plan : Entrée ${entry}€ | SL ${sl}€ | TP1 ${tp1}€ | TP2 ${tp2}€ | (`;
+            const suffix = ")";
+            const maxThesisLen = Math.max(10, 270 - prefix.length - suffix.length);
+            const thesis = rawThesis.length > maxThesisLen
+                ? `${rawThesis.slice(0, Math.max(0, maxThesisLen - 3)).trim()}...`
+                : rawThesis;
+
+            const tweet = `${prefix}${thesis}${suffix}`.slice(0, 270);
+            copyTextFallback(tweet);
+            showToast(`Post PP (${tweet.length}/270 car.) copié.`, "success");
         }
 
         function copySummaryTextToClipboard() {
