@@ -123,13 +123,13 @@ function parseAndCleanModelJson(rawText) {
 }
 
 async function callGeminiWithFallback(apiKey, primaryModel, payload, deadlineMs = Date.now() + 6800) {
-  const baseCandidates = Array.from(new Set([primaryModel, "gemini-2.5-flash"]));
+  const targetModel = primaryModel || "gemini-4-hydrogen";
   const attempts = payload?.tools?.length
     ? [
-        { model: primaryModel, useTools: true },
-        { model: "gemini-2.5-flash", useTools: false }
+        { model: targetModel, useTools: true },
+        { model: targetModel, useTools: false }
       ]
-    : baseCandidates.map((m) => ({ model: m, useTools: false }));
+    : [{ model: targetModel, useTools: false }];
 
   let lastError = null;
 
@@ -161,10 +161,10 @@ async function callGeminiWithFallback(apiKey, primaryModel, payload, deadlineMs 
     const controller = new AbortController();
     const isFirstOfTwo = i === 0 && attempts.length > 1;
     const timeoutMs = attempt.useTools
-      ? Math.max(1600, Math.min(2200, remainingForModel - 2600))
+      ? Math.max(1800, Math.min(2600, remainingForModel - 2600))
       : isFirstOfTwo
-        ? Math.max(2200, Math.min(3400, Math.floor(remainingForModel * 0.55)))
-        : Math.max(1800, remainingForModel - 200);
+        ? Math.max(2400, Math.min(3600, Math.floor(remainingForModel * 0.6)))
+        : Math.max(2200, remainingForModel - 200);
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
@@ -313,10 +313,9 @@ exports.handler = async function (event) {
     return { statusCode: 500, headers, body: JSON.stringify({ error: "Clé API StocksAnalyserKey manquante dans Netlify." }) };
   }
 
-  const modelId = process.env.GEMINI_MODEL || "gemini-4-hydrogen";
-
   try {
     const body = JSON.parse(event.body || "{}");
+    const modelId = body.model || process.env.GEMINI_MODEL || "gemini-4-hydrogen";
     const mode = body.mode || "legacy";
     const subjectQuery = String(body.subjectQuery || "").trim();
 
