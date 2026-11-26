@@ -1491,10 +1491,12 @@
                     if (!res.ok) {
                         const msg = data?.error || (res.status === 504
                             ? "Délai serveur Netlify dépassé (504). Réessaie avec une requête plus ciblée."
-                            : `Erreur serveur StocksAnalyser (${res.status})`);
+                            : res.status === 502
+                                ? "Réponse JSON incomplète du serveur (502). Réessaie."
+                                : `Erreur serveur StocksAnalyser (${res.status})`);
                         if (res.status === 404 && attempt === 0) {
                             lastErr = new Error(msg);
-                            await new Promise(r => setTimeout(r, 500));
+                            await new Promise(r => setTimeout(r, 400));
                             continue;
                         }
                         throw new Error(msg);
@@ -1510,7 +1512,8 @@
                     return parsed;
                 } catch (err) {
                     lastErr = err;
-                    if (attempt === 0 && !String(err.message || "").includes("504")) {
+                    const errStr = String(err.message || "");
+                    if (attempt === 0 && !errStr.includes("504") && !errStr.includes("502")) {
                         await new Promise(r => setTimeout(r, 400));
                     } else {
                         break;
@@ -1634,12 +1637,12 @@
             if (rail) rail.scrollBy({ left: delta, behavior: "smooth" });
         }
 
-        // --- SINGLE STOCK 29-SOURCE AUDIT ---
+        // --- SINGLE STOCK AUDIT (29 SOURCES) ---
         async function handleSingleSearch(event) {
             if (event) event.preventDefault();
-            const query = (document.getElementById("searchInput")?.value || "").trim();
+            const query = document.getElementById("searchInput")?.value?.trim();
             if (!query) {
-                showToast("Saisis un nom de société, ticker Euronext ou code ISIN.", "warning");
+                showToast("Saisis un nom de société, un ticker Euronext ou un code ISIN.", "warning");
                 return;
             }
 
@@ -1648,35 +1651,36 @@
             document.getElementById("resultsContainer").classList.add("hidden");
             document.getElementById("quickNavContainer").classList.add("hidden");
             document.getElementById("loadingContainer").classList.remove("hidden");
+            document.getElementById("loadingProgressBar").style.width = "20%";
 
-            const systemPrompt = "Tu es un comité institutionnel d'analyse financière Euronext (CFA, CMT, M&A). Réponds uniquement en JSON valide, factuel et précis, sans aucun texte hors JSON et sans inventer de données non vérifiées.";
+            const systemPrompt = "Comité financier Euronext. Réponds uniquement en JSON valide, concis (1 phrase max par texte) et factuel.";
 
-            const auditPromptPart1 = `Audite la valeur Euronext "${query}" à partir des données temps réel et du corpus multi-sources. Retourne strictement un objet JSON avec ces clés exactes :
+            const auditPromptPart1 = `Audite "${query}" (Euronext). JSON strict et concis :
 {
-  "companyInfo": { "name": "Nom officiel", "ticker": "Ticker Euronext", "isin": "Code ISIN", "market": "Compartiment Euronext", "index": "Indice", "icbSector": "Secteur ICB", "headquarters": "Ville, Pays", "summary": "Présentation synthétique de l'activité", "competitivePositioning": "Avantages concurrentiels et moat" },
-  "bayesianPerspective": { "probBullish": "Probabilité %", "expectedRange": "Fourchette cours T+1", "peadVal": "Score PEAD", "peadText": "Explication PEAD", "peadBar": "65%", "macroVal": "Sensibilité", "macroText": "Impact taux/WACC", "macroBar": "55%", "gammaVal": "Asymétrie", "gammaText": "Profil rendement/risque", "gammaBar": "60%", "summary": "Synthèse probabiliste T+1" },
-  "cfaPersona": { "roe": "ROE %", "debtEbitda": "Ratio Dette/EBITDA", "moatRating": "Qualité du Moat", "fcfQuality": "Conversion FCF", "factsVsForecasts": "Analyse fondamentale factuelle" },
-  "cmtPersona": { "rrRatio": "Ratio R:R", "invalidationCondition": "Seuil d'invalidation", "levelsText": "Supports et résistances clés", "scenarioText": "Scénario technique" },
-  "mnaPersona": { "bearPrice": "Cours Bear €", "basePrice": "Cours Base €", "bullPrice": "Cours Bull €", "waccFormula": "WACC & g retenus", "assumptionsText": "Hypothèses DCF & multiples" },
-  "financialKPIs": { "period": "Exercice / LTM", "revenue": "CA", "ebitda": "EBITDA", "netIncome": "Résultat Net", "fcf": "FCF", "operatingMargin": "Marge Op. %", "eps": "BNPA", "marketCap": "Capitalisation", "netDebt": "Dette Nette / (Cash)", "currentPriceNumeric": 0, "fcfMillionsNumeric": 0, "netDebtMillionsNumeric": 0, "sharesMillionsNumeric": 0 },
-  "debtStructure": { "grossDebt": "Dette brute", "cash": "Trésorerie", "costOfDebt": "Coût moyen %", "creditRating": "Profil crédit", "fixedRatePct": 75, "variableRatePct": 25, "maturitySTPct": 15, "maturityMTPct": 45, "maturityLTPct": 40 },
-  "healthScores": { "piotroskiScore": 0, "piotroskiAnalysis": "Analyse Piotroski", "altmanZScore": "Score Z", "altmanAnalysis": "Analyse solvabilité", "pegRatio": "Ratio PEG", "pegBadge": "Statut PEG", "pegAnalysis": "Analyse croissance/prix", "dividendYield": "Rendement %", "dividendSafety": "Sécurité dividende", "dividendAnalysis": "Politique de distribution", "debtEbitda": "Dette/EBITDA", "interestCoverage": "ICR" },
-  "valuationMultiples": { "peRatio": "PER", "evEbitda": "EV/EBITDA", "pFCF": "P/FCF", "roicWacc": "Spread ROIC-WACC" }
+  "companyInfo": { "name": "", "ticker": "", "isin": "", "market": "", "index": "", "icbSector": "", "headquarters": "", "summary": "", "competitivePositioning": "" },
+  "bayesianPerspective": { "probBullish": "", "expectedRange": "", "peadVal": "", "peadText": "", "peadBar": "65%", "macroVal": "", "macroText": "", "macroBar": "55%", "gammaVal": "", "gammaText": "", "gammaBar": "60%", "summary": "" },
+  "cfaPersona": { "roe": "", "debtEbitda": "", "moatRating": "", "fcfQuality": "", "factsVsForecasts": "" },
+  "cmtPersona": { "rrRatio": "", "invalidationCondition": "", "levelsText": "", "scenarioText": "" },
+  "mnaPersona": { "bearPrice": "", "basePrice": "", "bullPrice": "", "waccFormula": "", "assumptionsText": "" },
+  "financialKPIs": { "period": "", "revenue": "", "ebitda": "", "netIncome": "", "fcf": "", "operatingMargin": "", "eps": "", "marketCap": "", "netDebt": "", "currentPriceNumeric": 0, "fcfMillionsNumeric": 0, "netDebtMillionsNumeric": 0, "sharesMillionsNumeric": 0 },
+  "debtStructure": { "grossDebt": "", "cash": "", "costOfDebt": "", "creditRating": "", "fixedRatePct": 75, "variableRatePct": 25, "maturitySTPct": 15, "maturityMTPct": 45, "maturityLTPct": 40 },
+  "healthScores": { "piotroskiScore": 0, "piotroskiAnalysis": "", "altmanZScore": "", "altmanAnalysis": "", "pegRatio": "", "pegBadge": "", "pegAnalysis": "", "dividendYield": "", "dividendSafety": "", "dividendAnalysis": "", "debtEbitda": "", "interestCoverage": "" },
+  "valuationMultiples": { "peRatio": "", "evEbitda": "", "pFCF": "", "roicWacc": "" }
 }`;
 
-            const auditPromptPart2 = `Complète l'audit institutionnel de la valeur Euronext "${query}" en retournant strictement un objet JSON avec ces clés exactes :
+            const auditPromptPart2 = `Complète "${query}" (Euronext). JSON strict et concis :
 {
-  "companyInfo": { "name": "Nom officiel", "ticker": "Ticker Euronext" },
-  "growthAnalysis": { "cagrHist": "CAGR CA hist.", "cagrEpsEst": "CAGR BPA est.", "revisionTrend": "Tendance révisions", "lastSurprise": "Dernière publication", "historicalGrowthSummary": "Dynamique historique", "growthOutlook": "Perspectives 12-24 mois", "growthDrivers": ["Moteur 1", "Moteur 2"], "marketRumors": [{ "source": "Source", "credibility": "Niveau de fiabilité", "text": "Signal ou rumeur relevée" }] },
-  "governanceAndCapital": { "majorShareholders": [{ "name": "Actionnaire", "percentage": "Part %" }], "governanceNotes": "Notes gouvernance et flottant" },
-  "perspectives": { "guidanceSummary": "Guidance officielle", "strategicPillars": ["Pilier 1", "Pilier 2"] },
-  "analystConsensusAndNews": { "consensusRecommendation": "Consensus", "targetPriceAvg": "Objectif moyen €", "consensusSummary": "Synthèse des bureaux d'études" },
-  "documentedRisks": [{ "category": "Catégorie risque", "description": "Description détaillée" }],
-  "shortInterest": { "shortCapitalPct": "Part vadée %", "shortSqueezePotential": "Niveau", "shortAnalysis": "Analyse positions courtes AMF" },
-  "portfolioEntryIndicators": { "grahamStatus": "Statut Graham", "grahamDesc": "Critère valeur intrinsèque", "kellyValue": "Fraction Kelly %", "kellyDesc": "Sizing optimal", "kijunStatus": "Position vs Kijun", "kijunDesc": "Lecture tendance" },
-  "leonceDiagnostic": { "overallScore": 0, "stAnalysis": "Diagnostic court terme swing", "mtAnalysis": "Thèse moyen terme 6-18 mois" },
-  "tradingPlan": { "entryZone": "0.00", "stopLoss": "0.00", "tp1": "0.00", "tp2": "0.00", "ichimokuKumo": "Position vs Nuage", "ichimokuTK": "Tenkan / Kijun", "ichimokuChikou": "Validation Chikou", "tradeExamples": [{ "title": "Setup principal", "rrRatio": "R:R", "setupSummary": "Déclencheur", "entry": "Entrée", "stopLoss": "SL", "target": "TP" }] },
-  "qvmComposite": { "overallScore": 0, "qualityScore": 0, "valuationScore": 0, "momentumScore": 0, "qualityAnalysis": "Analyse qualité", "valuationAnalysis": "Analyse valorisation", "momentumAnalysis": "Analyse momentum" }
+  "companyInfo": { "name": "", "ticker": "" },
+  "growthAnalysis": { "cagrHist": "", "cagrEpsEst": "", "revisionTrend": "", "lastSurprise": "", "historicalGrowthSummary": "", "growthOutlook": "", "growthDrivers": ["", ""], "marketRumors": [{ "source": "", "credibility": "", "text": "" }] },
+  "governanceAndCapital": { "majorShareholders": [{ "name": "", "percentage": "" }], "governanceNotes": "" },
+  "perspectives": { "guidanceSummary": "", "strategicPillars": ["", ""] },
+  "analystConsensusAndNews": { "consensusRecommendation": "", "targetPriceAvg": "", "consensusSummary": "" },
+  "documentedRisks": [{ "category": "", "description": "" }],
+  "shortInterest": { "shortCapitalPct": "", "shortSqueezePotential": "", "shortAnalysis": "" },
+  "portfolioEntryIndicators": { "grahamStatus": "", "grahamDesc": "", "kellyValue": "", "kellyDesc": "", "kijunStatus": "", "kijunDesc": "" },
+  "leonceDiagnostic": { "overallScore": 0, "stAnalysis": "", "mtAnalysis": "" },
+  "tradingPlan": { "entryZone": "0.00", "stopLoss": "0.00", "tp1": "0.00", "tp2": "0.00", "ichimokuKumo": "", "ichimokuTK": "", "ichimokuChikou": "", "tradeExamples": [{ "title": "", "rrRatio": "", "setupSummary": "", "entry": "", "stopLoss": "", "target": "" }] },
+  "qvmComposite": { "overallScore": 0, "qualityScore": 0, "valuationScore": 0, "momentumScore": 0, "qualityAnalysis": "", "valuationAnalysis": "", "momentumAnalysis": "" }
 }`;
 
             try {
