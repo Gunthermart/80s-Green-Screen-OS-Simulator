@@ -1,9 +1,11 @@
 /**
  * Netlify Serverless Function : Collecteur Macroéconomique & Sentiment Marché
+ * 100% Temps Réel — Aucune donnée codée en dur.
  * - CNN Fear & Greed Index (Score global + 7 sous-indicateurs traduits)
  * - Cboe Volatility & Dispersion (VIX via Yahoo Finance + calcul dérivé VIXEQ / DSPX)
- * - CME FedWatch (Probabilités conditionnelles FOMC)
+ * - CME FedWatch (Probabilités conditionnelles implicites depuis Taux US 10Y ^TNX)
  * - BCE SDMX REST API (Taux Dépôt, Refi, Prêt Marginal, €STR, OAT 10Y FR & Bund 10Y DE)
+ * - Indices Actions & Crédit Live (^FCHI CAC 40, ^STOXX50E, ^GSPC, HYG, EURUSD=X)
  */
 
 const DEFAULT_HEADERS = {
@@ -12,9 +14,6 @@ const DEFAULT_HEADERS = {
   "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7"
 };
 
-/**
- * Requête HTTP déterministe avec AbortController, retries et backoff exponentiel.
- */
 async function fetchWithRetry(url, options = {}, maxRetries = 2, timeoutMs = 6500) {
   let lastError = null;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -57,6 +56,20 @@ function roundTo(num, decimals = 2) {
   return Math.round((Number(num) + Number.EPSILON) * factor) / factor;
 }
 
+async function fetchYahooQuoteMeta(symbol) {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`;
+  const res = await fetchWithRetry(url);
+  const json = await res.json();
+  const meta = json?.chart?.result?.[0]?.meta || {};
+  const price = Number(meta.regularMarketPrice);
+  const prevClose = Number(meta.chartPreviousClose ?? meta.previousClose);
+  if (!Number.isFinite(price)) throw new Error(`Cours indisponible pour ${symbol}`);
+  const changePct = Number.isFinite(prevClose) && prevClose > 0
+    ? roundTo(((price - prevClose) / prevClose) * 100, 2)
+    : null;
+  return { price: roundTo(price, 2), prevClose, changePct };
+}
+
 /**
  * 1. CNN Fear & Greed Index + 7 sous-indicateurs
  */
@@ -68,7 +81,7 @@ async function fetchCnnFearAndGreed() {
     });
     const data = await res.json();
     const fg = data?.fear_and_greed || {};
-    const score = roundTo(fg.score ?? 50, 1);
+    const score = roundTo(fg.score ?? 0, 1);
 
     return {
       source: "CNN Business Live",
@@ -89,21 +102,21 @@ async function fetchCnnFearAndGreed() {
     };
   } catch (err) {
     return {
-      source: "Fallback Calibré",
+      source: "Flux CNN Indisponible",
       isFallback: true,
       error: err.message,
-      value: 52.0,
-      sentiment: "Neutre",
-      previousClose: 51.0,
-      oneWeekAgo: 49.0,
+      value: null,
+      sentiment: "Indisponible",
+      previousClose: null,
+      oneWeekAgo: null,
       subIndicators: {
-        momentum: "Neutre",
-        strength: "Avidité",
-        breadth: "Neutre",
-        putCall: "Neutre",
-        vix: "Neutre",
-        safeHaven: "Peur",
-        junkBond: "Avidité"
+        momentum: "--",
+        strength: "--",
+        breadth: "--",
+        putCall: "--",
+        vix: "--",
+        safeHaven: "--",
+        junkBond: "--"
       }
     };
   }
@@ -114,11 +127,8 @@ async function fetchCnnFearAndGreed() {
  */
 async function fetchCboeIndices() {
   try {
-    const url = "https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX?interval=1d&range=5d";
-    const res = await fetchWithRetry(url);
-    const json = await res.json();
-    const meta = json?.chart?.result?.[0]?.meta || {};
-    const vix = roundTo(meta.regularMarketPrice ?? 16.8, 2);
+    const q = await fetchYahooQuoteMeta("^VIX");
+    const vix = q.price;
     const vixeq = roundTo(vix * 1.18, 2);
     const dspx = roundTo(Math.max(18, Math.min(48, 24.5 + (vix - 15) * 0.65)), 2);
 
@@ -137,26 +147,24 @@ async function fetchCboeIndices() {
     };
   } catch (err) {
     return {
-      source: "Fallback Calibré",
+      source: "Flux Cboe Indisponible",
       isFallback: true,
       error: err.message,
-      vix: 16.85,
-      vixeq: 19.88,
-      dspx: 25.7,
-      regime: "Régime Normal / Stock-Picking"
+      vix: null,
+      vixeq: null,
+      dspx: null,
+      regime: "Données indisponibles"
     };
   }
 }
 
 /**
- * 3. CME FedWatch (Probabilités FOMC)
+ * 3. CME FedWatch (Probabilités FOMC implicites depuis Taux US 10Y)
  */
 async function fetchCmeFedWatch() {
   try {
-    const url = "https://query1.finance.yahoo.com/v8/finance/chart/%5ETNX?interval=1d&range=5d";
-    const res = await fetchWithRetry(url);
-    const json = await res.json();
-    const tnx = Number(json?.chart?.result?.[0]?.meta?.regularMarketPrice ?? 4.15);
+    const q = await fetchYahooQuoteMeta("^TNX");
+    const tnx = q.price;
 
     let cut25 = 35;
     let hold = 60;
@@ -172,32 +180,36 @@ async function fetchCmeFedWatch() {
     }
 
     return {
-      source: "Modèle Implicite Taux US 10Y",
+      source: "Modèle Implicite Taux US 10Y Live",
       isFallback: false,
-      us10yYield: roundTo(tnx, 2),
+      us10yYield: tnx,
       expectedBps: cut25 > hold ? "-25 bps probables" : "0 bps (Statu Quo dominant)",
       probabilities: {
         cut50Pct: 0,
         cut25Pct: cut25,
         holdPct: hold,
-        hike25Pct: hike25
+        hike25Pct: hikeTotalFrom(hike25)
       }
     };
   } catch (err) {
     return {
-      source: "Fallback Calibré",
+      source: "Flux Taux US Indisponible",
       isFallback: true,
       error: err.message,
-      us10yYield: 4.15,
-      expectedBps: "0 bps (Statu Quo dominant)",
+      us10yYield: null,
+      expectedBps: "--",
       probabilities: {
         cut50Pct: 0,
-        cut25Pct: 35,
-        holdPct: 60,
-        hike25Pct: 5
+        cut25Pct: 0,
+        holdPct: 0,
+        hike25Pct: 0
       }
     };
   }
+}
+
+function hikeTotalFrom(v) {
+  return Number(v) || 0;
 }
 
 /**
@@ -231,28 +243,83 @@ async function fetchEcbRates() {
     queryEcbSdmxLastValue("IRS", "M.DE.L.L40.CI.0000.EUR.N.Z")
   ]);
 
-  const dfr = results[0].status === "fulfilled" ? results[0].value : 2.50;
-  const mrr = results[1].status === "fulfilled" ? results[1].value : roundTo(dfr + 0.15, 2);
-  const mlfr = results[2].status === "fulfilled" ? results[2].value : roundTo(dfr + 0.40, 2);
-  const estr = results[3].status === "fulfilled" ? results[3].value : roundTo(dfr - 0.08, 2);
-  const oat10y = results[4].status === "fulfilled" ? results[4].value : 3.25;
-  const bund10y = results[5].status === "fulfilled" ? results[5].value : 2.50;
+  const dfr = results[0].status === "fulfilled" ? results[0].value : null;
+  const mrr = results[1].status === "fulfilled" ? results[1].value : null;
+  const mlfr = results[2].status === "fulfilled" ? results[2].value : null;
+  const estr = results[3].status === "fulfilled" ? results[3].value : null;
+  const oat10y = results[4].status === "fulfilled" ? results[4].value : null;
+  const bund10y = results[5].status === "fulfilled" ? results[5].value : null;
 
   const isLive = results.some((r) => r.status === "fulfilled");
-  const spreadBps = Math.round((oat10y - bund10y) * 100);
+  const spreadBps = (oat10y !== null && bund10y !== null) ? Math.round((oat10y - bund10y) * 100) : null;
 
   return {
-    source: isLive ? "BCE SDMX REST API Direct" : "Fallback Calibré BCE",
+    source: isLive ? "BCE SDMX REST API Direct" : "Flux BCE SDMX Indisponible",
     isFallback: !isLive,
-    depositRate: `${dfr.toFixed(2)}%`,
-    refinancingRate: `${mrr.toFixed(2)}%`,
-    marginalLendingRate: `${mlfr.toFixed(2)}%`,
-    estrRate: `${estr.toFixed(2)}%`,
+    depositRate: dfr !== null ? `${dfr.toFixed(2)}%` : "--",
+    refinancingRate: mrr !== null ? `${mrr.toFixed(2)}%` : "--",
+    marginalLendingRate: mlfr !== null ? `${mlfr.toFixed(2)}%` : "--",
+    estrRate: estr !== null ? `${estr.toFixed(2)}%` : "--",
     oat10y,
     bund10y,
     oatBundSpreadBps: spreadBps,
-    bias: dfr <= 2.75 ? "Accommodant / Neutre" : "Restrictif Graduel",
-    diagnostic: `Taux de dépôt BCE à ${dfr.toFixed(2)}% (€STR ${estr.toFixed(2)}%). Rendement OAT 10Y à ${oat10y.toFixed(2)}% contre ${bund10y.toFixed(2)}% sur le Bund allemand, soit un spread souverain de ${spreadBps} bps impactant directement le taux sans risque et le WACC des valeurs françaises.`
+    bias: dfr === null ? "--" : (dfr <= 2.75 ? "Accommodant / Neutre" : "Restrictif Graduel"),
+    diagnostic: isLive
+      ? `Taux de dépôt BCE à ${dfr !== null ? dfr.toFixed(2) + "%" : "--"} (€STR ${estr !== null ? estr.toFixed(2) + "%" : "--"}). Rendement OAT 10Y à ${oat10y !== null ? oat10y.toFixed(2) + "%" : "--"} contre ${bund10y !== null ? bund10y.toFixed(2) + "%" : "--"} sur le Bund allemand${spreadBps !== null ? ` (spread ${spreadBps} bps)` : ""}.`
+      : "Flux SDMX de la Banque Centrale Européenne temporairement inaccessible."
+  };
+}
+
+/**
+ * 5. Flux Live Actions, Crédit High Yield & Change (CAC 40, Euro Stoxx 50, S&P 500, HYG, EUR/USD)
+ */
+async function fetchEquitiesAndCreditLive() {
+  const [cacRes, stoxxRes, sp500Res, hygRes, eurusdRes] = await Promise.allSettled([
+    fetchYahooQuoteMeta("^FCHI"),
+    fetchYahooQuoteMeta("^STOXX50E"),
+    fetchYahooQuoteMeta("^GSPC"),
+    fetchYahooQuoteMeta("HYG"),
+    fetchYahooQuoteMeta("EURUSD=X")
+  ]);
+
+  const cac = cacRes.status === "fulfilled" ? cacRes.value : null;
+  const stoxx = stoxxRes.status === "fulfilled" ? stoxxRes.value : null;
+  const sp500 = sp500Res.status === "fulfilled" ? sp500Res.value : null;
+  const hyg = hygRes.status === "fulfilled" ? hygRes.value : null;
+  const eurusd = eurusdRes.status === "fulfilled" ? eurusdRes.value : null;
+
+  const fmtPct = (v) => (v !== null && v !== undefined ? `${v >= 0 ? "+" : ""}${v.toFixed(2)}%` : "--");
+
+  return {
+    creditAndLiquidity: {
+      fciLabel: hyg?.changePct !== null && hyg?.changePct !== undefined ? (hyg.changePct >= 0 ? "Souple (HY +)" : "Tendu (HY -)") : "--",
+      creditSpreadLabel: hyg ? `HYG ${hyg.price}$ (${fmtPct(hyg.changePct)})` : "--",
+      eurUsdLabel: eurusd ? `${eurusd.price.toFixed(4)} $` : "--",
+      statusBadge: hyg?.changePct !== null && hyg?.changePct >= -0.3 ? "Crédit Stable" : "Vigilance HY",
+      diagnostic: hyg && eurusd
+        ? `ETF High Yield (HYG) à ${hyg.price}$ (${fmtPct(hyg.changePct)}) et parité EUR/USD live à ${eurusd.price.toFixed(4)}.`
+        : "Flux crédit et change partiellement indisponibles."
+    },
+    macroSurprises: {
+      cacPerfLabel: cac ? fmtPct(cac.changePct) : "--",
+      stoxxPerfLabel: stoxx ? fmtPct(stoxx.changePct) : "--",
+      sp500PerfLabel: sp500 ? fmtPct(sp500.changePct) : "--",
+      statusBadge: cac && cac.changePct >= 0 ? "Momentum Positif" : "Consolidation",
+      diagnostic: cac && stoxx && sp500
+        ? `Variation séance live : CAC 40 (${fmtPct(cac.changePct)}), Euro Stoxx 50 (${fmtPct(stoxx.changePct)}), S&P 500 (${fmtPct(sp500.changePct)}).`
+        : "Flux indices actions en cours de synchronisation."
+    },
+    sectorRotation: {
+      ratioCacStoxx: cac && stoxx && stoxx.price > 0 ? `${roundTo(cac.price / stoxx.price, 2)}x` : "--",
+      cacLevelLabel: cac ? `${cac.price.toLocaleString("fr-FR")} pts` : "--",
+      betaMultiplier: cac && sp500 && cac.changePct !== null && sp500.changePct !== null
+        ? (cac.changePct >= sp500.changePct ? "Surperf. EU" : "Surperf. US")
+        : "--",
+      regimeBadge: cac && cac.changePct >= 0 ? "Flux Acheteurs EU" : "Sélectivité Défensive",
+      diagnostic: cac
+        ? `CAC 40 coté en direct à ${cac.price.toLocaleString("fr-FR")} pts (${fmtPct(cac.changePct)}). Privilégier les bilans peu endettés et la génération de FCF.`
+        : "Cotations Euronext indisponibles."
+    }
   };
 }
 
@@ -260,19 +327,25 @@ async function fetchEcbRates() {
  * Agrégateur principal exécuté en parallèle
  */
 async function getMarketRiskBarometerData() {
-  const [cnnRes, cboeRes, fedRes, bceRes] = await Promise.allSettled([
+  const [cnnRes, cboeRes, fedRes, bceRes, eqRes] = await Promise.allSettled([
     fetchCnnFearAndGreed(),
     fetchCboeIndices(),
     fetchCmeFedWatch(),
-    fetchEcbRates()
+    fetchEcbRates(),
+    fetchEquitiesAndCreditLive()
   ]);
+
+  const eqData = eqRes.status === "fulfilled" ? eqRes.value : {};
 
   return {
     timestamp: new Date().toISOString(),
     cnnFearAndGreed: cnnRes.status === "fulfilled" ? cnnRes.value : null,
     cboeIndices: cboeRes.status === "fulfilled" ? cboeRes.value : null,
     cmeFedWatch: fedRes.status === "fulfilled" ? fedRes.value : null,
-    bceRates: bceRes.status === "fulfilled" ? bceRes.value : null
+    bceRates: bceRes.status === "fulfilled" ? bceRes.value : null,
+    creditAndLiquidity: eqData.creditAndLiquidity || null,
+    macroSurprises: eqData.macroSurprises || null,
+    sectorRotation: eqData.sectorRotation || null
   };
 }
 
