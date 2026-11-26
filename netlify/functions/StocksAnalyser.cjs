@@ -1,6 +1,6 @@
 /**
  * Netlify Serverless Function (.cjs) : StocksAnalyser
- * Garantit la compatibilité CommonJS même si "type": "module" est défini dans package.json.
+ * Optimisée sous la barre des 7.5s (anti-504 Netlify) avec flux d'actualités live en parallèle.
  */
 
 const CERTIFIED_SOURCES = [
@@ -35,7 +35,7 @@ const CERTIFIED_SOURCES = [
   { id: 29, name: "Societe.com", url: "https://www.societe.com/cgi-bin/search?champs=" }
 ];
 
-function stripHtmlToCleanText(html, maxChars = 750) {
+function stripHtmlToCleanText(html, maxChars = 700) {
   if (!html) return "";
   const cleaned = html
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
@@ -65,7 +65,7 @@ function escapeXmlAttr(str) {
 async function fetchSingleCertifiedSource(source, encodedQuery) {
   const targetUrl = `${source.url}${encodedQuery}`;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 450);
+  const timer = setTimeout(() => controller.abort(), 400);
   try {
     const res = await fetch(targetUrl, {
       headers: {
@@ -78,7 +78,7 @@ async function fetchSingleCertifiedSource(source, encodedQuery) {
     clearTimeout(timer);
     if (!res.ok) return { ...source, targetUrl, ok: false, text: "" };
     const rawHtml = await res.text();
-    const cleanText = stripHtmlToCleanText(rawHtml, 750);
+    const cleanText = stripHtmlToCleanText(rawHtml, 700);
     const blocked = /captcha|cloudflare|access denied|enable javascript|just a moment/i.test(cleanText) && cleanText.length < 1500;
     return {
       ...source,
@@ -121,24 +121,28 @@ function parseAndCleanModelJson(rawText) {
   }
   return parsed;
 }
-async function callGeminiWithFallback(apiKey, primaryModel, payload, deadlineMs = Date.now() + 7800) {
+
+async function callGeminiWithFallback(apiKey, primaryModel, payload, deadlineMs = Date.now() + 7400) {
   const baseCandidates = Array.from(new Set([primaryModel, "gemini-2.5-flash"]));
   const attempts = payload?.tools?.length
-    ? [{ model: primaryModel, useTools: true }, { model: "gemini-2.5-flash", useTools: false }]
+    ? [
+        { model: primaryModel, useTools: true },
+        { model: "gemini-2.5-flash", useTools: false }
+      ]
     : baseCandidates.map((m) => ({ model: m, useTools: false }));
 
   let lastError = null;
 
   for (const attempt of attempts) {
     const remainingForModel = deadlineMs - Date.now();
-    if (remainingForModel < 1800) {
+    if (remainingForModel < 1500) {
       lastError = { status: 504, message: "Budget temps Netlify atteint avant la fin de la synthèse." };
       break;
     }
 
     const baseGenConfig = {
       temperature: 0,
-      maxOutputTokens: 2600,
+      maxOutputTokens: 2200,
       thinkingConfig: { thinkingBudget: 0 },
       ...(payload?.generationConfig || {})
     };
@@ -155,8 +159,8 @@ async function callGeminiWithFallback(apiKey, primaryModel, payload, deadlineMs 
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(attempt.model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
     const controller = new AbortController();
     const timeoutMs = attempt.useTools
-      ? Math.max(2200, Math.min(3600, remainingForModel - 2200))
-      : Math.max(2000, Math.min(5800, remainingForModel));
+      ? Math.max(1800, Math.min(2400, remainingForModel - 2600))
+      : Math.max(1800, Math.min(5200, remainingForModel));
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
@@ -221,9 +225,9 @@ async function buildInjectedXmlCorpus(subjectQuery) {
 
 async function fetchLiveMarketSnapshot(subjectQuery) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 900);
+  const timer = setTimeout(() => controller.abort(), 850);
   try {
-    const searchUrl = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(subjectQuery)}&quotesCount=5&newsCount=0`;
+    const searchUrl = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(subjectQuery)}&quotesCount=5&newsCount=5`;
     const searchRes = await fetch(searchUrl, { headers: { "User-Agent": "Mozilla/5.0" }, signal: controller.signal });
     if (!searchRes.ok) {
       clearTimeout(timer);
@@ -231,18 +235,22 @@ async function fetchLiveMarketSnapshot(subjectQuery) {
     }
     const searchJson = await searchRes.json();
     const quotes = searchJson?.quotes || [];
+    const news = (searchJson?.news || [])
+      .slice(0, 4)
+      .map((n) => `[${n.publisher || "Actu"}] ${n.title || ""}`)
+      .join(" ; ");
     const bestQuote =
       quotes.find((q) => String(q.symbol || "").endsWith(".PA") || String(q.symbol || "").endsWith(".AS") || String(q.symbol || "").endsWith(".BR")) ||
       quotes[0];
     if (!bestQuote?.symbol) {
       clearTimeout(timer);
-      return "";
+      return news ? `Actualités récentes : ${news}` : "";
     }
     const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(bestQuote.symbol)}?interval=1d&range=1mo`;
     const chartRes = await fetch(chartUrl, { headers: { "User-Agent": "Mozilla/5.0" }, signal: controller.signal });
     clearTimeout(timer);
     if (!chartRes.ok) {
-      return `Symbole identifié: ${bestQuote.symbol} | Nom: ${bestQuote.longname || bestQuote.shortname || subjectQuery}`;
+      return `Symbole identifié: ${bestQuote.symbol} | Nom: ${bestQuote.longname || bestQuote.shortname || subjectQuery}${news ? ` | Actus: ${news}` : ""}`;
     }
     const chartJson = await chartRes.json();
     const meta = chartJson?.chart?.result?.[0]?.meta || {};
@@ -251,8 +259,27 @@ async function fetchLiveMarketSnapshot(subjectQuery) {
       `Ticker Yahoo: ${bestQuote.symbol}`,
       `Place: ${meta.fullExchangeName || bestQuote.exchDisp || "Euronext"}`,
       `Devise: ${meta.currency || "EUR"}`,
-      `Cours actuel: ${meta.regularMarketPrice ?? "N/A"} ${meta.currency || "EUR"}`
-    ].join(" | ");
+      `Cours actuel: ${meta.regularMarketPrice ?? "N/A"} ${meta.currency || "EUR"}`,
+      news ? `Actualités récentes: ${news}` : ""
+    ].filter(Boolean).join(" | ");
+  } catch {
+    clearTimeout(timer);
+    return "";
+  }
+}
+
+async function fetchEuronextLiveNewsDigest() {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 850);
+  try {
+    const url = "https://query1.finance.yahoo.com/v1/finance/search?q=Euronext%20Paris%20OPA%20AMF%20contrat&quotesCount=0&newsCount=8";
+    const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" }, signal: controller.signal });
+    clearTimeout(timer);
+    if (!res.ok) return "";
+    const data = await res.json();
+    const items = (data?.news || []).slice(0, 8);
+    if (items.length === 0) return "";
+    return items.map((n) => `- [${n.publisher || "Source"}] ${n.title || ""}`).join("\n");
   } catch {
     clearTimeout(timer);
     return "";
@@ -260,7 +287,7 @@ async function fetchLiveMarketSnapshot(subjectQuery) {
 }
 
 exports.handler = async function (event) {
-  const netlifyDeadlineMs = Date.now() + 8200;
+  const netlifyDeadlineMs = Date.now() + 7400;
   const headers = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type",
@@ -308,12 +335,30 @@ exports.handler = async function (event) {
       return { statusCode: 200, headers, body: JSON.stringify(geminiResult.data) };
     }
 
+    // Mode 2 : Appels ciblés (Radar Rumeurs, Comparateur VS, Deep Dive, Scan Gérants)
+    let enrichedContents = body.contents || [];
+    if (body.tools?.length && Array.isArray(enrichedContents) && enrichedContents[0]?.parts?.[0]?.text) {
+      const liveNews = await fetchEuronextLiveNewsDigest();
+      if (liveNews) {
+        enrichedContents = [
+          {
+            ...enrichedContents[0],
+            parts: [
+              {
+                text: `${enrichedContents[0].parts[0].text}\n\nDÉPÊCHES FINANCIÈRES EURONEXT EN DIRECT :\n${liveNews}`
+              }
+            ]
+          }
+        ];
+      }
+    }
+
     const geminiResult = await callGeminiWithFallback(
       apiKey,
       modelId,
       {
         systemInstruction: body.systemInstruction || undefined,
-        contents: body.contents || [],
+        contents: enrichedContents,
         tools: body.tools || undefined,
         generationConfig: { temperature: 0, ...(body.generationConfig || {}) }
       },
