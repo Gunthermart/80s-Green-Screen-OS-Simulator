@@ -303,7 +303,7 @@ exports.handler = async function (event) {
     return { statusCode: 500, headers, body: JSON.stringify({ error: "Clé API StocksAnalyserKey manquante dans Netlify." }) };
   }
 
-  const modelId = process.env.GEMINI_MODEL || "gemini-3-flash-preview";
+  const modelId = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
   try {
     const body = JSON.parse(event.body || "{}");
