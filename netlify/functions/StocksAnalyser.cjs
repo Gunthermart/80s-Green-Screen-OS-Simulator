@@ -122,28 +122,28 @@ function parseAndCleanModelJson(rawText) {
   return parsed;
 }
 
-async function callGeminiWithFallback(apiKey, primaryModel, payload, deadlineMs = Date.now() + 7400) {
-  const baseCandidates = Array.from(new Set([primaryModel, "gemini-4-hydrogen", "gemini-2.5-flash"]));
+async function callGeminiWithFallback(apiKey, primaryModel, payload, deadlineMs = Date.now() + 6800) {
+  const baseCandidates = Array.from(new Set([primaryModel, "gemini-2.5-flash"]));
   const attempts = payload?.tools?.length
     ? [
         { model: primaryModel, useTools: true },
-        { model: primaryModel, useTools: false },
         { model: "gemini-2.5-flash", useTools: false }
       ]
     : baseCandidates.map((m) => ({ model: m, useTools: false }));
 
   let lastError = null;
 
-  for (const attempt of attempts) {
+  for (let i = 0; i < attempts.length; i++) {
+    const attempt = attempts[i];
     const remainingForModel = deadlineMs - Date.now();
-    if (remainingForModel < 1500) {
+    if (remainingForModel < 1400) {
       lastError = { status: 504, message: "Budget temps Netlify atteint avant la fin de la synthèse." };
       break;
     }
 
     const baseGenConfig = {
       temperature: 0,
-      maxOutputTokens: 2200,
+      maxOutputTokens: 1800,
       thinkingConfig: { thinkingBudget: 0 },
       ...(payload?.generationConfig || {})
     };
@@ -159,9 +159,12 @@ async function callGeminiWithFallback(apiKey, primaryModel, payload, deadlineMs 
 
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(attempt.model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
     const controller = new AbortController();
+    const isFirstOfTwo = i === 0 && attempts.length > 1;
     const timeoutMs = attempt.useTools
-      ? Math.max(1800, Math.min(2400, remainingForModel - 2600))
-      : Math.max(1800, Math.min(5200, remainingForModel));
+      ? Math.max(1600, Math.min(2200, remainingForModel - 2600))
+      : isFirstOfTwo
+        ? Math.max(2200, Math.min(3400, Math.floor(remainingForModel * 0.55)))
+        : Math.max(1800, remainingForModel - 200);
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
@@ -212,16 +215,22 @@ async function buildInjectedXmlCorpus(subjectQuery) {
   const directSettlements = await Promise.allSettled(
     CERTIFIED_SOURCES.map((src) => fetchSingleCertifiedSource(src, encodedQuery))
   );
-  const collected = directSettlements.map((s, idx) =>
-    s.status === "fulfilled"
-      ? s.value
-      : { ...CERTIFIED_SOURCES[idx], targetUrl: `${CERTIFIED_SOURCES[idx].url}${encodedQuery}`, ok: false, text: "" }
-  );
-  const xmlBlocks = collected.map((src) => {
-    const content = src.ok ? src.text : "Portail protégé ou rendu dynamique.";
-    return `<source id="${src.id}" name="${escapeXmlAttr(src.name)}" url="${escapeXmlAttr(src.targetUrl)}">\n${content}\n</source>`;
+  const collected = directSettlements
+    .map((s, idx) =>
+      s.status === "fulfilled"
+        ? s.value
+        : { ...CERTIFIED_SOURCES[idx], targetUrl: `${CERTIFIED_SOURCES[idx].url}${encodedQuery}`, ok: false, text: "" }
+    )
+    .filter((src) => src.ok && src.text);
+
+  if (collected.length === 0) {
+    return `<corpus subject="${escapeXmlAttr(subjectQuery)}" total_sources="29">Utilise les données financières temps réel ci-dessus.</corpus>`;
+  }
+
+  const xmlBlocks = collected.slice(0, 8).map((src) => {
+    return `<source id="${src.id}" name="${escapeXmlAttr(src.name)}">\n${src.text.slice(0, 500)}\n</source>`;
   });
-  return `<corpus subject="${escapeXmlAttr(subjectQuery)}" total_sources="29">\n${xmlBlocks.join("\n")}\n</corpus>`;
+  return `<corpus subject="${escapeXmlAttr(subjectQuery)}" total_sources="29" active_extracts="${xmlBlocks.length}">\n${xmlBlocks.join("\n")}\n</corpus>`;
 }
 
 async function fetchLiveMarketSnapshot(subjectQuery) {
@@ -288,7 +297,7 @@ async function fetchEuronextLiveNewsDigest() {
 }
 
 exports.handler = async function (event) {
-  const netlifyDeadlineMs = Date.now() + 7400;
+  const netlifyDeadlineMs = Date.now() + 6800;
   const headers = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type",
