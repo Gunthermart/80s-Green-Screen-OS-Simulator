@@ -123,10 +123,11 @@ function parseAndCleanModelJson(rawText) {
 }
 
 async function callGeminiWithFallback(apiKey, primaryModel, payload, deadlineMs = Date.now() + 7400) {
-  const baseCandidates = Array.from(new Set([primaryModel, "gemini-2.5-flash"]));
+  const baseCandidates = Array.from(new Set([primaryModel, "gemini-4-hydrogen", "gemini-2.5-flash"]));
   const attempts = payload?.tools?.length
     ? [
         { model: primaryModel, useTools: true },
+        { model: primaryModel, useTools: false },
         { model: "gemini-2.5-flash", useTools: false }
       ]
     : baseCandidates.map((m) => ({ model: m, useTools: false }));
@@ -303,7 +304,7 @@ exports.handler = async function (event) {
     return { statusCode: 500, headers, body: JSON.stringify({ error: "Clé API StocksAnalyserKey manquante dans Netlify." }) };
   }
 
-  const modelId = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  const modelId = process.env.GEMINI_MODEL || "gemini-4-hydrogen";
 
   try {
     const body = JSON.parse(event.body || "{}");
