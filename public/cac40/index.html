@@ -1490,11 +1490,11 @@
                     const data = await res.json().catch(() => ({}));
                     if (!res.ok) {
                         const msg = data?.error || (res.status === 504
-                            ? "Délai serveur Netlify dépassé (504). Réessaie dans quelques secondes."
+                            ? "Délai serveur Netlify dépassé (504). Réessaie avec une requête plus ciblée."
                             : `Erreur serveur StocksAnalyser (${res.status})`);
-                        if ((res.status === 404 || res.status === 504) && attempt === 0) {
+                        if (res.status === 404 && attempt === 0) {
                             lastErr = new Error(msg);
-                            await new Promise(r => setTimeout(r, 600));
+                            await new Promise(r => setTimeout(r, 500));
                             continue;
                         }
                         throw new Error(msg);
@@ -1510,8 +1510,10 @@
                     return parsed;
                 } catch (err) {
                     lastErr = err;
-                    if (attempt === 0) {
-                        await new Promise(r => setTimeout(r, 500));
+                    if (attempt === 0 && !String(err.message || "").includes("504")) {
+                        await new Promise(r => setTimeout(r, 400));
+                    } else {
+                        break;
                     }
                 }
             }
@@ -2768,9 +2770,9 @@
             try {
                 const targetFund = fundsList.find(f => f.id === targetId);
                 const targetDesc = targetFund
-                    ? `le fonds ${targetFund.name} (${targetFund.fundName})`
-                    : (customQuery || "les principaux fonds Small & Mid Caps France actifs sur Euronext");
-                const prompt = `Recherche sur le web les informations réelles, gérants, encours, style de gestion et principales lignes détenues pour : ${targetDesc}. Contexte additionnel : "${customQuery}". Réponds en JSON strict avec un tableau "funds" contenant jusqu'à 5 fonds :
+                    ? `${targetFund.name} (${targetFund.fundName})`
+                    : (customQuery || "fonds Small & Mid Caps France Euronext");
+                const prompt = `Extrais les informations réelles (gérant, encours, style, thèse, principales positions Euronext et mouvements récents) pour : ${targetDesc}. Contexte : "${customQuery}". Réponds uniquement en JSON strict avec un tableau "funds" de 3 fonds maximum :
 {
   "funds": [
     {
@@ -2780,17 +2782,22 @@
       "fundName": "Nom exact du fonds",
       "url": "URL officielle",
       "aum": "Encours sous gestion",
-      "perfYtd": "Performance YTD si disponible",
+      "perfYtd": "Performance YTD si connue",
       "style": "Style détaillé",
       "styleCategory": "Value ou Quality Growth ou GARP ou Stock-picking",
-      "thesis": "Thèse d'investissement",
+      "thesis": "Thèse d'investissement concise",
       "topHoldings": ["Société 1", "Société 2"],
       "targetStocks": ["TICKER1", "TICKER2"],
-      "recentMoves": "Derniers mouvements et arbitrages relevés"
+      "recentMoves": "Derniers mouvements relevés"
     }
   ]
 }`;
-                const res = await callGeminiHydrogenProxy({ mode: "legacy", userPrompt: prompt, useSearch: true });
+                const res = await callGeminiHydrogenProxy({
+                    mode: "funds_scan",
+                    subjectQuery: targetDesc,
+                    userPrompt: prompt,
+                    useSearch: false
+                });
                 const returnedFunds = Array.isArray(res.funds) ? res.funds : (res.id ? [res] : []);
 
                 for (const item of returnedFunds) {
