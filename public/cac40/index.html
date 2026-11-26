@@ -1438,25 +1438,28 @@
 
         function extractCleanJSON(text) {
             if (!text) return null;
+            if (typeof text === "object") return text;
+            const cleaned = String(text)
+                .replace(/```json\s*/gi, "")
+                .replace(/```\s*/g, "")
+                .trim();
+
             let parsed = null;
             try {
-                parsed = JSON.parse(text);
+                parsed = JSON.parse(cleaned);
             } catch {
-                const start = text.indexOf("{");
-                const end = text.lastIndexOf("}");
+                const start = cleaned.indexOf("{");
+                const end = cleaned.lastIndexOf("}");
                 if (start !== -1 && end !== -1 && end > start) {
                     try {
-                        parsed = JSON.parse(text.slice(start, end + 1));
+                        parsed = JSON.parse(cleaned.slice(start, end + 1));
                     } catch {
                         return null;
                     }
                 }
             }
             if (!parsed || typeof parsed !== "object") return null;
-            if (Array.isArray(parsed)) {
-                parsed = parsed[0] || null;
-            }
-            // Déballer automatiquement si le modèle a encapsulé la réponse dans une clé racine unique (ex: { "part1": { ... } })
+            if (Array.isArray(parsed)) parsed = parsed[0] || null;
             const keys = parsed ? Object.keys(parsed) : [];
             if (keys.length === 1 && parsed[keys[0]] && typeof parsed[keys[0]] === "object" && !Array.isArray(parsed[keys[0]])) {
                 return parsed[keys[0]];
@@ -1464,83 +1467,18 @@
             return parsed;
         }
 
-        async function callDirectGeminiFallback({ systemPrompt = "", userPrompt = "", useSearch = false }) {
-            const isSandboxPreview = !window.location.hostname ||
-                window.location.hostname.includes("googleusercontent.com") ||
-                window.location.protocol === "blob:";
-            if (!isSandboxPreview) {
-                throw new Error("La fonction serveur Netlify StocksAnalyser est temporairement indisponible. Réessaie dans quelques secondes.");
-            }
-            const apiKey = "";
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
-            const payload = {
-                contents: [{ parts: [{ text: userPrompt }] }],
-                generationConfig: { temperature: 0 }
-            };
-            if (systemPrompt) {
-                payload.systemInstruction = { parts: [{ text: systemPrompt }] };
-            }
-            if (useSearch) {
-                payload.tools = [{ google_search: {} }];
-            } else {
-                payload.generationConfig.responseMimeType = "application/json";
-            }
-
-            let lastErr = null;
-            for (let attempt = 0; attempt < 3; attempt++) {
-                try {
-                    const res = await fetch(apiUrl, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(payload)
-                    });
-                    const data = await res.json();
-                    if (!res.ok) {
-                        throw new Error(data?.error?.message || `HTTP ${res.status}`);
-                    }
-                    const parts = data?.candidates?.[0]?.content?.parts || [];
-                    const rawText = parts.map(p => p?.text || "").filter(Boolean).join("\n");
-                    const parsed = extractCleanJSON(rawText);
-                    if (!parsed) throw new Error("Réponse JSON invalide depuis Gemini.");
-                    return parsed;
-                } catch (err) {
-                    lastErr = err;
-                    if (attempt < 2) {
-                        await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt)));
-                    }
-                }
-            }
-            throw lastErr || new Error("Échec de connexion au moteur Gemini.");
-        }
-
         async function callGeminiHydrogenProxy({ mode = "legacy", subjectQuery = "", systemPrompt = "", userPrompt = "", useSearch = false, skipCorpusFetch = false }) {
             const payload = {
                 mode,
                 subjectQuery,
                 skipCorpusFetch,
-                userPrompt
+                systemInstruction: systemPrompt ? { parts: [{ text: systemPrompt }] } : undefined,
+                contents: [{ parts: [{ text: userPrompt }] }],
+                tools: useSearch ? [{ google_search: {} }] : undefined,
+                generationConfig: { temperature: 0 }
             };
 
-            if (systemPrompt) {
-                payload.systemInstruction = {
-                    parts: [{ text: systemPrompt }]
-                };
-            }
-
-            if (mode === "legacy") {
-                payload.contents = [{ parts: [{ text: userPrompt }] }];
-                if (useSearch) {
-                    payload.tools = [{ google_search: {} }];
-                } else {
-                    payload.generationConfig = { responseMimeType: "application/json" };
-                }
-            }
-
-            const effectivePrompt = subjectQuery
-                ? `${userPrompt}\n\nEffectue une recherche web en direct sur Euronext Paris et les sources financières certifiées pour la valeur : "${subjectQuery}". Réponds uniquement en JSON brut valide sans balises markdown.`
-                : `${userPrompt}\n\nRéponds uniquement en JSON brut valide sans balises markdown.`;
-
-            let lastServerError = null;
+            let lastErr = null;
             for (let attempt = 0; attempt < 2; attempt++) {
                 try {
                     const res = await fetch("/.netlify/functions/StocksAnalyser", {
@@ -1548,79 +1486,40 @@
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify(payload)
                     });
-
-                    if (res.status === 404 || res.status === 502 || res.status === 504) {
-                        lastServerError = new Error(`Fonction serveur Netlify indisponible (HTTP ${res.status}).`);
-                        if (attempt === 0) {
-                            await new Promise(r => setTimeout(r, 900));
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok) {
+                        const msg = data?.error || (res.status === 504
+                            ? "Délai serveur Netlify dépassé (504). Réessaie dans quelques secondes."
+                            : `Erreur serveur StocksAnalyser (${res.status})`);
+                        if ((res.status === 404 || res.status === 504) && attempt === 0) {
+                            lastErr = new Error(msg);
+                            await new Promise(r => setTimeout(r, 600));
                             continue;
                         }
-                        return await callDirectGeminiFallback({
-                            systemPrompt,
-                            userPrompt: effectivePrompt,
-                            useSearch: useSearch || Boolean(subjectQuery)
-                        });
+                        throw new Error(msg);
                     }
-
-                    const rawResponseText = await res.text();
-                    let data = null;
-                    try {
-                        data = JSON.parse(rawResponseText);
-                    } catch {
-                        throw new Error(`Délai serveur dépassé ou réponse invalide (HTTP ${res.status}). Réessaie l'audit.`);
-                    }
-
-                    if (!res.ok) {
-                        throw new Error(data?.error || `Erreur serveur Netlify (${res.status})`);
-                    }
-
                     if (data?.parsedJson && typeof data.parsedJson === "object") {
                         return data.parsedJson;
                     }
-
-                    const parts = data?.candidates?.[0]?.content?.parts || [];
-                    const rawText = parts.map(p => p?.text || "").filter(Boolean).join("\n");
+                    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
                     const parsed = extractCleanJSON(rawText);
                     if (!parsed) {
-                        throw new Error("Réponse JSON invalide reçue depuis le moteur d'analyse.");
+                        throw new Error("Réponse JSON invalide reçue du moteur IA.");
                     }
                     return parsed;
                 } catch (err) {
-                    lastServerError = err;
-                    if (err instanceof TypeError) {
-                        return await callDirectGeminiFallback({
-                            systemPrompt,
-                            userPrompt: effectivePrompt,
-                            useSearch: useSearch || Boolean(subjectQuery)
-                        });
+                    lastErr = err;
+                    if (attempt === 0) {
+                        await new Promise(r => setTimeout(r, 500));
                     }
-                    if (attempt === 0 && /502|504|404/.test(err.message)) {
-                        await new Promise(r => setTimeout(r, 900));
-                        continue;
-                    }
-                    throw err;
                 }
             }
-            throw lastServerError || new Error("Erreur de communication avec StocksAnalyser.");
+            throw lastErr || new Error("La fonction serveur Netlify StocksAnalyser est temporairement indisponible.");
         }
 
-        // --- NAVIGATION & MODES ---
+        // --- NAVIGATION & SEARCH BAR HELPERS ---
         function activateMode(mode) {
-            ["resultsContainer", "welcomeContainer", "quickNavContainer", "vsResultsContainer", "fundsContainer", "stocksContainer", "matrixContainer", "sentimentMarketContainer", "dcfContainer", "rumorsContainer"].forEach(id => {
-                const el = document.getElementById(id);
-                if (el) el.classList.add("hidden");
-            });
-
-            const tabIds = ["tabSingleMode", "tabVSMode", "tabFundsMode", "tabStocksMode", "tabMatrixMode", "tabSentimentMode", "tabDCFMode", "tabRumorsMode"];
-            tabIds.forEach(id => {
-                const btn = document.getElementById(id);
-                if (btn) {
-                    btn.classList.remove("bg-sky-500", "text-white", "font-bold", "shadow");
-                    btn.classList.add("text-slate-400");
-                }
-            });
-
-            const activeTabMap = {
+            const tabs = {
                 single: "tabSingleMode",
                 vs: "tabVSMode",
                 funds: "tabFundsMode",
@@ -1630,21 +1529,30 @@
                 dcf: "tabDCFMode",
                 rumors: "tabRumorsMode"
             };
-            const activeTab = document.getElementById(activeTabMap[mode]);
-            if (activeTab) {
-                activeTab.classList.add("bg-sky-500", "text-white", "font-bold", "shadow");
-                activeTab.classList.remove("text-slate-400");
-            }
+            Object.entries(tabs).forEach(([key, id]) => {
+                const btn = document.getElementById(id);
+                if (!btn) return;
+                btn.className = key === mode
+                    ? "px-3 py-1.5 rounded-lg bg-sky-500 text-white font-bold shadow cursor-pointer transition"
+                    : "px-3 py-1.5 rounded-lg text-slate-400 hover:text-white cursor-pointer transition";
+            });
 
-            const searchForm = document.getElementById("searchForm");
-            const searchVSForm = document.getElementById("searchVSForm");
-            if (mode === "vs") {
-                searchForm.classList.add("hidden");
-                searchVSForm.classList.remove("hidden");
-            } else {
-                searchForm.classList.remove("hidden");
-                searchVSForm.classList.add("hidden");
-            }
+            document.getElementById("searchForm").classList.toggle("hidden", mode !== "single");
+            document.getElementById("searchVSForm").classList.toggle("hidden", mode !== "vs");
+
+            const containers = [
+                "welcomeContainer",
+                "resultsContainer",
+                "vsResultsContainer",
+                "fundsContainer",
+                "stocksContainer",
+                "matrixContainer",
+                "sentimentMarketContainer",
+                "dcfContainer",
+                "rumorsContainer"
+            ];
+            containers.forEach(id => document.getElementById(id)?.classList.add("hidden"));
+            document.getElementById("quickNavContainer")?.classList.add("hidden");
 
             if (mode === "single") {
                 if (currentReportData) {
@@ -1672,125 +1580,132 @@
                 runDCFCalculation();
             } else if (mode === "rumors") {
                 document.getElementById("rumorsContainer").classList.remove("hidden");
-                if (document.getElementById("rumorsRadarGrid").children.length === 0) {
-                    runRumorsRadarScan();
-                }
+                const grid = document.getElementById("rumorsRadarGrid");
+                if (grid && !grid.innerHTML.trim()) runRumorsRadarScan();
             }
         }
 
         function toggleClearButton() {
-            const input = document.getElementById("searchInput");
-            const btn = document.getElementById("btnClearSearch");
-            if (input.value.trim().length > 0) btn.classList.remove("hidden");
-            else btn.classList.add("hidden");
+            const val = document.getElementById("searchInput")?.value || "";
+            document.getElementById("btnClearSearch")?.classList.toggle("hidden", val.length === 0);
         }
 
         function clearSearchInput() {
             const input = document.getElementById("searchInput");
-            input.value = "";
+            if (input) {
+                input.value = "";
+                input.focus();
+            }
             toggleClearButton();
-            input.focus();
         }
 
-        function selectPreset(val) {
-            document.getElementById("searchInput").value = val;
-            toggleClearButton();
-            handleSingleSearch(new Event("submit"));
+        function selectPreset(queryText) {
+            activateMode("single");
+            const input = document.getElementById("searchInput");
+            if (input) {
+                input.value = queryText;
+                toggleClearButton();
+            }
+            handleSingleSearch();
         }
 
-        function jumpToSection(sectionId) {
-            const target = document.getElementById(sectionId);
-            if (!target) return;
-            target.scrollIntoView({ behavior: "smooth", block: "start" });
-            document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("nav-btn-active"));
-            const btn = document.getElementById(`navbtn-${sectionId}`);
-            if (btn) {
-                btn.classList.add("nav-btn-active");
-                document.getElementById("activeSectionLabel").innerText = btn.innerText;
+        function jumpToSection(secId) {
+            const el = document.getElementById(secId);
+            if (!el) return;
+            el.scrollIntoView({ behavior: "smooth", block: "start" });
+            document.querySelectorAll(".nav-btn").forEach(btn => {
+                btn.classList.remove("nav-btn-active");
+                btn.classList.add("text-slate-400");
+            });
+            const activeBtn = document.getElementById(`navbtn-${secId}`);
+            if (activeBtn) {
+                activeBtn.classList.add("nav-btn-active");
+                activeBtn.classList.remove("text-slate-400");
+                const label = document.getElementById("activeSectionLabel");
+                if (label) label.innerText = activeBtn.innerText;
             }
         }
 
-        function scrollQuickNavRail(offset) {
+        function scrollQuickNavRail(delta) {
             const rail = document.getElementById("quickNavScrollRail");
-            if (rail) rail.scrollBy({ left: offset, behavior: "smooth" });
+            if (rail) rail.scrollBy({ left: delta, behavior: "smooth" });
         }
 
-        // --- SINGLE STOCK AUDIT (29 SOURCES + GEMINI-4-HYDROGEN) ---
+        // --- SINGLE STOCK 29-SOURCE AUDIT ---
         async function handleSingleSearch(event) {
             if (event) event.preventDefault();
-            const query = document.getElementById("searchInput").value.trim();
-            if (!query) return;
+            const query = (document.getElementById("searchInput")?.value || "").trim();
+            if (!query) {
+                showToast("Saisis un nom de société, ticker Euronext ou code ISIN.", "warning");
+                return;
+            }
 
             activateMode("single");
             document.getElementById("welcomeContainer").classList.add("hidden");
             document.getElementById("resultsContainer").classList.add("hidden");
             document.getElementById("quickNavContainer").classList.add("hidden");
             document.getElementById("loadingContainer").classList.remove("hidden");
-            document.getElementById("loadingStatusText").innerText = `Collecte parallèle sur les 29 sources certifiées pour "${query}"...`;
-            document.getElementById("loadingProgressBar").style.width = "40%";
 
-            const systemPrompt = `Tu es un comité d'investissement institutionnel (CFA, CMT, M&A Corporate Finance) spécialisé sur Euronext Paris et les marchés européens.
-Tu reçois un corpus XML de 29 sources financières certifiées (<source id="1"> à <source id="29">).
-Extrais les données avec une précision chirurgicale, sans hallucination, en croisant les bilans, cours du jour, FCF en M€, dette nette en M€ (négative si trésorerie nette), nombre d'actions en millions, ratios de valorisation, consensus et niveaux techniques Ichimoku.`;
+            const systemPrompt = "Tu es un comité institutionnel d'analyse financière Euronext (CFA, CMT, M&A). Réponds uniquement en JSON valide, factuel et précis, sans aucun texte hors JSON et sans inventer de données non vérifiées.";
 
-            const auditPromptPart1 = `Produis la PARTIE 1 (Identité, Triple Audit, KPIs, Dette, Santé & Multiples) au format JSON strict pour : "${query}".
-Ne laisse AUCUNE chaîne vide et n'invente aucun chiffre absent des sources ou données temps réel. Respecte exactement cette structure JSON :
+            const auditPromptPart1 = `Audite la valeur Euronext "${query}" à partir des données temps réel et du corpus multi-sources. Retourne strictement un objet JSON avec ces clés exactes :
 {
-  "companyInfo": { "name": "Nom complet officiel", "ticker": "Symbole boursier", "isin": "Code ISIN", "market": "Place de cotation", "index": "Indice d'appartenance", "icbSector": "Secteur d'activité", "headquarters": "Ville, Pays", "summary": "Présentation synthétique de l'activité en 2 phrases", "competitivePositioning": "Avantage concurrentiel principal" },
-  "cfaPersona": { "roe": "Rentabilité des capitaux propres en %", "debtEbitda": "Ratio Dette Nette / EBITDA en x", "moatRating": "Évaluation de l'avantage concurrentiel", "fcfQuality": "Qualité de conversion en Free Cash Flow", "factsVsForecasts": "Analyse factuelle du bilan et de la rentabilité" },
-  "cmtPersona": { "rrRatio": "Ratio rendement/risque calculé", "invalidationCondition": "Seuil technique d'invalidation", "levelsText": "Supports et résistances techniques majeurs", "scenarioText": "Scénario technique court et moyen terme" },
-  "mnaPersona": { "bearPrice": "Valorisation scénario prudent en devise", "basePrice": "Valorisation scénario central en devise", "bullPrice": "Valorisation scénario optimiste en devise", "waccFormula": "Paramètres WACC et croissance perpétuelle g retenus", "assumptionsText": "Hypothèses de valorisation DCF et multiples sectoriels" },
-  "bayesianPerspective": { "probBullish": "Probabilité haussière estimée en %", "expectedRange": "Fourchette de cours estimée T+1", "peadVal": "Dérive post-publication en %", "peadText": "Dynamique post-publication des résultats", "peadBar": "Pourcentage jauge 0-100%", "macroVal": "Sensibilité macroéconomique", "macroText": "Impact des taux directeurs et souverains", "macroBar": "Pourcentage jauge 0-100%", "gammaVal": "Asymétrie rendement/risque", "gammaText": "Lecture de l'asymétrie haussière/baissière", "gammaBar": "Pourcentage jauge 0-100%", "summary": "Synthèse probabiliste à horizon T+1 trimestre" },
-  "financialKPIs": { "period": "Période financière de référence", "revenue": "Chiffre d'affaires avec unité", "ebitda": "EBITDA avec unité", "netIncome": "Résultat net avec unité", "fcf": "Free Cash Flow avec unité", "operatingMargin": "Marge opérationnelle en %", "eps": "Bénéfice net par action en devise", "marketCap": "Capitalisation boursière avec unité", "netDebt": "Dette nette ou trésorerie nette avec unité", "fcfMillionsNumeric": 0, "netDebtMillionsNumeric": 0, "sharesMillionsNumeric": 0, "currentPriceNumeric": 0 },
-  "debtStructure": { "grossDebt": "Dette financière brute avec unité", "cash": "Trésorerie et équivalents avec unité", "costOfDebt": "Coût moyen de la dette en %", "creditRating": "Notation crédit ou profil de solvabilité", "fixedRatePct": 0, "variableRatePct": 0, "maturitySTPct": 0, "maturityMTPct": 0, "maturityLTPct": 0 },
-  "healthScores": { "piotroskiScore": 0, "piotroskiAnalysis": "Diagnostic détaillé Piotroski F-Score", "altmanZScore": "Score Altman Z", "altmanAnalysis": "Diagnostic de solvabilité Altman", "pegRatio": "Ratio PEG", "pegBadge": "Qualification valorisation/croissance", "pegAnalysis": "Analyse croissance par rapport au PER", "dividendYield": "Rendement du dividende en %", "dividendSafety": "Niveau de couverture du dividende", "dividendAnalysis": "Analyse de la politique de distribution", "debtEbitda": "Ratio Dette Nette / EBITDA", "interestCoverage": "Couverture des frais financiers" },
-  "valuationMultiples": { "peRatio": "Multiple PER", "evEbitda": "Multiple EV/EBITDA", "pFCF": "Multiple P/FCF", "roicWacc": "Écart ROIC - WACC en %" }
+  "companyInfo": { "name": "Nom officiel", "ticker": "Ticker Euronext", "isin": "Code ISIN", "market": "Compartiment Euronext", "index": "Indice", "icbSector": "Secteur ICB", "headquarters": "Ville, Pays", "summary": "Présentation synthétique de l'activité", "competitivePositioning": "Avantages concurrentiels et moat" },
+  "bayesianPerspective": { "probBullish": "Probabilité %", "expectedRange": "Fourchette cours T+1", "peadVal": "Score PEAD", "peadText": "Explication PEAD", "peadBar": "65%", "macroVal": "Sensibilité", "macroText": "Impact taux/WACC", "macroBar": "55%", "gammaVal": "Asymétrie", "gammaText": "Profil rendement/risque", "gammaBar": "60%", "summary": "Synthèse probabiliste T+1" },
+  "cfaPersona": { "roe": "ROE %", "debtEbitda": "Ratio Dette/EBITDA", "moatRating": "Qualité du Moat", "fcfQuality": "Conversion FCF", "factsVsForecasts": "Analyse fondamentale factuelle" },
+  "cmtPersona": { "rrRatio": "Ratio R:R", "invalidationCondition": "Seuil d'invalidation", "levelsText": "Supports et résistances clés", "scenarioText": "Scénario technique" },
+  "mnaPersona": { "bearPrice": "Cours Bear €", "basePrice": "Cours Base €", "bullPrice": "Cours Bull €", "waccFormula": "WACC & g retenus", "assumptionsText": "Hypothèses DCF & multiples" },
+  "financialKPIs": { "period": "Exercice / LTM", "revenue": "CA", "ebitda": "EBITDA", "netIncome": "Résultat Net", "fcf": "FCF", "operatingMargin": "Marge Op. %", "eps": "BNPA", "marketCap": "Capitalisation", "netDebt": "Dette Nette / (Cash)", "currentPriceNumeric": 0, "fcfMillionsNumeric": 0, "netDebtMillionsNumeric": 0, "sharesMillionsNumeric": 0 },
+  "debtStructure": { "grossDebt": "Dette brute", "cash": "Trésorerie", "costOfDebt": "Coût moyen %", "creditRating": "Profil crédit", "fixedRatePct": 75, "variableRatePct": 25, "maturitySTPct": 15, "maturityMTPct": 45, "maturityLTPct": 40 },
+  "healthScores": { "piotroskiScore": 0, "piotroskiAnalysis": "Analyse Piotroski", "altmanZScore": "Score Z", "altmanAnalysis": "Analyse solvabilité", "pegRatio": "Ratio PEG", "pegBadge": "Statut PEG", "pegAnalysis": "Analyse croissance/prix", "dividendYield": "Rendement %", "dividendSafety": "Sécurité dividende", "dividendAnalysis": "Politique de distribution", "debtEbitda": "Dette/EBITDA", "interestCoverage": "ICR" },
+  "valuationMultiples": { "peRatio": "PER", "evEbitda": "EV/EBITDA", "pFCF": "P/FCF", "roicWacc": "Spread ROIC-WACC" }
 }`;
 
-            const auditPromptPart2 = `Produis la PARTIE 2 (Croissance, Gouvernance, Guidance, Consensus, Risques, Shorts, Filtres, Diagnostic, Plan Trading, Ichimoku & QVM) au format JSON strict pour : "${query}".
-Ne laisse AUCUNE chaîne vide et n'invente aucun chiffre absent des sources. Respecte exactement cette structure JSON :
+            const auditPromptPart2 = `Complète l'audit institutionnel de la valeur Euronext "${query}" en retournant strictement un objet JSON avec ces clés exactes :
 {
-  "growthAnalysis": { "cagrHist": "TCAM historique du CA en %", "cagrEpsEst": "TCAM estimé du BPA en %", "revisionTrend": "Tendance des révisions d'estimations", "lastSurprise": "Écart lors de la dernière publication en %", "historicalGrowthSummary": "Trajectoire de croissance historique", "growthOutlook": "Perspectives de croissance sur 12-24 mois", "growthDrivers": ["Moteur de croissance 1", "Moteur de croissance 2"], "marketRumors": [{ "source": "Nom de la source", "credibility": "Niveau de vérification", "text": "Fait ou catalyseur récent relevé dans les sources" }] },
-  "governanceAndCapital": { "majorShareholders": [{ "name": "Nom de l'actionnaire", "percentage": "Part du capital en %" }], "governanceNotes": "Structure de gouvernance et flottant" },
-  "perspectives": { "guidanceSummary": "Objectifs communiqués par la direction", "strategicPillars": ["Pilier stratégique 1", "Pilier stratégique 2"] },
-  "analystConsensusAndNews": { "consensusRecommendation": "Recommandation dominante", "targetPriceAvg": "Objectif de cours moyen en devise", "consensusSummary": "Synthèse des notes d'analystes" },
-  "documentedRisks": [{ "category": "Catégorie du risque", "description": "Description factuelle du risque" }],
-  "shortInterest": { "shortCapitalPct": "Part du capital en position courte déclarée AMF", "shortSqueezePotential": "Évaluation du potentiel de rachat forcé", "shortAnalysis": "Analyse des positions courtes nettes" },
-  "portfolioEntryIndicators": { "grahamStatus": "Statut critère valeur intrinsèque", "grahamDesc": "Justification critère Graham", "kellyValue": "Allocation fractionnée en %", "kellyDesc": "Justification taille de position", "kijunStatus": "Position du cours par rapport à la Kijun", "kijunDesc": "Lecture technique Kijun-Sen" },
-  "leonceDiagnostic": { "overallScore": 0, "stAnalysis": "Lecture technique et catalyseurs court terme", "mtAnalysis": "Thèse fondamentale moyen terme" },
-  "tradingPlan": { "entryZone": "Prix d'entrée numérique", "stopLoss": "Prix de stop loss numérique", "tp1": "Objectif 1 numérique", "tp2": "Objectif 2 numérique", "ichimokuKumo": "Position du cours vis-à-vis du nuage Kumo", "ichimokuTK": "Configuration Tenkan-Sen / Kijun-Sen", "ichimokuChikou": "Validation par la Chikou Span", "tradeExamples": [{ "title": "Intitulé du scénario", "rrRatio": "Ratio rendement/risque", "setupSummary": "Description du point d'entrée", "entry": "Niveau d'entrée", "stopLoss": "Niveau d'invalidation", "target": "Objectif visé" }] },
-  "qvmComposite": { "overallScore": 0, "qualityScore": 0, "valuationScore": 0, "momentumScore": 0, "qualityAnalysis": "Analyse du pilier Qualité", "valuationAnalysis": "Analyse du pilier Valorisation", "momentumAnalysis": "Analyse du pilier Momentum" }
+  "companyInfo": { "name": "Nom officiel", "ticker": "Ticker Euronext" },
+  "growthAnalysis": { "cagrHist": "CAGR CA hist.", "cagrEpsEst": "CAGR BPA est.", "revisionTrend": "Tendance révisions", "lastSurprise": "Dernière publication", "historicalGrowthSummary": "Dynamique historique", "growthOutlook": "Perspectives 12-24 mois", "growthDrivers": ["Moteur 1", "Moteur 2"], "marketRumors": [{ "source": "Source", "credibility": "Niveau de fiabilité", "text": "Signal ou rumeur relevée" }] },
+  "governanceAndCapital": { "majorShareholders": [{ "name": "Actionnaire", "percentage": "Part %" }], "governanceNotes": "Notes gouvernance et flottant" },
+  "perspectives": { "guidanceSummary": "Guidance officielle", "strategicPillars": ["Pilier 1", "Pilier 2"] },
+  "analystConsensusAndNews": { "consensusRecommendation": "Consensus", "targetPriceAvg": "Objectif moyen €", "consensusSummary": "Synthèse des bureaux d'études" },
+  "documentedRisks": [{ "category": "Catégorie risque", "description": "Description détaillée" }],
+  "shortInterest": { "shortCapitalPct": "Part vadée %", "shortSqueezePotential": "Niveau", "shortAnalysis": "Analyse positions courtes AMF" },
+  "portfolioEntryIndicators": { "grahamStatus": "Statut Graham", "grahamDesc": "Critère valeur intrinsèque", "kellyValue": "Fraction Kelly %", "kellyDesc": "Sizing optimal", "kijunStatus": "Position vs Kijun", "kijunDesc": "Lecture tendance" },
+  "leonceDiagnostic": { "overallScore": 0, "stAnalysis": "Diagnostic court terme swing", "mtAnalysis": "Thèse moyen terme 6-18 mois" },
+  "tradingPlan": { "entryZone": "0.00", "stopLoss": "0.00", "tp1": "0.00", "tp2": "0.00", "ichimokuKumo": "Position vs Nuage", "ichimokuTK": "Tenkan / Kijun", "ichimokuChikou": "Validation Chikou", "tradeExamples": [{ "title": "Setup principal", "rrRatio": "R:R", "setupSummary": "Déclencheur", "entry": "Entrée", "stopLoss": "SL", "target": "TP" }] },
+  "qvmComposite": { "overallScore": 0, "qualityScore": 0, "valuationScore": 0, "momentumScore": 0, "qualityAnalysis": "Analyse qualité", "valuationAnalysis": "Analyse valorisation", "momentumAnalysis": "Analyse momentum" }
 }`;
 
             try {
-                setTimeout(() => {
-                    document.getElementById("loadingStatusText").innerText = "Synthèse parallèle Fondamentale & Technique sur contexte XML (29 sources)...";
-                    document.getElementById("loadingProgressBar").style.width = "78%";
-                }, 900);
+                document.getElementById("loadingStatusText").innerText = `Collecte 29 sources & synthèse fondamentale (${query})...`;
+                document.getElementById("loadingProgressBar").style.width = "45%";
 
-                const [res1, res2] = await Promise.allSettled([
-                    callGeminiHydrogenProxy({
-                        mode: "stock_analysis_part1",
-                        subjectQuery: query,
-                        systemPrompt,
-                        userPrompt: auditPromptPart1,
-                        skipCorpusFetch: false
-                    }),
-                    callGeminiHydrogenProxy({
+                const part1 = await callGeminiHydrogenProxy({
+                    mode: "stock_analysis_part1",
+                    subjectQuery: query,
+                    systemPrompt,
+                    userPrompt: auditPromptPart1,
+                    skipCorpusFetch: false
+                });
+
+                document.getElementById("loadingStatusText").innerText = `Synthèse technique, Ichimoku & plan de trade (${query})...`;
+                document.getElementById("loadingProgressBar").style.width = "82%";
+
+                let part2 = {};
+                let partialWarning = false;
+                try {
+                    part2 = await callGeminiHydrogenProxy({
                         mode: "stock_analysis_part2",
                         subjectQuery: query,
                         systemPrompt,
                         userPrompt: auditPromptPart2,
                         skipCorpusFetch: true
-                    })
-                ]);
-
-                if (res1.status === "rejected" && res2.status === "rejected") {
-                    throw new Error(res1.reason?.message || res2.reason?.message || "Échec de l'audit sur les 29 sources.");
+                    });
+                } catch (errPart2) {
+                    console.warn("Sous-requête technique partielle :", errPart2);
+                    partialWarning = true;
                 }
 
-                const part1 = res1.status === "fulfilled" ? res1.value : {};
-                const part2 = res2.status === "fulfilled" ? res2.value : {};
                 const cleanObj = (obj) => {
                     if (!obj || typeof obj !== "object") return {};
                     const out = {};
@@ -1821,8 +1736,8 @@ Ne laisse AUCUNE chaîne vide et n'invente aucun chiffre absent des sources. Res
                 document.getElementById("resultsContainer").classList.remove("hidden");
                 document.getElementById("quickNavContainer").classList.remove("hidden");
 
-                if (res1.status === "rejected" || res2.status === "rejected") {
-                    showToast(`Audit partiel affiché pour ${report.companyInfo?.ticker || query} (une sous-requête a expiré).`, "warning");
+                if (partialWarning) {
+                    showToast(`Audit fondamental affiché pour ${report.companyInfo?.ticker || query} (bloc technique partiel).`, "warning");
                 } else {
                     showToast(`Audit ${report.companyInfo?.ticker || query} terminé (29 sources)`, "success");
                 }
