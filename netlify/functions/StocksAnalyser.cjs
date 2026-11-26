@@ -1,11 +1,6 @@
 /**
- * Netlify Serverless Function : StocksAnalyser
- * Pipeline déterministe en 2 phases :
- * 1. Collecte parallèle directe (HTML nettoyé) sur les 29 URLs financières certifiées,
- *    complétée si nécessaire par des lots ciblés de recherche (4 à 5 sites max par lot).
- * 2. Injection des 29 contenus nettoyés balisés en XML (<source id="1" url="...">...</source>)
- *    dans la fenêtre de 1 million de tokens de gemini-4-hydrogen avec temperature: 0
- *    et responseSchema strict.
+ * Netlify Serverless Function (.cjs) : StocksAnalyser
+ * Garantit la compatibilité CommonJS même si "type": "module" est défini dans package.json.
  */
 
 const CERTIFIED_SOURCES = [
@@ -40,9 +35,6 @@ const CERTIFIED_SOURCES = [
   { id: 29, name: "Societe.com", url: "https://www.societe.com/cgi-bin/search?champs=" }
 ];
 
-/**
- * Nettoyage HTML déterministe : supprime scripts, styles, balises et compresse les espaces.
- */
 function stripHtmlToCleanText(html, maxChars = 750) {
   if (!html) return "";
   const cleaned = html
@@ -70,14 +62,10 @@ function escapeXmlAttr(str) {
     .replace(/>/g, "&gt;");
 }
 
-/**
- * Collecte parallèle directe des 29 URLs certifiées avec timeout strict (650ms)
- * pour garantir le respect absolu de la limite Netlify de 10s.
- */
 async function fetchSingleCertifiedSource(source, encodedQuery) {
   const targetUrl = `${source.url}${encodedQuery}`;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 650);
+  const timer = setTimeout(() => controller.abort(), 450);
   try {
     const res = await fetch(targetUrl, {
       headers: {
@@ -88,9 +76,7 @@ async function fetchSingleCertifiedSource(source, encodedQuery) {
       signal: controller.signal
     });
     clearTimeout(timer);
-    if (!res.ok) {
-      return { ...source, targetUrl, ok: false, text: "" };
-    }
+    if (!res.ok) return { ...source, targetUrl, ok: false, text: "" };
     const rawHtml = await res.text();
     const cleanText = stripHtmlToCleanText(rawHtml, 750);
     const blocked = /captcha|cloudflare|access denied|enable javascript|just a moment/i.test(cleanText) && cleanText.length < 1500;
@@ -106,12 +92,9 @@ async function fetchSingleCertifiedSource(source, encodedQuery) {
   }
 }
 
-/**
- * Extraction JSON robuste côté serveur (gère les blocs ```json, citations [1], ou objets encapsulés).
- */
 function parseAndCleanModelJson(rawText) {
   if (!rawText) return null;
-  let cleaned = String(rawText)
+  const cleaned = String(rawText)
     .replace(/```json\s*/gi, "")
     .replace(/```\s*/g, "")
     .trim();
@@ -138,41 +121,30 @@ function parseAndCleanModelJson(rawText) {
   }
   return parsed;
 }
-
-/**
- * Appel Gemini résilient avec budget temps global (anti-504 Netlify),
- * thinkingBudget: 0 pour latence minimale et fallback automatique sans google_search si nécessaire.
- */
-async function callGeminiWithFallback(apiKey, primaryModel, payload, deadlineMs = Date.now() + 8500) {
-  const baseCandidates = Array.from(new Set([primaryModel, "gemini-3-flash-preview", "gemini-2.5-flash"]));
-  // Si google_search est activé, prévoir un repli immédiat en JSON natif sans google_search en cas de lenteur/erreur
+async function callGeminiWithFallback(apiKey, primaryModel, payload, deadlineMs = Date.now() + 7800) {
+  const baseCandidates = Array.from(new Set([primaryModel, "gemini-2.5-flash"]));
   const attempts = payload?.tools?.length
-    ? [
-        ...baseCandidates.map((m) => ({ model: m, useTools: true })),
-        { model: "gemini-2.5-flash", useTools: false }
-      ]
+    ? [{ model: primaryModel, useTools: true }, { model: "gemini-2.5-flash", useTools: false }]
     : baseCandidates.map((m) => ({ model: m, useTools: false }));
 
   let lastError = null;
 
   for (const attempt of attempts) {
     const remainingForModel = deadlineMs - Date.now();
-    if (remainingForModel < 1600) {
+    if (remainingForModel < 1800) {
       lastError = { status: 504, message: "Budget temps Netlify atteint avant la fin de la synthèse." };
       break;
     }
 
     const baseGenConfig = {
       temperature: 0,
+      maxOutputTokens: 2600,
       thinkingConfig: { thinkingBudget: 0 },
       ...(payload?.generationConfig || {})
     };
 
-    if (attempt.useTools) {
-      delete baseGenConfig.responseMimeType;
-    } else {
-      baseGenConfig.responseMimeType = "application/json";
-    }
+    if (attempt.useTools) delete baseGenConfig.responseMimeType;
+    else baseGenConfig.responseMimeType = "application/json";
 
     const effectivePayload = {
       ...payload,
@@ -183,8 +155,8 @@ async function callGeminiWithFallback(apiKey, primaryModel, payload, deadlineMs 
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(attempt.model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
     const controller = new AbortController();
     const timeoutMs = attempt.useTools
-      ? Math.max(2500, Math.min(4800, remainingForModel - 1800))
-      : Math.max(2000, Math.min(6500, remainingForModel));
+      ? Math.max(2200, Math.min(3600, remainingForModel - 2200))
+      : Math.max(2000, Math.min(5800, remainingForModel));
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
@@ -213,7 +185,7 @@ async function callGeminiWithFallback(apiKey, primaryModel, payload, deadlineMs 
         return {
           ok: false,
           status: res.status,
-          error: "Crédits prépayés Google AI Studio épuisés ou quota dépassé. Rechargez votre solde sur https://ai.studio/projects (Facturation)."
+          error: "Crédits prépayés Google AI Studio épuisés ou quota dépassé."
         };
       }
       lastError = { status: res.status, message: rawMsg };
@@ -230,45 +202,29 @@ async function callGeminiWithFallback(apiKey, primaryModel, payload, deadlineMs 
   };
 }
 
-/**
- * Construction rapide (< 1.2s) du corpus XML balisé des 29 sources certifiées.
- */
 async function buildInjectedXmlCorpus(subjectQuery) {
   const encodedQuery = encodeURIComponent(subjectQuery);
-
   const directSettlements = await Promise.allSettled(
     CERTIFIED_SOURCES.map((src) => fetchSingleCertifiedSource(src, encodedQuery))
   );
-
   const collected = directSettlements.map((s, idx) =>
     s.status === "fulfilled"
       ? s.value
       : { ...CERTIFIED_SOURCES[idx], targetUrl: `${CERTIFIED_SOURCES[idx].url}${encodedQuery}`, ok: false, text: "" }
   );
-
   const xmlBlocks = collected.map((src) => {
-    const content = src.ok
-      ? src.text
-      : "Portail protégé ou rendu dynamique : compléter via vérification temps réel sur ce domaine certifié.";
+    const content = src.ok ? src.text : "Portail protégé ou rendu dynamique.";
     return `<source id="${src.id}" name="${escapeXmlAttr(src.name)}" url="${escapeXmlAttr(src.targetUrl)}">\n${content}\n</source>`;
   });
-
   return `<corpus subject="${escapeXmlAttr(subjectQuery)}" total_sources="29">\n${xmlBlocks.join("\n")}\n</corpus>`;
 }
 
-/**
- * Récupération ultra-rapide (< 600ms) des données de marché réelles (ticker exact, cours, devise, place)
- * via Yahoo Finance Search + Chart API pour garantir des faits chiffrés non vides.
- */
 async function fetchLiveMarketSnapshot(subjectQuery) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 900);
   try {
     const searchUrl = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(subjectQuery)}&quotesCount=5&newsCount=0`;
-    const searchRes = await fetch(searchUrl, {
-      headers: { "User-Agent": "Mozilla/5.0" },
-      signal: controller.signal
-    });
+    const searchRes = await fetch(searchUrl, { headers: { "User-Agent": "Mozilla/5.0" }, signal: controller.signal });
     if (!searchRes.ok) {
       clearTimeout(timer);
       return "";
@@ -278,32 +234,24 @@ async function fetchLiveMarketSnapshot(subjectQuery) {
     const bestQuote =
       quotes.find((q) => String(q.symbol || "").endsWith(".PA") || String(q.symbol || "").endsWith(".AS") || String(q.symbol || "").endsWith(".BR")) ||
       quotes[0];
-
     if (!bestQuote?.symbol) {
       clearTimeout(timer);
       return "";
     }
-
     const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(bestQuote.symbol)}?interval=1d&range=1mo`;
-    const chartRes = await fetch(chartUrl, {
-      headers: { "User-Agent": "Mozilla/5.0" },
-      signal: controller.signal
-    });
+    const chartRes = await fetch(chartUrl, { headers: { "User-Agent": "Mozilla/5.0" }, signal: controller.signal });
     clearTimeout(timer);
     if (!chartRes.ok) {
-      return `Symbole identifié: ${bestQuote.symbol} | Nom: ${bestQuote.longname || bestQuote.shortname || subjectQuery} | Place: ${bestQuote.exchDisp || "Euronext"}`;
+      return `Symbole identifié: ${bestQuote.symbol} | Nom: ${bestQuote.longname || bestQuote.shortname || subjectQuery}`;
     }
     const chartJson = await chartRes.json();
     const meta = chartJson?.chart?.result?.[0]?.meta || {};
     return [
       `Nom officiel: ${bestQuote.longname || bestQuote.shortname || subjectQuery}`,
       `Ticker Yahoo: ${bestQuote.symbol}`,
-      `Place de cotation: ${meta.fullExchangeName || bestQuote.exchDisp || "Euronext"}`,
+      `Place: ${meta.fullExchangeName || bestQuote.exchDisp || "Euronext"}`,
       `Devise: ${meta.currency || "EUR"}`,
-      `Cours actuel: ${meta.regularMarketPrice ?? "N/A"} ${meta.currency || "EUR"}`,
-      `Plus haut 52 sem.: ${meta.fiftyTwoWeekHigh ?? "N/A"}`,
-      `Plus bas 52 sem.: ${meta.fiftyTwoWeekLow ?? "N/A"}`,
-      `Clôture précédente: ${meta.chartPreviousClose ?? "N/A"}`
+      `Cours actuel: ${meta.regularMarketPrice ?? "N/A"} ${meta.currency || "EUR"}`
     ].join(" | ");
   } catch {
     clearTimeout(timer);
@@ -312,9 +260,7 @@ async function fetchLiveMarketSnapshot(subjectQuery) {
 }
 
 exports.handler = async function (event) {
-  const functionStartMs = Date.now();
-  const netlifyDeadlineMs = functionStartMs + 8900;
-
+  const netlifyDeadlineMs = Date.now() + 8200;
   const headers = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type",
@@ -322,25 +268,12 @@ exports.handler = async function (event) {
     "Content-Type": "application/json; charset=utf-8"
   };
 
-  if (event.httpMethod === "OPTIONS") {
-    return { statusCode: 204, headers, body: "" };
-  }
-
-  if (event.httpMethod !== "POST") {
-    return {
-      statusCode: 405,
-      headers,
-      body: JSON.stringify({ error: "Méthode non autorisée. Utilisez POST." })
-    };
-  }
+  if (event.httpMethod === "OPTIONS") return { statusCode: 204, headers, body: "" };
+  if (event.httpMethod !== "POST") return { statusCode: 405, headers, body: JSON.stringify({ error: "Méthode non autorisée." }) };
 
   const apiKey = process.env.StocksAnalyserKey;
   if (!apiKey) {
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ error: "Clé API StocksAnalyserKey manquante dans les variables d'environnement Netlify." })
-    };
+    return { statusCode: 500, headers, body: JSON.stringify({ error: "Clé API StocksAnalyserKey manquante dans Netlify." }) };
   }
 
   const modelId = process.env.GEMINI_MODEL || "gemini-3-flash-preview";
@@ -350,29 +283,15 @@ exports.handler = async function (event) {
     const mode = body.mode || "legacy";
     const subjectQuery = String(body.subjectQuery || "").trim();
 
-    // Mode 1 : Audit complet ou partiel (29 sources XML)
     if ((mode === "stock_analysis" || mode === "stock_analysis_part1" || mode === "stock_analysis_part2") && subjectQuery) {
       const [xmlCorpus, liveSnapshot] = await Promise.all([
         body.skipCorpusFetch
-          ? Promise.resolve(`<corpus subject="${escapeXmlAttr(subjectQuery)}" total_sources="29">Synthèse complémentaire sur les 29 sources Euronext certifiées.</corpus>`)
+          ? Promise.resolve(`<corpus subject="${escapeXmlAttr(subjectQuery)}" total_sources="29">Synthèse complémentaire.</corpus>`)
           : buildInjectedXmlCorpus(subjectQuery),
         fetchLiveMarketSnapshot(subjectQuery)
       ]);
-      const useLiveSearch = false;
 
-      const extractionPrompt = `${body.userPrompt || `Analyse complète de ${subjectQuery}`}
-
-DONNÉES TEMPS RÉEL VÉRIFIÉES :
-${liveSnapshot || `Valeur recherchée : ${subjectQuery}`}
-
-RÈGLES IMPÉRATIVES :
-1. Réponds UNIQUEMENT avec l'objet JSON brut valide (sans balises markdown \`\`\`json ni texte autour).
-2. INTERDICTION ABSOLUE de laisser des chaînes vides "" ou "--". Remplis CHAQUE champ avec les données réelles connues et calculées de la société "${subjectQuery}".
-3. Sois concis, dense et chirurgical sur chaque champ texte (1 à 2 phrases max par champ).
-
-Voici les contenus extraits des 29 sources financières certifiées :
-
-${xmlCorpus}`;
+      const extractionPrompt = `${body.userPrompt || `Analyse complète de ${subjectQuery}`}\n\nDONNÉES TEMPS RÉEL :\n${liveSnapshot || subjectQuery}\n\n${xmlCorpus}`;
 
       const geminiResult = await callGeminiWithFallback(
         apiKey,
@@ -380,31 +299,15 @@ ${xmlCorpus}`;
         {
           systemInstruction: body.systemInstruction || undefined,
           contents: [{ parts: [{ text: extractionPrompt }] }],
-          tools: useLiveSearch ? [{ google_search: {} }] : undefined,
-          generationConfig: {
-            temperature: 0,
-            ...(useLiveSearch ? {} : { responseMimeType: "application/json" })
-          }
+          generationConfig: { temperature: 0, responseMimeType: "application/json" }
         },
         netlifyDeadlineMs
       );
 
-      if (!geminiResult.ok) {
-        return {
-          statusCode: geminiResult.status,
-          headers,
-          body: JSON.stringify({ error: geminiResult.error })
-        };
-      }
-
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify(geminiResult.data)
-      };
+      if (!geminiResult.ok) return { statusCode: geminiResult.status, headers, body: JSON.stringify({ error: geminiResult.error }) };
+      return { statusCode: 200, headers, body: JSON.stringify(geminiResult.data) };
     }
 
-    // Mode 2 : Appels ciblés (Comparateur VS, Deep Dive, Radar Rumeurs, Stress-Test, Mise à jour fonds)
     const geminiResult = await callGeminiWithFallback(
       apiKey,
       modelId,
@@ -412,32 +315,14 @@ ${xmlCorpus}`;
         systemInstruction: body.systemInstruction || undefined,
         contents: body.contents || [],
         tools: body.tools || undefined,
-        generationConfig: {
-          temperature: 0,
-          ...(body.generationConfig || {})
-        }
+        generationConfig: { temperature: 0, ...(body.generationConfig || {}) }
       },
       netlifyDeadlineMs
     );
 
-    if (!geminiResult.ok) {
-      return {
-        statusCode: geminiResult.status,
-        headers,
-        body: JSON.stringify({ error: geminiResult.error })
-      };
-    }
-
-    return {
-      statusCode: 200,
-      headers,
-      body: JSON.stringify(geminiResult.data)
-    };
+    if (!geminiResult.ok) return { statusCode: geminiResult.status, headers, body: JSON.stringify({ error: geminiResult.error }) };
+    return { statusCode: 200, headers, body: JSON.stringify(geminiResult.data) };
   } catch (error) {
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ error: error.message || "Erreur interne StocksAnalyser." })
-    };
+    return { statusCode: 500, headers, body: JSON.stringify({ error: error.message || "Erreur interne StocksAnalyser." }) };
   }
 };
